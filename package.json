@@ -15,6 +15,8 @@
     "db:import:schedule": "node scripts/importSchedule.js cNnmhtiJF7VLgW01RBErKTwu9Ym2"
   },
   "dependencies": {
+    "@expo-google-fonts/cairo": "^0.4.2",
+    "@expo-google-fonts/great-vibes": "^0.4.1",
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/poppins": "^0.4.1",
     "@expo/vector-icons": "^15.0.3",

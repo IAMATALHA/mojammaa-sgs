@@ -18,6 +18,12 @@ import {
   Poppins_700Bold,
   Poppins_800ExtraBold,
 } from '@expo-google-fonts/poppins'
+import { GreatVibes_400Regular } from '@expo-google-fonts/great-vibes'
+import {
+  Cairo_400Regular,
+  Cairo_600SemiBold,
+  Cairo_700Bold,
+} from '@expo-google-fonts/cairo'
 import { AuthProvider } from './src/contexts/AuthContext'
 import { ThemeProvider } from './src/contexts/ThemeContext'
 import NavigationRoot from './src/navigation/NavigationRoot'
@@ -34,6 +40,10 @@ export default function App() {
     Poppins_600SemiBold,
     Poppins_700Bold,
     Poppins_800ExtraBold,
+    GreatVibes_400Regular,
+    Cairo_400Regular,
+    Cairo_600SemiBold,
+    Cairo_700Bold,
   })
 
   if (!fontsLoaded) {

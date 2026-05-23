@@ -49,10 +49,11 @@ export default function DashboardHeader({
           <Text
             numberOfLines={1}
             style={{
-              color: theme.text,
-              fontFamily: theme.fonts.bold,
-              fontSize: 13,
-              letterSpacing: -0.2,
+              color: '#1D3557',                       // navy élégant (poster vibe)
+              fontFamily: theme.fonts.script,          // Great Vibes — calligraphie
+              fontSize: 22,
+              lineHeight: 26,
+              letterSpacing: 0.2,
             }}
           >
             Mojammaa Al Maarifa
@@ -61,9 +62,10 @@ export default function DashboardHeader({
             numberOfLines={1}
             style={{
               color: theme.textSoft,
-              fontFamily: theme.fonts.regular,
+              fontFamily: theme.fonts.arabicSemi,      // Cairo SemiBold pour l'arabe
               fontSize: 11,
-              marginTop: 1,
+              marginTop: 0,
+              writingDirection: 'rtl',
             }}
           >
             مجمع المعرفة الخصوصية
@@ -175,7 +177,7 @@ const styles = StyleSheet.create({
     paddingBottom:     4,
   },
   brandLogo: {
-    width:  28, height: 28, borderRadius: 7,
+    width:  34, height: 34, borderRadius: 8,
   },
   container: {
     flexDirection:  'row',

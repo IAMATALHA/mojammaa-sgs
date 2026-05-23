@@ -125,11 +125,20 @@ export const radius = {
 } as const
 
 export const fonts = {
-  regular: 'Poppins_400Regular',
-  medium: 'Poppins_500Medium',
+  regular:  'Poppins_400Regular',
+  medium:   'Poppins_500Medium',
   semibold: 'Poppins_600SemiBold',
-  bold: 'Poppins_700Bold',
-  black: 'Poppins_800ExtraBold',
+  bold:     'Poppins_700Bold',
+  black:    'Poppins_800ExtraBold',
+
+  // Brand calligraphy — pour le nom de l'école et grandes signatures
+  script:   'GreatVibes_400Regular',
+
+  // Arabe propre — pour les textes en arabe (le système trouve mal le
+  // bon glyphe avec Poppins, Cairo est conçu pour l'arabe).
+  arabic:   'Cairo_400Regular',
+  arabicSemi:'Cairo_600SemiBold',
+  arabicBold:'Cairo_700Bold',
 } as const
 
 export const fontSize = {
