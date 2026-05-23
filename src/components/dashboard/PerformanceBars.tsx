@@ -30,7 +30,7 @@ export default function PerformanceBars({ data, max = 20, height = 140 }: Props)
       {data.map(d => {
         const pct = Math.max(0, Math.min(1, d.average / max))
         const trendColor =
-          d.trend === 'up'   ? theme.textSoft :
+          d.trend === 'up'   ? theme.success :
           d.trend === 'down' ? theme.danger  :
           theme.textMuted
         return (
@@ -47,7 +47,7 @@ export default function PerformanceBars({ data, max = 20, height = 140 }: Props)
                 styles.topMark,
                 {
                   bottom: `${(d.topMark / max) * 100}%`,
-                  backgroundColor: theme.borderStrong,
+                  backgroundColor: theme.warning,
                 },
               ]}/>
             </View>

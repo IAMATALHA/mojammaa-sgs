@@ -72,9 +72,9 @@ export default function ChildCard({ child, onPress }: ChildCardProps) {
               {child.classe} · {child.level}
             </Text>
             <View style={[styles.statsRow, { borderTopColor: theme.border }]}>
-              <Stat icon={<TrendingUp size={11} color={theme.textSoft} strokeWidth={1.75} />}
+              <Stat icon={<TrendingUp size={11} color={theme.success} strokeWidth={1.75} />}
                     value={`${child.averageGrade.toFixed(1)}/20`} label="Moyenne" theme={theme} />
-              <Stat icon={<BookOpen   size={11} color={theme.textSoft} strokeWidth={1.75} />}
+              <Stat icon={<BookOpen   size={11} color={theme.warning} strokeWidth={1.75} />}
                     value={String(child.pendingHomework)}            label="À faire"  theme={theme} />
             </View>
           </View>

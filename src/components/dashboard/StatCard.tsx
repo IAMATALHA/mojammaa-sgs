@@ -24,13 +24,12 @@ export default function StatCard({
   icon, value, label, trend, tint = 'primary', onPress,
 }: StatCardProps) {
   const theme = useTheme()
-  const neutralTint = { bg: theme.surface, fg: theme.textSoft }
   const tints = {
     primary: { bg: theme.primarySurface, fg: theme.primary },
-    accent:  { bg: theme.primarySurface, fg: theme.primary },
-    success: neutralTint,
-    info:    neutralTint,
-    warning: neutralTint,
+    accent:  { bg: theme.accentSurface, fg: theme.accent },
+    success: { bg: theme.successSurface, fg: theme.success },
+    info:    { bg: theme.infoSurface, fg: theme.info },
+    warning: { bg: theme.warningSurface, fg: theme.warning },
   }[tint]
   const renderedIcon = React.isValidElement(icon)
     ? React.cloneElement(icon as React.ReactElement<{ color?: string; strokeWidth?: number }>, {

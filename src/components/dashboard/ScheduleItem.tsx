@@ -22,11 +22,14 @@ export default function ScheduleItem({
   const isDone = item.status === 'done'
 
   const bg     = isNow ? theme.primarySurface : theme.card
-  const accent = isNow ? theme.primary : theme.borderStrong
+  const accent =
+    isNow ? theme.accent :
+    isDone ? theme.success :
+    theme.warning
 
   const baseStyle = {
     backgroundColor: bg,
-    borderColor: isNow ? theme.primaryBorder : theme.border,
+    borderColor: isNow ? theme.accentSurface : theme.border,
   }
 
   const content = (
@@ -34,7 +37,7 @@ export default function ScheduleItem({
       <View style={[styles.bar, { backgroundColor: accent }]} />
       <View style={styles.time}>
         <Text style={{
-          color: isNow ? theme.primary : theme.text,
+          color: isNow ? theme.accent : theme.text,
           fontFamily: theme.fonts.bold,
           fontSize: 13,
         }}>
@@ -76,7 +79,7 @@ export default function ScheduleItem({
       </View>
 
       {isNow ? (
-        <View style={[styles.pill, { backgroundColor: theme.primary }]}>
+        <View style={[styles.pill, { backgroundColor: theme.accent }]}>
           <View style={styles.pulse} />
           <Text style={[styles.pillText, { fontFamily: theme.fonts.black }]}>EN COURS</Text>
         </View>

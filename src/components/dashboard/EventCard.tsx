@@ -29,9 +29,16 @@ export default function EventCard({
 }: { event: UpcomingEvent; onPress?: () => void }) {
   const theme = useTheme()
   const { day, month } = fmtMonthDay(event.date)
-  const isExam = event.type === 'exam'
-  const tint = isExam ? theme.primary : theme.textSoft
-  const tintSurface = isExam ? theme.primarySurface : theme.surface
+  const tint =
+    event.type === 'exam'    ? theme.accent :
+    event.type === 'holiday' ? theme.success :
+    event.type === 'event'   ? theme.warning :
+    theme.primary
+  const tintSurface =
+    event.type === 'exam'    ? theme.accentSurface :
+    event.type === 'holiday' ? theme.successSurface :
+    event.type === 'event'   ? theme.warningSurface :
+    theme.primarySurface
 
   const content = (
     <>

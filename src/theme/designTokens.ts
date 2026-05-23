@@ -1,8 +1,9 @@
 /**
  * Apple-style design tokens for Mojammaa SGS.
  *
- * The light theme intentionally uses one brand accent and layered iOS-like
- * grays. The shape below is semantic so a dark theme can mirror it later.
+ * The light theme blends the school poster inspiration with an iOS system:
+ * warm cream surfaces, navy structure, coral accents, and orange/yellow
+ * status indicators. The shape below is semantic so dark mode can mirror it.
  */
 
 import { Platform } from 'react-native'
@@ -10,36 +11,43 @@ import { Platform } from 'react-native'
 export const colors = {
   light: {
     text: {
-      primary: '#000000',
-      secondary: 'rgba(60, 60, 67, 0.72)',
-      tertiary: 'rgba(60, 60, 67, 0.42)',
+      primary: '#1D3557',
+      secondary: 'rgba(29, 53, 87, 0.72)',
+      tertiary: 'rgba(29, 53, 87, 0.44)',
       inverse: '#FFFFFF',
     },
     surface: {
-      primary: '#FFFFFF',
-      secondary: '#F2F2F7',
-      tertiary: '#E5E5EA',
-      elevated: '#FFFFFF',
-      grouped: '#F9F9FB',
+      primary: '#F5F1E8',
+      secondary: 'rgba(255, 252, 247, 0.76)',
+      tertiary: 'rgba(29, 53, 87, 0.08)',
+      elevated: 'rgba(255, 252, 247, 0.94)',
+      grouped: '#EFE8DA',
     },
-    separator: 'rgba(0, 0, 0, 0.06)',
-    separatorStrong: 'rgba(60, 60, 67, 0.18)',
+    separator: 'rgba(29, 53, 87, 0.10)',
+    separatorStrong: 'rgba(29, 53, 87, 0.20)',
+    primary: {
+      value: '#1D3557',
+      pressed: '#14243D',
+      surface: 'rgba(29, 53, 87, 0.10)',
+      surfaceStrong: 'rgba(29, 53, 87, 0.16)',
+      border: 'rgba(29, 53, 87, 0.22)',
+    },
     accent: {
-      primary: '#E53935',
-      pressed: '#C62828',
-      surface: 'rgba(229, 57, 53, 0.10)',
-      surfaceStrong: 'rgba(229, 57, 53, 0.16)',
-      border: 'rgba(229, 57, 53, 0.24)',
+      primary: '#E63946',
+      pressed: '#C92F3B',
+      surface: 'rgba(230, 57, 70, 0.10)',
+      surfaceStrong: 'rgba(230, 57, 70, 0.16)',
+      border: 'rgba(230, 57, 70, 0.24)',
     },
     status: {
-      success: '#3C3C43',
-      successSurface: '#F2F2F7',
-      warning: '#636366',
-      warningSurface: '#F2F2F7',
-      danger: '#E53935',
-      dangerSurface: 'rgba(229, 57, 53, 0.10)',
-      info: '#636366',
-      infoSurface: '#F2F2F7',
+      success: '#FCBF49',
+      successSurface: 'rgba(252, 191, 73, 0.18)',
+      warning: '#F77F00',
+      warningSurface: 'rgba(247, 127, 0, 0.14)',
+      danger: '#E63946',
+      dangerSurface: 'rgba(230, 57, 70, 0.10)',
+      info: '#457B9D',
+      infoSurface: 'rgba(69, 123, 157, 0.12)',
     },
   },
 } as const
@@ -49,6 +57,18 @@ const light = colors.light
 // Flat aliases preserve the current app contract while the semantic tokens
 // above become the source of truth for new work.
 export const palette = {
+  navy: light.primary.value,
+  navyDark: light.primary.pressed,
+  navySoft: light.primary.surface,
+  navyBorder: light.primary.border,
+  coral: light.accent.primary,
+  coralDark: light.accent.pressed,
+  coralSoft: light.accent.surface,
+  orange: light.status.warning,
+  orangeSoft: light.status.warningSurface,
+  yellow: light.status.success,
+  yellowSoft: light.status.successSurface,
+
   brandRed: light.accent.primary,
   brandRedDark: light.accent.pressed,
   brandRedSoft: light.accent.surface,
@@ -59,7 +79,7 @@ export const palette = {
   accentSoftStrong: light.accent.surfaceStrong,
   accentBorder: light.accent.border,
 
-  white: light.surface.primary,
+  white: '#FFFFFF',
   bg: light.surface.primary,
   surface: light.surface.secondary,
   surfaceAlt: light.surface.tertiary,
@@ -94,10 +114,10 @@ export const spacing = {
 } as const
 
 export const radius = {
-  sm: 12,
-  md: 16,
-  lg: 22,
-  xl: 28,
+  sm: 10,
+  md: 12,
+  lg: 12,
+  xl: 18,
   pill: 999,
 } as const
 
@@ -130,20 +150,20 @@ const iosShadow = (shadowRadius: number, opacity: number, y = 2) => ({
 
 export const shadows = {
   none: { ...iosShadow(0, 0, 0), elevation: 0 },
-  xs: { ...iosShadow(4, 0.03, 1), elevation: 0 },
-  sm: { ...iosShadow(8, 0.04, 2), elevation: 1 },
-  md: { ...iosShadow(12, 0.05, 3), elevation: 2 },
-  lg: { ...iosShadow(16, 0.06, 4), elevation: 2 },
+  xs: { ...iosShadow(8, 0.06, 2), elevation: 1 },
+  sm: { ...iosShadow(14, 0.08, 4), elevation: 2 },
+  md: { ...iosShadow(18, 0.10, 6), elevation: 3 },
+  lg: { ...iosShadow(24, 0.12, 10), elevation: 4 },
 } as const
 
 export const hitSlop = { top: 8, bottom: 8, left: 8, right: 8 }
 export const minTouch = 44
 
 export const chartColors = [
-  palette.accent,
-  palette.textSoft,
-  palette.textMuted,
-  palette.borderStrong,
+  palette.navy,
+  palette.coral,
+  palette.orange,
+  palette.yellow,
 ] as const
 
 export const fontStack =

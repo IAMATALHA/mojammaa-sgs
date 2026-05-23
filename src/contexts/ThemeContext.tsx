@@ -3,8 +3,8 @@
  *
  * The previous build assigned a different `primary` colour per role
  * (student=green, teacher=blue, admin=red). The current system uses one
- * restrained red accent across every role. Role differentiation is now
- * expressed through iconography and copy, not colour.
+ * restrained navy/coral system across every role. Role differentiation is
+ * expressed through iconography, copy, and small status indicators.
  *
  * Public shape is preserved (`primary`, `primarySurface`, spacing,
  * radius, fonts) so every existing screen keeps compiling — they
@@ -59,10 +59,10 @@ export interface Theme {
 }
 
 const THEME: Theme = {
-  primary:        palette.accent,
-  primarySurface: palette.accentSoft,
-  primaryBorder:  palette.accentBorder,
-  primaryDark:    palette.accentDark,
+  primary:        palette.navy,
+  primarySurface: palette.navySoft,
+  primaryBorder:  palette.navyBorder,
+  primaryDark:    palette.navyDark,
   accent:         palette.accent,
   accentSurface:  palette.accentSoft,
 
