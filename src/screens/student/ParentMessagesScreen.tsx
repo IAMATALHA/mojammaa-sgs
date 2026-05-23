@@ -19,10 +19,8 @@ import { useTheme } from '../../contexts/ThemeContext'
 import {
   Card, AnnouncementCard, EmptyState, SectionHeader,
 } from '../../components/dashboard'
-import {
-  PARENT_ANNOUNCEMENTS, TEACHER_ANNOUNCEMENTS,
-  type Announcement,
-} from '../../utils/mockData'
+import { useParentMessages } from '../../hooks/useParentMessages'
+import { type Announcement } from '../../utils/mockData'
 
 const TAB_DEFS: { id: string; label: string; filter: (a: Announcement) => boolean }[] = [
   { id: 'all',    label: 'Tout',         filter: ()  => true },
@@ -40,21 +38,13 @@ const CATEGORY_ICON = {
 
 export default function ParentMessagesScreen() {
   const theme = useTheme()
+  const { messages: liveMessages } = useParentMessages()
   const [activeTab, setActiveTab] = useState('all')
   const [query, setQuery] = useState('')
   const [detail, setDetail] = useState<Announcement | null>(null)
 
-  // Merge parent + general announcements, then dedupe by id, sort recent first.
-  const allMessages = useMemo<Announcement[]>(() => {
-    const seen = new Set<string>()
-    return [...PARENT_ANNOUNCEMENTS, ...TEACHER_ANNOUNCEMENTS]
-      .filter(m => {
-        if (seen.has(m.id)) return false
-        seen.add(m.id)
-        return true
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [])
+  // Already sorted desc by createdAt in the hook subscription
+  const allMessages = liveMessages
 
   const filtered = useMemo(() => {
     const tab = TAB_DEFS.find(t => t.id === activeTab) ?? TAB_DEFS[0]

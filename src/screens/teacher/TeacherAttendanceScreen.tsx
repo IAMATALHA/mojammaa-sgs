@@ -24,6 +24,7 @@ import {
   documentId,
 } from 'firebase/firestore'
 import { sendPush } from '../../services/pushService'
+import { sendMessage } from '../../services/messagesService'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -47,25 +48,33 @@ function todayISO(): string {
   return new Date().toISOString().split('T')[0]
 }
 
+interface TeacherInfo {
+  uid:    string
+  nom:    string
+  prenom: string
+}
+
 /**
- * Pour chaque élève absent, retrouve son parent et envoie un push.
- * Retourne le nombre de pushs réellement envoyés.
+ * Pour chaque élève absent ayant un parent enregistré :
+ *   1. Écrit un doc dans `messages` (historique permanent côté parent)
+ *   2. Envoie un push instantané (si parent a un expoPushToken)
+ *
+ * Retourne le nombre de parents notifiés (au moins par message Firestore).
  */
 async function notifyParentsOfAbsents(
   absents: EleveLite[],
   classe:  string,
   date:    string,
   seance:  string,
+  teacher: TeacherInfo,
 ): Promise<number> {
   if (absents.length === 0) return 0
 
-  // 1. Récupère les codeMassar (= id) des absents, lit les eleves docs
-  //    pour trouver leur parentUid.
+  // 1. Lit les eleves docs des absents pour trouver leur parentUid.
   const absentIds = absents.map(e => e.id)
   const elevesSnap = await getDocs(
     query(collection(db, 'eleves'), where(documentId(), 'in', absentIds.slice(0, 10))),
   )
-  // Note : Firestore `in` is limited to 10. Pour 1 séance la limite tient.
   const eleveToParent = new Map<string, { parentUid: string; prenom: string; nom: string }>()
   elevesSnap.forEach(d => {
     const data = d.data() as any
@@ -80,7 +89,7 @@ async function notifyParentsOfAbsents(
 
   if (eleveToParent.size === 0) return 0
 
-  // 2. Lit les users (parents) pour récupérer leurs expoPushTokens.
+  // 2. Lit les parents pour récupérer leurs expoPushTokens.
   const parentUids = [...new Set([...eleveToParent.values()].map(v => v.parentUid))]
   const usersSnap = await getDocs(
     query(collection(db, 'users'), where(documentId(), 'in', parentUids.slice(0, 10))),
@@ -91,31 +100,52 @@ async function notifyParentsOfAbsents(
     if (data?.expoPushToken) parentToToken.set(d.id, data.expoPushToken)
   })
 
-  // 3. Construit les messages
-  const messages = []
+  const fromNom = `${teacher.prenom} ${teacher.nom}`.trim()
+
+  // 3. Pour chaque absent : écrire un message + push (en parallèle)
+  const writes: Promise<any>[] = []
+  const pushes: any[] = []
+  let notified = 0
+
   for (const eleve of absents) {
     const link = eleveToParent.get(eleve.id)
     if (!link) continue
+    const body = `${link.prenom} ${link.nom} a été marqué(e) absent(e) en ${classe} (${seance}, ${date}).`
+
+    // 3.a — message Firestore (historique permanent)
+    writes.push(sendMessage({
+      subject:  'Absence signalée',
+      body,
+      fromId:   teacher.uid,
+      fromNom,
+      fromRole: 'professeur',
+      toType:   'user',
+      toIds:    [link.parentUid],
+      category: 'attendance',
+      priority: 'urgent',
+      eleveId:  eleve.id,
+      classe,
+    }))
+    notified++
+
+    // 3.b — push instantané (best-effort, seulement si on a le token)
     const token = parentToToken.get(link.parentUid)
-    if (!token) continue
-    messages.push({
-      to:    token,
-      title: 'Absence signalée',
-      body:  `${link.prenom} ${link.nom} a été marqué(e) absent(e) en ${classe} (${seance}, ${date}).`,
-      data:  {
-        type:    'absence',
-        eleveId: eleve.id,
-        classe,
-        date,
-        seance,
-      },
-    })
+    if (token) {
+      pushes.push({
+        to:    token,
+        title: 'Absence signalée',
+        body,
+        data:  { type: 'absence', eleveId: eleve.id, classe, date, seance },
+      })
+    }
   }
 
-  // 4. Envoie via Expo Push API
-  if (messages.length === 0) return 0
-  await sendPush(messages)
-  return messages.length
+  // 4. Exécuter en parallèle
+  await Promise.all([
+    Promise.all(writes),
+    pushes.length > 0 ? sendPush(pushes) : Promise.resolve(),
+  ])
+  return notified
 }
 
 export default function TeacherAttendanceScreen() {
@@ -202,15 +232,16 @@ export default function TeacherAttendanceScreen() {
 
       // ── Notifier les parents des absents ──────────────────────────────
       let notifSent = 0
-      if (absent.size > 0) {
+      if (absent.size > 0 && profile) {
         try {
           notifSent = await notifyParentsOfAbsents(
             eleves.filter(e => absent.has(e.id)),
             classe, date, seance,
+            { uid: profile.uid, nom: profile.nom, prenom: profile.prenom },
           )
         } catch (e) {
           // Erreur de notif non-bloquante : l'appel est déjà sauvegardé
-          console.warn('Push notification failed:', e)
+          console.warn('Notification failed:', e)
         }
       }
 
