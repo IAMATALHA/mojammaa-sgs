@@ -73,29 +73,14 @@ export default function LoginScreen() {
         contentContainerStyle={[styles.root, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 40 }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Animated.View
-          entering={FadeInUp.duration(500)}
-          style={[styles.logoWrap, {
-            shadowColor:   theme.text,
-            shadowOpacity: 0.10,
-            shadowRadius:  18,
-            shadowOffset:  { width: 0, height: 6 },
-            elevation:     4,
-          }]}
-        >
+        <Animated.View entering={FadeInUp.duration(500)} style={styles.logoWrap}>
           <Image
-            source={require('../../../assets/icon.png')}
+            source={require('../../../assets/logo.png')}
             style={styles.logoImage}
             resizeMode="contain"
           />
         </Animated.View>
-        <Animated.Text entering={FadeInUp.delay(150).duration(500)} style={[styles.title, { color: theme.text, fontFamily: theme.fonts.black }]}>
-          Mojammaa Al Maarifa
-        </Animated.Text>
-        <Animated.Text entering={FadeInUp.delay(220).duration(500)} style={[styles.titleAr, { color: theme.textSoft, fontFamily: theme.fonts.semibold }]}>
-          مجمع المعرفة الخصوصية
-        </Animated.Text>
-        <Animated.Text entering={FadeInUp.delay(300).duration(500)} style={[styles.subtitle, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>
+        <Animated.Text entering={FadeInUp.delay(220).duration(500)} style={[styles.subtitle, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>
           Connectez-vous avec votre compte
         </Animated.Text>
 
@@ -166,13 +151,10 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   root: { flexGrow: 1, paddingHorizontal: 28, backgroundColor: '#F5F1E8' },
   logoWrap: {
-    width: 120, height: 120, borderRadius: 28,
-    alignSelf: 'center', marginBottom: 22,
-    overflow: 'hidden',
+    width: 220, height: 220,
+    alignSelf: 'center', marginBottom: 8,
   },
   logoImage: { width: '100%', height: '100%' },
-  title:    { fontSize: 24, fontWeight: '800', textAlign: 'center', marginBottom: 4, letterSpacing: -0.3 },
-  titleAr:  { fontSize: 14, textAlign: 'center', marginBottom: 10, letterSpacing: 0.2 },
   subtitle: { fontSize: 13, textAlign: 'center', marginBottom: 32, opacity: 0.85 },
 
   label: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
