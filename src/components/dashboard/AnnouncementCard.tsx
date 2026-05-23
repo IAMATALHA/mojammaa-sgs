@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { MotiView } from 'moti'
 import { Megaphone, AlertCircle, Calendar, School, ShieldCheck } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import type { Announcement } from '../../utils/mockData'
@@ -37,29 +38,17 @@ export default function AnnouncementCard({
   const Icon = CATEGORY_ICON[item.category] ?? Megaphone
 
   const baseStyle = {
-    backgroundColor: isUrgent ? theme.dangerSurface : theme.surface,
-    borderColor:     isUrgent ? theme.primaryBorder : 'transparent',
+    backgroundColor: isUrgent ? theme.dangerSurface : theme.card,
+    borderColor:     isUrgent ? theme.primaryBorder : theme.border,
   }
-  const Wrapper: any = onPress ? Pressable : View
-  const wrapperProps = onPress
-    ? {
-        onPress,
-        android_ripple: { color: theme.border },
-        style: ({ pressed }: { pressed: boolean }) => [
-          styles.row,
-          baseStyle,
-          pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
-        ],
-      }
-    : { style: [styles.row, baseStyle] }
 
-  return (
-    <Wrapper {...wrapperProps}>
+  const content = (
+    <>
       <View style={[
         styles.iconWrap,
-        { backgroundColor: isUrgent ? theme.primary : theme.white },
+        { backgroundColor: isUrgent ? theme.primary : theme.surface },
       ]}>
-        <Icon size={16} color={isUrgent ? '#fff' : theme.text} strokeWidth={2} />
+        <Icon size={16} color={isUrgent ? '#fff' : theme.textSoft} strokeWidth={1.75} />
       </View>
 
       <View style={styles.body}>
@@ -77,8 +66,8 @@ export default function AnnouncementCard({
           </Text>
           {isUrgent ? (
             <View style={[styles.badge, { backgroundColor: theme.primary }]}>
-              <AlertCircle size={9} color="#fff" strokeWidth={2.5} />
-              <Text style={styles.badgeText}>URGENT</Text>
+              <AlertCircle size={9} color="#fff" strokeWidth={1.75} />
+              <Text style={[styles.badgeText, { fontFamily: theme.fonts.black }]}>URGENT</Text>
             </View>
           ) : null}
         </View>
@@ -112,20 +101,48 @@ export default function AnnouncementCard({
           </Text>
         </View>
       </View>
-    </Wrapper>
+    </>
+  )
+
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} android_ripple={{ color: theme.border }}>
+        {({ pressed }) => (
+          <MotiView
+            from={{ opacity: 0 }}
+            animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
+            transition={{ type: 'timing', duration: 200 }}
+            style={[styles.row, baseStyle]}
+          >
+            {content}
+          </MotiView>
+        )}
+      </Pressable>
+    )
+  }
+
+  return (
+    <MotiView
+      from={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ type: 'timing', duration: 200 }}
+      style={[styles.row, baseStyle]}
+    >
+      {content}
+    </MotiView>
   )
 }
 
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 10,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   iconWrap: {
-    width: 34, height: 34, borderRadius: 10,
+    width: 36, height: 36, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
     marginEnd: 12,
   },
@@ -135,7 +152,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 3,
     paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999,
   },
-  badgeText: { color: '#fff', fontSize: 8.5, fontWeight: '800', letterSpacing: 0.4 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 6 },
+  badgeText: { color: '#fff', fontSize: 8.5, letterSpacing: 0.4 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 },
   dot: { width: 2.5, height: 2.5, borderRadius: 2 },
 })

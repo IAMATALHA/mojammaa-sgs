@@ -24,7 +24,7 @@ interface AttendanceRingProps {
 export default function AttendanceRing({
   value,
   size = 140,
-  stroke = 12,
+  stroke = 10,
   label,
   caption,
   trackColor,
@@ -42,7 +42,7 @@ export default function AttendanceRing({
         <G rotation={-90} origin={`${size / 2}, ${size / 2}`}>
           <Circle
             cx={size / 2} cy={size / 2} r={r}
-            stroke={trackColor ?? theme.surface}
+            stroke={trackColor ?? theme.surfaceAlt}
             strokeWidth={stroke}
             fill="none"
           />
@@ -59,10 +59,11 @@ export default function AttendanceRing({
       </Svg>
       <View style={styles.label}>
         <Text style={{
-          color: theme.text,
-          fontFamily: theme.fonts.black,
-          fontSize: size * 0.24,
-          letterSpacing: -1,
+            color: theme.text,
+            fontFamily: theme.fonts.black,
+          fontSize: size * 0.23,
+          letterSpacing: -0.4,
+          fontVariant: ['tabular-nums'],
         }}>
           {label ?? `${Math.round(clamped)}%`}
         </Text>
@@ -73,7 +74,7 @@ export default function AttendanceRing({
             fontSize: 11,
             marginTop: 2,
             textTransform: 'uppercase',
-            letterSpacing: 0.6,
+            letterSpacing: 0.4,
           }}>
             {caption}
           </Text>

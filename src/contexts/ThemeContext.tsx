@@ -2,10 +2,9 @@
  * ThemeContext — unified SaaS brand palette.
  *
  * The previous build assigned a different `primary` colour per role
- * (student=green, teacher=blue, admin=red). The new brand system uses
- * a single, modern red/gold accent across every role to read as a
- * coherent product. Role differentiation is now expressed through
- * iconography and copy, not colour.
+ * (student=green, teacher=blue, admin=red). The current system uses one
+ * restrained red accent across every role. Role differentiation is now
+ * expressed through iconography and copy, not colour.
  *
  * Public shape is preserved (`primary`, `primarySurface`, spacing,
  * radius, fonts) so every existing screen keeps compiling — they
@@ -60,17 +59,17 @@ export interface Theme {
 }
 
 const THEME: Theme = {
-  primary:        palette.brandRed,
-  primarySurface: palette.brandRedSoft,
-  primaryBorder:  palette.brandRed + '55',
-  primaryDark:    palette.brandRedDark,
-  accent:         palette.gold,
-  accentSurface:  palette.goldSoft,
+  primary:        palette.accent,
+  primarySurface: palette.accentSoft,
+  primaryBorder:  palette.accentBorder,
+  primaryDark:    palette.accentDark,
+  accent:         palette.accent,
+  accentSurface:  palette.accentSoft,
 
-  bg:             palette.white,
+  bg:             palette.bg,
   surface:        palette.surface,
   surfaceAlt:     palette.surfaceAlt,
-  card:           palette.white,
+  card:           palette.elevated,
   border:         palette.border,
   borderStrong:   palette.borderStrong,
   white:          palette.white,

@@ -7,6 +7,7 @@
 
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { MotiView } from 'moti'
 import {
   CheckCircle, PencilLine, BookOpen, Send,
   GraduationCap, CalendarX, MessageCircle, Bell,
@@ -33,12 +34,13 @@ interface QuickActionsProps {
 
 export default function QuickActions({ actions, onPress }: QuickActionsProps) {
   const theme = useTheme()
+  const neutralTint = { bg: theme.surface, fg: theme.textSoft }
   const tints = {
     primary: { bg: theme.primarySurface, fg: theme.primary },
-    accent:  { bg: theme.accentSurface,  fg: theme.accent  },
-    success: { bg: theme.successSurface, fg: theme.success },
-    info:    { bg: theme.infoSurface,    fg: theme.info    },
-    warning: { bg: theme.warningSurface, fg: theme.warning },
+    accent:  { bg: theme.primarySurface, fg: theme.primary },
+    success: neutralTint,
+    info:    neutralTint,
+    warning: neutralTint,
   }
   return (
     <View style={styles.grid}>
@@ -50,31 +52,39 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
             key={action.id}
             onPress={() => onPress?.(action)}
             android_ripple={{ color: theme.border }}
-            style={({ pressed }) => [
-              styles.tile,
-              {
-                backgroundColor: theme.card,
-                borderColor:     theme.border,
-              },
-              pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
-            ]}
+            style={styles.tilePressable}
           >
-            <View style={[styles.iconBox, { backgroundColor: tint.bg }]}>
-              <Icon size={20} color={tint.fg} strokeWidth={2.2} />
-            </View>
-            <Text
-              numberOfLines={2}
-              style={{
-                color: theme.text,
-                fontFamily: theme.fonts.semibold,
-                fontSize: 12.5,
-                marginTop: 8,
-                textAlign: 'center',
-                lineHeight: 16,
-              }}
-            >
-              {action.label}
-            </Text>
+            {({ pressed }) => (
+              <MotiView
+                from={{ opacity: 0 }}
+                animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
+                transition={{ type: 'timing', duration: 200 }}
+                style={[
+                  styles.tile,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor:     theme.border,
+                  },
+                ]}
+              >
+                <View style={[styles.iconBox, { backgroundColor: tint.bg }]}>
+                  <Icon size={20} color={tint.fg} strokeWidth={1.75} />
+                </View>
+                <Text
+                  numberOfLines={2}
+                  style={{
+                    color: theme.text,
+                    fontFamily: theme.fonts.medium,
+                    fontSize: 12.5,
+                    marginTop: 10,
+                    textAlign: 'center',
+                    lineHeight: 17,
+                  }}
+                >
+                  {action.label}
+                </Text>
+              </MotiView>
+            )}
           </Pressable>
         )
       })}
@@ -86,20 +96,23 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap:      'wrap',
-    gap:           10,
+    gap:           12,
   },
-  tile: {
+  tilePressable: {
     width:        '47%',
     flexGrow:     1,
-    minHeight:    96,
-    borderRadius: 14,
-    borderWidth:  1,
-    padding:      12,
+  },
+  tile: {
+    flex:         1,
+    minHeight:    108,
+    borderRadius: 16,
+    borderWidth:  StyleSheet.hairlineWidth,
+    padding:      16,
     alignItems:   'center',
     justifyContent:'center',
   },
   iconBox: {
-    width: 40, height: 40, borderRadius: 12,
+    width: 42, height: 42, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
   },
 })

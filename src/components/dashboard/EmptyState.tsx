@@ -4,6 +4,7 @@
 
 import React from 'react'
 import { View, Text, StyleSheet } from 'react-native'
+import { MotiView } from 'moti'
 import { Inbox, type LucideIcon } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 
@@ -18,9 +19,14 @@ export default function EmptyState({
 }: EmptyStateProps) {
   const theme = useTheme()
   return (
-    <View style={styles.wrap}>
+    <MotiView
+      from={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ type: 'timing', duration: 200 }}
+      style={styles.wrap}
+    >
       <View style={[styles.iconWrap, { backgroundColor: theme.surface }]}>
-        <Icon size={22} color={theme.textMuted} strokeWidth={1.8} />
+        <Icon size={22} color={theme.textMuted} strokeWidth={1.75} />
       </View>
       <Text style={{
         color: theme.text,
@@ -44,7 +50,7 @@ export default function EmptyState({
           {message}
         </Text>
       ) : null}
-    </View>
+    </MotiView>
   )
 }
 
@@ -52,10 +58,10 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems:     'center',
     justifyContent: 'center',
-    paddingVertical: 24,
+    paddingVertical: 32,
   },
   iconWrap: {
-    width: 48, height: 48, borderRadius: 16,
+    width: 50, height: 50, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
   },
 })

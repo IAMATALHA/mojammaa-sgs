@@ -25,7 +25,7 @@ export function Skeleton({
     <MotiView
       from={{ opacity: 0.55 }}
       animate={{ opacity: 1 }}
-      transition={{ type: 'timing', duration: 800, loop: true, repeatReverse: true }}
+      transition={{ type: 'timing', duration: 900, loop: true, repeatReverse: true }}
       style={[
         {
           width: width as any,
@@ -44,11 +44,11 @@ export function SkeletonCard({ height = 110 }: { height?: number }) {
   return (
     <View style={[
       styles.card,
-      { backgroundColor: theme.card, borderColor: theme.border },
+      { minHeight: height, backgroundColor: theme.card, borderColor: theme.border },
     ]}>
-      <Skeleton width={34} height={34} radius={10} />
-      <Skeleton width="60%" height={22} radius={6} style={{ marginTop: 12 }} />
-      <Skeleton width="40%" height={12} radius={6} style={{ marginTop: 6 }} />
+      <Skeleton width={36} height={36} radius={12} />
+      <Skeleton width="60%" height={20} radius={6} style={{ marginTop: 16 }} />
+      <Skeleton width="42%" height={12} radius={6} style={{ marginTop: 7 }} />
     </View>
   )
 }
@@ -67,11 +67,14 @@ export function SkeletonRow() {
 
 const styles = StyleSheet.create({
   card: {
-    flex: 1, padding: 14, borderRadius: 16, borderWidth: 1,
+    flex: 1,
+    padding: 16,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   row: {
     flexDirection: 'row',
     alignItems:    'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
 })

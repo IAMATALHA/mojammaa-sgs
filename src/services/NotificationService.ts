@@ -50,8 +50,10 @@ export async function registerForPushNotificationsAsync(userId: string) {
     return;
   }
 
+  // EAS project ID (UUID from app.json extra.eas.projectId).
+  // Required since Expo SDK 53+ — push notifications fail silently without it.
   token = (await Notifications.getExpoPushTokenAsync({
-    projectId: 'mojammaa-sgs' // Optional, better to dynamically fetch if possible
+    projectId: '6ff4e5d9-040f-45df-ac65-5cf941ad8627',
   })).data;
   
   // Save token to Firestore — setDoc(merge) au lieu d'updateDoc, sinon
