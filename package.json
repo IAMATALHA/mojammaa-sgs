@@ -11,7 +11,8 @@
     "doctor": "npx expo-doctor",
     "db:import:eleves": "node scripts/importStudents.js",
     "db:import:eleves:commit": "node scripts/importStudents.js --commit",
-    "db:reset:eleves": "node scripts/importStudents.js --commit --wipe"
+    "db:reset:eleves": "node scripts/importStudents.js --commit --wipe",
+    "db:import:schedule": "node scripts/importSchedule.js cNnmhtiJF7VLgW01RBErKTwu9Ym2"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",

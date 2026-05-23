@@ -26,7 +26,7 @@ import {
   PerformanceBars, SkeletonCard, SkeletonRow, EmptyState,
 } from '../../components/dashboard'
 import {
-  TEACHER_SCHEDULE, TEACHER_ANNOUNCEMENTS,
+  TEACHER_ANNOUNCEMENTS,
   TEACHER_QUICK_ACTIONS, CLASS_PERFORMANCE,
   type ScheduleEntry, type Announcement, type QuickAction,
 } from '../../utils/mockData'
@@ -166,14 +166,14 @@ export default function TeacherDashboardScreen() {
               <>
                 <SkeletonRow /><SkeletonRow /><SkeletonRow />
               </>
-            ) : TEACHER_SCHEDULE.length === 0 ? (
+            ) : teacher.todaySlots.length === 0 ? (
               <EmptyState
                 icon={CalendarClock}
                 title="Aucun cours aujourd'hui"
                 message="Profitez d'une journée calme — ou consultez la semaine."
               />
             ) : (
-              TEACHER_SCHEDULE.map(s => (
+              teacher.todaySlots.map(s => (
                 <ScheduleItem
                   key={s.id}
                   item={s}
