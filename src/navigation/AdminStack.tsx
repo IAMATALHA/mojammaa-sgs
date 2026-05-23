@@ -1,7 +1,12 @@
 import React from 'react'
+import { StyleSheet, View } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { LayoutDashboard, Users, GraduationCap, CalendarDays, Megaphone, BarChart3, Settings } from 'lucide-react-native'
+import { LinearGradient } from 'expo-linear-gradient'
+import {
+  LayoutDashboard, Users, GraduationCap, CalendarDays, Megaphone, BarChart3, Settings,
+  type LucideIcon,
+} from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext'
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen'
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen'
@@ -12,6 +17,29 @@ import AdminStatsScreen from '../screens/admin/AdminStatsScreen'
 import AdminSettingsScreen from '../screens/admin/AdminSettingsScreen'
 
 const Tab = createBottomTabNavigator()
+
+function TabIcon({
+  Icon, color, focused, theme,
+}: { Icon: LucideIcon; color: string; focused: boolean; theme: any }) {
+  if (focused) {
+    return (
+      <LinearGradient
+        colors={[theme.primarySurface, theme.accentSurface]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.iconActive, { borderColor: theme.primaryBorder }]}
+      >
+        <Icon color={color} size={20} strokeWidth={1.75} />
+        <View style={[styles.statusDot, { backgroundColor: theme.warning }]} />
+      </LinearGradient>
+    )
+  }
+  return (
+    <View style={styles.iconInactive}>
+      <Icon color={color} size={20} strokeWidth={1.75} />
+    </View>
+  )
+}
 
 export default function AdminStack() {
   const theme = useTheme()
@@ -24,51 +52,82 @@ export default function AdminStack() {
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSoft,
         tabBarStyle: { 
-          backgroundColor: theme.white, 
+          backgroundColor: theme.card,
           borderTopColor: theme.border,
-          borderTopWidth: 1,
+          borderTopWidth: StyleSheet.hairlineWidth,
           paddingBottom: Math.max(insets.bottom, 8), // Dynamically add space for Android buttons
-          paddingTop: 8,
-          minHeight: 60 + Math.max(insets.bottom, 0),
+          paddingTop: 10,
+          minHeight: 68 + Math.max(insets.bottom, 0),
+          shadowColor: '#1D3557',
+          shadowOpacity: 0.08,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: -4 },
+          elevation: 8,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginTop: 4 },
+        tabBarItemStyle: { minHeight: 44 },
+        tabBarLabelStyle: { fontSize: 10.5, fontFamily: theme.fonts.medium, marginTop: 2 },
       }}
     >
       <Tab.Screen 
         name="AdminDashboard"  
         component={AdminDashboardScreen}  
-        options={{ title: 'Accueil', tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={24} strokeWidth={2} /> }} 
+        options={{ title: 'Accueil', tabBarIcon: ({ color, focused }) => <TabIcon Icon={LayoutDashboard} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen 
         name="AdminUsers"      
         component={AdminUsersScreen}      
-        options={{ title: 'Users', tabBarIcon: ({ color, size }) => <Users color={color} size={24} strokeWidth={2} /> }} 
+        options={{ title: 'Users', tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen 
         name="AdminClasses"    
         component={AdminClassesScreen}    
-        options={{ title: 'Classes', tabBarIcon: ({ color, size }) => <GraduationCap color={color} size={24} strokeWidth={2} /> }} 
+        options={{ title: 'Classes', tabBarIcon: ({ color, focused }) => <TabIcon Icon={GraduationCap} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen 
         name="AdminEdt"        
         component={AdminEdtScreen}        
-        options={{ title: 'EDT', tabBarIcon: ({ color, size }) => <CalendarDays color={color} size={24} strokeWidth={2} /> }} 
+        options={{ title: 'EDT', tabBarIcon: ({ color, focused }) => <TabIcon Icon={CalendarDays} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen 
         name="AdminBroadcast"  
         component={AdminBroadcastScreen}  
-        options={{ title: 'Annonces', tabBarIcon: ({ color, size }) => <Megaphone color={color} size={24} strokeWidth={2} /> }} 
+        options={{ title: 'Annonces', tabBarIcon: ({ color, focused }) => <TabIcon Icon={Megaphone} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen 
         name="AdminStats"      
         component={AdminStatsScreen}      
-        options={{ title: 'Stats', tabBarIcon: ({ color, size }) => <BarChart3 color={color} size={24} strokeWidth={2} /> }} 
+        options={{ title: 'Stats', tabBarIcon: ({ color, focused }) => <TabIcon Icon={BarChart3} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen 
         name="AdminSettings"   
         component={AdminSettingsScreen}   
-        options={{ title: 'Réglages', tabBarIcon: ({ color, size }) => <Settings color={color} size={24} strokeWidth={2} /> }} 
+        options={{ title: 'Réglages', tabBarIcon: ({ color, focused }) => <TabIcon Icon={Settings} color={color} focused={focused} theme={theme} /> }}
       />
     </Tab.Navigator>
   )
 }
+
+const styles = StyleSheet.create({
+  iconActive: {
+    width: 42,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconInactive: {
+    width: 42,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusDot: {
+    position: 'absolute',
+    top: 6,
+    end: 8,
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+})

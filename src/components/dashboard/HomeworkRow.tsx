@@ -28,7 +28,7 @@ export default function HomeworkRow({
   const Icon = isSubmitted ? Check : item.status === 'pending' ? BookOpen : FileText
 
   const iconBg = due.danger ? theme.dangerSurface : theme.surface
-  const iconFg = due.danger ? theme.primary : theme.textSoft
+  const iconFg = due.danger ? theme.accent : isSubmitted ? theme.success : theme.textSoft
 
   const content = (
     <>
@@ -62,11 +62,11 @@ export default function HomeworkRow({
         styles.pill,
         {
           backgroundColor: due.danger ? theme.dangerSurface : theme.surface,
-          borderColor: due.danger ? theme.primaryBorder : theme.border,
+          borderColor: due.danger ? theme.accentSurface : theme.border,
         },
       ]}>
         <Text style={{
-          color: due.danger ? theme.primary : theme.textSoft,
+          color: due.danger ? theme.accent : theme.textSoft,
           fontFamily: theme.fonts.medium,
           fontSize: 10.5,
           letterSpacing: 0.2,

@@ -39,14 +39,14 @@ export default function AnnouncementCard({
 
   const baseStyle = {
     backgroundColor: isUrgent ? theme.dangerSurface : theme.card,
-    borderColor:     isUrgent ? theme.primaryBorder : theme.border,
+    borderColor:     isUrgent ? theme.accentSurface : theme.border,
   }
 
   const content = (
     <>
       <View style={[
         styles.iconWrap,
-        { backgroundColor: isUrgent ? theme.primary : theme.surface },
+        { backgroundColor: isUrgent ? theme.accent : theme.surface },
       ]}>
         <Icon size={16} color={isUrgent ? '#fff' : theme.textSoft} strokeWidth={1.75} />
       </View>
@@ -65,7 +65,7 @@ export default function AnnouncementCard({
             {item.title}
           </Text>
           {isUrgent ? (
-            <View style={[styles.badge, { backgroundColor: theme.primary }]}>
+            <View style={[styles.badge, { backgroundColor: theme.accent }]}>
               <AlertCircle size={9} color="#fff" strokeWidth={1.75} />
               <Text style={[styles.badgeText, { fontFamily: theme.fonts.black }]}>URGENT</Text>
             </View>

@@ -2,19 +2,19 @@
 
 ## Direction
 
-The dashboard visual language now follows a restrained iOS-style system: white as the primary canvas, grouped gray surfaces for secondary areas, hairline separators, and very soft shadows only where depth helps scanning.
+The dashboard visual language now follows the Arabic poster inspiration through an iOS lens: warm cream canvas, navy structure, coral emphasis, and very small orange/yellow status points. The goal is school-friendly warmth without turning the app into a decorative poster.
 
 ## Color
 
-The single accent is the existing Mojammaa red, `#E53935`. It stays reserved for primary actions, active/current states, urgent indicators, and small brand moments. Former blue, green, and gold dashboard tints now resolve to neutral grays so the interface feels calmer and more native.
+The core palette is `#F5F1E8` cream, `#1D3557` navy, `#E63946` coral, `#F77F00` orange, and `#FCBF49` yellow. Navy is used for text and primary action structure, coral for urgent/emphasis moments, and orange/yellow for small status indicators only.
 
 ## Type And Shape
 
-Poppins remains the app font. Hierarchy comes mostly from weight: 400 for body, 500 for secondary emphasis, 600 for titles, 700/800 for numbers and initials. Corners follow the stepped 12/16/22/28 scale, with larger cards using 22px and compact controls using 12-16px.
+Poppins remains the app font as the closest loaded match to a San Francisco-style hierarchy. Weight does most of the work: 400 body, 500 secondary emphasis, 600 titles, 700/800 numbers and initials. Cards now sit closer to a consistent 12px radius with soft floating depth.
 
 ## Motion
 
-Dashboard press states use Moti timing transitions at 200ms with a small `0.98` scale and light opacity change. Loading and entry motion stays quiet and linear.
+Dashboard press states use Moti timing transitions at 200ms with a small `0.98` scale and light opacity change. Bottom tabs use a subtle navy/coral active capsule and orange/yellow dots as status accents.
 
 ## Dark Mode
 
