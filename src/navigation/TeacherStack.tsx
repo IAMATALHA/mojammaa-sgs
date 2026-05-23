@@ -1,6 +1,16 @@
+/**
+ * Teacher navigation : NativeStack wrapping the BottomTabs.
+ *
+ * - MainTabs is the root tabs screen
+ * - Detail screens (Attendance, ClasseFolder, ClasseEleves, etc.) are
+ *   pushed over the tabs so we keep the tab bar visible-less context
+ *   during deep navigation.
+ */
+
 import React from 'react'
 import { StyleSheet, View } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
@@ -8,13 +18,18 @@ import {
   type LucideIcon,
 } from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext'
-import TeacherDashboardScreen from '../screens/teacher/TeacherDashboardScreen'
-import TeacherEdtScreen      from '../screens/teacher/TeacherEdtScreen'
-import TeacherClassesScreen  from '../screens/teacher/TeacherClassesScreen'
-import TeacherDevoirsScreen  from '../screens/teacher/TeacherDevoirsScreen'
-import TeacherMessagesScreen from '../screens/teacher/TeacherMessagesScreen'
+import TeacherDashboardScreen    from '../screens/teacher/TeacherDashboardScreen'
+import TeacherEdtScreen          from '../screens/teacher/TeacherEdtScreen'
+import TeacherClassesScreen      from '../screens/teacher/TeacherClassesScreen'
+import TeacherDevoirsScreen      from '../screens/teacher/TeacherDevoirsScreen'
+import TeacherMessagesScreen     from '../screens/teacher/TeacherMessagesScreen'
+import TeacherAttendanceScreen   from '../screens/teacher/TeacherAttendanceScreen'
+import TeacherClasseFolderScreen from '../screens/teacher/TeacherClasseFolderScreen'
+import TeacherClasseElevesScreen from '../screens/teacher/TeacherClasseElevesScreen'
+import TeacherNotesScreen        from '../screens/teacher/TeacherNotesScreen'
 
-const Tab = createBottomTabNavigator()
+const Tab   = createBottomTabNavigator()
+const Stack = createNativeStackNavigator()
 
 function TabIcon({
   Icon, color, focused, theme,
@@ -39,7 +54,7 @@ function TabIcon({
   )
 }
 
-export default function TeacherStack() {
+function TeacherTabs() {
   const theme = useTheme()
   const insets = useSafeAreaInsets()
 
@@ -62,9 +77,7 @@ export default function TeacherStack() {
           shadowOffset:    { width: 0, height: -4 },
           elevation:       8,
         },
-        tabBarItemStyle: {
-          minHeight: 44,
-        },
+        tabBarItemStyle: { minHeight: 44 },
         tabBarLabelStyle: {
           fontSize:   11,
           fontFamily: theme.fonts.medium,
@@ -113,6 +126,18 @@ export default function TeacherStack() {
         }}
       />
     </Tab.Navigator>
+  )
+}
+
+export default function TeacherStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="TeacherTabs"            component={TeacherTabs} />
+      <Stack.Screen name="TeacherAttendance"      component={TeacherAttendanceScreen} />
+      <Stack.Screen name="TeacherClasseFolder"    component={TeacherClasseFolderScreen} />
+      <Stack.Screen name="TeacherClasseEleves"    component={TeacherClasseElevesScreen} />
+      <Stack.Screen name="TeacherNotes"           component={TeacherNotesScreen} />
+    </Stack.Navigator>
   )
 }
 

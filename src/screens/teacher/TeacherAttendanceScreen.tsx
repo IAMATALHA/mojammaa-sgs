@@ -21,7 +21,9 @@ import { useRoute, useNavigation } from '@react-navigation/native'
 import PressableScale from '../../components/PressableScale'
 import {
   collection, getDocs, query, where, writeBatch, doc, Timestamp,
+  documentId,
 } from 'firebase/firestore'
+import { sendPush } from '../../services/pushService'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -43,6 +45,77 @@ interface RouteParams {
 
 function todayISO(): string {
   return new Date().toISOString().split('T')[0]
+}
+
+/**
+ * Pour chaque élève absent, retrouve son parent et envoie un push.
+ * Retourne le nombre de pushs réellement envoyés.
+ */
+async function notifyParentsOfAbsents(
+  absents: EleveLite[],
+  classe:  string,
+  date:    string,
+  seance:  string,
+): Promise<number> {
+  if (absents.length === 0) return 0
+
+  // 1. Récupère les codeMassar (= id) des absents, lit les eleves docs
+  //    pour trouver leur parentUid.
+  const absentIds = absents.map(e => e.id)
+  const elevesSnap = await getDocs(
+    query(collection(db, 'eleves'), where(documentId(), 'in', absentIds.slice(0, 10))),
+  )
+  // Note : Firestore `in` is limited to 10. Pour 1 séance la limite tient.
+  const eleveToParent = new Map<string, { parentUid: string; prenom: string; nom: string }>()
+  elevesSnap.forEach(d => {
+    const data = d.data() as any
+    if (data?.parentUid) {
+      eleveToParent.set(d.id, {
+        parentUid: data.parentUid,
+        prenom:    data.prenomLatin || data.prenom || '',
+        nom:       data.nomLatin    || data.nom    || '',
+      })
+    }
+  })
+
+  if (eleveToParent.size === 0) return 0
+
+  // 2. Lit les users (parents) pour récupérer leurs expoPushTokens.
+  const parentUids = [...new Set([...eleveToParent.values()].map(v => v.parentUid))]
+  const usersSnap = await getDocs(
+    query(collection(db, 'users'), where(documentId(), 'in', parentUids.slice(0, 10))),
+  )
+  const parentToToken = new Map<string, string>()
+  usersSnap.forEach(d => {
+    const data = d.data() as any
+    if (data?.expoPushToken) parentToToken.set(d.id, data.expoPushToken)
+  })
+
+  // 3. Construit les messages
+  const messages = []
+  for (const eleve of absents) {
+    const link = eleveToParent.get(eleve.id)
+    if (!link) continue
+    const token = parentToToken.get(link.parentUid)
+    if (!token) continue
+    messages.push({
+      to:    token,
+      title: 'Absence signalée',
+      body:  `${link.prenom} ${link.nom} a été marqué(e) absent(e) en ${classe} (${seance}, ${date}).`,
+      data:  {
+        type:    'absence',
+        eleveId: eleve.id,
+        classe,
+        date,
+        seance,
+      },
+    })
+  }
+
+  // 4. Envoie via Expo Push API
+  if (messages.length === 0) return 0
+  await sendPush(messages)
+  return messages.length
 }
 
 export default function TeacherAttendanceScreen() {
@@ -126,12 +199,28 @@ export default function TeacherAttendanceScreen() {
         }, { merge: true })
       })
       await batch.commit()
+
+      // ── Notifier les parents des absents ──────────────────────────────
+      let notifSent = 0
+      if (absent.size > 0) {
+        try {
+          notifSent = await notifyParentsOfAbsents(
+            eleves.filter(e => absent.has(e.id)),
+            classe, date, seance,
+          )
+        } catch (e) {
+          // Erreur de notif non-bloquante : l'appel est déjà sauvegardé
+          console.warn('Push notification failed:', e)
+        }
+      }
+
       const count = absent.size
       Alert.alert(
         'Appel sauvegardé',
         count === 0
           ? `Tous les élèves de ${classe} sont présents pour ${seance}.`
-          : `${count} absent${count > 1 ? 's' : ''} enregistré${count > 1 ? 's' : ''} pour ${classe} · ${seance}.`,
+          : `${count} absent${count > 1 ? 's' : ''} enregistré${count > 1 ? 's' : ''} pour ${classe} · ${seance}.` +
+            (notifSent > 0 ? `\n\n${notifSent} parent${notifSent > 1 ? 's' : ''} notifié${notifSent > 1 ? 's' : ''}.` : ''),
         [{ text: 'OK', onPress: () => navigation.goBack() }],
       )
     } catch (e: any) {

@@ -38,12 +38,20 @@ function greetingFor(date = new Date()): string {
   return 'Bonsoir'
 }
 
-// Mapping action.id → tab route
+// Mapping action.id → tab route (qa1 = "Faire l'appel" is handled separately)
 const QUICK_ACTION_ROUTES: Record<string, string> = {
-  qa1: 'TeacherClasses',   // Faire l'appel
   qa2: 'TeacherClasses',   // Saisir une note
   qa3: 'TeacherDevoirs',   // Nouveau devoir
   qa4: 'TeacherMessages',  // Envoyer message
+}
+
+// Convertit l'heure de début d'un créneau → identifiant séance MASSAR
+function timeToSeance(startTime: string): string {
+  const seances: Record<string, string> = {
+    '08:30': 'S1', '09:30': 'S2', '10:30': 'S3', '11:30': 'S4',
+    '13:00': 'S5', '14:00': 'S6',
+  }
+  return seances[startTime] || 'S1'
 }
 
 export default function TeacherDashboardScreen() {
@@ -69,6 +77,26 @@ export default function TeacherDashboardScreen() {
   const goTo = (route: string) => nav.navigate(route)
 
   const handleQuickAction = (action: QuickAction) => {
+    // Cas spécial : "Faire l'appel" cible directement le cours en cours
+    // (ou le prochain, ou le 1er du jour, sinon affiche un message)
+    if (action.id === 'qa1') {
+      const slots = teacher.todaySlots
+      const target = slots.find(s => s.status === 'now')
+                  ?? slots.find(s => s.status === 'upcoming')
+                  ?? slots[0]
+      if (target) {
+        nav.navigate('TeacherAttendance', {
+          classe: target.classe,
+          seance: timeToSeance(target.startTime),
+        })
+      } else {
+        Alert.alert(
+          'Pas de cours aujourd\'hui',
+          'Va sur l\'onglet Classes pour choisir une classe et faire l\'appel.',
+        )
+      }
+      return
+    }
     const route = QUICK_ACTION_ROUTES[action.id]
     if (route) goTo(route)
   }
