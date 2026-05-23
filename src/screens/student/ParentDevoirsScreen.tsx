@@ -16,8 +16,9 @@ import { useTheme } from '../../contexts/ThemeContext'
 import {
   Card, HomeworkRow, EmptyState, SectionHeader,
 } from '../../components/dashboard'
+import { useParentData } from '../../hooks/useParentData'
 import {
-  PARENT_CHILDREN, PARENT_RECENT_HOMEWORK,
+  PARENT_RECENT_HOMEWORK,
   type HomeworkItem,
 } from '../../utils/mockData'
 
@@ -29,6 +30,7 @@ const STATUS_LABEL = {
 
 export default function ParentDevoirsScreen() {
   const theme = useTheme()
+  const parent = useParentData()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
   const [detail, setDetail] = useState<HomeworkItem | null>(null)
 
@@ -41,7 +43,7 @@ export default function ParentDevoirsScreen() {
   const submitted = filtered.filter(h => h.status !== 'pending')
 
   const childName = (id: string): string => {
-    const c = PARENT_CHILDREN.find(x => x.id === id)
+    const c = parent.children.find(x => x.id === id)
     return c ? c.firstName : ''
   }
 
@@ -82,7 +84,7 @@ export default function ParentDevoirsScreen() {
           onPress={() => setSelectedChildId('all')}
           theme={theme}
         />
-        {PARENT_CHILDREN.map(c => (
+        {parent.children.map(c => (
           <FilterChip
             key={c.id}
             label={c.firstName}

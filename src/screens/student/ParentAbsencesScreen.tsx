@@ -19,8 +19,9 @@ import { useTheme } from '../../contexts/ThemeContext'
 import {
   Card, StatCard, EmptyState, SectionHeader,
 } from '../../components/dashboard'
+import { useParentData } from '../../hooks/useParentData'
 import {
-  PARENT_CHILDREN, PARENT_ABSENCES,
+  PARENT_ABSENCES,
   type AbsenceEntry,
 } from '../../utils/mockData'
 
@@ -32,6 +33,7 @@ const TYPE_META = {
 
 export default function ParentAbsencesScreen() {
   const theme = useTheme()
+  const parent = useParentData()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
 
   const filtered = useMemo(() => {
@@ -51,7 +53,7 @@ export default function ParentAbsencesScreen() {
   }, [filtered])
 
   const childName = (id: string): string => {
-    const c = PARENT_CHILDREN.find(x => x.id === id)
+    const c = parent.children.find(x => x.id === id)
     return c ? c.firstName : ''
   }
 
@@ -114,7 +116,7 @@ export default function ParentAbsencesScreen() {
             onPress={() => setSelectedChildId('all')}
             theme={theme}
           />
-          {PARENT_CHILDREN.map(c => (
+          {parent.children.map(c => (
             <Chip
               key={c.id}
               label={c.firstName}

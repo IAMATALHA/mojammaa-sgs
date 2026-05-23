@@ -91,6 +91,23 @@ export async function countEleves(classes?: string[]): Promise<number> {
 }
 
 /**
+ * Souscrit aux enfants d'un parent (eleves où parentUid == parentUid).
+ * Retourne la fonction d'unsubscribe.
+ */
+export function subscribeChildrenOfParent(
+  parentUid: string,
+  onChange: (eleves: EleveDoc[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  const q = query(collection(db, COL), where('parentUid', '==', parentUid))
+  return onSnapshot(
+    q,
+    snap => onChange(snap.docs.map(d => d.data() as EleveDoc)),
+    err  => { onError?.(err) },
+  )
+}
+
+/**
  * Groupe les élèves par classe (utile pour l'affichage prof).
  */
 export function groupByClasse(eleves: EleveDoc[]): Record<string, EleveDoc[]> {

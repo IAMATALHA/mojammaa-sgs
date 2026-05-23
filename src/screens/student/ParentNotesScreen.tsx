@@ -6,7 +6,7 @@
  * - Liste des matières : moyenne enfant vs classe + tendance + commentaire.
  */
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, ScrollView, Pressable, StyleSheet,
 } from 'react-native'
@@ -17,8 +17,9 @@ import {
 } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import { Card, EmptyState, SectionHeader } from '../../components/dashboard'
+import { useParentData } from '../../hooks/useParentData'
 import {
-  PARENT_CHILDREN, PARENT_REPORTS,
+  PARENT_REPORTS,
   type SubjectGrade,
 } from '../../utils/mockData'
 
@@ -30,11 +31,19 @@ const HONOR_LABEL: Record<string, { label: string; tint: 'success' | 'info' | 'w
 
 export default function ParentNotesScreen() {
   const theme = useTheme()
-  const [selectedChildId, setSelectedChildId] = useState<string>(PARENT_CHILDREN[0]?.id ?? '')
+  const parent = useParentData()
+  const [selectedChildId, setSelectedChildId] = useState<string>('')
+
+  // Auto-select first child when data arrives
+  useEffect(() => {
+    if (parent.children.length > 0 && !selectedChildId) {
+      setSelectedChildId(parent.children[0].id)
+    }
+  }, [parent.children, selectedChildId])
 
   const selectedChild  = useMemo(
-    () => PARENT_CHILDREN.find(c => c.id === selectedChildId),
-    [selectedChildId],
+    () => parent.children.find(c => c.id === selectedChildId),
+    [parent.children, selectedChildId],
   )
   const report = useMemo(
     () => PARENT_REPORTS.find(r => r.childId === selectedChildId),
@@ -72,7 +81,7 @@ export default function ParentNotesScreen() {
         style={{ flexGrow: 0 }}
         contentContainerStyle={styles.chips}
       >
-        {PARENT_CHILDREN.map(c => (
+        {parent.children.map(c => (
           <Pressable
             key={c.id}
             onPress={() => setSelectedChildId(c.id)}

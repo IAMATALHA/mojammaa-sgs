@@ -13,7 +13,7 @@
  * All interactions are wired to navigation or modals — no dead UI.
  */
 
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, ScrollView, RefreshControl, StyleSheet, Pressable, Text,
   Alert, Modal,
@@ -26,13 +26,14 @@ import {
 } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { useParentData } from '../../hooks/useParentData'
 import {
   DashboardHeader, SectionHeader, Card,
   ChildCard, AttendanceRing, HomeworkRow, AnnouncementCard,
   EventCard, QuickActions, EmptyState, SkeletonRow,
 } from '../../components/dashboard'
 import {
-  PARENT_CHILDREN, PARENT_RECENT_HOMEWORK, PARENT_ANNOUNCEMENTS,
+  PARENT_RECENT_HOMEWORK, PARENT_ANNOUNCEMENTS,
   PARENT_UPCOMING_EVENTS, PARENT_QUICK_ACTIONS,
   type Announcement, type HomeworkItem, type UpcomingEvent, type QuickAction,
 } from '../../utils/mockData'
@@ -55,10 +56,11 @@ const QUICK_ACTION_ROUTES: Record<string, string> = {
 export default function ParentDashboardScreen() {
   const theme = useTheme()
   const { profile, logout } = useAuth()
+  const parent = useParentData()
   const nav = useNavigation<any>()
   const [refreshing, setRefreshing] = useState(false)
-  const [loading]    = useState(false)
-  const [selectedChildId, setSelectedChildId] = useState<string>(PARENT_CHILDREN[0]?.id ?? '')
+  const loading = parent.loading
+  const [selectedChildId, setSelectedChildId] = useState<string>('')
 
   // Detail modal state
   const [hwDetail,    setHwDetail]    = useState<HomeworkItem | null>(null)
@@ -74,9 +76,16 @@ export default function ParentDashboardScreen() {
     setTimeout(() => setRefreshing(false), 700)
   }, [])
 
+  // Auto-select the first child once data loads
+  useEffect(() => {
+    if (parent.children.length > 0 && !selectedChildId) {
+      setSelectedChildId(parent.children[0].id)
+    }
+  }, [parent.children, selectedChildId])
+
   const selectedChild = useMemo(
-    () => PARENT_CHILDREN.find(c => c.id === selectedChildId) ?? PARENT_CHILDREN[0],
-    [selectedChildId],
+    () => parent.children.find(c => c.id === selectedChildId) ?? parent.children[0],
+    [parent.children, selectedChildId],
   )
 
   const homeworkForSelected = useMemo(
@@ -108,7 +117,7 @@ export default function ParentDashboardScreen() {
   }
 
   const childName = (id: string): string => {
-    const c = PARENT_CHILDREN.find(x => x.id === id)
+    const c = parent.children.find(x => x.id === id)
     return c ? c.firstName : ''
   }
 
@@ -139,11 +148,11 @@ export default function ParentDashboardScreen() {
         <View style={styles.section}>
           <SectionHeader
             title="Mes enfants"
-            subtitle={`${PARENT_CHILDREN.length} enfant${PARENT_CHILDREN.length > 1 ? 's' : ''}`}
+            subtitle={`${parent.children.length} enfant${parent.children.length > 1 ? 's' : ''}`}
             actionLabel="Voir tout"
             onAction={() => goTo('StudentNotes')}
           />
-          {PARENT_CHILDREN.length === 0 ? (
+          {parent.children.length === 0 ? (
             <Card>
               <EmptyState
                 icon={Users}
@@ -152,7 +161,7 @@ export default function ParentDashboardScreen() {
               />
             </Card>
           ) : (
-            PARENT_CHILDREN.map(c => (
+            parent.children.map(c => (
               <ChildCard
                 key={c.id}
                 child={c}
