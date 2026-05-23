@@ -73,6 +73,7 @@ export default function ParentDevoirsScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0 }}
         contentContainerStyle={styles.chips}
       >
         <FilterChip
@@ -290,12 +291,12 @@ const styles = StyleSheet.create({
   // Modal
   backdrop: {
     flex: 1, backgroundColor: 'rgba(15,23,42,0.45)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
   },
   sheet: {
     padding: 20,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingBottom: 32,
+    borderRadius: 22,
     maxHeight: '85%',
   },
   sheetHeader: {

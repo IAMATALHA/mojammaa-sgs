@@ -105,6 +105,7 @@ export default function ParentAbsencesScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
           contentContainerStyle={styles.chips}
         >
           <Chip

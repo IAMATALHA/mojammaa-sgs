@@ -69,6 +69,7 @@ export default function ParentNotesScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0 }}
         contentContainerStyle={styles.chips}
       >
         {PARENT_CHILDREN.map(c => (
