@@ -9,6 +9,7 @@
 
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { MotiView } from 'moti'
 import { Clock, MapPin } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import type { ScheduleEntry } from '../../utils/mockData'
@@ -20,28 +21,16 @@ export default function ScheduleItem({
   const isNow  = item.status === 'now'
   const isDone = item.status === 'done'
 
-  const bg     = isNow ? theme.primarySurface : theme.surface
+  const bg     = isNow ? theme.primarySurface : theme.card
   const accent = isNow ? theme.primary : theme.borderStrong
 
   const baseStyle = {
     backgroundColor: bg,
-    borderColor: isNow ? theme.primaryBorder : 'transparent',
+    borderColor: isNow ? theme.primaryBorder : theme.border,
   }
-  const Wrapper: any = onPress ? Pressable : View
-  const wrapperProps = onPress
-    ? {
-        onPress,
-        android_ripple: { color: theme.border },
-        style: ({ pressed }: { pressed: boolean }) => [
-          styles.row,
-          baseStyle,
-          pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
-        ],
-      }
-    : { style: [styles.row, baseStyle] }
 
-  return (
-    <Wrapper {...wrapperProps}>
+  const content = (
+    <>
       <View style={[styles.bar, { backgroundColor: accent }]} />
       <View style={styles.time}>
         <Text style={{
@@ -74,12 +63,12 @@ export default function ScheduleItem({
           {item.subject}
         </Text>
         <View style={styles.meta}>
-          <Clock size={11} color={theme.textSoft} strokeWidth={2} />
+          <Clock size={11} color={theme.textSoft} strokeWidth={1.75} />
           <Text style={[styles.metaText, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>
             {item.classe}
           </Text>
           <View style={[styles.dot, { backgroundColor: theme.textMuted }]} />
-          <MapPin size={11} color={theme.textSoft} strokeWidth={2} />
+          <MapPin size={11} color={theme.textSoft} strokeWidth={1.75} />
           <Text style={[styles.metaText, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>
             {item.room}
           </Text>
@@ -89,10 +78,38 @@ export default function ScheduleItem({
       {isNow ? (
         <View style={[styles.pill, { backgroundColor: theme.primary }]}>
           <View style={styles.pulse} />
-          <Text style={styles.pillText}>EN COURS</Text>
+          <Text style={[styles.pillText, { fontFamily: theme.fonts.black }]}>EN COURS</Text>
         </View>
       ) : null}
-    </Wrapper>
+    </>
+  )
+
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} android_ripple={{ color: theme.border }}>
+        {({ pressed }) => (
+          <MotiView
+            from={{ opacity: 0 }}
+            animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
+            transition={{ type: 'timing', duration: 200 }}
+            style={[styles.row, baseStyle]}
+          >
+            {content}
+          </MotiView>
+        )}
+      </Pressable>
+    )
+  }
+
+  return (
+    <MotiView
+      from={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ type: 'timing', duration: 200 }}
+      style={[styles.row, baseStyle]}
+    >
+      {content}
+    </MotiView>
   )
 }
 
@@ -100,17 +117,17 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems:    'center',
-    paddingVertical: 10,
-    paddingEnd:      12,
-    borderRadius:    12,
-    marginBottom:    8,
-    borderWidth:     1,
+    paddingVertical: 14,
+    paddingEnd:      14,
+    borderRadius:    16,
+    marginBottom:    10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     overflow:        'hidden',
   },
-  bar:  { width: 4, alignSelf: 'stretch', borderRadius: 2, marginEnd: 10 },
-  time: { width: 52, alignItems: 'center' },
+  bar:  { width: 3, alignSelf: 'stretch', borderRadius: 2, marginEnd: 12 },
+  time: { width: 54, alignItems: 'center' },
   body: { flex: 1, marginStart: 10 },
-  meta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 },
+  meta: { flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 4 },
   metaText: { fontSize: 11 },
   dot:  { width: 3, height: 3, borderRadius: 2, marginHorizontal: 4 },
   pill: {
@@ -118,5 +135,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999,
   },
   pulse: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
-  pillText: { color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
+  pillText: { color: '#fff', fontSize: 9, letterSpacing: 0.4 },
 })

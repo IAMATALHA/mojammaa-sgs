@@ -9,6 +9,7 @@ import React from 'react'
 import {
   View, Text, Pressable, StyleSheet,
 } from 'react-native'
+import { MotiView } from 'moti'
 import { Bell } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 
@@ -40,15 +41,28 @@ export default function DashboardHeader({
       <Pressable
         onPress={onPressAvatar}
         hitSlop={8}
-        style={[styles.avatar, { backgroundColor: theme.primarySurface }]}
       >
-        <Text style={{
-          color: theme.primary,
-          fontFamily: theme.fonts.bold,
-          fontSize: 16,
-        }}>
-          {initialsOf(fullName)}
-        </Text>
+        {({ pressed }) => (
+          <MotiView
+            animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
+            transition={{ type: 'timing', duration: 200 }}
+            style={[
+              styles.avatar,
+              {
+                backgroundColor: theme.primarySurface,
+                borderColor: theme.primaryBorder,
+              },
+            ]}
+          >
+            <Text style={{
+              color: theme.primary,
+              fontFamily: theme.fonts.semibold,
+              fontSize: 16,
+            }}>
+              {initialsOf(fullName)}
+            </Text>
+          </MotiView>
+        )}
       </Pressable>
 
       <View style={styles.textBlock}>
@@ -66,7 +80,7 @@ export default function DashboardHeader({
           numberOfLines={1}
           style={{
             color: theme.text,
-            fontFamily: theme.fonts.bold,
+            fontFamily: theme.fonts.semibold,
             fontSize: theme.fontSize.h3,
             letterSpacing: -0.3,
             marginTop: 2,
@@ -92,19 +106,26 @@ export default function DashboardHeader({
       <Pressable
         onPress={onPressBell}
         hitSlop={8}
-        style={[
-          styles.bell,
-          { backgroundColor: theme.surface, borderColor: theme.border },
-        ]}
       >
-        <Bell size={20} color={theme.text} strokeWidth={2} />
-        {notifications > 0 ? (
-          <View style={[styles.dot, { backgroundColor: theme.primary }]}>
-            <Text style={styles.dotText}>
-              {notifications > 9 ? '9+' : String(notifications)}
-            </Text>
-          </View>
-        ) : null}
+        {({ pressed }) => (
+          <MotiView
+            animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
+            transition={{ type: 'timing', duration: 200 }}
+            style={[
+              styles.bell,
+              { backgroundColor: theme.card, borderColor: theme.border },
+            ]}
+          >
+            <Bell size={20} color={theme.text} strokeWidth={1.75} />
+            {notifications > 0 ? (
+              <View style={[styles.dot, { backgroundColor: theme.primary }]}>
+                <Text style={[styles.dotText, { fontFamily: theme.fonts.black }]}>
+                  {notifications > 9 ? '9+' : String(notifications)}
+                </Text>
+              </View>
+            ) : null}
+          </MotiView>
+        )}
       </Pressable>
     </View>
   )
@@ -114,23 +135,24 @@ const styles = StyleSheet.create({
   container: {
     flexDirection:  'row',
     alignItems:     'center',
-    paddingHorizontal: 20,
-    paddingVertical:   12,
+    paddingHorizontal: 24,
+    paddingVertical:   16,
   },
   avatar: {
     width: 48, height: 48, borderRadius: 24,
     alignItems: 'center', justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  textBlock: { flex: 1, marginHorizontal: 12 },
+  textBlock: { flex: 1, marginHorizontal: 14 },
   bell: {
     width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   dot: {
     position: 'absolute', top: 6, right: 6,
     minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4,
     alignItems: 'center', justifyContent: 'center',
   },
-  dotText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+  dotText: { color: '#fff', fontSize: 9 },
 })

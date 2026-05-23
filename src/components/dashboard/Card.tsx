@@ -1,14 +1,14 @@
 /**
  * Card — base surface for every dashboard widget.
  *
- * Soft elevation, 16px radius, optional pressable behaviour. RTL-safe
- * because we rely on `flexDirection: 'row'` (RN auto-flips in RTL).
+ * Flat, quiet surface with optional pressable behaviour.
  */
 
 import React from 'react'
 import {
-  Pressable, View, StyleSheet, ViewStyle, StyleProp,
+  Pressable, StyleSheet, ViewStyle, StyleProp,
 } from 'react-native'
+import { MotiView } from 'moti'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface CardProps {
@@ -26,33 +26,45 @@ export default function Card({
   const base: ViewStyle = {
     backgroundColor: variant === 'flat' ? theme.surface : theme.card,
     borderRadius:    theme.radius.lg,
-    padding:         padding ?? theme.spacing.lg,
-    borderWidth:     variant === 'outline' ? 1 : 0,
-    borderColor:     theme.border,
+    padding:         padding ?? theme.spacing.xl,
+    borderWidth:     StyleSheet.hairlineWidth,
+    borderColor:     variant === 'outline' ? theme.borderStrong : theme.border,
   }
   const elevation = variant === 'flat' || variant === 'outline'
     ? null
-    : theme.shadows.sm
+    : theme.shadows.xs
 
   if (onPress) {
     return (
       <Pressable
         onPress={onPress}
-        style={({ pressed }) => [
-          base,
-          elevation,
-          pressed && styles.pressed,
-          style,
-        ]}
         android_ripple={{ color: theme.border }}
+        style={style}
       >
-        {children}
+        {({ pressed }) => (
+          <MotiView
+            from={{ opacity: 0 }}
+            animate={{
+              opacity: pressed ? 0.96 : 1,
+              scale: pressed ? 0.98 : 1,
+            }}
+            transition={{ type: 'timing', duration: 200 }}
+            style={[base, elevation, style]}
+          >
+            {children}
+          </MotiView>
+        )}
       </Pressable>
     )
   }
-  return <View style={[base, elevation, style]}>{children}</View>
+  return (
+    <MotiView
+      from={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ type: 'timing', duration: 200 }}
+      style={[base, elevation, style]}
+    >
+      {children}
+    </MotiView>
+  )
 }
-
-const styles = StyleSheet.create({
-  pressed: { opacity: 0.92, transform: [{ scale: 0.995 }] },
-})

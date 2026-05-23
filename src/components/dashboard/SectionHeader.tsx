@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { MotiView } from 'moti'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface SectionHeaderProps {
@@ -25,7 +26,7 @@ export default function SectionHeader({
           numberOfLines={1}
           style={[styles.title, {
             color: theme.text,
-            fontFamily: theme.fonts.bold,
+            fontFamily: theme.fonts.semibold,
             fontSize: theme.fontSize.title,
           }]}
         >
@@ -47,13 +48,20 @@ export default function SectionHeader({
       </View>
       {onAction && actionLabel ? (
         <Pressable onPress={onAction} hitSlop={8}>
-          <Text style={{
-            color: theme.primary,
-            fontFamily: theme.fonts.semibold,
-            fontSize: theme.fontSize.small,
-          }}>
-            {actionLabel}
-          </Text>
+          {({ pressed }) => (
+            <MotiView
+              animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.78 : 1 }}
+              transition={{ type: 'timing', duration: 200 }}
+            >
+              <Text style={{
+                color: theme.primary,
+                fontFamily: theme.fonts.medium,
+                fontSize: theme.fontSize.small,
+              }}>
+                {actionLabel}
+              </Text>
+            </MotiView>
+          )}
         </Pressable>
       ) : null}
     </View>
@@ -65,8 +73,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems:    'flex-end',
     justifyContent:'space-between',
-    marginBottom:  12,
+    marginBottom:  14,
   },
-  titleBlock: { flex: 1, marginEnd: 12 },
-  title:      { letterSpacing: -0.2 },
+  titleBlock: { flex: 1, marginEnd: 16 },
+  title:      { letterSpacing: -0.25 },
 })

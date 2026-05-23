@@ -24,32 +24,40 @@ export default function StatCard({
   icon, value, label, trend, tint = 'primary', onPress,
 }: StatCardProps) {
   const theme = useTheme()
+  const neutralTint = { bg: theme.surface, fg: theme.textSoft }
   const tints = {
-    primary: { bg: theme.primarySurface, fg: theme.primary  },
-    accent:  { bg: theme.accentSurface,  fg: theme.accent   },
-    success: { bg: theme.successSurface, fg: theme.success  },
-    info:    { bg: theme.infoSurface,    fg: theme.info     },
-    warning: { bg: theme.warningSurface, fg: theme.warning  },
+    primary: { bg: theme.primarySurface, fg: theme.primary },
+    accent:  { bg: theme.primarySurface, fg: theme.primary },
+    success: neutralTint,
+    info:    neutralTint,
+    warning: neutralTint,
   }[tint]
+  const renderedIcon = React.isValidElement(icon)
+    ? React.cloneElement(icon as React.ReactElement<{ color?: string; strokeWidth?: number }>, {
+        color: tints.fg,
+        strokeWidth: 1.75,
+      })
+    : icon
 
   const trendColor =
-    trend?.direction === 'up'   ? theme.success :
+    trend?.direction === 'up'   ? theme.textSoft :
     trend?.direction === 'down' ? theme.danger  :
     theme.textSoft
 
   return (
-    <Card onPress={onPress} padding={14} style={styles.card}>
+    <Card onPress={onPress} padding={16} style={styles.card}>
       <View style={[styles.iconWrap, { backgroundColor: tints.bg }]}>
-        {icon}
+        {renderedIcon}
       </View>
       <Text
         numberOfLines={1}
         style={{
           color: theme.text,
           fontFamily: theme.fonts.black,
-          fontSize: theme.fontSize.h2,
-          marginTop: 10,
-          letterSpacing: -0.6,
+          fontSize: theme.fontSize.h3,
+          marginTop: 16,
+          letterSpacing: -0.35,
+          fontVariant: ['tabular-nums'],
         }}
       >
         {value}
@@ -60,7 +68,7 @@ export default function StatCard({
           color: theme.textSoft,
           fontFamily: theme.fonts.medium,
           fontSize: theme.fontSize.small,
-          marginTop: 2,
+          marginTop: 3,
         }}
       >
         {label}
@@ -70,12 +78,12 @@ export default function StatCard({
           numberOfLines={1}
           style={{
             color: trendColor,
-            fontFamily: theme.fonts.semibold,
+            fontFamily: theme.fonts.medium,
             fontSize: theme.fontSize.caption,
-            marginTop: 6,
+            marginTop: 10,
           }}
         >
-          {trend.direction === 'up' ? '▲' : trend.direction === 'down' ? '▼' : '•'} {trend.value}
+          {trend.direction === 'down' ? '↓' : trend.direction === 'up' ? '↑' : '•'} {trend.value}
         </Text>
       ) : null}
     </Card>
@@ -83,9 +91,9 @@ export default function StatCard({
 }
 
 const styles = StyleSheet.create({
-  card: { flex: 1, minHeight: 110 },
+  card: { flex: 1, minHeight: 122 },
   iconWrap: {
-    width: 34, height: 34, borderRadius: 10,
+    width: 36, height: 36, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
   },
 })

@@ -8,6 +8,7 @@
 
 import React from 'react'
 import { View, Text, StyleSheet } from 'react-native'
+import { MotiView } from 'moti'
 import { useTheme } from '../../contexts/ThemeContext'
 import type { ClassPerformance } from '../../utils/mockData'
 
@@ -20,16 +21,21 @@ interface Props {
 export default function PerformanceBars({ data, max = 20, height = 140 }: Props) {
   const theme = useTheme()
   return (
-    <View style={[styles.wrap, { height }]}>
+    <MotiView
+      from={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ type: 'timing', duration: 200 }}
+      style={[styles.wrap, { height }]}
+    >
       {data.map(d => {
         const pct = Math.max(0, Math.min(1, d.average / max))
         const trendColor =
-          d.trend === 'up'   ? theme.success :
+          d.trend === 'up'   ? theme.textSoft :
           d.trend === 'down' ? theme.danger  :
           theme.textMuted
         return (
           <View key={d.classe} style={styles.col}>
-            <View style={styles.barTrack}>
+            <View style={[styles.barTrack, { backgroundColor: theme.surface }]}>
               <View style={[
                 styles.barFill,
                 {
@@ -41,7 +47,7 @@ export default function PerformanceBars({ data, max = 20, height = 140 }: Props)
                 styles.topMark,
                 {
                   bottom: `${(d.topMark / max) * 100}%`,
-                  backgroundColor: theme.accent,
+                  backgroundColor: theme.borderStrong,
                 },
               ]}/>
             </View>
@@ -50,6 +56,7 @@ export default function PerformanceBars({ data, max = 20, height = 140 }: Props)
               fontFamily: theme.fonts.bold,
               fontSize: 12,
               marginTop: 6,
+              fontVariant: ['tabular-nums'],
             }}>
               {d.average.toFixed(1)}
             </Text>
@@ -66,12 +73,12 @@ export default function PerformanceBars({ data, max = 20, height = 140 }: Props)
               fontSize: 10,
               marginTop: 2,
             }}>
-              {d.trend === 'up' ? '▲' : d.trend === 'down' ? '▼' : '•'} top {d.topMark}
+              {d.trend === 'up' ? '↑' : d.trend === 'down' ? '↓' : '•'} top {d.topMark}
             </Text>
           </View>
         )
       })}
-    </View>
+    </MotiView>
   )
 }
 
@@ -83,9 +90,8 @@ const styles = StyleSheet.create({
   },
   col: { flex: 1, alignItems: 'center' },
   barTrack: {
-    width: 26, height: '70%',
+    width: 24, height: '70%',
     borderRadius: 8,
-    backgroundColor: '#F1F3F7',
     overflow: 'hidden',
     justifyContent: 'flex-end',
   },

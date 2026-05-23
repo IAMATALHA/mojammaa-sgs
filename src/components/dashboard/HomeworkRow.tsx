@@ -1,9 +1,10 @@
 /**
- * HomeworkRow — compact list item for "Recent homework".
+ * HomeworkRow - compact list item for "Recent homework".
  */
 
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { MotiView } from 'moti'
 import { BookOpen, Check, FileText } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import type { HomeworkItem } from '../../utils/mockData'
@@ -26,33 +27,13 @@ export default function HomeworkRow({
   const isSubmitted = item.status === 'submitted' || item.status === 'graded'
   const Icon = isSubmitted ? Check : item.status === 'pending' ? BookOpen : FileText
 
-  const iconBg =
-    isSubmitted ? theme.successSurface :
-    due.danger  ? theme.dangerSurface  :
-    theme.surface
+  const iconBg = due.danger ? theme.dangerSurface : theme.surface
+  const iconFg = due.danger ? theme.primary : theme.textSoft
 
-  const iconFg =
-    isSubmitted ? theme.success :
-    due.danger  ? theme.primary :
-    theme.text
-
-  const Wrapper: any = onPress ? Pressable : View
-  const wrapperProps = onPress
-    ? {
-        onPress,
-        android_ripple: { color: theme.border },
-        style: ({ pressed }: { pressed: boolean }) => [
-          styles.row,
-          { backgroundColor: theme.surface },
-          pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
-        ],
-      }
-    : { style: [styles.row, { backgroundColor: theme.surface }] }
-
-  return (
-    <Wrapper {...wrapperProps}>
+  const content = (
+    <>
       <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
-        <Icon size={16} color={iconFg} strokeWidth={2} />
+        <Icon size={16} color={iconFg} strokeWidth={1.75} />
       </View>
       <View style={styles.body}>
         <Text
@@ -71,7 +52,7 @@ export default function HomeworkRow({
             color: theme.textSoft,
             fontFamily: theme.fonts.regular,
             fontSize: 11.5,
-            marginTop: 2,
+            marginTop: 3,
           }}
         >
           {item.subject}{childName ? ` · ${childName}` : ''}
@@ -80,25 +61,48 @@ export default function HomeworkRow({
       <View style={[
         styles.pill,
         {
-          backgroundColor:
-            isSubmitted ? theme.successSurface :
-            due.danger  ? theme.dangerSurface  :
-            theme.surfaceAlt,
+          backgroundColor: due.danger ? theme.dangerSurface : theme.surface,
+          borderColor: due.danger ? theme.primaryBorder : theme.border,
         },
       ]}>
         <Text style={{
-          color:
-            isSubmitted ? theme.success :
-            due.danger  ? theme.primary :
-            theme.textSoft,
-          fontFamily: theme.fonts.semibold,
+          color: due.danger ? theme.primary : theme.textSoft,
+          fontFamily: theme.fonts.medium,
           fontSize: 10.5,
           letterSpacing: 0.2,
         }}>
           {isSubmitted ? 'Rendu' : due.text}
         </Text>
       </View>
-    </Wrapper>
+    </>
+  )
+
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} android_ripple={{ color: theme.border }}>
+        {({ pressed }) => (
+          <MotiView
+            from={{ opacity: 0 }}
+            animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
+            transition={{ type: 'timing', duration: 200 }}
+            style={[styles.row, { backgroundColor: theme.card, borderColor: theme.border }]}
+          >
+            {content}
+          </MotiView>
+        )}
+      </Pressable>
+    )
+  }
+
+  return (
+    <MotiView
+      from={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ type: 'timing', duration: 200 }}
+      style={[styles.row, { backgroundColor: theme.card, borderColor: theme.border }]}
+    >
+      {content}
+    </MotiView>
   )
 }
 
@@ -106,15 +110,22 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems:    'center',
-    padding:       12,
-    borderRadius:  12,
-    marginBottom:  8,
+    padding:       14,
+    borderRadius:  16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom:  10,
   },
   iconWrap: {
-    width: 34, height: 34, borderRadius: 10,
+    width: 36, height: 36, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
     marginEnd: 12,
   },
   body: { flex: 1 },
-  pill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, marginStart: 8 },
+  pill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginStart: 8,
+  },
 })
