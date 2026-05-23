@@ -1,0 +1,151 @@
+rules_version = '2';
+
+// Mojammaa SGS — Firestore Security Rules
+//
+// Modèle de rôles (lu dans users/{uid}.role) :
+//   - 'parent'      → voit ses propres enfants uniquement
+//   - 'professeur'  → voit les élèves de ses classes, écrit présences/notes/devoirs
+//   - 'admin'       → tout
+//
+// Toujours commencer par "deny by default" puis ouvrir spécifiquement.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function myUid() {
+      return request.auth.uid;
+    }
+    function myDoc() {
+      return get(/databases/$(database)/documents/users/$(myUid())).data;
+    }
+    function isAdmin() {
+      return isSignedIn() && myDoc().role == 'admin';
+    }
+    function isTeacher() {
+      return isSignedIn() && myDoc().role == 'professeur';
+    }
+    function isParent() {
+      return isSignedIn() && myDoc().role == 'parent';
+    }
+    function teacherTeaches(classe) {
+      return isTeacher() && (
+        classe in (myDoc().classes != null ? myDoc().classes : []) ||
+        classe == myDoc().classe
+      );
+    }
+    function isParentOf(codeMassar) {
+      return isParent() && exists(/databases/$(database)/documents/eleves/$(codeMassar))
+        && get(/databases/$(database)/documents/eleves/$(codeMassar)).data.parentUid == myUid();
+    }
+
+    // ── users ─────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read:   if isSignedIn() && (uid == myUid() || isAdmin());
+      // L'utilisateur peut update son propre profil, MAIS PAS son `role`
+      allow update: if isSignedIn() && uid == myUid()
+                    && !(request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+                    || isAdmin();
+      allow create, delete: if isAdmin();
+    }
+
+    // ── eleves ────────────────────────────────────────────────
+    match /eleves/{codeMassar} {
+      allow read:   if isAdmin()
+                    || (isParent() && resource.data.parentUid == myUid())
+                    || (isTeacher() && teacherTeaches(resource.data.classe));
+      allow write:  if isAdmin();
+    }
+
+    // ── schedules (EDT des profs) ────────────────────────────
+    match /schedules/{teacherUid} {
+      allow read:  if isSignedIn() && (teacherUid == myUid() || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // ── evenements ───────────────────────────────────────────
+    match /evenements/{eventId} {
+      allow read:   if isSignedIn();
+      allow write:  if isAdmin() || isTeacher();
+    }
+
+    // ── messages ─────────────────────────────────────────────
+    match /messages/{messageId} {
+      // Tous les users authentifiés peuvent lire (filtrage par audience côté client)
+      allow read:   if isSignedIn();
+      // Tout user authentifié peut envoyer ; le contrôle d'audience reste au client
+      allow create: if isSignedIn() && request.resource.data.fromId == myUid();
+      allow update: if isSignedIn() && (resource.data.fromId == myUid() || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ── notes ────────────────────────────────────────────────
+    match /notes/{noteId} {
+      allow read:   if isAdmin()
+                    || (isTeacher() && teacherTeaches(resource.data.classe))
+                    || (isParent() && isParentOf(resource.data.eleveId));
+      allow create: if isAdmin()
+                    || (isTeacher() && teacherTeaches(request.resource.data.classe)
+                        && request.resource.data.professorId == myUid());
+      allow update: if isAdmin()
+                    || (isTeacher() && resource.data.professorId == myUid());
+      allow delete: if isAdmin();
+    }
+
+    // ── attendances (présences) ──────────────────────────────
+    match /attendances/{attendanceId} {
+      allow read:   if isAdmin()
+                    || (isTeacher() && teacherTeaches(resource.data.classe))
+                    // Parent : seulement si son enfant est dans cette classe
+                    || (isParent() && resource.data.absents != null
+                        && resource.data.absents.toSet().intersection(myDoc().children.toSet()).size() > 0);
+      allow create: if isAdmin()
+                    || (isTeacher() && teacherTeaches(request.resource.data.classe)
+                        && request.resource.data.teacherUid == myUid());
+      allow update: if isAdmin()
+                    || (isTeacher() && resource.data.teacherUid == myUid());
+      allow delete: if isAdmin();
+    }
+
+    // ── homeworks (devoirs) ──────────────────────────────────
+    match /homeworks/{homeworkId} {
+      allow read:   if isAdmin()
+                    || (isTeacher() && teacherTeaches(resource.data.classe))
+                    // Parent : si un enfant est dans la classe du devoir
+                    || (isParent() && resource.data.classe in
+                        (myDoc().children != null
+                          ? myDoc().children.map(c => get(/databases/$(database)/documents/eleves/$(c)).data.classe)
+                          : []));
+      allow create: if isAdmin()
+                    || (isTeacher() && teacherTeaches(request.resource.data.classe)
+                        && request.resource.data.teacherUid == myUid());
+      allow update: if isAdmin()
+                    || (isTeacher() && resource.data.teacherUid == myUid());
+      allow delete: if isAdmin();
+    }
+
+    // ── homeworkSubmissions ─────────────────────────────────
+    match /homeworkSubmissions/{subId} {
+      allow read:   if isAdmin()
+                    || (isParent() && isParentOf(resource.data.eleveCodeMassar))
+                    || isTeacher();
+      allow write:  if isAdmin() || isTeacher();
+    }
+
+    // ── bulletins ────────────────────────────────────────────
+    match /bulletins/{bulletinId} {
+      allow read:   if isAdmin()
+                    || (isParent() && isParentOf(resource.data.eleveCodeMassar));
+      // Les bulletins sont générés par un script admin — pas d'écriture client
+      allow write:  if isAdmin();
+    }
+
+    // ── Default deny ─────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
