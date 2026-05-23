@@ -1,0 +1,107 @@
+/**
+ * ThemeContext — unified SaaS brand palette.
+ *
+ * The previous build assigned a different `primary` colour per role
+ * (student=green, teacher=blue, admin=red). The new brand system uses
+ * a single, modern red/gold accent across every role to read as a
+ * coherent product. Role differentiation is now expressed through
+ * iconography and copy, not colour.
+ *
+ * Public shape is preserved (`primary`, `primarySurface`, spacing,
+ * radius, fonts) so every existing screen keeps compiling — they
+ * just inherit the new look automatically.
+ */
+
+import React, { createContext, useContext, useMemo } from 'react'
+import type { ReactNode } from 'react'
+import { palette, spacing, radius, fonts, shadows, fontSize } from '../theme/designTokens'
+
+export interface Theme {
+  // Brand
+  primary:         string
+  primarySurface:  string
+  primaryBorder:   string
+  primaryDark:     string
+  accent:          string
+  accentSurface:   string
+
+  // Surfaces
+  bg:              string
+  surface:         string
+  surfaceAlt:      string
+  card:            string
+  border:          string
+  borderStrong:    string
+  white:           string
+
+  // Text
+  text:            string
+  textSoft:        string
+  textMuted:       string
+
+  // Semantic
+  danger:          string
+  dangerSurface:   string
+  warning:         string
+  warningSurface:  string
+  success:         string
+  successSurface:  string
+  info:            string
+  infoSurface:     string
+
+  // Typography
+  fonts: typeof fonts
+  fontSize: typeof fontSize
+
+  // Layout primitives
+  spacing: typeof spacing
+  radius:  typeof radius
+  shadows: typeof shadows
+}
+
+const THEME: Theme = {
+  primary:        palette.brandRed,
+  primarySurface: palette.brandRedSoft,
+  primaryBorder:  palette.brandRed + '55',
+  primaryDark:    palette.brandRedDark,
+  accent:         palette.gold,
+  accentSurface:  palette.goldSoft,
+
+  bg:             palette.white,
+  surface:        palette.surface,
+  surfaceAlt:     palette.surfaceAlt,
+  card:           palette.white,
+  border:         palette.border,
+  borderStrong:   palette.borderStrong,
+  white:          palette.white,
+
+  text:           palette.text,
+  textSoft:       palette.textSoft,
+  textMuted:      palette.textMuted,
+
+  danger:         palette.danger,
+  dangerSurface:  palette.dangerSoft,
+  warning:        palette.warning,
+  warningSurface: palette.warningSoft,
+  success:        palette.success,
+  successSurface: palette.successSoft,
+  info:           palette.info,
+  infoSurface:    palette.infoSoft,
+
+  fonts,
+  fontSize,
+  spacing,
+  radius,
+  shadows,
+}
+
+const ThemeContext = createContext<Theme>(THEME)
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const value = useMemo(() => THEME, [])
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+}
+
+export function useTheme() {
+  return useContext(ThemeContext)
+}

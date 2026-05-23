@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy — Mojammaa SGS</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 32px 20px 80px;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: #ffffff;
+    }
+    h1 { font-size: 1.9rem; margin-bottom: 0.2rem; }
+    h2 { font-size: 1.2rem; margin-top: 2rem; }
+    .muted { color: #666; font-size: 0.9rem; }
+    code { background: #f3f3f3; padding: 0 4px; border-radius: 3px; }
+    ul { padding-left: 1.2rem; }
+    a { color: #1a56db; }
+    hr { border: none; border-top: 1px solid #eee; margin: 2rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy</h1>
+  <p class="muted">Application: <strong>Mojammaa SGS</strong> (package <code>com.mojammaa.sgs</code> / bundle <code>com.youssefatalha.mojammaasgs</code>)<br />
+  Last updated: 2026-05-20</p>
+
+  <p>This Privacy Policy describes how the Mojammaa SGS mobile application (the
+  &ldquo;App&rdquo;) collects, uses, and protects information when used by school
+  administrators, teachers, students, and parents. The App is operated by the
+  school administration of Mojammaa and is hosted on Google Firebase
+  (project <code>mojammaa-sgs</code>).</p>
+
+  <h2>1. Who is the data controller</h2>
+  <p>The school administration that deploys the App for its pupils is the data
+  controller. Technical operation of the backend (Firebase Authentication,
+  Cloud Firestore, Cloud Storage, Firebase Cloud Messaging) is provided by
+  Google LLC as a sub-processor.</p>
+
+  <h2>2. What information we collect</h2>
+  <ul>
+    <li><strong>Account credentials</strong> — email address and a hashed
+        password, managed by Firebase Authentication. We never see the
+        plain-text password.</li>
+    <li><strong>School records</strong> — for pupils enrolled at the school:
+        full name, class/level, grades (<em>notes</em>), attendance records,
+        homework (<em>devoirs</em>) and teacher feedback. This data is entered
+        by teachers and administrators, not by the pupils themselves.</li>
+    <li><strong>Uploaded files</strong> — documents and images that teachers
+        or administrators upload (for example, course materials or class
+        photos), stored in Firebase Cloud Storage.</li>
+    <li><strong>Push notification tokens</strong> — when notifications are
+        enabled, the App registers an Expo/FCM device token so the school can
+        send reminders (new grade posted, announcement, etc.). The token is
+        stored against the user&rsquo;s account in Firestore.</li>
+    <li><strong>Language preference and theme</strong> — stored locally on the
+        device (AsyncStorage) for in-app personalisation only.</li>
+  </ul>
+  <p>We do <strong>not</strong> collect advertising identifiers, precise
+  location, contacts, microphone, or browsing history. The App contains no
+  third-party advertising SDKs.</p>
+
+  <h2>3. How we use the information</h2>
+  <ul>
+    <li>To authenticate users and enforce role-based access (admin, teacher,
+        student/parent).</li>
+    <li>To display class schedules, grades, attendance, homework and messages
+        to the people authorised to see them under the school&rsquo;s Firestore
+        security rules.</li>
+    <li>To deliver push notifications related to school activity.</li>
+    <li>To maintain the security and integrity of the service (abuse
+        prevention, debugging, backups).</li>
+  </ul>
+  <p>We do not sell personal data and we do not use it for advertising or
+  profiling.</p>
+
+  <h2>4. Legal basis</h2>
+  <p>Processing is carried out (a) to perform the educational contract between
+  the school and the pupil&rsquo;s family, (b) on the basis of the school&rsquo;s
+  legitimate interest in running its educational activities, and (c) where
+  applicable, with the consent obtained from the parent or legal guardian at
+  enrolment.</p>
+
+  <h2>5. Children&rsquo;s privacy (under 13)</h2>
+  <p>The App&rsquo;s target audience includes pupils under the age of 13.
+  Accounts for minor pupils are created by the school administration with the
+  knowledge of the parent or legal guardian; pupils do not self-register.
+  In line with COPPA (U.S.) and GDPR-K (EU):</p>
+  <ul>
+    <li>We collect only the information strictly necessary for the school&rsquo;s
+        educational activity.</li>
+    <li>We do not show advertising and we do not engage in behavioural
+        profiling of minors.</li>
+    <li>A parent or legal guardian may, at any time, request access to,
+        correction of, or deletion of their child&rsquo;s data by contacting the
+        school administration (see Section 9).</li>
+  </ul>
+
+  <h2>6. Sharing and sub-processors</h2>
+  <p>Personal data is hosted on Google Firebase (Google LLC / Google Ireland
+  Ltd.) and may be transferred and processed in data centres operated by
+  Google. We share data only with:</p>
+  <ul>
+    <li>Google Firebase &mdash; Authentication, Firestore, Cloud Storage, Cloud
+        Messaging.</li>
+    <li>Expo (Expo Application Services, 650 Industries, Inc.) &mdash; only
+        push-notification routing for the Expo push token, when push is
+        enabled.</li>
+  </ul>
+  <p>We do not share personal data with any other third party, except where
+  required by law.</p>
+
+  <h2>7. Data retention</h2>
+  <p>School records (grades, attendance, homework) are retained for as long as
+  the pupil is enrolled at the school and for the additional period required
+  by local education regulations. Account credentials are deleted when the
+  account is removed by an administrator. Uploaded files are retained until
+  deleted by the uploader or by an administrator.</p>
+
+  <h2>8. Security</h2>
+  <p>Data in transit is encrypted with HTTPS/TLS. Data at rest is encrypted by
+  Google Cloud. Access to data is enforced by Firestore and Cloud Storage
+  security rules, which restrict each user (admin / teacher / student) to the
+  records they are authorised to see. Passwords are stored only as hashes by
+  Firebase Authentication.</p>
+
+  <h2>9. Your rights &amp; contact</h2>
+  <p>Users (or, for minors, their parents or legal guardians) may request
+  access to, correction of, export of, or deletion of personal data, and may
+  withdraw consent at any time. To exercise these rights, or to ask any
+  question about this Privacy Policy, contact:</p>
+  <p>
+    <strong>Mojammaa SGS &mdash; Data Protection Contact</strong><br />
+    Email: <a href="mailto:youssefatalha@icloud.com">youssefatalha@icloud.com</a>
+  </p>
+
+  <h2>10. Changes to this policy</h2>
+  <p>We may update this Privacy Policy from time to time. The &ldquo;Last
+  updated&rdquo; date at the top of this page indicates when the latest changes
+  took effect. Material changes will be communicated through the App or by
+  the school administration.</p>
+
+  <hr />
+  <p class="muted">This policy applies to the Mojammaa SGS mobile application
+  distributed on Google Play and the Apple App Store.</p>
+</body>
+</html>

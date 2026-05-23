@@ -39,3 +39,12 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Service account keys — never commit
+.secrets/
+
+# Real student data — never commit (RGPD / vie privée mineurs)
+data/
+
+# Firebase local cache
+.firebase/

@@ -1,0 +1,91 @@
+import React, { useCallback, useEffect, useState } from 'react'
+import {
+  View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl,
+} from 'react-native'
+import { useRoute } from '@react-navigation/native'
+import { collection, getDocs, query, where } from 'firebase/firestore'
+import ScreenLayout from '../../components/ScreenLayout'
+import { useTheme } from '../../contexts/ThemeContext'
+import { db } from '../../config/firebase'
+
+interface Eleve {
+  id:         string
+  nom:        string
+  prenom:     string
+  codeMassar: string
+}
+
+export default function TeacherClasseElevesScreen() {
+  const theme = useTheme()
+  const route = useRoute()
+  const { classe } = (route.params || {}) as { classe: string }
+  const [eleves,  setEleves]  = useState<Eleve[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const snap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', classe)))
+      const list = snap.docs.map(d => {
+        const data = d.data() as any
+        return {
+          id:         d.id,
+          nom:        data.nom        || '',
+          prenom:     data.prenom     || '',
+          codeMassar: data.codeMassar || '',
+        }
+      }).sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
+      setEleves(list)
+    } catch (e: any) {
+      setError(e?.message || 'Impossible de charger.')
+    } finally { setLoading(false) }
+  }, [classe])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <ScreenLayout title={`Élèves · ${classe}`}>
+      {error ? (
+        <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
+          <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
+        </View>
+      ) : null}
+      {loading && eleves.length === 0 ? (
+        <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
+      ) : (
+        <FlatList
+          data={eleves}
+          keyExtractor={item => item.id}
+          ListHeaderComponent={
+            <Text style={[styles.count, { color: theme.textSoft }]}>
+              {eleves.length} élève{eleves.length > 1 ? 's' : ''}
+            </Text>
+          }
+          renderItem={({ item, index }) => (
+            <View style={[styles.row, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.idx, { color: theme.textSoft }]}>{index + 1}.</Text>
+              <View style={{ flex: 1, marginStart: 10 }}>
+                <Text style={[styles.name, { color: theme.text }]}>{item.prenom} {item.nom}</Text>
+                {item.codeMassar ? (
+                  <Text style={[styles.massar, { color: theme.textSoft }]}>{item.codeMassar}</Text>
+                ) : null}
+              </View>
+            </View>
+          )}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.primary} />}
+        />
+      )}
+    </ScreenLayout>
+  )
+}
+
+const styles = StyleSheet.create({
+  count:    { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
+  row:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  idx:      { fontSize: 12, fontWeight: '600', minWidth: 24 },
+  name:     { fontSize: 15, fontWeight: '600' },
+  massar:   { fontSize: 11, marginTop: 2 },
+  loading:  { paddingVertical: 40, alignItems: 'center' },
+  errorBox: { padding: 12, borderRadius: 10, marginBottom: 12 },
+})
