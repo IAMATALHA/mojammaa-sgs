@@ -42,7 +42,7 @@ function greetingFor(date = new Date()): string {
 const QUICK_ACTION_ROUTES: Record<string, string> = {
   qa2: 'TeacherClasses',   // Saisir une note
   qa3: 'TeacherDevoirs',   // Nouveau devoir
-  qa4: 'TeacherMessages',  // Envoyer message
+  qa4: 'TeacherCompose',   // Envoyer message → direct au form de compose
 }
 
 // Convertit l'heure de début d'un créneau → identifiant séance MASSAR

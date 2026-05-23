@@ -27,6 +27,7 @@ import TeacherAttendanceScreen   from '../screens/teacher/TeacherAttendanceScree
 import TeacherClasseFolderScreen from '../screens/teacher/TeacherClasseFolderScreen'
 import TeacherClasseElevesScreen from '../screens/teacher/TeacherClasseElevesScreen'
 import TeacherNotesScreen        from '../screens/teacher/TeacherNotesScreen'
+import TeacherComposeScreen      from '../screens/teacher/TeacherComposeScreen'
 
 const Tab   = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
@@ -137,6 +138,7 @@ export default function TeacherStack() {
       <Stack.Screen name="TeacherClasseFolder"    component={TeacherClasseFolderScreen} />
       <Stack.Screen name="TeacherClasseEleves"    component={TeacherClasseElevesScreen} />
       <Stack.Screen name="TeacherNotes"           component={TeacherNotesScreen} />
+      <Stack.Screen name="TeacherCompose"         component={TeacherComposeScreen} />
     </Stack.Navigator>
   )
 }
