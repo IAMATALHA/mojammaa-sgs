@@ -24,16 +24,15 @@ export default function StatCard({
   icon, value, label, trend, tint = 'primary', onPress,
 }: StatCardProps) {
   const theme = useTheme()
-  const tints = {
-    primary: { bg: theme.primarySurface, fg: theme.primary },
-    accent:  { bg: theme.accentSurface, fg: theme.accent },
-    success: { bg: theme.successSurface, fg: theme.success },
-    info:    { bg: theme.infoSurface, fg: theme.info },
-    warning: { bg: theme.warningSurface, fg: theme.warning },
-  }[tint]
+  // Carrés d'icône uniformisés : tous en navy, icône blanche.
+  // Le paramètre `tint` est conservé pour la rétrocompatibilité mais
+  // n'affecte plus le visuel (était autrefois la couleur du carré).
+  void tint
+  const iconBoxBg = theme.text       // navy #1D3557
+  const iconColor = '#FFFFFF'
   const renderedIcon = React.isValidElement(icon)
     ? React.cloneElement(icon as React.ReactElement<{ color?: string; strokeWidth?: number }>, {
-        color: tints.fg,
+        color: iconColor,
         strokeWidth: 1.75,
       })
     : icon
@@ -45,7 +44,7 @@ export default function StatCard({
 
   return (
     <Card onPress={onPress} padding={16} style={styles.card}>
-      <View style={[styles.iconWrap, { backgroundColor: tints.bg }]}>
+      <View style={[styles.iconWrap, { backgroundColor: iconBoxBg }]}>
         {renderedIcon}
       </View>
       <Text

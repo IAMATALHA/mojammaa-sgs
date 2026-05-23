@@ -32,52 +32,53 @@ interface QuickActionsProps {
   onPress?: (action: QuickAction) => void
 }
 
+// Quick Actions = cards solides : chaque tuile a sa propre couleur de fond
+// Le texte/icône passe en blanc (ou navy sur le jaune clair).
+const SOLID_COLORS: Record<string, { bg: string; fg: string }> = {
+  primary: { bg: '#E63946', fg: '#FFFFFF' },  // coral
+  accent:  { bg: '#F77F00', fg: '#FFFFFF' },  // orange
+  info:    { bg: '#457B9D', fg: '#FFFFFF' },  // info blue
+  warning: { bg: '#FCBF49', fg: '#1D3557' },  // yellow → navy text (contraste)
+  success: { bg: '#1D3557', fg: '#FFFFFF' },  // navy
+}
+
 export default function QuickActions({ actions, onPress }: QuickActionsProps) {
   const theme = useTheme()
-  const tints = {
-    primary: { bg: theme.primarySurface, fg: theme.primary },
-    accent:  { bg: theme.accentSurface, fg: theme.accent },
-    success: { bg: theme.successSurface, fg: theme.success },
-    info:    { bg: theme.infoSurface, fg: theme.info },
-    warning: { bg: theme.warningSurface, fg: theme.warning },
-  }
   return (
     <View style={styles.grid}>
       {actions.map(action => {
         const Icon = ICONS[action.icon] ?? Bell
-        const tint = tints[action.tint]
+        const tint = SOLID_COLORS[action.tint] || SOLID_COLORS.primary
         return (
           <Pressable
             key={action.id}
             onPress={() => onPress?.(action)}
-            android_ripple={{ color: theme.border }}
+            android_ripple={{ color: '#ffffff40' }}
             style={styles.tilePressable}
           >
             {({ pressed }) => (
               <MotiView
                 from={{ opacity: 0 }}
-                animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
+                animate={{ scale: pressed ? 0.97 : 1, opacity: pressed ? 0.92 : 1 }}
                 transition={{ type: 'timing', duration: 200 }}
                 style={[
                   styles.tile,
-                  {
-                    backgroundColor: theme.card,
-                    borderColor:     theme.border,
-                  },
+                  { backgroundColor: tint.bg },
                 ]}
               >
-                <View style={[styles.iconBox, { backgroundColor: tint.bg }]}>
-                  <Icon size={20} color={tint.fg} strokeWidth={1.75} />
+                <View style={styles.iconCircle}>
+                  <Icon size={22} color={tint.fg} strokeWidth={1.75} />
                 </View>
                 <Text
                   numberOfLines={2}
                   style={{
-                    color: theme.text,
-                    fontFamily: theme.fonts.medium,
-                    fontSize: 12.5,
+                    color: tint.fg,
+                    fontFamily: theme.fonts.bold,
+                    fontSize: 13,
                     marginTop: 10,
                     textAlign: 'center',
                     lineHeight: 17,
+                    letterSpacing: -0.1,
                   }}
                 >
                   {action.label}
@@ -103,15 +104,15 @@ const styles = StyleSheet.create({
   },
   tile: {
     flex:         1,
-    minHeight:    108,
+    minHeight:    112,
     borderRadius: 16,
-    borderWidth:  StyleSheet.hairlineWidth,
     padding:      16,
     alignItems:   'center',
     justifyContent:'center',
   },
-  iconBox: {
-    width: 42, height: 42, borderRadius: 14,
+  iconCircle: {
+    width: 38, height: 38, borderRadius: 19,
     alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',  // halo léger sur le fond solide
   },
 })

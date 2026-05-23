@@ -7,7 +7,7 @@
 
 import React from 'react'
 import {
-  View, Text, Pressable, StyleSheet,
+  View, Text, Image, Pressable, StyleSheet,
 } from 'react-native'
 import { MotiView } from 'moti'
 import { Bell } from 'lucide-react-native'
@@ -37,7 +37,41 @@ export default function DashboardHeader({
 }: DashboardHeaderProps) {
   const theme = useTheme()
   return (
-    <View style={styles.container}>
+    <View>
+      {/* Brand strip */}
+      <View style={styles.brandStrip}>
+        <Image
+          source={require('../../../assets/icon.png')}
+          style={styles.brandLogo}
+          resizeMode="contain"
+        />
+        <View style={{ flex: 1, marginStart: 10 }}>
+          <Text
+            numberOfLines={1}
+            style={{
+              color: theme.text,
+              fontFamily: theme.fonts.bold,
+              fontSize: 13,
+              letterSpacing: -0.2,
+            }}
+          >
+            Mojammaa Al Maarifa
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={{
+              color: theme.textSoft,
+              fontFamily: theme.fonts.regular,
+              fontSize: 11,
+              marginTop: 1,
+            }}
+          >
+            مجمع المعرفة الخصوصية
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.container}>
       <Pressable
         onPress={onPressAvatar}
         hitSlop={8}
@@ -127,16 +161,27 @@ export default function DashboardHeader({
           </MotiView>
         )}
       </Pressable>
+      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+  brandStrip: {
+    flexDirection:    'row',
+    alignItems:       'center',
+    paddingHorizontal: 24,
+    paddingTop:        8,
+    paddingBottom:     4,
+  },
+  brandLogo: {
+    width:  28, height: 28, borderRadius: 7,
+  },
   container: {
     flexDirection:  'row',
     alignItems:     'center',
     paddingHorizontal: 24,
-    paddingVertical:   16,
+    paddingVertical:   12,
   },
   avatar: {
     width: 48, height: 48, borderRadius: 24,

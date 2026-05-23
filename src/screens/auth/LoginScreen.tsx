@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  View, Text, TextInput, StyleSheet,
+  View, Text, TextInput, Image, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
   Alert, Linking, TouchableOpacity,
 } from 'react-native'
@@ -73,13 +73,29 @@ export default function LoginScreen() {
         contentContainerStyle={[styles.root, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 40 }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Animated.View entering={FadeInUp.duration(500)} style={[styles.logoCircle, { backgroundColor: theme.primarySurface }]}>
-          <Text style={[styles.logoText, { color: theme.primary, fontFamily: theme.fonts.black }]}>SGS</Text>
+        <Animated.View
+          entering={FadeInUp.duration(500)}
+          style={[styles.logoWrap, {
+            shadowColor:   theme.text,
+            shadowOpacity: 0.10,
+            shadowRadius:  18,
+            shadowOffset:  { width: 0, height: 6 },
+            elevation:     4,
+          }]}
+        >
+          <Image
+            source={require('../../../assets/icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </Animated.View>
         <Animated.Text entering={FadeInUp.delay(150).duration(500)} style={[styles.title, { color: theme.text, fontFamily: theme.fonts.black }]}>
-          Mojammaa SGS
+          Mojammaa Al Maarifa
         </Animated.Text>
-        <Animated.Text entering={FadeInUp.delay(250).duration(500)} style={[styles.subtitle, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>
+        <Animated.Text entering={FadeInUp.delay(220).duration(500)} style={[styles.titleAr, { color: theme.textSoft, fontFamily: theme.fonts.semibold }]}>
+          مجمع المعرفة الخصوصية
+        </Animated.Text>
+        <Animated.Text entering={FadeInUp.delay(300).duration(500)} style={[styles.subtitle, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>
           Connectez-vous avec votre compte
         </Animated.Text>
 
@@ -148,14 +164,16 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flexGrow: 1, paddingHorizontal: 28, backgroundColor: '#F7F4ED' },
-  logoCircle: {
-    width: 96, height: 96, borderRadius: 48,
-    alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 24,
+  root: { flexGrow: 1, paddingHorizontal: 28, backgroundColor: '#F5F1E8' },
+  logoWrap: {
+    width: 120, height: 120, borderRadius: 28,
+    alignSelf: 'center', marginBottom: 22,
+    overflow: 'hidden',
   },
-  logoText: { fontSize: 30, fontWeight: '800', letterSpacing: 1 },
-  title:    { fontSize: 26, fontWeight: '800', textAlign: 'center', marginBottom: 6 },
-  subtitle: { fontSize: 14, textAlign: 'center', marginBottom: 32 },
+  logoImage: { width: '100%', height: '100%' },
+  title:    { fontSize: 24, fontWeight: '800', textAlign: 'center', marginBottom: 4, letterSpacing: -0.3 },
+  titleAr:  { fontSize: 14, textAlign: 'center', marginBottom: 10, letterSpacing: 0.2 },
+  subtitle: { fontSize: 13, textAlign: 'center', marginBottom: 32, opacity: 0.85 },
 
   label: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   input: {

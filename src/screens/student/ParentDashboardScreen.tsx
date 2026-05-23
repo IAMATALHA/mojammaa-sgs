@@ -27,6 +27,7 @@ import {
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useParentData } from '../../hooks/useParentData'
+import { useUpcomingEvents } from '../../hooks/useUpcomingEvents'
 import {
   DashboardHeader, SectionHeader, Card,
   ChildCard, AttendanceRing, HomeworkRow, AnnouncementCard,
@@ -34,7 +35,7 @@ import {
 } from '../../components/dashboard'
 import {
   PARENT_RECENT_HOMEWORK, PARENT_ANNOUNCEMENTS,
-  PARENT_UPCOMING_EVENTS, PARENT_QUICK_ACTIONS,
+  PARENT_QUICK_ACTIONS,
   type Announcement, type HomeworkItem, type UpcomingEvent, type QuickAction,
 } from '../../utils/mockData'
 
@@ -57,6 +58,7 @@ export default function ParentDashboardScreen() {
   const theme = useTheme()
   const { profile, logout } = useAuth()
   const parent = useParentData()
+  const { events: upcomingEvents } = useUpcomingEvents(6)
   const nav = useNavigation<any>()
   const [refreshing, setRefreshing] = useState(false)
   const loading = parent.loading
@@ -284,13 +286,13 @@ export default function ParentDashboardScreen() {
             onAction={() => goTo('StudentMessages')}
           />
           <Card padding={12}>
-            {PARENT_UPCOMING_EVENTS.length === 0 ? (
+            {upcomingEvents.length === 0 ? (
               <EmptyState
                 icon={CalendarDays}
                 title="Aucun événement à venir"
               />
             ) : (
-              PARENT_UPCOMING_EVENTS.map(e => (
+              upcomingEvents.map(e => (
                 <EventCard
                   key={e.id}
                   event={e}
