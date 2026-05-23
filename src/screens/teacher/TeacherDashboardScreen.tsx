@@ -20,13 +20,13 @@ import {
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTeacherData } from '../../hooks/useTeacherData'
+import { useTeacherMessages } from '../../hooks/useTeacherMessages'
 import {
   DashboardHeader, SectionHeader, StatCard, Card,
   ScheduleItem, AnnouncementCard, QuickActions,
   PerformanceBars, SkeletonCard, SkeletonRow, EmptyState,
 } from '../../components/dashboard'
 import {
-  TEACHER_ANNOUNCEMENTS,
   TEACHER_QUICK_ACTIONS, CLASS_PERFORMANCE,
   type ScheduleEntry, type Announcement, type QuickAction,
 } from '../../utils/mockData'
@@ -58,6 +58,7 @@ export default function TeacherDashboardScreen() {
   const theme = useTheme()
   const { profile, logout } = useAuth()
   const teacher = useTeacherData()
+  const { messages: teacherInbox } = useTeacherMessages()
   const nav = useNavigation<any>()
   const [refreshing, setRefreshing] = useState(false)
   const loading = teacher.loading
@@ -221,7 +222,7 @@ export default function TeacherDashboardScreen() {
           />
           {loading ? (
             <Card padding={12}><SkeletonRow /><SkeletonRow /></Card>
-          ) : TEACHER_ANNOUNCEMENTS.length === 0 ? (
+          ) : teacherInbox.length === 0 ? (
             <Card>
               <EmptyState
                 icon={Megaphone}
@@ -231,7 +232,7 @@ export default function TeacherDashboardScreen() {
             </Card>
           ) : (
             <View>
-              {TEACHER_ANNOUNCEMENTS.map(a => (
+              {teacherInbox.map(a => (
                 <AnnouncementCard
                   key={a.id}
                   item={a}

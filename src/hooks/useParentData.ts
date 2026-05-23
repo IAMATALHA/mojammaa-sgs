@@ -11,6 +11,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { subscribeChildrenOfParent, type EleveDoc } from '../services/elevesService'
+import {
+  subscribeAbsencesForEleves, computeChildPresenceRate,
+  type AbsenceDoc,
+} from '../services/absencesService'
 import type { Child } from '../utils/mockData'
 
 export interface ParentData {
@@ -35,7 +39,7 @@ function hashOf(s: string): number {
   return h
 }
 
-function eleveToChild(e: EleveDoc): Child {
+function eleveToChild(e: EleveDoc, absences: AbsenceDoc[]): Child {
   return {
     id:              e.codeMassar,
     firstName:       e.prenomLatin || e.prenom || '',
@@ -43,7 +47,7 @@ function eleveToChild(e: EleveDoc): Child {
     classe:          e.classe      || '',
     level:           e.niveau      || 'Collège',
     avatarColor:     AVATAR_COLORS[hashOf(e.codeMassar) % AVATAR_COLORS.length],
-    attendance:      0,   // TODO : brancher quand collection absences existera
+    attendance:      computeChildPresenceRate(absences, e.codeMassar),
     averageGrade:    0,   // TODO : brancher quand bulletins existeront
     pendingHomework: 0,   // TODO : brancher quand collection devoirs existera
   }
@@ -51,10 +55,12 @@ function eleveToChild(e: EleveDoc): Child {
 
 export function useParentData(): ParentData {
   const { profile } = useAuth()
-  const [eleves,  setEleves]  = useState<EleveDoc[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
+  const [eleves,   setEleves]   = useState<EleveDoc[]>([])
+  const [absences, setAbsences] = useState<AbsenceDoc[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [error,    setError]    = useState<string | null>(null)
 
+  // Subscribe to children
   useEffect(() => {
     if (!profile?.uid) {
       setEleves([])
@@ -77,7 +83,21 @@ export function useParentData(): ParentData {
     return unsub
   }, [profile?.uid])
 
-  const children = useMemo(() => eleves.map(eleveToChild), [eleves])
+  // Subscribe to absences for those children
+  useEffect(() => {
+    const ids = eleves.map(e => e.codeMassar)
+    if (ids.length === 0) {
+      setAbsences([])
+      return
+    }
+    const unsub = subscribeAbsencesForEleves(ids, setAbsences)
+    return unsub
+  }, [eleves.map(e => e.codeMassar).join('|')])
+
+  const children = useMemo(
+    () => eleves.map(e => eleveToChild(e, absences)),
+    [eleves, absences],
+  )
 
   return { loading, error, eleves, children }
 }

@@ -20,8 +20,8 @@ import {
   Card, StatCard, EmptyState, SectionHeader,
 } from '../../components/dashboard'
 import { useParentData } from '../../hooks/useParentData'
+import { useParentAbsences } from '../../hooks/useParentAbsences'
 import {
-  PARENT_ABSENCES,
   type AbsenceEntry,
 } from '../../utils/mockData'
 
@@ -34,16 +34,17 @@ const TYPE_META = {
 export default function ParentAbsencesScreen() {
   const theme = useTheme()
   const parent = useParentData()
+  const { absences: live } = useParentAbsences()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
 
   const filtered = useMemo(() => {
     const base = selectedChildId === 'all'
-      ? PARENT_ABSENCES
-      : PARENT_ABSENCES.filter(a => a.childId === selectedChildId)
+      ? live
+      : live.filter(a => a.childId === selectedChildId)
     return [...base].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     )
-  }, [selectedChildId])
+  }, [selectedChildId, live])
 
   const stats = useMemo(() => {
     const justified   = filtered.filter(a => a.justified && a.type === 'absence').length

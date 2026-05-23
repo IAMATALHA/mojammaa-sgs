@@ -10,44 +10,47 @@ import { Platform } from 'react-native'
 
 export const colors = {
   light: {
+    // Texte : warm-dark plutôt que navy (le navy n'existe pas dans le logo)
     text: {
-      primary: '#1D3557',
-      secondary: 'rgba(29, 53, 87, 0.72)',
-      tertiary: 'rgba(29, 53, 87, 0.44)',
-      inverse: '#FFFFFF',
+      primary:   '#2A1F1A',                        // warm dark — lisible sur cream
+      secondary: 'rgba(42, 31, 26, 0.72)',
+      tertiary:  'rgba(42, 31, 26, 0.45)',
+      inverse:   '#FFFFFF',
     },
     surface: {
-      primary: '#F5F1E8',
-      secondary: 'rgba(255, 252, 247, 0.76)',
-      tertiary: 'rgba(29, 53, 87, 0.08)',
-      elevated: 'rgba(255, 252, 247, 0.94)',
-      grouped: '#EFE8DA',
+      primary:   '#F5F1E8',                        // cream du logo
+      secondary: 'rgba(255, 252, 247, 0.80)',
+      tertiary:  'rgba(42, 31, 26, 0.06)',
+      elevated:  '#FFFFFF',
+      grouped:   '#EFE8DA',
     },
-    separator: 'rgba(29, 53, 87, 0.10)',
-    separatorStrong: 'rgba(29, 53, 87, 0.20)',
+    separator:       'rgba(42, 31, 26, 0.08)',
+    separatorStrong: 'rgba(42, 31, 26, 0.18)',
+    // PRIMARY = corail #E63946 (le M rouge du logo)
     primary: {
-      value: '#1D3557',
-      pressed: '#14243D',
-      surface: 'rgba(29, 53, 87, 0.10)',
-      surfaceStrong: 'rgba(29, 53, 87, 0.16)',
-      border: 'rgba(29, 53, 87, 0.22)',
-    },
-    accent: {
-      primary: '#E63946',
-      pressed: '#C92F3B',
-      surface: 'rgba(230, 57, 70, 0.10)',
+      value:         '#E63946',
+      pressed:       '#C92F3B',
+      surface:       'rgba(230, 57, 70, 0.10)',
       surfaceStrong: 'rgba(230, 57, 70, 0.16)',
-      border: 'rgba(230, 57, 70, 0.24)',
+      border:        'rgba(230, 57, 70, 0.26)',
+    },
+    // ACCENT = orange #F77F00 (la fleur orange du logo)
+    accent: {
+      primary:       '#F77F00',
+      pressed:       '#D86E00',
+      surface:       'rgba(247, 127, 0, 0.10)',
+      surfaceStrong: 'rgba(247, 127, 0, 0.16)',
+      border:        'rgba(247, 127, 0, 0.26)',
     },
     status: {
-      success: '#FCBF49',
+      success:        '#FCBF49',                   // jaune (M jaune du logo)
       successSurface: 'rgba(252, 191, 73, 0.18)',
-      warning: '#F77F00',
+      warning:        '#F77F00',                   // orange
       warningSurface: 'rgba(247, 127, 0, 0.14)',
-      danger: '#E63946',
-      dangerSurface: 'rgba(230, 57, 70, 0.10)',
-      info: '#457B9D',
-      infoSurface: 'rgba(69, 123, 157, 0.12)',
+      danger:         '#E63946',                   // corail = primary
+      dangerSurface:  'rgba(230, 57, 70, 0.10)',
+      info:           '#457B9D',                   // bleu seul rescapé (info neutre)
+      infoSurface:    'rgba(69, 123, 157, 0.12)',
     },
   },
 } as const

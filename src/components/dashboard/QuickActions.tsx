@@ -32,14 +32,14 @@ interface QuickActionsProps {
   onPress?: (action: QuickAction) => void
 }
 
-// Quick Actions = cards solides : chaque tuile a sa propre couleur de fond
-// Le texte/icône passe en blanc (ou navy sur le jaune clair).
+// Quick Actions = cards solides matchant les 4 couleurs du logo M✿M
+// (rouge corail + orange + jaune) + un info blue neutre.
 const SOLID_COLORS: Record<string, { bg: string; fg: string }> = {
-  primary: { bg: '#E63946', fg: '#FFFFFF' },  // coral
-  accent:  { bg: '#F77F00', fg: '#FFFFFF' },  // orange
-  info:    { bg: '#457B9D', fg: '#FFFFFF' },  // info blue
-  warning: { bg: '#FCBF49', fg: '#1D3557' },  // yellow → navy text (contraste)
-  success: { bg: '#1D3557', fg: '#FFFFFF' },  // navy
+  primary: { bg: '#E63946', fg: '#FFFFFF' },  // coral (M rouge logo)
+  accent:  { bg: '#F77F00', fg: '#FFFFFF' },  // orange (fleur logo)
+  info:    { bg: '#457B9D', fg: '#FFFFFF' },  // info blue (neutre)
+  warning: { bg: '#F77F00', fg: '#FFFFFF' },  // orange (= accent)
+  success: { bg: '#FCBF49', fg: '#2A1F1A' },  // jaune (M jaune logo) avec warm-dark
 }
 
 export default function QuickActions({ actions, onPress }: QuickActionsProps) {

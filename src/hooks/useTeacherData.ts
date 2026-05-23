@@ -16,6 +16,7 @@ import { subscribeEleves, groupByClasse, type EleveDoc } from '../services/eleve
 import {
   subscribeSchedule, type ScheduleDoc, type WeeklySlot, type WeekDay,
 } from '../services/scheduleService'
+import { computeTeacherPresenceRate } from '../services/absencesService'
 import type { ScheduleEntry, ScheduleStatus } from '../utils/mockData'
 
 export interface TeacherKpis {
@@ -89,11 +90,12 @@ function getClassesFromProfile(profile: any): string[] {
 
 export function useTeacherData(): TeacherData {
   const { profile } = useAuth()
-  const [eleves,   setEleves]   = useState<EleveDoc[]>([])
-  const [schedule, setSchedule] = useState<ScheduleDoc | null>(null)
-  const [loading,  setLoading]  = useState(true)
-  const [error,    setError]    = useState<string | null>(null)
-  const [tick,     setTick]     = useState(0)   // re-render every minute for status
+  const [eleves,   setEleves]    = useState<EleveDoc[]>([])
+  const [schedule, setSchedule]  = useState<ScheduleDoc | null>(null)
+  const [presence, setPresence]  = useState<number>(100)
+  const [loading,  setLoading]   = useState(true)
+  const [error,    setError]     = useState<string | null>(null)
+  const [tick,     setTick]      = useState(0)   // re-render every minute for status
 
   const classes = useMemo(() => getClassesFromProfile(profile), [profile])
 
@@ -140,6 +142,18 @@ export function useTeacherData(): TeacherData {
     return () => clearInterval(id)
   }, [])
 
+  // Recalcule le taux de présence du jour quand les classes changent ou
+  // à chaque tick (refresh chaque minute, suffisant pour un KPI).
+  useEffect(() => {
+    if (classes.length === 0) {
+      setPresence(100)
+      return
+    }
+    computeTeacherPresenceRate(classes)
+      .then(setPresence)
+      .catch(() => setPresence(100))
+  }, [classes.join('|'), tick])
+
   const byClasse = useMemo(() => groupByClasse(eleves), [eleves])
 
   const subject = (profile as any)?.matiere || 'Mathématiques'
@@ -159,9 +173,9 @@ export function useTeacherData(): TeacherData {
   const kpis: TeacherKpis = useMemo(() => ({
     classes:    classes.length,
     students:   eleves.length,
-    attendance: 0,
+    attendance: presence,
     pending:    0,
-  }), [classes.length, eleves.length])
+  }), [classes.length, eleves.length, presence])
 
   return {
     loading,
