@@ -28,27 +28,13 @@ const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
 
 function TabIcon({
-  Icon, color, focused, theme, emphasized = false,
+  Icon, color, focused, theme,
 }: {
   Icon: LucideIcon
   color: string
   focused: boolean
   theme: any
-  emphasized?: boolean
 }) {
-  if (emphasized) {
-    return (
-      <LinearGradient
-        colors={focused ? [theme.accent, '#FFB066'] : [theme.primary, '#34557F']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.centerIcon, theme.shadows.sm]}
-      >
-        <Icon color="#FFFFFF" size={22} strokeWidth={2} />
-      </LinearGradient>
-    )
-  }
-
   if (focused) {
     return (
       <LinearGradient
@@ -62,7 +48,6 @@ function TabIcon({
       </LinearGradient>
     )
   }
-
   return (
     <View style={styles.iconInactive}>
       <Icon color={color} size={20} strokeWidth={1.8} />
@@ -130,8 +115,7 @@ function TeacherTabs() {
         component={TeacherClassesScreen}
         options={{
           title: 'Classes',
-          tabBarItemStyle: { marginTop: -18 },
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} emphasized />,
+          tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} />,
         }}
       />
       <Tab.Screen
@@ -179,13 +163,6 @@ const styles = StyleSheet.create({
   iconInactive: {
     width: 42,
     height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },

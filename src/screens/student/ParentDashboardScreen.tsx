@@ -942,7 +942,7 @@ function SheetMeta({
 
 const styles = StyleSheet.create({
   safe:   { flex: 1 },
-  scroll: { paddingBottom: 132 },
+  scroll: { paddingBottom: 180 },
 
   // Hero
   heroGradient: {

@@ -82,17 +82,20 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View entering={FadeInUp.duration(500)} style={styles.logoBlock}>
+          <Animated.View
+            entering={FadeInUp.duration(500)}
+            style={[
+              styles.unifiedCard,
+              { backgroundColor: theme.card, borderColor: theme.border },
+              theme.shadows.sm,
+            ]}
+          >
+            {/* Logo centré au top */}
             <View style={[
               styles.logoShell,
               {
                 backgroundColor: theme.white,
                 borderColor: theme.border,
-                shadowColor: theme.text,
-                shadowOpacity: 0.10,
-                shadowRadius: 20,
-                shadowOffset: { width: 0, height: 8 },
-                elevation: 3,
               },
             ]}>
               <Image
@@ -101,14 +104,19 @@ export default function LoginScreen() {
                 resizeMode="contain"
               />
             </View>
-            <Text style={[styles.kicker, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>
-              Application scolaire
-            </Text>
-          </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(180).duration(500)} style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.sm]}>
+            {/* Nom école */}
+            <Text style={[styles.schoolName, { color: theme.text, fontFamily: theme.fonts.bold }]}>
+              Mojammaa Al Maarifa
+            </Text>
+            <Text style={[styles.schoolNameAr, { color: theme.textSoft, fontFamily: theme.fonts.arabicSemi }]}>
+              مجمع المعرفة الخصوصية
+            </Text>
+
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
             {error ? (
-              <View style={[styles.errorBox, { backgroundColor: theme.dangerSurface }]}> 
+              <View style={[styles.errorBox, { backgroundColor: theme.dangerSurface }]}>
                 <Text style={[styles.errorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>{error}</Text>
               </View>
             ) : null}
@@ -203,35 +211,42 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 22,
   },
-  logoBlock: {
-    alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 8,
+  unifiedCard: {
+    marginTop: 18,
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 22,
+    alignItems: 'stretch',
   },
   logoShell: {
-    width: 180,
-    height: 180,
-    borderRadius: 40,
+    width: 160,
+    height: 160,
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
+    alignSelf: 'center',
   },
   logoImage: {
     width: '90%',
     height: '90%',
   },
-  kicker: {
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    marginTop: 16,
+  schoolName: {
+    fontSize: 18,
+    textAlign: 'center',
+    marginTop: 14,
+    letterSpacing: -0.2,
   },
-  formCard: {
+  schoolNameAr: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
     marginTop: 18,
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 18,
+    marginBottom: 14,
   },
   label: {
     fontSize: 12,
