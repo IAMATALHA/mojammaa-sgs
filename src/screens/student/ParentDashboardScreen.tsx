@@ -570,6 +570,7 @@ export default function ParentDashboardScreen() {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.attendanceGradient}
+                  pointerEvents="none"
                 />
                 <View style={styles.attendanceRow}>
                   <AttendanceRing
