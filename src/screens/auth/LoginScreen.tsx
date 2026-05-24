@@ -114,10 +114,20 @@ export default function LoginScreen() {
                   resizeMode="contain"
                 />
               </View>
-              <Text style={[styles.brandName, { color: theme.brandNavy, fontFamily: theme.fonts.script }]}>
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.82}
+                style={[styles.brandName, { color: theme.brandNavy, fontFamily: theme.fonts.script }]}
+              >
                 Mojammaa Al Maarifa
               </Text>
-              <Text style={[styles.brandArabic, { color: theme.textSoft, fontFamily: theme.fonts.arabicSemi }]}>
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.86}
+                style={[styles.brandArabic, { color: theme.textSoft, fontFamily: theme.fonts.arabicSemi }]}
+              >
                 مجمع المعرفة الخصوصية
               </Text>
               <View style={[styles.goldRule, { backgroundColor: theme.brandYellow }]} />
@@ -240,17 +250,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoHalo: {
-    width: 122,
-    height: 122,
-    borderRadius: 61,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
   },
   logoImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 26,
+    width: 126,
+    height: 126,
+    borderRadius: 32,
   },
   brandName: {
     fontSize: 34,

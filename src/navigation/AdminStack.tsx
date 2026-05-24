@@ -19,31 +19,18 @@ import AdminSettingsScreen from '../screens/admin/AdminSettingsScreen'
 const Tab = createBottomTabNavigator()
 
 function TabIcon({
-  Icon, color, focused, theme, emphasized = false,
-}: { Icon: LucideIcon; color: string; focused: boolean; theme: any; emphasized?: boolean }) {
-  if (emphasized) {
-    return (
-      <LinearGradient
-        colors={focused ? [theme.accent, '#FFB066'] : [theme.primary, '#34557F']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.centerIcon, theme.shadows.sm]}
-      >
-        <Icon color="#FFFFFF" size={20} strokeWidth={2} />
-      </LinearGradient>
-    )
-  }
-
+  Icon, color, focused, theme,
+}: { Icon: LucideIcon; color: string; focused: boolean; theme: any }) {
   if (focused) {
     return (
       <LinearGradient
-        colors={[theme.primarySurface, theme.roseSurface]}
+        colors={[theme.paperWarm, theme.brandYellowSoft]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[styles.iconActive, { borderColor: theme.primaryBorder }]}
+        style={[styles.iconActive, { borderColor: 'rgba(252, 191, 73, 0.30)' }]}
       >
         <Icon color={color} size={19} strokeWidth={1.8} />
-        <View style={[styles.statusDot, { backgroundColor: theme.accent }]} />
+        <View style={[styles.statusDot, { backgroundColor: theme.brandYellow }]} />
       </LinearGradient>
     )
   }
@@ -70,18 +57,19 @@ export default function AdminStack() {
           left: 10,
           right: 10,
           bottom: Math.max(insets.bottom, 8),
-          backgroundColor: 'rgba(255,255,255,0.97)',
-          borderTopWidth: 0,
-          minHeight: 82,
-          height: 82,
-          paddingTop: 10,
-          paddingBottom: 12,
-          borderRadius: 26,
+          backgroundColor: 'rgba(255,253,248,0.97)',
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: 'rgba(29, 53, 87, 0.08)',
+          minHeight: 76,
+          height: 76,
+          paddingTop: 9,
+          paddingBottom: 10,
+          borderRadius: 24,
           shadowColor: '#1D3557',
-          shadowOpacity: 0.12,
-          shadowRadius: 22,
-          shadowOffset: { width: 0, height: 10 },
-          elevation: 12,
+          shadowOpacity: 0.10,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 8,
         },
         sceneStyle: {
           backgroundColor: theme.bg,
@@ -112,7 +100,7 @@ export default function AdminStack() {
       <Tab.Screen
         name="AdminEdt"
         component={AdminEdtScreen}
-        options={{ title: 'EDT', tabBarItemStyle: { marginTop: -18 }, tabBarIcon: ({ color, focused }) => <TabIcon Icon={CalendarDays} color={color} focused={focused} theme={theme} emphasized /> }}
+        options={{ title: 'EDT', tabBarIcon: ({ color, focused }) => <TabIcon Icon={CalendarDays} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
         name="AdminBroadcast"
@@ -137,7 +125,7 @@ const styles = StyleSheet.create({
   iconActive: {
     width: 40,
     height: 32,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
@@ -148,19 +136,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  centerIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   statusDot: {
     position: 'absolute',
-    top: 6,
-    end: 8,
-    width: 5,
-    height: 5,
-    borderRadius: 3,
+    bottom: 3,
+    width: 18,
+    height: 3,
+    borderRadius: 2,
   },
 })

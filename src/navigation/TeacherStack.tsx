@@ -28,37 +28,23 @@ const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
 
 function TabIcon({
-  Icon, color, focused, theme, emphasized = false,
+  Icon, color, focused, theme,
 }: {
   Icon: LucideIcon
   color: string
   focused: boolean
   theme: any
-  emphasized?: boolean
 }) {
-  if (emphasized) {
-    return (
-      <LinearGradient
-        colors={focused ? [theme.accent, '#FFB066'] : [theme.primary, '#34557F']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.centerIcon, theme.shadows.sm]}
-      >
-        <Icon color="#FFFFFF" size={22} strokeWidth={2} />
-      </LinearGradient>
-    )
-  }
-
   if (focused) {
     return (
       <LinearGradient
-        colors={[theme.primarySurface, theme.greenSurface]}
+        colors={[theme.paperWarm, theme.brandYellowSoft]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[styles.iconActive, { borderColor: theme.primaryBorder }]}
+        style={[styles.iconActive, { borderColor: 'rgba(252, 191, 73, 0.30)' }]}
       >
         <Icon color={color} size={20} strokeWidth={1.8} />
-        <View style={[styles.statusDot, { backgroundColor: theme.green }]} />
+        <View style={[styles.statusDot, { backgroundColor: theme.brandYellow }]} />
       </LinearGradient>
     )
   }
@@ -85,18 +71,19 @@ function TeacherTabs() {
           left: 14,
           right: 14,
           bottom: Math.max(insets.bottom, 10),
-          backgroundColor: 'rgba(255,255,255,0.96)',
-          borderTopWidth: 0,
-          minHeight: 78,
-          height: 78,
-          paddingTop: 10,
-          paddingBottom: 12,
-          borderRadius: 26,
+          backgroundColor: 'rgba(255,253,248,0.97)',
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: 'rgba(29, 53, 87, 0.08)',
+          minHeight: 74,
+          height: 74,
+          paddingTop: 9,
+          paddingBottom: 10,
+          borderRadius: 24,
           shadowColor: '#1D3557',
-          shadowOpacity: 0.12,
-          shadowRadius: 22,
-          shadowOffset: { width: 0, height: 10 },
-          elevation: 12,
+          shadowOpacity: 0.10,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 8,
         },
         sceneStyle: {
           backgroundColor: theme.bg,
@@ -130,8 +117,7 @@ function TeacherTabs() {
         component={TeacherClassesScreen}
         options={{
           title: 'Classes',
-          tabBarItemStyle: { marginTop: -18 },
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} emphasized />,
+          tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} />,
         }}
       />
       <Tab.Screen
@@ -170,31 +156,23 @@ export default function TeacherStack() {
 const styles = StyleSheet.create({
   iconActive: {
     width: 42,
-    height: 34,
-    borderRadius: 17,
+    height: 32,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconInactive: {
     width: 42,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statusDot: {
     position: 'absolute',
-    top: 6,
-    end: 8,
-    width: 5,
-    height: 5,
-    borderRadius: 3,
+    bottom: 3,
+    width: 18,
+    height: 3,
+    borderRadius: 2,
   },
 })
