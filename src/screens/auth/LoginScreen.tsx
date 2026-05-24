@@ -5,6 +5,7 @@ import {
   Alert, Linking, TouchableOpacity,
 } from 'react-native'
 import Animated, { FadeInUp } from 'react-native-reanimated'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import { auth } from '../../config/firebase'
@@ -70,9 +71,20 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.screen, { backgroundColor: theme.bg }]}> 
-        <View style={[styles.blob, styles.blobTop, { backgroundColor: theme.watercolorA }]} />
-        <View style={[styles.blob, styles.blobLeft, { backgroundColor: theme.roseSurface }]} />
-        <View style={[styles.blob, styles.blobBottom, { backgroundColor: theme.violetSurface }]} />
+        <LinearGradient
+          colors={[theme.brandCream, theme.paper, '#FFF8EC']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <Image
+          source={require('../../../assets/icon.png')}
+          style={styles.watermark}
+          resizeMode="contain"
+        />
+        <View style={[styles.wash, styles.washGold, { backgroundColor: theme.brandYellowSoft }]} />
+        <View style={[styles.wash, styles.washCoral, { backgroundColor: theme.brandCoralSoft }]} />
+        <View style={[styles.wash, styles.washMint, { backgroundColor: theme.schoolMintSoft }]} />
 
         <ScrollView
           contentContainerStyle={[
@@ -82,80 +94,86 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View entering={FadeInUp.duration(500)} style={styles.heroCard}>
-            <View style={[styles.heroSurface, { backgroundColor: theme.surface, borderColor: theme.border }, theme.shadows.sm]}>
-              <View style={styles.logoRow}>
-                <View style={[styles.logoShell, { backgroundColor: theme.white, borderColor: theme.border }]}> 
-                  <Image
-                    source={require('../../../assets/logo.png')}
-                    style={styles.logoImage}
-                    resizeMode="contain"
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.kicker, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>Application scolaire</Text>
-                  <Text style={[styles.title, { color: theme.primary, fontFamily: theme.fonts.serif }]}>Bonjour !</Text>
-                  <Text style={[styles.subtitle, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Un espace doux, moderne et rassurant pour l'école.</Text>
-                </View>
+          <Animated.View
+            entering={FadeInUp.duration(500)}
+            style={[
+              styles.authPanel,
+              {
+                backgroundColor: 'rgba(255,255,255,0.64)',
+                borderColor: 'rgba(29, 53, 87, 0.10)',
+                shadowColor: theme.brandNavy,
+              },
+              theme.shadows.sm,
+            ]}
+          >
+            <View style={styles.identity}>
+              <View style={[styles.logoHalo, { backgroundColor: theme.white, borderColor: 'rgba(252, 191, 73, 0.42)' }]}>
+                <Image
+                  source={require('../../../assets/logo.png')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
               </View>
+              <Text style={[styles.brandName, { color: theme.brandNavy, fontFamily: theme.fonts.script }]}>
+                Mojammaa Al Maarifa
+              </Text>
+              <Text style={[styles.brandArabic, { color: theme.textSoft, fontFamily: theme.fonts.arabicSemi }]}>
+                مجمع المعرفة الخصوصية
+              </Text>
+              <View style={[styles.goldRule, { backgroundColor: theme.brandYellow }]} />
             </View>
-          </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(180).duration(500)} style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.sm]}>
-            {error ? (
-              <View style={[styles.errorBox, { backgroundColor: theme.dangerSurface }]}> 
-                <Text style={[styles.errorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>{error}</Text>
-              </View>
-            ) : null}
+            <View style={styles.formArea}>
+              {error ? (
+                <View style={[styles.errorBox, { backgroundColor: theme.dangerSurface }]}>
+                  <Text style={[styles.errorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>{error}</Text>
+                </View>
+              ) : null}
 
-            <Text style={[styles.label, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>Email</Text>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="vous@exemple.com"
-              placeholderTextColor={theme.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
-            />
+              <Text style={[styles.label, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>Email</Text>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="vous@exemple.com"
+                placeholderTextColor={theme.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: 'rgba(255,255,255,0.74)' }]}
+              />
 
-            <Text style={[styles.label, { color: theme.textSoft, marginTop: 14, fontFamily: theme.fonts.medium }]}>Mot de passe</Text>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              placeholderTextColor={theme.textMuted}
-              secureTextEntry
-              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
-            />
+              <Text style={[styles.label, { color: theme.textSoft, marginTop: 14, fontFamily: theme.fonts.medium }]}>Mot de passe</Text>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                placeholderTextColor={theme.textMuted}
+                secureTextEntry
+                style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: 'rgba(255,255,255,0.74)' }]}
+              />
 
-            <PressableScale
-              onPress={submit}
-              disabled={loading}
-              style={[
-                styles.button,
-                {
-                  backgroundColor: theme.accent,
-                  opacity: loading ? 0.7 : 1,
-                  shadowColor: theme.accent,
-                  shadowOpacity: 0.22,
-                  shadowRadius: 16,
-                  shadowOffset: { width: 0, height: 8 },
-                  elevation: 4,
-                },
-              ]}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={[styles.buttonText, { fontFamily: theme.fonts.bold }]}>Se connecter</Text>
-              )}
-            </PressableScale>
+              <PressableScale
+                onPress={submit}
+                disabled={loading}
+                style={[
+                  styles.button,
+                  {
+                    backgroundColor: theme.brandNavy,
+                    opacity: loading ? 0.7 : 1,
+                  },
+                ]}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={[styles.buttonText, { fontFamily: theme.fonts.bold }]}>Se connecter</Text>
+                )}
+              </PressableScale>
 
-            <TouchableOpacity onPress={forgotPassword} style={styles.forgot}>
-              <Text style={[styles.forgotText, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>Mot de passe oublié ?</Text>
-            </TouchableOpacity>
+              <TouchableOpacity onPress={forgotPassword} style={styles.forgot}>
+                <Text style={[styles.forgotText, { color: theme.brandNavy, fontFamily: theme.fonts.semibold }]}>Mot de passe oublié ?</Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
 
           <TouchableOpacity onPress={openPrivacy} style={styles.privacy}>
@@ -172,90 +190,97 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
   },
-  blob: {
+  watermark: {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    alignSelf: 'center',
+    top: 78,
+    opacity: 0.045,
+  },
+  wash: {
     position: 'absolute',
     borderRadius: 999,
   },
-  blobTop: {
-    width: 170,
-    height: 170,
-    top: -34,
-    right: -42,
+  washGold: {
+    width: 280,
+    height: 126,
+    top: -36,
+    right: -84,
+    transform: [{ rotate: '-14deg' }],
   },
-  blobLeft: {
-    width: 92,
-    height: 92,
-    top: 240,
-    left: -24,
+  washCoral: {
+    width: 210,
+    height: 104,
+    top: 248,
+    left: -86,
+    transform: [{ rotate: '16deg' }],
   },
-  blobBottom: {
-    width: 150,
-    height: 150,
+  washMint: {
+    width: 260,
+    height: 118,
     bottom: 40,
-    right: -34,
+    right: -104,
+    transform: [{ rotate: '-13deg' }],
   },
   root: {
     flexGrow: 1,
-    paddingHorizontal: 22,
-  },
-  heroCard: {
-    marginTop: 18,
-  },
-  heroSurface: {
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 18,
-  },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  logoShell: {
-    width: 92,
-    height: 92,
-    borderRadius: 24,
-    alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  authPanel: {
+    borderRadius: 32,
     borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 20,
     overflow: 'hidden',
   },
+  identity: {
+    alignItems: 'center',
+  },
+  logoHalo: {
+    width: 122,
+    height: 122,
+    borderRadius: 61,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
   logoImage: {
-    width: '88%',
-    height: '88%',
+    width: 100,
+    height: 100,
+    borderRadius: 26,
   },
-  kicker: {
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+  brandName: {
+    fontSize: 34,
+    lineHeight: 40,
+    marginTop: 12,
   },
-  title: {
-    fontSize: 38,
-    lineHeight: 44,
-    marginTop: 4,
-    letterSpacing: -0.8,
+  brandArabic: {
+    fontSize: 13,
+    writingDirection: 'rtl',
+    marginTop: -2,
   },
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 6,
+  goldRule: {
+    width: 64,
+    height: 3,
+    borderRadius: 2,
+    marginTop: 13,
   },
-  formCard: {
-    marginTop: 18,
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 18,
+  formArea: {
+    marginTop: 24,
   },
   label: {
     fontSize: 12,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0,
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 14,
+    borderRadius: 18,
+    paddingHorizontal: 15,
     paddingVertical: 14,
     fontSize: 15,
   },
@@ -271,7 +296,7 @@ const styles = StyleSheet.create({
   button: {
     marginTop: 24,
     paddingVertical: 16,
-    borderRadius: 16,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
