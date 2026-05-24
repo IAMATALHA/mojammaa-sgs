@@ -1,5 +1,5 @@
 /**
- * DashboardHeader — warm bilingual welcome panel for parent dashboards.
+ * DashboardHeader — premium watercolor welcome panel for parent dashboards.
  */
 
 import React from 'react'
@@ -8,8 +8,7 @@ import {
 } from 'react-native'
 import { MotiView } from 'moti'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Bell, HeartHandshake } from 'lucide-react-native'
-import Svg, { Circle, G, Line, Path, Rect } from 'react-native-svg'
+import { Bell, Sparkles } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface DashboardHeaderProps {
@@ -39,29 +38,30 @@ export default function DashboardHeader({
   return (
     <View style={styles.wrapper}>
       <MotiView
-        from={{ opacity: 0, translateY: 18 }}
+        from={{ opacity: 0, translateY: 16 }}
         animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: 520 }}
+        transition={{ type: 'timing', duration: 500 }}
       >
         <LinearGradient
-          colors={[theme.paper, theme.brandCream, theme.paperWarm]}
-          start={{ x: 0.05, y: 0 }}
+          colors={[theme.paper, theme.brandCream, '#FFF9F0']}
+          start={{ x: 0.02, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[
             styles.panel,
             {
-              borderColor: theme.border,
+              borderColor: 'rgba(29, 53, 87, 0.12)',
               shadowColor: theme.brandNavy,
             },
             theme.shadows.md,
           ]}
         >
-          <View style={[styles.blob, styles.blobSun, { backgroundColor: theme.brandYellowSoft }]} />
-          <View style={[styles.blob, styles.blobCoral, { backgroundColor: theme.brandCoralSoft }]} />
-          <View style={[styles.blob, styles.blobSky, { backgroundColor: theme.schoolSkySoft }]} />
+          <View style={[styles.wash, styles.washAmber, { backgroundColor: theme.brandYellowSoft }]} />
+          <View style={[styles.wash, styles.washCoral, { backgroundColor: theme.brandCoralSoft }]} />
+          <View style={[styles.wash, styles.washSky, { backgroundColor: theme.schoolSkySoft }]} />
+          <View style={[styles.wash, styles.washMint, { backgroundColor: theme.schoolMintSoft }]} />
 
           <View style={styles.topRow}>
-            <View style={[styles.brandStrip, { backgroundColor: 'rgba(255,255,255,0.64)', borderColor: theme.border }]}>
+            <View style={[styles.brandStrip, { backgroundColor: 'rgba(255,255,255,0.68)', borderColor: theme.border }]}>
               <View style={[styles.logoWrap, { backgroundColor: theme.white, borderColor: theme.border }]}>
                 <Image
                   source={require('../../../assets/logo.png')}
@@ -124,7 +124,7 @@ export default function DashboardHeader({
           <View style={styles.heroRow}>
             <View style={styles.copyBlock}>
               <View style={[styles.kicker, { backgroundColor: theme.brandNavySoft }]}>
-                <HeartHandshake size={13} color={theme.brandNavy} strokeWidth={2} />
+                <Sparkles size={13} color={theme.brandOrange} strokeWidth={2} />
                 <Text style={{
                   color: theme.brandNavy,
                   fontFamily: theme.fonts.semibold,
@@ -139,8 +139,8 @@ export default function DashboardHeader({
                 style={{
                   color: theme.brandNavy,
                   fontFamily: theme.fonts.black,
-                  fontSize: 30,
-                  lineHeight: 36,
+                  fontSize: 31,
+                  lineHeight: 37,
                 }}
               >
                 {greeting} {fullName}
@@ -156,65 +156,53 @@ export default function DashboardHeader({
                   marginTop: 6,
                 }}
               >
-                Une journée claire, douce et bien suivie.
+                Tout est prêt pour suivre la journée avec calme.
               </Text>
             </View>
 
-            <View style={styles.sideColumn}>
-              <SchoolYardIllustration theme={theme} />
-              <Pressable onPress={onPressAvatar} hitSlop={8} style={styles.avatarPressable}>
-                {({ pressed }) => (
-                  <MotiView
-                    animate={{ scale: pressed ? 0.96 : 1, opacity: pressed ? 0.9 : 1 }}
-                    transition={{ type: 'timing', duration: 180 }}
-                    style={[
-                      styles.avatarShell,
-                      {
-                        backgroundColor: theme.white,
-                        borderColor: theme.brandYellow,
-                      },
-                    ]}
-                  >
-                    <Text style={{
-                      color: theme.brandNavy,
-                      fontFamily: theme.fonts.black,
-                      fontSize: 15,
-                    }}>
-                      {initialsOf(fullName)}
-                    </Text>
-                  </MotiView>
-                )}
-              </Pressable>
+            <View style={styles.profileColumn}>
+              <View style={[styles.profilePanel, { backgroundColor: 'rgba(255,255,255,0.58)', borderColor: theme.border }]}>
+                <View style={[styles.profileWash, { backgroundColor: theme.brandYellowSoft }]} />
+                <Pressable onPress={onPressAvatar} hitSlop={8}>
+                  {({ pressed }) => (
+                    <MotiView
+                      animate={{ scale: pressed ? 0.96 : 1, opacity: pressed ? 0.9 : 1 }}
+                      transition={{ type: 'timing', duration: 180 }}
+                      style={[
+                        styles.avatarShell,
+                        {
+                          backgroundColor: theme.white,
+                          borderColor: theme.brandYellow,
+                        },
+                      ]}
+                    >
+                      <Text style={{
+                        color: theme.brandNavy,
+                        fontFamily: theme.fonts.black,
+                        fontSize: 17,
+                      }}>
+                        {initialsOf(fullName)}
+                      </Text>
+                    </MotiView>
+                  )}
+                </Pressable>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.brandNavy,
+                    fontFamily: theme.fonts.semibold,
+                    fontSize: 11,
+                    marginTop: 8,
+                  }}
+                >
+                  Parent
+                </Text>
+              </View>
             </View>
           </View>
         </LinearGradient>
       </MotiView>
     </View>
-  )
-}
-
-function SchoolYardIllustration({ theme }: { theme: any }) {
-  return (
-    <Svg width={124} height={104} viewBox="0 0 124 104">
-      <Circle cx={94} cy={20} r={13} fill={theme.brandYellow} opacity={0.95} />
-      <Path d="M14 81C31 62 48 70 63 53C77 37 97 44 112 30" stroke={theme.schoolSky} strokeWidth={9} strokeLinecap="round" opacity={0.34} />
-      <G>
-        <Path d="M23 52L62 24L101 52V88H23V52Z" fill={theme.white} stroke={theme.brandNavy} strokeWidth={2} strokeLinejoin="round" />
-        <Path d="M62 24L105 55H98L62 31L26 55H19L62 24Z" fill={theme.brandCoral} />
-        <Rect x={51} y={62} width={22} height={26} rx={4} fill={theme.brandNavy} />
-        <Rect x={34} y={57} width={12} height={12} rx={3} fill={theme.schoolSky} />
-        <Rect x={78} y={57} width={12} height={12} rx={3} fill={theme.schoolSky} />
-        <Line x1={62} y1={62} x2={62} y2={88} stroke={theme.white} strokeWidth={1.2} opacity={0.5} />
-      </G>
-      <G>
-        <Circle cx={25} cy={87} r={7} fill={theme.brandOrange} />
-        <Path d="M18 101C19 92 31 92 32 101" stroke={theme.brandNavy} strokeWidth={4} strokeLinecap="round" />
-        <Circle cx={99} cy={87} r={7} fill={theme.schoolMint} />
-        <Path d="M92 101C93 92 105 92 106 101" stroke={theme.brandNavy} strokeWidth={4} strokeLinecap="round" />
-      </G>
-      <Circle cx={16} cy={27} r={4} fill={theme.brandCoral} opacity={0.8} />
-      <Circle cx={111} cy={75} r={4} fill={theme.brandYellow} opacity={0.9} />
-    </Svg>
   )
 }
 
@@ -231,27 +219,37 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     position: 'relative',
   },
-  blob: {
+  wash: {
     position: 'absolute',
     borderRadius: 999,
   },
-  blobSun: {
-    width: 170,
-    height: 170,
-    top: -72,
-    right: -48,
+  washAmber: {
+    width: 210,
+    height: 142,
+    top: -68,
+    right: -56,
+    transform: [{ rotate: '-18deg' }],
   },
-  blobCoral: {
-    width: 128,
-    height: 128,
-    bottom: -56,
-    left: -32,
+  washCoral: {
+    width: 176,
+    height: 118,
+    bottom: -52,
+    left: -42,
+    transform: [{ rotate: '14deg' }],
   },
-  blobSky: {
-    width: 94,
-    height: 94,
-    top: 86,
-    right: 40,
+  washSky: {
+    width: 150,
+    height: 96,
+    top: 92,
+    right: 58,
+    transform: [{ rotate: '-24deg' }],
+  },
+  washMint: {
+    width: 122,
+    height: 88,
+    bottom: 18,
+    right: -20,
+    transform: [{ rotate: '24deg' }],
   },
   topRow: {
     flexDirection: 'row',
@@ -312,12 +310,12 @@ const styles = StyleSheet.create({
   heroRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginTop: 18,
-    gap: 8,
+    marginTop: 20,
+    gap: 12,
   },
   copyBlock: {
     flex: 1,
-    paddingBottom: 4,
+    paddingBottom: 2,
   },
   kicker: {
     alignSelf: 'flex-start',
@@ -329,20 +327,33 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginBottom: 10,
   },
-  sideColumn: {
-    width: 126,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
+  profileColumn: {
+    width: 92,
+    alignItems: 'flex-end',
   },
-  avatarPressable: {
+  profilePanel: {
+    width: 86,
+    minHeight: 104,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    padding: 10,
+  },
+  profileWash: {
     position: 'absolute',
-    right: 2,
-    bottom: 0,
+    width: 88,
+    height: 58,
+    top: -18,
+    right: -26,
+    borderRadius: 999,
+    transform: [{ rotate: '-18deg' }],
   },
   avatarShell: {
-    width: 46,
-    height: 46,
-    borderRadius: 18,
+    width: 52,
+    height: 52,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,

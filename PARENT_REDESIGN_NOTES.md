@@ -2,9 +2,9 @@
 
 ## Mood / inspiration
 
-Direction: carnet scolaire premium marocain, chaleureux et child-friendly, avec une structure de dashboard parent claire. Le fond reste cream et papier, le navy porte la hiérarchie, puis le corail, l'orange et le jaune du logo rythment les actions et les statuts. Les pastels mint, sky et lilac servent uniquement de respirations visuelles.
+Direction: carnet scolaire premium marocain, chaleureux mais plus mature, avec une structure de dashboard parent claire. Le fond reste cream et papier, le navy porte la hiérarchie, puis le corail, l'orange et le jaune du logo rythment les actions et les statuts. Les pastels mint, sky et lilac servent uniquement de lavis watercolor abstraits.
 
-Le hero garde le brand strip bilingue avec le logo local et ajoute une illustration SVG inline d'école. Les cartes utilisent des surfaces papier, des badges arrondis, des pictos lucide et des micro-animations Moti sobres.
+Le hero garde le brand strip bilingue avec le logo local. Les illustrations figuratives ont été retirées au profit de couches watercolor abstraites, de surfaces papier, de badges arrondis, de pictos lucide et de micro-animations Moti sobres.
 
 ## Ce qu'un dev doit savoir
 

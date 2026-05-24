@@ -25,9 +25,8 @@ import { MotiView } from 'moti'
 import { useNavigation } from '@react-navigation/native'
 import {
   Megaphone, BookOpen, CalendarDays, Users, X, MapPin, Clock,
-  CalendarCheck, MessageCircle, Sparkles, SunMedium, GraduationCap,
+  CalendarCheck, MessageCircle, SunMedium, GraduationCap,
 } from 'lucide-react-native'
-import Svg, { Circle, Path } from 'react-native-svg'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useParentData } from '../../hooks/useParentData'
@@ -402,19 +401,27 @@ function TodayStoryCard({
       style={styles.todayWrap}
     >
       <LinearGradient
-        colors={[theme.brandNavy, '#25466F']}
+        colors={[theme.paper, theme.brandCream, '#FFF8EA']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.todayCard}
+        style={[
+          styles.todayCard,
+          {
+            borderColor: 'rgba(29, 53, 87, 0.12)',
+            shadowColor: theme.brandNavy,
+          },
+          theme.shadows.sm,
+        ]}
       >
-        <View style={[styles.todayGlow, { backgroundColor: theme.brandYellow }]} />
-        <View style={[styles.todayGlowSmall, { backgroundColor: theme.brandCoral }]} />
+        <View style={[styles.todayGlow, { backgroundColor: theme.brandYellowSoft }]} />
+        <View style={[styles.todayGlowSmall, { backgroundColor: theme.brandCoralSoft }]} />
+        <View style={[styles.todayGlowSky, { backgroundColor: theme.schoolSkySoft }]} />
 
         <View style={styles.todayTextBlock}>
-          <View style={[styles.todayKicker, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
-            <SunMedium size={13} color={theme.brandYellow} strokeWidth={2} />
+          <View style={[styles.todayKicker, { backgroundColor: theme.brandNavySoft }]}>
+            <SunMedium size={13} color={theme.brandOrange} strokeWidth={2} />
             <Text style={{
-              color: theme.white,
+              color: theme.brandNavy,
               fontFamily: theme.fonts.semibold,
               fontSize: 11,
             }}>
@@ -422,16 +429,14 @@ function TodayStoryCard({
             </Text>
           </View>
           <Text style={{
-            color: theme.white,
+            color: theme.brandNavy,
             fontFamily: theme.fonts.black,
             fontSize: 21,
             lineHeight: 27,
           }}>
-            La famille suit le rythme de l'école.
+            Suivi familial, clair et élégant.
           </Text>
         </View>
-
-        <FamilyPath theme={theme} />
 
         <View style={styles.snapshotGrid}>
           <SnapshotPill
@@ -509,18 +514,6 @@ function SnapshotPill({
         </MotiView>
       )}
     </Pressable>
-  )
-}
-
-function FamilyPath({ theme }: { theme: any }) {
-  return (
-    <Svg width={116} height={66} viewBox="0 0 116 66" style={styles.familyPath}>
-      <Path d="M6 49C24 24 39 54 58 30C76 7 94 23 110 9" stroke={theme.brandYellow} strokeWidth={5} strokeLinecap="round" opacity={0.7} />
-      <Path d="M7 58C29 43 44 61 66 42C82 29 96 39 111 28" stroke={theme.schoolSky} strokeWidth={4} strokeLinecap="round" opacity={0.65} />
-      <Circle cx={22} cy={28} r={6} fill={theme.brandCoral} />
-      <Circle cx={58} cy={30} r={6} fill={theme.brandYellow} />
-      <Circle cx={92} cy={22} r={6} fill={theme.schoolMint} />
-    </Svg>
   )
 }
 
@@ -743,27 +736,37 @@ const styles = StyleSheet.create({
   },
   todayCard: {
     borderRadius: 26,
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     padding: 16,
-    minHeight: 206,
+    minHeight: 196,
   },
   todayGlow: {
     position: 'absolute',
-    width: 144,
-    height: 144,
-    borderRadius: 72,
-    top: -64,
-    right: -28,
-    opacity: 0.22,
+    width: 216,
+    height: 112,
+    borderRadius: 999,
+    top: -42,
+    right: -54,
+    transform: [{ rotate: '-17deg' }],
   },
   todayGlowSmall: {
     position: 'absolute',
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    bottom: 72,
-    left: -22,
-    opacity: 0.22,
+    width: 168,
+    height: 92,
+    borderRadius: 999,
+    bottom: 62,
+    left: -42,
+    transform: [{ rotate: '18deg' }],
+  },
+  todayGlowSky: {
+    position: 'absolute',
+    width: 142,
+    height: 78,
+    borderRadius: 999,
+    right: 30,
+    bottom: -22,
+    transform: [{ rotate: '-14deg' }],
   },
   todayTextBlock: {
     maxWidth: 235,
@@ -777,11 +780,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     marginBottom: 10,
-  },
-  familyPath: {
-    position: 'absolute',
-    top: 28,
-    right: 9,
   },
   snapshotGrid: {
     flexDirection: 'row',
