@@ -15,22 +15,18 @@ export default function ScreenLayout({ children, title }: ScreenLayoutProps) {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}> 
       <StatusBar barStyle="dark-content" />
       <View style={styles.canvas}>
-        <View style={[styles.blob, styles.blobA, { backgroundColor: theme.watercolorA }]} />
-        <View style={[styles.blob, styles.blobB, { backgroundColor: theme.roseSurface }]} />
-        <View style={[styles.blob, styles.blobC, { backgroundColor: theme.violetSurface }]} />
-
         {title ? (
           <LinearGradient
-            colors={[theme.surface, theme.bg]}
+            colors={[theme.geminiSurface, theme.card]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.header, { borderColor: theme.border }, theme.shadows.xs]}
+            style={[styles.header, { borderColor: theme.geminiBorder }, theme.shadows.xs]}
           >
-            <Text style={[styles.headerEyebrow, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>Espace école</Text>
-            <Text style={[styles.headerTitle, { color: theme.primary, fontFamily: theme.fonts.serif }]}>{title}</Text>
+            <Text style={[styles.headerEyebrow, { color: theme.geminiBlue, fontFamily: theme.fonts.medium }]}>System Interface</Text>
+            <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}>{title}</Text>
             <View style={styles.headerAccentRow}>
-              <View style={[styles.decorativeLine, { backgroundColor: theme.accent }]} />
-              <View style={[styles.decorativeDot, { backgroundColor: theme.success }]} />
+              <View style={[styles.decorativeLine, { backgroundColor: theme.geminiCyan }]} />
+              <View style={[styles.decorativeDot, { backgroundColor: theme.geminiPurple }]} />
             </View>
           </LinearGradient>
         ) : null}
@@ -49,28 +45,6 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
   },
-  blob: {
-    position: 'absolute',
-    borderRadius: 999,
-  },
-  blobA: {
-    width: 148,
-    height: 148,
-    top: -30,
-    right: -24,
-  },
-  blobB: {
-    width: 88,
-    height: 88,
-    top: 120,
-    left: -24,
-  },
-  blobC: {
-    width: 128,
-    height: 128,
-    bottom: 36,
-    right: -40,
-  },
   header: {
     marginHorizontal: 20,
     marginTop: 18,
@@ -78,7 +52,7 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
     paddingHorizontal: 20,
     borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
   },
   headerEyebrow: {
     fontSize: 11,

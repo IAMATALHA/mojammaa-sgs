@@ -29,11 +29,11 @@ export default function AnimatedCard({ children, onPress, style, delay = 0 }: An
   });
 
   const handlePressIn = () => {
-    if (onPress) scale.value = withSpring(0.97, { damping: 15, stiffness: 300 });
+    if (onPress) scale.value = withSpring(0.95, { damping: 20, stiffness: 250 });
   };
 
   const handlePressOut = () => {
-    if (onPress) scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    if (onPress) scale.value = withSpring(1, { damping: 20, stiffness: 250 });
   };
 
   return (
@@ -41,13 +41,13 @@ export default function AnimatedCard({ children, onPress, style, delay = 0 }: An
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      entering={FadeInDown.delay(delay).springify().damping(15)}
+      entering={FadeInDown.delay(delay).springify().damping(20).stiffness(250)}
       style={[
         styles.card,
         {
-          backgroundColor: theme.white,
-          borderColor: theme.border,
-          shadowColor: theme.primary, // Tinted shadow based on role!
+          backgroundColor: theme.card,
+          borderColor: theme.geminiBorder,
+          shadowColor: theme.geminiBlue,
         },
         animatedStyle,
         style,
@@ -60,14 +60,14 @@ export default function AnimatedCard({ children, onPress, style, delay = 0 }: An
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16, // Softer, more modern corners
-    padding: 16,
+    borderRadius: 20,
+    padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    // Premium soft shadows
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+    overflow: 'hidden',
   },
 });
