@@ -2,6 +2,7 @@ import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import ScreenLayout from '../../components/ScreenLayout';
 import AnimatedCard from '../../components/AnimatedCard';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -11,6 +12,7 @@ import { Users, BookOpen, GraduationCap, Percent } from 'lucide-react-native';
 export default function AdminDashboardScreen() {
   const theme = useTheme();
   const { stats, loading, error, refresh } = useDashboardStats();
+  const nav = useNavigation<any>();
 
   return (
     <ScreenLayout title="Dashboard">
@@ -34,13 +36,13 @@ export default function AdminDashboardScreen() {
         ) : (
           <>
             <View style={styles.row}>
-              <AnimatedCard style={styles.statBox} delay={100} onPress={() => {}}>
+              <AnimatedCard style={styles.statBox} delay={100} onPress={() => nav.navigate('AdminUsers')}>
                 <Users color={theme.primary} size={28} style={styles.icon} />
                 <Text style={[styles.statValue, { color: theme.text }]}>{stats?.totalEleves ?? 0}</Text>
                 <Text style={[styles.statLabel, { color: theme.textSoft }]}>Élèves</Text>
               </AnimatedCard>
 
-              <AnimatedCard style={styles.statBox} delay={200} onPress={() => {}}>
+              <AnimatedCard style={styles.statBox} delay={200} onPress={() => nav.navigate('AdminUsers')}>
                 <BookOpen color={theme.primary} size={28} style={styles.icon} />
                 <Text style={[styles.statValue, { color: theme.text }]}>{stats?.totalProfs ?? 0}</Text>
                 <Text style={[styles.statLabel, { color: theme.textSoft }]}>Profs</Text>
@@ -48,13 +50,13 @@ export default function AdminDashboardScreen() {
             </View>
 
             <View style={styles.row}>
-              <AnimatedCard style={styles.statBox} delay={300} onPress={() => {}}>
+              <AnimatedCard style={styles.statBox} delay={300} onPress={() => nav.navigate('AdminClasses')}>
                 <GraduationCap color={theme.primary} size={28} style={styles.icon} />
                 <Text style={[styles.statValue, { color: theme.text }]}>{stats?.totalClasses ?? 0}</Text>
                 <Text style={[styles.statLabel, { color: theme.textSoft }]}>Classes</Text>
               </AnimatedCard>
 
-              <AnimatedCard style={styles.statBox} delay={400} onPress={() => {}}>
+              <AnimatedCard style={styles.statBox} delay={400} onPress={() => nav.navigate('AdminStats')}>
                 <Percent color={theme.primary} size={28} style={styles.icon} />
                 <Text style={[styles.statValue, { color: theme.text }]}>{stats?.attendanceRate ?? 0}%</Text>
                 <Text style={[styles.statLabel, { color: theme.textSoft }]}>Présence</Text>
@@ -69,7 +71,7 @@ export default function AdminDashboardScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingBottom: 40,
+    paddingBottom: 124,
   },
   row: {
     flexDirection: 'row',

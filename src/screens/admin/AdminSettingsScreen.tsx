@@ -27,7 +27,7 @@ export default function AdminSettingsScreen() {
 
   return (
     <ScreenLayout title="Paramètres">
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Profile card */}
         <View style={[styles.profileCard, { backgroundColor: theme.primary }]}>
           <View style={[styles.avatar, { backgroundColor: theme.white }]}>
@@ -104,6 +104,7 @@ function Row({ label, value, theme }: { label: string; value: string; theme: any
 
 const styles = StyleSheet.create({
   profileCard: { padding: 22, borderRadius: 16, alignItems: 'center', marginBottom: 20 },
+  scrollContent: { paddingBottom: 28 },
   avatar:      { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   profileName: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 4 },
   profileEmail:{ color: 'rgba(255,255,255,0.85)', fontSize: 13, marginBottom: 10 },
