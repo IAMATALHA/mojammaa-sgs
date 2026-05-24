@@ -1,8 +1,5 @@
 /**
- * QuickActions — 4-up button grid (2x2 on phone widths).
- *
- * Icon names come from `lucide-react-native`. We resolve at runtime via a
- * tiny lookup map so callers can pass strings (mock data stays clean).
+ * QuickActions — storybook-style quick access square cards.
  */
 
 import React from 'react'
@@ -17,14 +14,14 @@ import { useTheme } from '../../contexts/ThemeContext'
 import type { QuickAction } from '../../utils/mockData'
 
 const ICONS: Record<string, LucideIcon> = {
-  'check-circle':   CheckCircle,
-  'pencil-line':    PencilLine,
-  'book-open':      BookOpen,
-  'send':           Send,
+  'check-circle': CheckCircle,
+  'pencil-line': PencilLine,
+  'book-open': BookOpen,
+  send: Send,
   'graduation-cap': GraduationCap,
-  'calendar-x':     CalendarX,
+  'calendar-x': CalendarX,
   'message-circle': MessageCircle,
-  'bell':           Bell,
+  bell: Bell,
 }
 
 interface QuickActionsProps {
@@ -32,56 +29,72 @@ interface QuickActionsProps {
   onPress?: (action: QuickAction) => void
 }
 
-// Quick Actions = cards solides matchant les 4 couleurs du logo M✿M
-// (rouge corail + orange + jaune) + un info blue neutre.
-const SOLID_COLORS: Record<string, { bg: string; fg: string }> = {
-  primary: { bg: '#E63946', fg: '#FFFFFF' },  // coral (M rouge logo)
-  accent:  { bg: '#F77F00', fg: '#FFFFFF' },  // orange (fleur logo)
-  info:    { bg: '#457B9D', fg: '#FFFFFF' },  // info blue (neutre)
-  warning: { bg: '#F77F00', fg: '#FFFFFF' },  // orange (= accent)
-  success: { bg: '#FCBF49', fg: '#2A1F1A' },  // jaune (M jaune logo) avec warm-dark
-}
-
 export default function QuickActions({ actions, onPress }: QuickActionsProps) {
   const theme = useTheme()
+
+  const palettes = [
+    { bg: theme.roseSurface, circle: theme.rose, icon: theme.primary },
+    { bg: theme.violetSurface, circle: theme.violet, icon: theme.primary },
+    { bg: theme.greenSurface, circle: theme.green, icon: theme.primary },
+    { bg: theme.accentSurface, circle: theme.accent, icon: theme.primary },
+  ]
+
   return (
     <View style={styles.grid}>
-      {actions.map(action => {
+      {actions.map((action, index) => {
         const Icon = ICONS[action.icon] ?? Bell
-        const tint = SOLID_COLORS[action.tint] || SOLID_COLORS.primary
+        const tint = palettes[index % palettes.length]
+
         return (
           <Pressable
             key={action.id}
             onPress={() => onPress?.(action)}
-            android_ripple={{ color: '#ffffff40' }}
+            android_ripple={{ color: theme.border }}
             style={styles.tilePressable}
           >
             {({ pressed }) => (
               <MotiView
-                from={{ opacity: 0 }}
                 animate={{ scale: pressed ? 0.97 : 1, opacity: pressed ? 0.92 : 1 }}
-                transition={{ type: 'timing', duration: 200 }}
+                transition={{ type: 'timing', duration: 180 }}
                 style={[
                   styles.tile,
-                  { backgroundColor: tint.bg },
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                    shadowColor: theme.primary,
+                  },
+                  theme.shadows.xs,
                 ]}
               >
-                <View style={styles.iconCircle}>
-                  <Icon size={22} color={tint.fg} strokeWidth={1.75} />
+                <View style={[styles.cornerWash, { backgroundColor: tint.bg }]} />
+                <View style={[styles.iconCircle, { backgroundColor: tint.circle }]}> 
+                  <Icon size={21} color={tint.icon} strokeWidth={1.9} />
                 </View>
                 <Text
                   numberOfLines={2}
                   style={{
-                    color: tint.fg,
-                    fontFamily: theme.fonts.bold,
+                    color: theme.text,
+                    fontFamily: theme.fonts.semibold,
                     fontSize: 13,
-                    marginTop: 10,
+                    lineHeight: 18,
+                    marginTop: 12,
                     textAlign: 'center',
-                    lineHeight: 17,
-                    letterSpacing: -0.1,
                   }}
                 >
                   {action.label}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.textMuted,
+                    fontFamily: theme.fonts.medium,
+                    fontSize: 10.5,
+                    marginTop: 6,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  Accès rapide
                 </Text>
               </MotiView>
             )}
@@ -95,24 +108,36 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
 const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
-    flexWrap:      'wrap',
-    gap:           12,
+    flexWrap: 'wrap',
+    gap: 12,
   },
   tilePressable: {
-    width:        '47%',
-    flexGrow:     1,
+    width: '47%',
+    flexGrow: 1,
   },
   tile: {
-    flex:         1,
-    minHeight:    112,
+    minHeight: 132,
     borderRadius: 16,
-    padding:      16,
-    alignItems:   'center',
-    justifyContent:'center',
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  cornerWash: {
+    position: 'absolute',
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    top: -18,
+    right: -12,
+    opacity: 0.9,
   },
   iconCircle: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',  // halo léger sur le fond solide
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 })

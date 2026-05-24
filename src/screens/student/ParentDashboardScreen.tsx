@@ -124,8 +124,11 @@ export default function ParentDashboardScreen() {
   }
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
+    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}> 
       <StatusBar style="dark" />
+      <View style={[styles.bgBlob, styles.bgBlobTop, { backgroundColor: theme.watercolorA }]} />
+      <View style={[styles.bgBlob, styles.bgBlobMiddle, { backgroundColor: theme.roseSurface }]} />
+      <View style={[styles.bgBlob, styles.bgBlobBottom, { backgroundColor: theme.violetSurface }]} />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -305,7 +308,10 @@ export default function ParentDashboardScreen() {
 
         {/* ── Quick actions ─────────────────────────────────── */}
         <View style={styles.section}>
-          <SectionHeader title="Actions rapides" />
+          <SectionHeader
+            title="Accès rapide"
+            subtitle="Petites cartes pour accéder aux essentiels"
+          />
           <QuickActions actions={PARENT_QUICK_ACTIONS} onPress={handleQuickAction} />
         </View>
 
@@ -316,7 +322,7 @@ export default function ParentDashboardScreen() {
             fontSize: 11,
             letterSpacing: 0.3,
           }}>
-            Mojammaa SGS — espace parent
+            Mojammaa SGS — un espace parent chaleureux et illustré
           </Text>
         </View>
       </ScrollView>
@@ -533,7 +539,29 @@ function SheetMeta({
 
 const styles = StyleSheet.create({
   safe:   { flex: 1 },
-  scroll: { paddingBottom: 32 },
+  bgBlob: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  bgBlobTop: {
+    width: 160,
+    height: 160,
+    top: -30,
+    right: -30,
+  },
+  bgBlobMiddle: {
+    width: 92,
+    height: 92,
+    top: 260,
+    left: -24,
+  },
+  bgBlobBottom: {
+    width: 150,
+    height: 150,
+    bottom: 100,
+    right: -42,
+  },
+  scroll: { paddingBottom: 132 },
   section: { paddingHorizontal: 20, marginTop: 22 },
   attendanceRow: {
     flexDirection: 'row',

@@ -1,10 +1,5 @@
 /**
- * Teacher navigation : NativeStack wrapping the BottomTabs.
- *
- * - MainTabs is the root tabs screen
- * - Detail screens (Attendance, ClasseFolder, ClasseEleves, etc.) are
- *   pushed over the tabs so we keep the tab bar visible-less context
- *   during deep navigation.
+ * Teacher navigation : NativeStack wrapping warm floating tabs.
  */
 
 import React from 'react'
@@ -18,39 +13,59 @@ import {
   type LucideIcon,
 } from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext'
-import TeacherDashboardScreen    from '../screens/teacher/TeacherDashboardScreen'
-import TeacherEdtScreen          from '../screens/teacher/TeacherEdtScreen'
-import TeacherClassesScreen      from '../screens/teacher/TeacherClassesScreen'
-import TeacherDevoirsScreen      from '../screens/teacher/TeacherDevoirsScreen'
-import TeacherMessagesScreen     from '../screens/teacher/TeacherMessagesScreen'
-import TeacherAttendanceScreen   from '../screens/teacher/TeacherAttendanceScreen'
+import TeacherDashboardScreen from '../screens/teacher/TeacherDashboardScreen'
+import TeacherEdtScreen from '../screens/teacher/TeacherEdtScreen'
+import TeacherClassesScreen from '../screens/teacher/TeacherClassesScreen'
+import TeacherDevoirsScreen from '../screens/teacher/TeacherDevoirsScreen'
+import TeacherMessagesScreen from '../screens/teacher/TeacherMessagesScreen'
+import TeacherAttendanceScreen from '../screens/teacher/TeacherAttendanceScreen'
 import TeacherClasseFolderScreen from '../screens/teacher/TeacherClasseFolderScreen'
 import TeacherClasseElevesScreen from '../screens/teacher/TeacherClasseElevesScreen'
-import TeacherNotesScreen        from '../screens/teacher/TeacherNotesScreen'
-import TeacherComposeScreen      from '../screens/teacher/TeacherComposeScreen'
+import TeacherNotesScreen from '../screens/teacher/TeacherNotesScreen'
+import TeacherComposeScreen from '../screens/teacher/TeacherComposeScreen'
 
-const Tab   = createBottomTabNavigator()
+const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
 
 function TabIcon({
-  Icon, color, focused, theme,
-}: { Icon: LucideIcon; color: string; focused: boolean; theme: any }) {
+  Icon, color, focused, theme, emphasized = false,
+}: {
+  Icon: LucideIcon
+  color: string
+  focused: boolean
+  theme: any
+  emphasized?: boolean
+}) {
+  if (emphasized) {
+    return (
+      <LinearGradient
+        colors={focused ? [theme.accent, '#FFB066'] : [theme.primary, '#34557F']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.centerIcon, theme.shadows.sm]}
+      >
+        <Icon color="#FFFFFF" size={22} strokeWidth={2} />
+      </LinearGradient>
+    )
+  }
+
   if (focused) {
     return (
       <LinearGradient
-        colors={[theme.primarySurface, theme.accentSurface]}
+        colors={[theme.primarySurface, theme.greenSurface]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.iconActive, { borderColor: theme.primaryBorder }]}
       >
-        <Icon color={color} size={21} strokeWidth={1.75} />
-        <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
+        <Icon color={color} size={20} strokeWidth={1.8} />
+        <View style={[styles.statusDot, { backgroundColor: theme.green }]} />
       </LinearGradient>
     )
   }
+
   return (
     <View style={styles.iconInactive}>
-      <Icon color={color} size={21} strokeWidth={1.75} />
+      <Icon color={color} size={20} strokeWidth={1.8} />
     </View>
   )
 }
@@ -63,26 +78,34 @@ function TeacherTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor:   theme.primary,
+        tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSoft,
         tabBarStyle: {
-          backgroundColor: theme.card,
-          borderTopColor:  theme.border,
-          borderTopWidth:  StyleSheet.hairlineWidth,
-          paddingBottom:   Math.max(insets.bottom, 8),
-          paddingTop:      10,
-          minHeight:       68 + Math.max(insets.bottom, 0),
-          shadowColor:     '#1D3557',
-          shadowOpacity:   0.08,
-          shadowRadius:    18,
-          shadowOffset:    { width: 0, height: -4 },
-          elevation:       8,
+          position: 'absolute',
+          left: 14,
+          right: 14,
+          bottom: Math.max(insets.bottom, 10),
+          backgroundColor: 'rgba(255,255,255,0.96)',
+          borderTopWidth: 0,
+          minHeight: 78,
+          height: 78,
+          paddingTop: 10,
+          paddingBottom: 12,
+          borderRadius: 26,
+          shadowColor: '#1D3557',
+          shadowOpacity: 0.12,
+          shadowRadius: 22,
+          shadowOffset: { width: 0, height: 10 },
+          elevation: 12,
         },
-        tabBarItemStyle: { minHeight: 44 },
+        sceneStyle: {
+          backgroundColor: theme.bg,
+        },
+        tabBarItemStyle: { minHeight: 46 },
         tabBarLabelStyle: {
-          fontSize:   11,
+          fontSize: 11,
           fontFamily: theme.fonts.medium,
-          marginTop:  2,
+          marginTop: 2,
         },
       }}
     >
@@ -107,7 +130,8 @@ function TeacherTabs() {
         component={TeacherClassesScreen}
         options={{
           title: 'Classes',
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} />,
+          tabBarItemStyle: { marginTop: -18 },
+          tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} emphasized />,
         }}
       />
       <Tab.Screen
@@ -133,19 +157,19 @@ function TeacherTabs() {
 export default function TeacherStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="TeacherTabs"            component={TeacherTabs} />
-      <Stack.Screen name="TeacherAttendance"      component={TeacherAttendanceScreen} />
-      <Stack.Screen name="TeacherClasseFolder"    component={TeacherClasseFolderScreen} />
-      <Stack.Screen name="TeacherClasseEleves"    component={TeacherClasseElevesScreen} />
-      <Stack.Screen name="TeacherNotes"           component={TeacherNotesScreen} />
-      <Stack.Screen name="TeacherCompose"         component={TeacherComposeScreen} />
+      <Stack.Screen name="TeacherTabs" component={TeacherTabs} />
+      <Stack.Screen name="TeacherAttendance" component={TeacherAttendanceScreen} />
+      <Stack.Screen name="TeacherClasseFolder" component={TeacherClasseFolderScreen} />
+      <Stack.Screen name="TeacherClasseEleves" component={TeacherClasseElevesScreen} />
+      <Stack.Screen name="TeacherNotes" component={TeacherNotesScreen} />
+      <Stack.Screen name="TeacherCompose" component={TeacherComposeScreen} />
     </Stack.Navigator>
   )
 }
 
 const styles = StyleSheet.create({
   iconActive: {
-    width: 44,
+    width: 42,
     height: 34,
     borderRadius: 17,
     borderWidth: StyleSheet.hairlineWidth,
@@ -153,8 +177,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconInactive: {
-    width: 44,
+    width: 42,
     height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },

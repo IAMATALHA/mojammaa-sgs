@@ -14,12 +14,12 @@ import PressableScale from '../../components/PressableScale'
 const PRIVACY_URL = 'https://mojammaa-sgs.web.app/privacy'
 
 export default function LoginScreen() {
-  const theme   = useTheme()
-  const insets  = useSafeAreaInsets()
-  const [email,    setEmail]    = useState('')
+  const theme = useTheme()
+  const insets = useSafeAreaInsets()
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const forgotPassword = async () => {
     const target = email.trim()
@@ -49,17 +49,17 @@ export default function LoginScreen() {
       setError('Email et mot de passe sont requis.')
       return
     }
-    setLoading(true); setError('')
+
+    setLoading(true)
+    setError('')
+
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password)
-      // Navigation se fera automatiquement via NavigationRoot quand
-      // AuthContext détecte l'utilisateur connecté.
     } catch (e: any) {
       const code = e?.code || ''
-      if (code === 'auth/invalid-email')        setError('Email invalide.')
-      else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password')
-        setError('Email ou mot de passe incorrect.')
-      else if (code === 'auth/user-not-found')  setError('Aucun compte avec cet email.')
+      if (code === 'auth/invalid-email') setError('Email invalide.')
+      else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') setError('Email ou mot de passe incorrect.')
+      else if (code === 'auth/user-not-found') setError('Aucun compte avec cet email.')
       else if (code === 'auth/too-many-requests') setError('Trop de tentatives. Réessayez plus tard.')
       else setError(e?.message || 'Erreur de connexion.')
     } finally {
@@ -69,112 +69,230 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        contentContainerStyle={[styles.root, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 40 }]}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Animated.View entering={FadeInUp.duration(500)} style={styles.logoWrap}>
-          <Image
-            source={require('../../../assets/logo.png')}
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
-        </Animated.View>
-        <Animated.Text entering={FadeInUp.delay(220).duration(500)} style={[styles.subtitle, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>
-          Connectez-vous avec votre compte
-        </Animated.Text>
+      <View style={[styles.screen, { backgroundColor: theme.bg }]}> 
+        <View style={[styles.blob, styles.blobTop, { backgroundColor: theme.watercolorA }]} />
+        <View style={[styles.blob, styles.blobLeft, { backgroundColor: theme.roseSurface }]} />
+        <View style={[styles.blob, styles.blobBottom, { backgroundColor: theme.violetSurface }]} />
 
-        {error ? (
-          <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
-            <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
-          </View>
-        ) : null}
-
-        <Text style={[styles.label, { color: theme.textSoft }]}>Email</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="vous@exemple.com"
-          placeholderTextColor={theme.textSoft}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
-        />
-
-        <Text style={[styles.label, { color: theme.textSoft, marginTop: 14 }]}>Mot de passe</Text>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          placeholder="••••••••"
-          placeholderTextColor={theme.textSoft}
-          secureTextEntry
-          style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
-        />
-
-        <PressableScale
-          onPress={submit}
-          disabled={loading}
-          style={[styles.button, {
-            backgroundColor: theme.primary,
-            opacity:         loading ? 0.7 : 1,
-            shadowColor:     theme.primary,
-            shadowOpacity:   0.30,
-            shadowRadius:    14,
-            shadowOffset:    { width: 0, height: 6 },
-            elevation:       4,
-          }]}
+        <ScrollView
+          contentContainerStyle={[
+            styles.root,
+            { paddingTop: insets.top + 26, paddingBottom: insets.bottom + 40 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={[styles.buttonText, { fontFamily: theme.fonts.black }]}>Se connecter</Text>
-          )}
-        </PressableScale>
+          <Animated.View entering={FadeInUp.duration(500)} style={styles.heroCard}>
+            <View style={[styles.heroSurface, { backgroundColor: theme.surface, borderColor: theme.border }, theme.shadows.sm]}>
+              <View style={styles.logoRow}>
+                <View style={[styles.logoShell, { backgroundColor: theme.white, borderColor: theme.border }]}> 
+                  <Image
+                    source={require('../../../assets/logo.png')}
+                    style={styles.logoImage}
+                    resizeMode="contain"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.kicker, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>Application scolaire</Text>
+                  <Text style={[styles.title, { color: theme.primary, fontFamily: theme.fonts.serif }]}>Bonjour !</Text>
+                  <Text style={[styles.subtitle, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Un espace doux, moderne et rassurant pour l'école.</Text>
+                </View>
+              </View>
+            </View>
+          </Animated.View>
 
-        <TouchableOpacity onPress={forgotPassword} style={styles.forgot}>
-          <Text style={[styles.forgotText, { color: theme.primary }]}>
-            Mot de passe oublié ?
-          </Text>
-        </TouchableOpacity>
+          <Animated.View entering={FadeInUp.delay(180).duration(500)} style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.sm]}>
+            {error ? (
+              <View style={[styles.errorBox, { backgroundColor: theme.dangerSurface }]}> 
+                <Text style={[styles.errorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>{error}</Text>
+              </View>
+            ) : null}
 
-        <TouchableOpacity onPress={openPrivacy} style={styles.privacy}>
-          <Text style={[styles.privacyText, { color: theme.textSoft }]}>
-            Politique de confidentialité
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
+            <Text style={[styles.label, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>Email</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="vous@exemple.com"
+              placeholderTextColor={theme.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
+            />
+
+            <Text style={[styles.label, { color: theme.textSoft, marginTop: 14, fontFamily: theme.fonts.medium }]}>Mot de passe</Text>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              placeholderTextColor={theme.textMuted}
+              secureTextEntry
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
+            />
+
+            <PressableScale
+              onPress={submit}
+              disabled={loading}
+              style={[
+                styles.button,
+                {
+                  backgroundColor: theme.accent,
+                  opacity: loading ? 0.7 : 1,
+                  shadowColor: theme.accent,
+                  shadowOpacity: 0.22,
+                  shadowRadius: 16,
+                  shadowOffset: { width: 0, height: 8 },
+                  elevation: 4,
+                },
+              ]}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={[styles.buttonText, { fontFamily: theme.fonts.bold }]}>Se connecter</Text>
+              )}
+            </PressableScale>
+
+            <TouchableOpacity onPress={forgotPassword} style={styles.forgot}>
+              <Text style={[styles.forgotText, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>Mot de passe oublié ?</Text>
+            </TouchableOpacity>
+          </Animated.View>
+
+          <TouchableOpacity onPress={openPrivacy} style={styles.privacy}>
+            <Text style={[styles.privacyText, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Politique de confidentialité</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
     </KeyboardAvoidingView>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flexGrow: 1, paddingHorizontal: 28, backgroundColor: '#F5F1E8' },
-  logoWrap: {
-    width: 220, height: 220,
-    alignSelf: 'center', marginBottom: 8,
+  screen: {
+    flex: 1,
+    position: 'relative',
   },
-  logoImage: { width: '100%', height: '100%' },
-  subtitle: { fontSize: 13, textAlign: 'center', marginBottom: 32, opacity: 0.85 },
-
-  label: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  blob: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  blobTop: {
+    width: 170,
+    height: 170,
+    top: -34,
+    right: -42,
+  },
+  blobLeft: {
+    width: 92,
+    height: 92,
+    top: 240,
+    left: -24,
+  },
+  blobBottom: {
+    width: 150,
+    height: 150,
+    bottom: 40,
+    right: -34,
+  },
+  root: {
+    flexGrow: 1,
+    paddingHorizontal: 22,
+  },
+  heroCard: {
+    marginTop: 18,
+  },
+  heroSurface: {
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 18,
+  },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  logoShell: {
+    width: 92,
+    height: 92,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: '88%',
+    height: '88%',
+  },
+  kicker: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  title: {
+    fontSize: 38,
+    lineHeight: 44,
+    marginTop: 4,
+    letterSpacing: -0.8,
+  },
+  subtitle: {
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 6,
+  },
+  formCard: {
+    marginTop: 18,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 18,
+  },
+  label: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
   input: {
-    borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     fontSize: 15,
   },
-
-  errorBox: { borderRadius: 10, padding: 12, marginBottom: 16 },
-  errorText: { fontSize: 13, fontWeight: '600' },
-
-  button: {
-    marginTop: 28, paddingVertical: 16, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center',
+  errorBox: {
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 16,
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-
-  forgot:     { marginTop: 20, alignItems: 'center' },
-  forgotText: { fontSize: 14, fontWeight: '600' },
-
-  privacy:     { marginTop: 28, alignItems: 'center' },
-  privacyText: { fontSize: 12, textDecorationLine: 'underline' },
+  errorText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  button: {
+    marginTop: 24,
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+  },
+  forgot: {
+    marginTop: 18,
+    alignItems: 'center',
+  },
+  forgotText: {
+    fontSize: 14,
+  },
+  privacy: {
+    marginTop: 24,
+    alignItems: 'center',
+    paddingBottom: 8,
+  },
+  privacyText: {
+    fontSize: 12,
+    textDecorationLine: 'underline',
+  },
 })

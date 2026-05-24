@@ -1,6 +1,5 @@
 /**
- * Stack pour les parents/élèves.
- * "Home" est désormais le nouveau ParentDashboardScreen (style SaaS).
+ * Parent / student navigation with a modern floating bottom bar.
  */
 import React from 'react'
 import { StyleSheet, View } from 'react-native'
@@ -13,32 +12,52 @@ import {
 } from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext'
 import ParentDashboardScreen from '../screens/student/ParentDashboardScreen'
-import ParentDevoirsScreen   from '../screens/student/ParentDevoirsScreen'
-import ParentNotesScreen     from '../screens/student/ParentNotesScreen'
-import ParentAbsencesScreen  from '../screens/student/ParentAbsencesScreen'
-import ParentMessagesScreen  from '../screens/student/ParentMessagesScreen'
+import ParentDevoirsScreen from '../screens/student/ParentDevoirsScreen'
+import ParentNotesScreen from '../screens/student/ParentNotesScreen'
+import ParentAbsencesScreen from '../screens/student/ParentAbsencesScreen'
+import ParentMessagesScreen from '../screens/student/ParentMessagesScreen'
 
 const Tab = createBottomTabNavigator()
 
 function TabIcon({
-  Icon, color, focused, theme,
-}: { Icon: LucideIcon; color: string; focused: boolean; theme: any }) {
+  Icon, color, focused, theme, emphasized = false,
+}: {
+  Icon: LucideIcon
+  color: string
+  focused: boolean
+  theme: any
+  emphasized?: boolean
+}) {
+  if (emphasized) {
+    return (
+      <LinearGradient
+        colors={focused ? [theme.accent, '#FFB066'] : [theme.primary, '#34557F']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.centerIcon, theme.shadows.sm]}
+      >
+        <Icon color="#FFFFFF" size={22} strokeWidth={2} />
+      </LinearGradient>
+    )
+  }
+
   if (focused) {
     return (
       <LinearGradient
-        colors={[theme.primarySurface, theme.accentSurface]}
+        colors={[theme.primarySurface, theme.violetSurface]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.iconActive, { borderColor: theme.primaryBorder }]}
       >
-        <Icon color={color} size={21} strokeWidth={1.75} />
-        <View style={[styles.statusDot, { backgroundColor: theme.warning }]} />
+        <Icon color={color} size={20} strokeWidth={1.8} />
+        <View style={[styles.statusDot, { backgroundColor: theme.accent }]} />
       </LinearGradient>
     )
   }
+
   return (
     <View style={styles.iconInactive}>
-      <Icon color={color} size={21} strokeWidth={1.75} />
+      <Icon color={color} size={20} strokeWidth={1.8} />
     </View>
   )
 }
@@ -46,32 +65,41 @@ function TabIcon({
 export default function StudentStack() {
   const theme = useTheme()
   const insets = useSafeAreaInsets()
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor:   theme.primary,
+        tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSoft,
         tabBarStyle: {
-          backgroundColor: theme.card,
-          borderTopColor:  theme.border,
-          borderTopWidth:  StyleSheet.hairlineWidth,
-          paddingBottom:   Math.max(insets.bottom, 8),
-          paddingTop:      10,
-          minHeight:       68 + Math.max(insets.bottom, 0),
-          shadowColor:     '#1D3557',
-          shadowOpacity:   0.08,
-          shadowRadius:    18,
-          shadowOffset:    { width: 0, height: -4 },
-          elevation:       8,
+          position: 'absolute',
+          left: 14,
+          right: 14,
+          bottom: Math.max(insets.bottom, 10),
+          backgroundColor: 'rgba(255,255,255,0.96)',
+          borderTopWidth: 0,
+          minHeight: 78,
+          height: 78,
+          paddingTop: 10,
+          paddingBottom: 12,
+          borderRadius: 26,
+          shadowColor: '#1D3557',
+          shadowOpacity: 0.12,
+          shadowRadius: 22,
+          shadowOffset: { width: 0, height: 10 },
+          elevation: 12,
+        },
+        sceneStyle: {
+          backgroundColor: theme.bg,
         },
         tabBarItemStyle: {
-          minHeight: 44,
+          minHeight: 46,
         },
         tabBarLabelStyle: {
-          fontSize:   11,
+          fontSize: 11,
           fontFamily: theme.fonts.medium,
-          marginTop:  2,
+          marginTop: 2,
         },
       }}
     >
@@ -96,7 +124,8 @@ export default function StudentStack() {
         component={ParentNotesScreen}
         options={{
           title: 'Notes',
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={FileText} color={color} focused={focused} theme={theme} />,
+          tabBarItemStyle: { marginTop: -18 },
+          tabBarIcon: ({ color, focused }) => <TabIcon Icon={FileText} color={color} focused={focused} theme={theme} emphasized />,
         }}
       />
       <Tab.Screen
@@ -121,7 +150,7 @@ export default function StudentStack() {
 
 const styles = StyleSheet.create({
   iconActive: {
-    width: 44,
+    width: 42,
     height: 34,
     borderRadius: 17,
     borderWidth: StyleSheet.hairlineWidth,
@@ -129,8 +158,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconInactive: {
-    width: 44,
+    width: 42,
     height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },

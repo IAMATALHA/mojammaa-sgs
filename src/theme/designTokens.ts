@@ -1,76 +1,97 @@
 /**
- * Apple-style design tokens for Mojammaa SGS.
+ * Storybook-inspired design tokens for Mojammaa SGS.
  *
- * The light theme blends the school poster inspiration with an iOS system:
- * warm cream surfaces, navy structure, coral accents, and orange/yellow
- * status indicators. The shape below is semantic so dark mode can mirror it.
+ * The visual system is intentionally warm and educational:
+ * - soft cream backgrounds
+ * - navy typography for structure
+ * - orange + gold accents for actions and achievements
+ * - pastel green / rose / violet for friendly illustrated moments
  */
 
 import { Platform } from 'react-native'
 
 export const colors = {
   light: {
-    // Texte : warm-dark plutôt que navy (le navy n'existe pas dans le logo)
     text: {
-      primary:   '#2A1F1A',                        // warm dark — lisible sur cream
-      secondary: 'rgba(42, 31, 26, 0.72)',
-      tertiary:  'rgba(42, 31, 26, 0.45)',
-      inverse:   '#FFFFFF',
+      primary: '#1D3557',
+      secondary: 'rgba(29, 53, 87, 0.74)',
+      tertiary: 'rgba(29, 53, 87, 0.48)',
+      inverse: '#FFFFFF',
     },
     surface: {
-      primary:   '#F5F1E8',                        // cream du logo
-      secondary: 'rgba(255, 252, 247, 0.80)',
-      tertiary:  'rgba(42, 31, 26, 0.06)',
-      elevated:  '#FFFFFF',
-      grouped:   '#EFE8DA',
+      primary: '#FAF8F5',
+      secondary: '#FFFDFC',
+      tertiary: '#F3EEE7',
+      elevated: '#FFFFFF',
+      grouped: '#F6F1EA',
     },
-    separator:       'rgba(42, 31, 26, 0.08)',
-    separatorStrong: 'rgba(42, 31, 26, 0.18)',
-    // PRIMARY = corail #E63946 (le M rouge du logo)
+    separator: 'rgba(29, 53, 87, 0.10)',
+    separatorStrong: 'rgba(29, 53, 87, 0.18)',
     primary: {
-      value:         '#E63946',
-      pressed:       '#C92F3B',
-      surface:       'rgba(230, 57, 70, 0.10)',
-      surfaceStrong: 'rgba(230, 57, 70, 0.16)',
-      border:        'rgba(230, 57, 70, 0.26)',
+      value: '#1D3557',
+      pressed: '#16304F',
+      surface: 'rgba(29, 53, 87, 0.10)',
+      surfaceStrong: 'rgba(29, 53, 87, 0.16)',
+      border: 'rgba(29, 53, 87, 0.18)',
     },
-    // ACCENT = orange #F77F00 (la fleur orange du logo)
     accent: {
-      primary:       '#F77F00',
-      pressed:       '#D86E00',
-      surface:       'rgba(247, 127, 0, 0.10)',
-      surfaceStrong: 'rgba(247, 127, 0, 0.16)',
-      border:        'rgba(247, 127, 0, 0.26)',
+      primary: '#FF8C42',
+      pressed: '#F07B2F',
+      surface: 'rgba(255, 140, 66, 0.12)',
+      surfaceStrong: 'rgba(255, 140, 66, 0.20)',
+      border: 'rgba(255, 140, 66, 0.22)',
     },
     status: {
-      success:        '#FCBF49',                   // jaune (M jaune du logo)
-      successSurface: 'rgba(252, 191, 73, 0.18)',
-      warning:        '#F77F00',                   // orange
-      warningSurface: 'rgba(247, 127, 0, 0.14)',
-      danger:         '#E63946',                   // corail = primary
-      dangerSurface:  'rgba(230, 57, 70, 0.10)',
-      info:           '#457B9D',                   // bleu seul rescapé (info neutre)
-      infoSurface:    'rgba(69, 123, 157, 0.12)',
+      success: '#FFD23F',
+      successSurface: 'rgba(255, 210, 63, 0.18)',
+      warning: '#FF8C42',
+      warningSurface: 'rgba(255, 140, 66, 0.14)',
+      danger: '#E76F51',
+      dangerSurface: 'rgba(231, 111, 81, 0.14)',
+      info: '#52B788',
+      infoSurface: 'rgba(82, 183, 136, 0.16)',
+    },
+    pastel: {
+      green: '#52B788',
+      greenSoft: 'rgba(82, 183, 136, 0.16)',
+      rose: '#F2B5D4',
+      roseSoft: 'rgba(242, 181, 212, 0.18)',
+      violet: '#B8B5FF',
+      violetSoft: 'rgba(184, 181, 255, 0.18)',
+      cream: '#FAF8F5',
+      watercolorA: 'rgba(255, 210, 63, 0.18)',
+      watercolorB: 'rgba(242, 181, 212, 0.16)',
+      watercolorC: 'rgba(184, 181, 255, 0.16)',
     },
   },
 } as const
 
 const light = colors.light
 
-// Flat aliases preserve the current app contract while the semantic tokens
-// above become the source of truth for new work.
 export const palette = {
   navy: light.primary.value,
   navyDark: light.primary.pressed,
   navySoft: light.primary.surface,
   navyBorder: light.primary.border,
+
   coral: light.accent.primary,
   coralDark: light.accent.pressed,
   coralSoft: light.accent.surface,
+
   orange: light.status.warning,
   orangeSoft: light.status.warningSurface,
   yellow: light.status.success,
   yellowSoft: light.status.successSurface,
+  green: light.pastel.green,
+  greenSoft: light.pastel.greenSoft,
+  rose: light.pastel.rose,
+  roseSoft: light.pastel.roseSoft,
+  violet: light.pastel.violet,
+  violetSoft: light.pastel.violetSoft,
+  cream: light.pastel.cream,
+  watercolorA: light.pastel.watercolorA,
+  watercolorB: light.pastel.watercolorB,
+  watercolorC: light.pastel.watercolorC,
 
   brandRed: light.accent.primary,
   brandRedDark: light.accent.pressed,
@@ -118,43 +139,46 @@ export const spacing = {
 
 export const radius = {
   sm: 10,
-  md: 12,
-  lg: 12,
-  xl: 18,
+  md: 14,
+  lg: 16,
+  xl: 20,
   pill: 999,
 } as const
 
 export const fonts = {
-  regular:  'Poppins_400Regular',
-  medium:   'Poppins_500Medium',
-  semibold: 'Poppins_600SemiBold',
-  bold:     'Poppins_700Bold',
-  black:    'Poppins_800ExtraBold',
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+  black: 'Poppins_800ExtraBold',
 
-  // Brand calligraphy — pour le nom de l'école et grandes signatures
-  script:   'GreatVibes_400Regular',
+  serif: Platform.select({
+    ios: 'Georgia',
+    android: 'serif',
+    web: 'Georgia, Times New Roman, serif',
+    default: 'serif',
+  }),
 
-  // Arabe propre — pour les textes en arabe (le système trouve mal le
-  // bon glyphe avec Poppins, Cairo est conçu pour l'arabe).
-  arabic:   'Cairo_400Regular',
-  arabicSemi:'Cairo_600SemiBold',
-  arabicBold:'Cairo_700Bold',
+  script: 'GreatVibes_400Regular',
+  arabic: 'Cairo_400Regular',
+  arabicSemi: 'Cairo_600SemiBold',
+  arabicBold: 'Cairo_700Bold',
 } as const
 
 export const fontSize = {
   caption: 11,
   small: 12,
-  body: 14,
-  bodyLg: 15,
-  title: 17,
-  h3: 20,
-  h2: 24,
-  h1: 28,
-  display: 34,
+  body: 15,
+  bodyLg: 16,
+  title: 18,
+  h3: 22,
+  h2: 28,
+  h1: 34,
+  display: 40,
 } as const
 
 const iosShadow = (shadowRadius: number, opacity: number, y = 2) => ({
-  shadowColor: '#000000',
+  shadowColor: '#1D3557',
   shadowOpacity: opacity,
   shadowRadius,
   shadowOffset: { width: 0, height: y },
@@ -162,10 +186,10 @@ const iosShadow = (shadowRadius: number, opacity: number, y = 2) => ({
 
 export const shadows = {
   none: { ...iosShadow(0, 0, 0), elevation: 0 },
-  xs: { ...iosShadow(8, 0.06, 2), elevation: 1 },
-  sm: { ...iosShadow(14, 0.08, 4), elevation: 2 },
-  md: { ...iosShadow(18, 0.10, 6), elevation: 3 },
-  lg: { ...iosShadow(24, 0.12, 10), elevation: 4 },
+  xs: { ...iosShadow(10, 0.05, 2), elevation: 1 },
+  sm: { ...iosShadow(16, 0.08, 6), elevation: 2 },
+  md: { ...iosShadow(24, 0.10, 10), elevation: 4 },
+  lg: { ...iosShadow(32, 0.14, 16), elevation: 6 },
 } as const
 
 export const hitSlop = { top: 8, bottom: 8, left: 8, right: 8 }
@@ -173,13 +197,15 @@ export const minTouch = 44
 
 export const chartColors = [
   palette.navy,
-  palette.coral,
   palette.orange,
   palette.yellow,
+  palette.green,
+  palette.rose,
+  palette.violet,
 ] as const
 
 export const fontStack =
   Platform.select({
-    web: '"Poppins", system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+    web: '"Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
     default: undefined,
   })

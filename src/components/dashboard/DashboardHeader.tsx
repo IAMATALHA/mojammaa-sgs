@@ -1,8 +1,5 @@
 /**
- * DashboardHeader — top strip with welcome message + avatar + bell.
- *
- * Used on both the teacher and the parent dashboards. The avatar
- * is initials-based so we don't need to ship images.
+ * DashboardHeader — warm storybook-style welcome panel.
  */
 
 import React from 'react'
@@ -10,16 +7,17 @@ import {
   View, Text, Image, Pressable, StyleSheet,
 } from 'react-native'
 import { MotiView } from 'moti'
+import { LinearGradient } from 'expo-linear-gradient'
 import { Bell } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface DashboardHeaderProps {
-  greeting:      string
-  fullName:      string
-  roleLabel:     string
+  greeting: string
+  fullName: string
+  roleLabel: string
   notifications?: number
-  onPressBell?:  () => void
-  onPressAvatar?:() => void
+  onPressBell?: () => void
+  onPressAvatar?: () => void
 }
 
 function initialsOf(name: string): string {
@@ -36,170 +34,274 @@ export default function DashboardHeader({
   notifications = 0, onPressBell, onPressAvatar,
 }: DashboardHeaderProps) {
   const theme = useTheme()
+
   return (
-    <View>
-      {/* Brand strip */}
-      <View style={styles.brandStrip}>
-        <Image
-          source={require('../../../assets/icon.png')}
-          style={styles.brandLogo}
-          resizeMode="contain"
-        />
-        <View style={{ flex: 1, marginStart: 10 }}>
-          <Text
-            numberOfLines={1}
-            style={{
-              color: '#1D3557',                       // navy élégant (poster vibe)
-              fontFamily: theme.fonts.script,          // Great Vibes — calligraphie
-              fontSize: 22,
-              lineHeight: 26,
-              letterSpacing: 0.2,
-            }}
-          >
-            Mojammaa Al Maarifa
-          </Text>
-          <Text
-            numberOfLines={1}
-            style={{
-              color: theme.textSoft,
-              fontFamily: theme.fonts.arabicSemi,      // Cairo SemiBold pour l'arabe
-              fontSize: 11,
-              marginTop: 0,
-              writingDirection: 'rtl',
-            }}
-          >
-            مجمع المعرفة الخصوصية
-          </Text>
+    <View style={styles.wrapper}>
+      <LinearGradient
+        colors={[theme.surface, theme.cream]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[
+          styles.panel,
+          {
+            backgroundColor: theme.card,
+            borderColor: theme.border,
+            shadowColor: theme.primary,
+          },
+          theme.shadows.sm,
+        ]}
+      >
+        <View style={[styles.blob, styles.blobTop, { backgroundColor: theme.watercolorA }]} />
+        <View style={[styles.blob, styles.blobMiddle, { backgroundColor: theme.roseSurface }]} />
+        <View style={[styles.blob, styles.blobBottom, { backgroundColor: theme.violetSurface }]} />
+
+        <View style={styles.topRow}>
+          <View style={styles.brandStrip}>
+            <View style={[styles.logoWrap, { backgroundColor: theme.white, borderColor: theme.border }]}> 
+              <Image
+                source={require('../../../assets/icon.png')}
+                style={styles.brandLogo}
+                resizeMode="contain"
+              />
+            </View>
+            <View style={{ flex: 1, marginStart: 12 }}>
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: theme.primary,
+                  fontFamily: theme.fonts.script,
+                  fontSize: 24,
+                  lineHeight: 28,
+                }}
+              >
+                Mojammaa Al Maarifa
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: theme.textSoft,
+                  fontFamily: theme.fonts.arabicSemi,
+                  fontSize: 11,
+                  writingDirection: 'rtl',
+                }}
+              >
+                مجمع المعرفة الخصوصية
+              </Text>
+            </View>
+          </View>
+
+          <Pressable onPress={onPressBell} hitSlop={8}>
+            {({ pressed }) => (
+              <MotiView
+                animate={{ scale: pressed ? 0.97 : 1, opacity: pressed ? 0.9 : 1 }}
+                transition={{ type: 'timing', duration: 200 }}
+                style={[
+                  styles.bell,
+                  {
+                    backgroundColor: theme.white,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <Bell size={20} color={theme.primary} strokeWidth={1.75} />
+                {notifications > 0 ? (
+                  <View style={[styles.dot, { backgroundColor: theme.accent }]}> 
+                    <Text style={[styles.dotText, { fontFamily: theme.fonts.black }]}>
+                      {notifications > 9 ? '9+' : String(notifications)}
+                    </Text>
+                  </View>
+                ) : null}
+              </MotiView>
+            )}
+          </Pressable>
         </View>
-      </View>
 
-      <View style={styles.container}>
-      <Pressable
-        onPress={onPressAvatar}
-        hitSlop={8}
-      >
-        {({ pressed }) => (
-          <MotiView
-            animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
-            transition={{ type: 'timing', duration: 200 }}
-            style={[
-              styles.avatar,
-              {
-                backgroundColor: theme.primarySurface,
-                borderColor: theme.primaryBorder,
-              },
-            ]}
-          >
-            <Text style={{
-              color: theme.primary,
-              fontFamily: theme.fonts.semibold,
-              fontSize: 16,
-            }}>
-              {initialsOf(fullName)}
+        <View style={styles.bottomRow}>
+          <Pressable onPress={onPressAvatar} hitSlop={8}>
+            {({ pressed }) => (
+              <MotiView
+                animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.94 : 1 }}
+                transition={{ type: 'timing', duration: 200 }}
+                style={[
+                  styles.avatarShell,
+                  {
+                    backgroundColor: theme.roseSurface,
+                    borderColor: theme.rose,
+                  },
+                ]}
+              >
+                <View style={[styles.avatar, { backgroundColor: theme.white }]}> 
+                  <Text style={{
+                    color: theme.primary,
+                    fontFamily: theme.fonts.bold,
+                    fontSize: 18,
+                  }}>
+                    {initialsOf(fullName)}
+                  </Text>
+                </View>
+              </MotiView>
+            )}
+          </Pressable>
+
+          <View style={styles.textBlock}>
+            <Text
+              numberOfLines={1}
+              style={{
+                color: theme.primary,
+                fontFamily: theme.fonts.serif,
+                fontSize: theme.fontSize.h1,
+                lineHeight: 40,
+                letterSpacing: -0.6,
+              }}
+            >
+              {greeting} {fullName}
             </Text>
-          </MotiView>
-        )}
-      </Pressable>
-
-      <View style={styles.textBlock}>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: theme.textSoft,
-            fontFamily: theme.fonts.regular,
-            fontSize: theme.fontSize.small,
-          }}
-        >
-          {greeting}
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: theme.text,
-            fontFamily: theme.fonts.semibold,
-            fontSize: theme.fontSize.h3,
-            letterSpacing: -0.3,
-            marginTop: 2,
-          }}
-        >
-          {fullName}
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: theme.textMuted,
-            fontFamily: theme.fonts.medium,
-            fontSize: theme.fontSize.caption,
-            marginTop: 2,
-            textTransform: 'uppercase',
-            letterSpacing: 0.6,
-          }}
-        >
-          {roleLabel}
-        </Text>
-      </View>
-
-      <Pressable
-        onPress={onPressBell}
-        hitSlop={8}
-      >
-        {({ pressed }) => (
-          <MotiView
-            animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
-            transition={{ type: 'timing', duration: 200 }}
-            style={[
-              styles.bell,
-              { backgroundColor: theme.card, borderColor: theme.border },
-            ]}
-          >
-            <Bell size={20} color={theme.text} strokeWidth={1.75} />
-            {notifications > 0 ? (
-              <View style={[styles.dot, { backgroundColor: theme.primary }]}>
-                <Text style={[styles.dotText, { fontFamily: theme.fonts.black }]}>
-                  {notifications > 9 ? '9+' : String(notifications)}
-                </Text>
+            <Text
+              numberOfLines={2}
+              style={{
+                color: theme.textSoft,
+                fontFamily: theme.fonts.regular,
+                fontSize: theme.fontSize.body,
+                lineHeight: 22,
+                marginTop: 4,
+              }}
+            >
+              Espace {roleLabel.toLowerCase()} chaleureux, clair et prêt pour la journée.
+            </Text>
+            <View style={styles.tagsRow}>
+              <View style={[styles.tag, { backgroundColor: theme.greenSurface }]}>
+                <Text style={[styles.tagText, { color: theme.green, fontFamily: theme.fonts.semibold }]}>École</Text>
               </View>
-            ) : null}
-          </MotiView>
-        )}
-      </Pressable>
-      </View>
+              <View style={[styles.tag, { backgroundColor: theme.violetSurface }]}>
+                <Text style={[styles.tagText, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>{roleLabel}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </LinearGradient>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+  },
+  panel: {
+    overflow: 'hidden',
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    position: 'relative',
+  },
+  blob: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  blobTop: {
+    width: 140,
+    height: 140,
+    top: -42,
+    right: -16,
+  },
+  blobMiddle: {
+    width: 92,
+    height: 92,
+    bottom: 22,
+    right: 56,
+  },
+  blobBottom: {
+    width: 120,
+    height: 120,
+    bottom: -44,
+    left: -24,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
   brandStrip: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    paddingHorizontal: 24,
-    paddingTop:        8,
-    paddingBottom:     4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginEnd: 12,
   },
-  brandLogo: {
-    width:  34, height: 34, borderRadius: 8,
-  },
-  container: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    paddingHorizontal: 24,
-    paddingVertical:   12,
-  },
-  avatar: {
-    width: 48, height: 48, borderRadius: 24,
-    alignItems: 'center', justifyContent: 'center',
+  logoWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
   },
-  textBlock: { flex: 1, marginHorizontal: 14 },
+  brandLogo: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+  },
   bell: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
   },
   dot: {
-    position: 'absolute', top: 6, right: 6,
-    minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4,
-    alignItems: 'center', justifyContent: 'center',
+    position: 'absolute',
+    top: 5,
+    right: 4,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  dotText: { color: '#fff', fontSize: 9 },
+  dotText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 18,
+  },
+  avatarShell: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  avatar: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textBlock: {
+    flex: 1,
+    marginStart: 16,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  tag: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  tagText: {
+    fontSize: 11,
+    letterSpacing: 0.2,
+  },
 })

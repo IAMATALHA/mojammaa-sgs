@@ -25,9 +25,9 @@ export default function SectionHeader({
         <Text
           numberOfLines={1}
           style={[styles.title, {
-            color: theme.text,
-            fontFamily: theme.fonts.semibold,
-            fontSize: theme.fontSize.title,
+            color: theme.primary,
+            fontFamily: theme.fonts.serif,
+            fontSize: theme.fontSize.h3,
           }]}
         >
           {title}
@@ -54,8 +54,8 @@ export default function SectionHeader({
               transition={{ type: 'timing', duration: 200 }}
             >
               <Text style={{
-                color: theme.primary,
-                fontFamily: theme.fonts.medium,
+                color: theme.accent,
+                fontFamily: theme.fonts.semibold,
                 fontSize: theme.fontSize.small,
               }}>
                 {actionLabel}
@@ -73,8 +73,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems:    'flex-end',
     justifyContent:'space-between',
-    marginBottom:  14,
+    marginBottom:  16,
   },
   titleBlock: { flex: 1, marginEnd: 16 },
-  title:      { letterSpacing: -0.25 },
+  title:      { letterSpacing: -0.45 },
 })

@@ -23,6 +23,16 @@ export interface Theme {
   primaryDark:     string
   accent:          string
   accentSurface:   string
+  green:           string
+  greenSurface:    string
+  rose:            string
+  roseSurface:     string
+  violet:          string
+  violetSurface:   string
+  cream:           string
+  watercolorA:     string
+  watercolorB:     string
+  watercolorC:     string
 
   // Surfaces
   bg:              string
@@ -65,6 +75,16 @@ const THEME: Theme = {
   primaryDark:    palette.navyDark,
   accent:         palette.accent,
   accentSurface:  palette.accentSoft,
+  green:          palette.green,
+  greenSurface:   palette.greenSoft,
+  rose:           palette.rose,
+  roseSurface:    palette.roseSoft,
+  violet:         palette.violet,
+  violetSurface:  palette.violetSoft,
+  cream:          palette.cream,
+  watercolorA:    palette.watercolorA,
+  watercolorB:    palette.watercolorB,
+  watercolorC:    palette.watercolorC,
 
   bg:             palette.bg,
   surface:        palette.surface,
