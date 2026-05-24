@@ -26,30 +26,25 @@ export default function ChildCard({ child, onPress }: ChildCardProps) {
       {({ pressed }) => (
         <MotiView
           animate={{ scale: pressed ? 0.985 : 1, opacity: pressed ? 0.96 : 1 }}
-          transition={{ type: 'timing', duration: 180 }}
+          transition={{ type: 'spring', damping: 20, stiffness: 250 }}
           style={[
             styles.card,
             {
               backgroundColor: theme.card,
               borderColor: theme.border,
-              shadowColor: theme.primary,
             },
             theme.shadows.xs,
           ]}
-        >
-          <View style={[styles.wash, { backgroundColor: theme.watercolorA }]} />
-          <View style={[styles.washSmall, { backgroundColor: theme.roseSurface }]} />
-
-          <View style={[styles.avatarShell, { backgroundColor: theme.greenSurface }]}> 
-            <View style={[styles.avatar, { backgroundColor: theme.white }]}> 
-              <Text style={{
-                color: theme.primary,
-                fontFamily: theme.fonts.bold,
-                fontSize: 18,
-              }}>
-                {initialsOf(child)}
-              </Text>
-            </View>
+          >
+          <View style={[styles.avatarShell, { backgroundColor: theme.geminiSurface, borderColor: theme.geminiBorder }]} />
+          <View style={{ position: 'absolute', left: 20, width: 44, height: 44, borderRadius: 14, backgroundColor: theme.geminiBlue, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{
+              color: theme.white,
+              fontFamily: theme.fonts.bold,
+              fontSize: 16,
+            }}>
+              {initialsOf(child)}
+            </Text>
           </View>
 
           <View style={styles.body}>

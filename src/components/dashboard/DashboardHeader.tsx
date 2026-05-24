@@ -1,14 +1,10 @@
-/**
- * DashboardHeader — warm storybook-style welcome panel.
- */
-
 import React from 'react'
 import {
-  View, Text, Image, Pressable, StyleSheet,
+  View, Text, Pressable, StyleSheet,
 } from 'react-native'
 import { MotiView } from 'moti'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Bell } from 'lucide-react-native'
+import { Bell, Sparkles } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface DashboardHeaderProps {
@@ -38,40 +34,31 @@ export default function DashboardHeader({
   return (
     <View style={styles.wrapper}>
       <LinearGradient
-        colors={[theme.surface, theme.cream]}
+        colors={[theme.geminiSurface, theme.card, theme.card]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[
           styles.panel,
           {
-            backgroundColor: theme.card,
-            borderColor: theme.border,
-            shadowColor: theme.primary,
+            borderColor: theme.geminiBorder,
+            shadowColor: theme.geminiBlue,
           },
           theme.shadows.sm,
         ]}
       >
-        <View style={[styles.blob, styles.blobTop, { backgroundColor: theme.watercolorA }]} />
-        <View style={[styles.blob, styles.blobMiddle, { backgroundColor: theme.roseSurface }]} />
-        <View style={[styles.blob, styles.blobBottom, { backgroundColor: theme.violetSurface }]} />
-
         <View style={styles.topRow}>
           <View style={styles.brandStrip}>
-            <View style={[styles.logoWrap, { backgroundColor: theme.white, borderColor: theme.border }]}> 
-              <Image
-                source={require('../../../assets/icon.png')}
-                style={styles.brandLogo}
-                resizeMode="contain"
-              />
+            <View style={[styles.logoWrap, { backgroundColor: theme.geminiBlue, borderColor: theme.geminiBlue }]}> 
+              <Sparkles size={20} color={theme.white} strokeWidth={2} />
             </View>
             <View style={{ flex: 1, marginStart: 12 }}>
               <Text
                 numberOfLines={1}
                 style={{
-                  color: theme.primary,
-                  fontFamily: theme.fonts.script,
-                  fontSize: 24,
-                  lineHeight: 28,
+                  color: theme.text,
+                  fontFamily: theme.fonts.bold,
+                  fontSize: 18,
+                  letterSpacing: -0.5,
                 }}
               >
                 Mojammaa Al Maarifa
@@ -79,13 +66,14 @@ export default function DashboardHeader({
               <Text
                 numberOfLines={1}
                 style={{
-                  color: theme.textSoft,
-                  fontFamily: theme.fonts.arabicSemi,
+                  color: theme.geminiBlue,
+                  fontFamily: theme.fonts.medium,
                   fontSize: 11,
-                  writingDirection: 'rtl',
+                  letterSpacing: 0.8,
+                  textTransform: 'uppercase',
                 }}
               >
-                مجمع المعرفة الخصوصية
+                System Online
               </Text>
             </View>
           </View>
@@ -93,19 +81,19 @@ export default function DashboardHeader({
           <Pressable onPress={onPressBell} hitSlop={8}>
             {({ pressed }) => (
               <MotiView
-                animate={{ scale: pressed ? 0.97 : 1, opacity: pressed ? 0.9 : 1 }}
-                transition={{ type: 'timing', duration: 200 }}
+                animate={{ scale: pressed ? 0.95 : 1, opacity: pressed ? 0.8 : 1 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 250 }}
                 style={[
                   styles.bell,
                   {
-                    backgroundColor: theme.white,
+                    backgroundColor: theme.surface,
                     borderColor: theme.border,
                   },
                 ]}
               >
-                <Bell size={20} color={theme.primary} strokeWidth={1.75} />
+                <Bell size={18} color={theme.text} strokeWidth={2} />
                 {notifications > 0 ? (
-                  <View style={[styles.dot, { backgroundColor: theme.accent }]}> 
+                  <View style={[styles.dot, { backgroundColor: theme.geminiPurple }]}> 
                     <Text style={[styles.dotText, { fontFamily: theme.fonts.black }]}>
                       {notifications > 9 ? '9+' : String(notifications)}
                     </Text>
@@ -120,21 +108,21 @@ export default function DashboardHeader({
           <Pressable onPress={onPressAvatar} hitSlop={8}>
             {({ pressed }) => (
               <MotiView
-                animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.94 : 1 }}
-                transition={{ type: 'timing', duration: 200 }}
+                animate={{ scale: pressed ? 0.95 : 1 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 250 }}
                 style={[
                   styles.avatarShell,
                   {
-                    backgroundColor: theme.roseSurface,
-                    borderColor: theme.rose,
+                    backgroundColor: theme.geminiSurface,
+                    borderColor: theme.geminiBlue,
                   },
                 ]}
               >
-                <View style={[styles.avatar, { backgroundColor: theme.white }]}> 
+                <View style={[styles.avatar, { backgroundColor: theme.geminiBlue }]}> 
                   <Text style={{
-                    color: theme.primary,
+                    color: theme.white,
                     fontFamily: theme.fonts.bold,
-                    fontSize: 18,
+                    fontSize: 16,
                   }}>
                     {initialsOf(fullName)}
                   </Text>
@@ -147,11 +135,10 @@ export default function DashboardHeader({
             <Text
               numberOfLines={1}
               style={{
-                color: theme.primary,
-                fontFamily: theme.fonts.serif,
-                fontSize: theme.fontSize.h1,
-                lineHeight: 40,
-                letterSpacing: -0.6,
+                color: theme.text,
+                fontFamily: theme.fonts.bold,
+                fontSize: theme.fontSize.h2,
+                letterSpacing: -0.8,
               }}
             >
               {greeting} {fullName}
@@ -161,21 +148,13 @@ export default function DashboardHeader({
               style={{
                 color: theme.textSoft,
                 fontFamily: theme.fonts.regular,
-                fontSize: theme.fontSize.body,
-                lineHeight: 22,
+                fontSize: 14,
+                lineHeight: 20,
                 marginTop: 4,
               }}
             >
-              Espace {roleLabel.toLowerCase()} chaleureux, clair et prêt pour la journée.
+              Interface {roleLabel.toLowerCase()} synchronisée. Toutes les données sont à jour.
             </Text>
-            <View style={styles.tagsRow}>
-              <View style={[styles.tag, { backgroundColor: theme.greenSurface }]}>
-                <Text style={[styles.tagText, { color: theme.green, fontFamily: theme.fonts.semibold }]}>École</Text>
-              </View>
-              <View style={[styles.tag, { backgroundColor: theme.violetSurface }]}>
-                <Text style={[styles.tagText, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>{roleLabel}</Text>
-              </View>
-            </View>
           </View>
         </View>
       </LinearGradient>
@@ -190,37 +169,14 @@ const styles = StyleSheet.create({
   },
   panel: {
     overflow: 'hidden',
-    borderRadius: 32,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 24,
+    borderWidth: 1,
     paddingHorizontal: 20,
     paddingVertical: 24,
-    position: 'relative',
-  },
-  blob: {
-    position: 'absolute',
-    borderRadius: 999,
-  },
-  blobTop: {
-    width: 160,
-    height: 160,
-    top: -50,
-    right: -20,
-  },
-  blobMiddle: {
-    width: 110,
-    height: 110,
-    bottom: 10,
-    right: 70,
-  },
-  blobBottom: {
-    width: 140,
-    height: 140,
-    bottom: -60,
-    left: -30,
   },
   topRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
   brandStrip: {
@@ -230,36 +186,33 @@ const styles = StyleSheet.create({
     marginEnd: 12,
   },
   logoWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  brandLogo: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    borderWidth: 1,
   },
   bell: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
   },
   dot: {
     position: 'absolute',
-    top: 5,
-    right: 4,
-    minWidth: 17,
-    height: 17,
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
     borderRadius: 9,
     paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   dotText: {
     color: '#FFFFFF',
@@ -268,40 +221,25 @@ const styles = StyleSheet.create({
   bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 18,
+    marginTop: 24,
   },
   avatarShell: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
+    width: 56,
+    height: 56,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
   },
   avatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   textBlock: {
     flex: 1,
     marginStart: 16,
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-  },
-  tag: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  tagText: {
-    fontSize: 11,
-    letterSpacing: 0.2,
   },
 })

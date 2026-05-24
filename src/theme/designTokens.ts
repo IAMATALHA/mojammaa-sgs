@@ -64,6 +64,11 @@ export const colors = {
       watercolorC: 'rgba(184, 181, 255, 0.16)',
       watercolorMint: 'rgba(82, 183, 136, 0.16)',
       watercolorPeach: 'rgba(255, 140, 66, 0.14)',
+      geminiBlue: '#4285F4',
+      geminiPurple: '#9B72CB',
+      geminiCyan: '#12B5CB',
+      geminiSurface: 'rgba(66, 133, 244, 0.08)',
+      geminiBorder: 'rgba(66, 133, 244, 0.15)',
     },
   },
 } as const
@@ -96,6 +101,12 @@ export const palette = {
   watercolorC: light.pastel.watercolorC,
   watercolorMint: light.pastel.watercolorMint,
   watercolorPeach: light.pastel.watercolorPeach,
+
+  geminiBlue: light.pastel.geminiBlue,
+  geminiPurple: light.pastel.geminiPurple,
+  geminiCyan: light.pastel.geminiCyan,
+  geminiSurface: light.pastel.geminiSurface,
+  geminiBorder: light.pastel.geminiBorder,
 
   brandRed: light.accent.primary,
   brandRedDark: light.accent.pressed,

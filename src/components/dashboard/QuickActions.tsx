@@ -33,10 +33,10 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
   const theme = useTheme()
 
   const palettes = [
-    { bg: theme.roseSurface, circle: theme.rose, icon: theme.primary },
-    { bg: theme.violetSurface, circle: theme.violet, icon: theme.primary },
-    { bg: theme.greenSurface, circle: theme.green, icon: theme.primary },
-    { bg: theme.accentSurface, circle: theme.accent, icon: theme.primary },
+    { bg: theme.geminiSurface, icon: theme.geminiBlue },
+    { bg: theme.surfaceAlt, icon: theme.geminiPurple },
+    { bg: theme.geminiSurface, icon: theme.geminiCyan },
+    { bg: theme.surfaceAlt, icon: theme.text },
   ]
 
   return (
@@ -55,20 +55,18 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
             {({ pressed }) => (
               <MotiView
                 animate={{ scale: pressed ? 0.97 : 1, opacity: pressed ? 0.92 : 1 }}
-                transition={{ type: 'timing', duration: 180 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 250 }}
                 style={[
                   styles.tile,
                   {
                     backgroundColor: theme.card,
                     borderColor: theme.border,
-                    shadowColor: theme.primary,
                   },
                   theme.shadows.xs,
                 ]}
               >
-                <View style={[styles.cornerWash, { backgroundColor: tint.bg }]} />
-                <View style={[styles.iconCircle, { backgroundColor: tint.circle }]}> 
-                  <Icon size={21} color={tint.icon} strokeWidth={1.9} />
+                <View style={[styles.iconBox, { backgroundColor: tint.bg, borderColor: theme.geminiBorder }]}> 
+                  <Icon size={20} color={tint.icon} strokeWidth={2} />
                 </View>
                 <Text
                   numberOfLines={2}
@@ -82,19 +80,6 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
                   }}
                 >
                   {action.label}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: theme.textMuted,
-                    fontFamily: theme.fonts.medium,
-                    fontSize: 10.5,
-                    marginTop: 6,
-                    textTransform: 'uppercase',
-                    letterSpacing: 0.5,
-                  }}
-                >
-                  Accès rapide
                 </Text>
               </MotiView>
             )}
@@ -116,28 +101,20 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   tile: {
-    minHeight: 132,
-    borderRadius: 16,
+    minHeight: 120,
+    borderRadius: 20,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     overflow: 'hidden',
   },
-  cornerWash: {
-    position: 'absolute',
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    top: -18,
-    right: -12,
-    opacity: 0.9,
-  },
-  iconCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
   },
 })

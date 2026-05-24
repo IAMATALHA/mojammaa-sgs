@@ -36,6 +36,12 @@ export interface Theme {
   watercolorMint:  string
   watercolorPeach: string
 
+  geminiBlue:      string
+  geminiPurple:    string
+  geminiCyan:      string
+  geminiSurface:   string
+  geminiBorder:    string
+
   // Surfaces
   bg:              string
   surface:         string
@@ -89,6 +95,12 @@ const THEME: Theme = {
   watercolorC:    palette.watercolorC,
   watercolorMint: palette.watercolorMint,
   watercolorPeach: palette.watercolorPeach,
+
+  geminiBlue:     palette.geminiBlue,
+  geminiPurple:   palette.geminiPurple,
+  geminiCyan:     palette.geminiCyan,
+  geminiSurface:  palette.geminiSurface,
+  geminiBorder:   palette.geminiBorder,
 
   bg:             palette.bg,
   surface:        palette.surface,

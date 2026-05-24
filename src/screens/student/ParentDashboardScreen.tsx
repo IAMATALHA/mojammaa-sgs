@@ -126,11 +126,6 @@ export default function ParentDashboardScreen() {
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}> 
       <StatusBar style="dark" />
-      <View style={[styles.bgBlob, styles.bgBlob1, { backgroundColor: theme.watercolorPeach }]} />
-      <View style={[styles.bgBlob, styles.bgBlob2, { backgroundColor: theme.watercolorMint }]} />
-      <View style={[styles.bgBlob, styles.bgBlob3, { backgroundColor: theme.watercolorC }]} />
-      <View style={[styles.bgBlob, styles.bgBlob4, { backgroundColor: theme.watercolorB }]} />
-      <View style={[styles.bgBlob, styles.bgBlob5, { backgroundColor: theme.watercolorA }]} />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
