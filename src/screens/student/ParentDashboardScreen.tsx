@@ -16,7 +16,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, ScrollView, RefreshControl, StyleSheet, Pressable, Text,
-  Alert, Modal,
+  Alert, Modal, Image,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -148,7 +148,7 @@ export default function ParentDashboardScreen() {
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}> 
       <StatusBar style="dark" />
       <View style={[styles.bgBlob, styles.bgBlobTop, { backgroundColor: theme.brandYellowSoft }]} />
-      <View style={[styles.bgBlob, styles.bgBlobMiddle, { backgroundColor: theme.schoolSkySoft }]} />
+      <View style={[styles.bgBlob, styles.bgBlobMiddle, { backgroundColor: theme.schoolMintSoft }]} />
       <View style={[styles.bgBlob, styles.bgBlobBottom, { backgroundColor: theme.brandCoralSoft }]} />
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -401,27 +401,31 @@ function TodayStoryCard({
       style={styles.todayWrap}
     >
       <LinearGradient
-        colors={[theme.paper, theme.brandCream, '#FFF8EA']}
+        colors={[theme.brandNavy, '#27496F']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[
           styles.todayCard,
           {
-            borderColor: 'rgba(29, 53, 87, 0.12)',
+            borderColor: 'rgba(255, 255, 255, 0.16)',
             shadowColor: theme.brandNavy,
           },
           theme.shadows.sm,
         ]}
       >
-        <View style={[styles.todayGlow, { backgroundColor: theme.brandYellowSoft }]} />
-        <View style={[styles.todayGlowSmall, { backgroundColor: theme.brandCoralSoft }]} />
-        <View style={[styles.todayGlowSky, { backgroundColor: theme.schoolSkySoft }]} />
+        <Image
+          source={require('../../../assets/icon.png')}
+          style={styles.todayWatermark}
+          resizeMode="contain"
+        />
+        <View style={[styles.todayGlow, { backgroundColor: 'rgba(252, 191, 73, 0.18)' }]} />
+        <View style={[styles.todayGlowSmall, { backgroundColor: 'rgba(230, 57, 70, 0.14)' }]} />
 
         <View style={styles.todayTextBlock}>
-          <View style={[styles.todayKicker, { backgroundColor: theme.brandNavySoft }]}>
-            <SunMedium size={13} color={theme.brandOrange} strokeWidth={2} />
+          <View style={[styles.todayKicker, { backgroundColor: 'rgba(255,255,255,0.10)' }]}>
+            <SunMedium size={13} color={theme.brandYellow} strokeWidth={2} />
             <Text style={{
-              color: theme.brandNavy,
+              color: theme.white,
               fontFamily: theme.fonts.semibold,
               fontSize: 11,
             }}>
@@ -429,41 +433,45 @@ function TodayStoryCard({
             </Text>
           </View>
           <Text style={{
-            color: theme.brandNavy,
+            color: theme.white,
             fontFamily: theme.fonts.black,
-            fontSize: 21,
-            lineHeight: 27,
+            fontSize: 22,
+            lineHeight: 28,
           }}>
             Suivi familial, clair et élégant.
           </Text>
         </View>
 
-        <View style={styles.snapshotGrid}>
+        <View style={[styles.snapshotGrid, { borderColor: 'rgba(255,255,255,0.14)' }]}>
           <SnapshotPill
-            icon={<GraduationCap size={15} color={theme.brandNavy} strokeWidth={2} />}
+            icon={<GraduationCap size={15} color={theme.brandYellow} strokeWidth={2} />}
             label="Enfants"
             value={String(childrenCount)}
             theme={theme}
+            inverse
           />
           <SnapshotPill
-            icon={<CalendarCheck size={15} color={theme.brandNavy} strokeWidth={2} />}
+            icon={<CalendarCheck size={15} color={theme.brandYellow} strokeWidth={2} />}
             label="Présence"
             value={`${attendance}%`}
             onPress={onPressAbsences}
             theme={theme}
+            inverse
           />
           <SnapshotPill
-            icon={<BookOpen size={15} color={theme.brandNavy} strokeWidth={2} />}
+            icon={<BookOpen size={15} color={theme.brandYellow} strokeWidth={2} />}
             label="Devoirs"
             value={String(homeworkCount)}
             theme={theme}
+            inverse
           />
           <SnapshotPill
-            icon={<MessageCircle size={15} color={theme.brandNavy} strokeWidth={2} />}
+            icon={<MessageCircle size={15} color={theme.brandYellow} strokeWidth={2} />}
             label="Messages"
             value={String(messageCount)}
             onPress={onPressMessages}
             theme={theme}
+            inverse
           />
         </View>
       </LinearGradient>
@@ -472,13 +480,14 @@ function TodayStoryCard({
 }
 
 function SnapshotPill({
-  icon, label, value, onPress, theme,
+  icon, label, value, onPress, theme, inverse = false,
 }: {
   icon: React.ReactNode
   label: string
   value: string
   onPress?: () => void
   theme: any
+  inverse?: boolean
 }) {
   return (
     <Pressable onPress={onPress} disabled={!onPress} style={styles.snapshotPressable}>
@@ -486,16 +495,19 @@ function SnapshotPill({
         <MotiView
           animate={{ scale: pressed ? 0.97 : 1, opacity: pressed ? 0.9 : 1 }}
           transition={{ type: 'timing', duration: 160 }}
-          style={[styles.snapshotPill, { backgroundColor: theme.white }]}
+          style={styles.snapshotPill}
         >
-          <View style={[styles.snapshotIcon, { backgroundColor: theme.brandYellowSoft }]}>
+          <View style={[
+            styles.snapshotIcon,
+            { backgroundColor: inverse ? 'rgba(255,255,255,0.10)' : theme.brandYellowSoft },
+          ]}>
             {icon}
           </View>
           <View style={styles.snapshotCopy}>
             <Text style={{
-              color: theme.brandNavy,
+              color: inverse ? theme.white : theme.brandNavy,
               fontFamily: theme.fonts.black,
-              fontSize: 15,
+              fontSize: 16,
               fontVariant: ['tabular-nums'],
             }}>
               {value}
@@ -503,7 +515,7 @@ function SnapshotPill({
             <Text
               numberOfLines={1}
               style={{
-                color: theme.textSoft,
+                color: inverse ? 'rgba(255,255,255,0.72)' : theme.textSoft,
                 fontFamily: theme.fonts.medium,
                 fontSize: 10.5,
               }}
@@ -712,22 +724,25 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   bgBlobTop: {
-    width: 180,
-    height: 180,
+    width: 260,
+    height: 126,
     top: -42,
-    right: -46,
+    right: -86,
+    transform: [{ rotate: '-18deg' }],
   },
   bgBlobMiddle: {
-    width: 104,
-    height: 104,
+    width: 170,
+    height: 96,
     top: 330,
-    left: -34,
+    left: -72,
+    transform: [{ rotate: '18deg' }],
   },
   bgBlobBottom: {
-    width: 170,
-    height: 170,
+    width: 240,
+    height: 118,
     bottom: 80,
-    right: -58,
+    right: -104,
+    transform: [{ rotate: '14deg' }],
   },
   scroll: { paddingBottom: 132 },
   todayWrap: {
@@ -735,38 +750,37 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   todayCard: {
-    borderRadius: 26,
+    borderRadius: 30,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    padding: 16,
-    minHeight: 196,
+    padding: 18,
+    minHeight: 188,
+  },
+  todayWatermark: {
+    position: 'absolute',
+    width: 142,
+    height: 142,
+    right: -28,
+    top: 16,
+    opacity: 0.06,
   },
   todayGlow: {
     position: 'absolute',
-    width: 216,
-    height: 112,
+    width: 230,
+    height: 108,
     borderRadius: 999,
-    top: -42,
-    right: -54,
-    transform: [{ rotate: '-17deg' }],
+    top: -50,
+    left: -64,
+    transform: [{ rotate: '-12deg' }],
   },
   todayGlowSmall: {
     position: 'absolute',
-    width: 168,
-    height: 92,
+    width: 210,
+    height: 94,
     borderRadius: 999,
-    bottom: 62,
-    left: -42,
-    transform: [{ rotate: '18deg' }],
-  },
-  todayGlowSky: {
-    position: 'absolute',
-    width: 142,
-    height: 78,
-    borderRadius: 999,
-    right: 30,
-    bottom: -22,
-    transform: [{ rotate: '-14deg' }],
+    right: -72,
+    bottom: -28,
+    transform: [{ rotate: '15deg' }],
   },
   todayTextBlock: {
     maxWidth: 235,
@@ -784,26 +798,27 @@ const styles = StyleSheet.create({
   snapshotGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 9,
-    marginTop: 18,
+    gap: 0,
+    marginTop: 20,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 14,
   },
   snapshotPressable: {
-    width: '47%',
+    width: '50%',
     flexGrow: 1,
   },
   snapshotPill: {
-    minHeight: 58,
-    borderRadius: 18,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
+    minHeight: 54,
+    paddingEnd: 12,
+    paddingVertical: 7,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 9,
   },
   snapshotIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
