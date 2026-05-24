@@ -7,6 +7,7 @@ import {
 import Animated, { FadeInUp } from 'react-native-reanimated'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { LockKeyhole, UserRound } from 'lucide-react-native'
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import { auth } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -70,96 +71,63 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.screen, { backgroundColor: theme.bg }]}> 
+      <View style={[styles.screen, { backgroundColor: theme.brandCream }]}>
         <LinearGradient
-          colors={[theme.brandCream, theme.paper, '#FFF8EC']}
+          colors={[theme.brandCream, '#FFF8EA', theme.paper]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <Image
-          source={require('../../../assets/icon.png')}
-          style={styles.watermark}
-          resizeMode="contain"
-        />
-        <View style={[styles.wash, styles.washGold, { backgroundColor: theme.brandYellowSoft }]} />
-        <View style={[styles.wash, styles.washCoral, { backgroundColor: theme.brandCoralSoft }]} />
-        <View style={[styles.wash, styles.washMint, { backgroundColor: theme.schoolMintSoft }]} />
+        <View style={[styles.wash, styles.washTop, { backgroundColor: theme.brandYellowSoft }]} />
+        <View style={[styles.wash, styles.washLeft, { backgroundColor: theme.brandOrangeSoft }]} />
+        <View style={[styles.wash, styles.washRight, { backgroundColor: theme.schoolSkySoft }]} />
 
         <ScrollView
           contentContainerStyle={[
             styles.root,
-            { paddingTop: insets.top + 26, paddingBottom: insets.bottom + 40 },
+            { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 12 },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View
-            entering={FadeInUp.duration(500)}
-            style={[
-              styles.authPanel,
-              {
-                backgroundColor: 'rgba(255,255,255,0.64)',
-                borderColor: 'rgba(29, 53, 87, 0.10)',
-                shadowColor: theme.brandNavy,
-              },
-              theme.shadows.sm,
-            ]}
-          >
-            <View style={styles.identity}>
-              <View style={[styles.logoHalo, { backgroundColor: theme.white, borderColor: 'rgba(252, 191, 73, 0.42)' }]}>
-                <Image
-                  source={require('../../../assets/logo.png')}
-                  style={styles.logoImage}
-                  resizeMode="contain"
-                />
-              </View>
-              <Text
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.82}
-                style={[styles.brandName, { color: theme.brandNavy, fontFamily: theme.fonts.script }]}
-              >
-                Mojammaa Al Maarifa
-              </Text>
-              <Text
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.86}
-                style={[styles.brandArabic, { color: theme.textSoft, fontFamily: theme.fonts.arabicSemi }]}
-              >
-                مجمع المعرفة الخصوصية
-              </Text>
-              <View style={[styles.goldRule, { backgroundColor: theme.brandYellow }]} />
-            </View>
+          <Animated.View entering={FadeInUp.duration(520)} style={styles.content}>
+            <Image
+              source={require('../../../assets/logo.png')}
+              style={styles.arabicLogo}
+              resizeMode="contain"
+            />
 
-            <View style={styles.formArea}>
+            <Image
+              source={require('../../../mojammaa.png')}
+              style={styles.calligraphy}
+              resizeMode="contain"
+            />
+
+            <View style={styles.form}>
               {error ? (
                 <View style={[styles.errorBox, { backgroundColor: theme.dangerSurface }]}>
                   <Text style={[styles.errorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>{error}</Text>
                 </View>
               ) : null}
 
-              <Text style={[styles.label, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>Email</Text>
-              <TextInput
+              <InputField
                 value={email}
                 onChangeText={setEmail}
-                placeholder="vous@exemple.com"
-                placeholderTextColor={theme.textMuted}
+                placeholder="Nom d’utilisateur"
+                keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                keyboardType="email-address"
-                style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: 'rgba(255,255,255,0.74)' }]}
+                icon={<UserRound size={26} color={theme.brandNavy} strokeWidth={2.4} />}
+                theme={theme}
               />
 
-              <Text style={[styles.label, { color: theme.textSoft, marginTop: 14, fontFamily: theme.fonts.medium }]}>Mot de passe</Text>
-              <TextInput
+              <InputField
                 value={password}
                 onChangeText={setPassword}
-                placeholder="••••••••"
-                placeholderTextColor={theme.textMuted}
+                placeholder="Mot de passe"
                 secureTextEntry
-                style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: 'rgba(255,255,255,0.74)' }]}
+                icon={<LockKeyhole size={26} color={theme.brandNavy} strokeWidth={2.4} />}
+                theme={theme}
               />
 
               <PressableScale
@@ -170,28 +138,69 @@ export default function LoginScreen() {
                   {
                     backgroundColor: theme.brandNavy,
                     opacity: loading ? 0.7 : 1,
+                    shadowColor: theme.brandNavy,
                   },
                 ]}
               >
                 {loading ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={[styles.buttonText, { fontFamily: theme.fonts.bold }]}>Se connecter</Text>
+                  <Text style={[styles.buttonText, { fontFamily: theme.fonts.script }]}>Se connecter</Text>
                 )}
               </PressableScale>
 
               <TouchableOpacity onPress={forgotPassword} style={styles.forgot}>
-                <Text style={[styles.forgotText, { color: theme.brandNavy, fontFamily: theme.fonts.semibold }]}>Mot de passe oublié ?</Text>
+                <Text style={[styles.forgotText, { color: theme.textSoft, fontFamily: theme.fonts.serif }]}>
+                  Mot de passe oublié?
+                </Text>
               </TouchableOpacity>
             </View>
-          </Animated.View>
 
-          <TouchableOpacity onPress={openPrivacy} style={styles.privacy}>
-            <Text style={[styles.privacyText, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Politique de confidentialité</Text>
-          </TouchableOpacity>
+            <View style={styles.childrenCrop}>
+              <Image
+                source={require('../../../French_mobile_app_login_page_design_for_Mojammaa.png')}
+                style={styles.childrenImage}
+                resizeMode="contain"
+              />
+            </View>
+
+            <TouchableOpacity onPress={openPrivacy} style={styles.privacy}>
+              <Text style={[styles.privacyText, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>
+                Politique de confidentialité
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
+  )
+}
+
+function InputField({
+  value, onChangeText, placeholder, icon, theme, ...inputProps
+}: {
+  value: string
+  onChangeText: (value: string) => void
+  placeholder: string
+  icon: React.ReactNode
+  theme: any
+  keyboardType?: 'email-address'
+  autoCapitalize?: 'none'
+  autoCorrect?: boolean
+  secureTextEntry?: boolean
+}) {
+  return (
+    <View style={[styles.inputShell, { borderColor: theme.brandNavy }]}>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={theme.brandNavy}
+        style={[styles.input, { color: theme.brandNavy, fontFamily: theme.fonts.serif }]}
+        {...inputProps}
+      />
+      <View style={styles.inputIcon}>{icon}</View>
+    </View>
   )
 }
 
@@ -200,134 +209,133 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
   },
-  watermark: {
-    position: 'absolute',
-    width: 240,
-    height: 240,
-    alignSelf: 'center',
-    top: 78,
-    opacity: 0.045,
-  },
   wash: {
     position: 'absolute',
     borderRadius: 999,
   },
-  washGold: {
-    width: 280,
-    height: 126,
-    top: -36,
-    right: -84,
-    transform: [{ rotate: '-14deg' }],
-  },
-  washCoral: {
-    width: 210,
-    height: 104,
-    top: 248,
-    left: -86,
-    transform: [{ rotate: '16deg' }],
-  },
-  washMint: {
-    width: 260,
-    height: 118,
-    bottom: 40,
-    right: -104,
+  washTop: {
+    width: 310,
+    height: 128,
+    top: -32,
+    right: -106,
     transform: [{ rotate: '-13deg' }],
+  },
+  washLeft: {
+    width: 238,
+    height: 118,
+    left: -112,
+    bottom: 156,
+    transform: [{ rotate: '18deg' }],
+  },
+  washRight: {
+    width: 240,
+    height: 118,
+    right: -96,
+    bottom: 82,
+    transform: [{ rotate: '-16deg' }],
   },
   root: {
     flexGrow: 1,
-    justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  authPanel: {
-    borderRadius: 32,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 22,
-    paddingTop: 24,
-    paddingBottom: 20,
-    overflow: 'hidden',
-  },
-  identity: {
+  content: {
+    flexGrow: 1,
     alignItems: 'center',
   },
-  logoHalo: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  logoImage: {
-    width: 126,
+  arabicLogo: {
+    width: 166,
     height: 126,
-    borderRadius: 32,
+    marginTop: 2,
   },
-  brandName: {
-    fontSize: 34,
-    lineHeight: 40,
-    marginTop: 12,
-  },
-  brandArabic: {
-    fontSize: 13,
-    writingDirection: 'rtl',
+  calligraphy: {
+    width: '100%',
+    maxWidth: 370,
+    height: 248,
     marginTop: -2,
+    marginBottom: 2,
   },
-  goldRule: {
-    width: 64,
-    height: 3,
-    borderRadius: 2,
-    marginTop: 13,
+  form: {
+    width: '100%',
+    maxWidth: 356,
+    alignItems: 'center',
   },
-  formArea: {
-    marginTop: 24,
-  },
-  label: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0,
-    marginBottom: 8,
+  inputShell: {
+    width: '100%',
+    minHeight: 58,
+    borderWidth: 1.8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 253, 248, 0.72)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingStart: 22,
+    paddingEnd: 18,
+    marginBottom: 13,
   },
   input: {
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-    fontSize: 15,
+    flex: 1,
+    fontSize: 20,
+    paddingVertical: 12,
+    paddingEnd: 12,
+  },
+  inputIcon: {
+    width: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   errorBox: {
-    borderRadius: 16,
+    width: '100%',
+    borderRadius: 18,
     padding: 12,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   errorText: {
     fontSize: 13,
     lineHeight: 18,
+    textAlign: 'center',
   },
   button: {
-    marginTop: 24,
-    paddingVertical: 16,
-    borderRadius: 18,
+    width: '100%',
+    minHeight: 68,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 10,
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 9 },
+    elevation: 4,
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 38,
+    lineHeight: 44,
   },
   forgot: {
-    marginTop: 18,
+    marginTop: 15,
     alignItems: 'center',
   },
   forgotText: {
-    fontSize: 14,
+    fontSize: 21,
+  },
+  childrenCrop: {
+    width: '100%',
+    height: 188,
+    marginTop: 8,
+    overflow: 'hidden',
+    alignItems: 'center',
+  },
+  childrenImage: {
+    width: 396,
+    height: 704,
+    marginTop: -515,
   },
   privacy: {
-    marginTop: 24,
+    marginTop: 4,
     alignItems: 'center',
-    paddingBottom: 8,
+    paddingBottom: 4,
   },
   privacyText: {
-    fontSize: 12,
+    fontSize: 11,
     textDecorationLine: 'underline',
   },
 })
