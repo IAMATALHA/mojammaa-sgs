@@ -138,5 +138,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999,
   },
   pulse: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
-  pillText: { color: '#fff', fontSize: 9, letterSpacing: 0.4 },
+  pillText: { color: '#fff', fontSize: 9, letterSpacing: 0 },
 })

@@ -5,7 +5,7 @@
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
-import { BookOpen, Check, FileText } from 'lucide-react-native'
+import { BookOpen, Check, FileText, Sparkles } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import type { HomeworkItem } from '../../utils/mockData'
 
@@ -27,8 +27,8 @@ export default function HomeworkRow({
   const isSubmitted = item.status === 'submitted' || item.status === 'graded'
   const Icon = isSubmitted ? Check : item.status === 'pending' ? BookOpen : FileText
 
-  const iconBg = due.danger ? theme.dangerSurface : theme.surface
-  const iconFg = due.danger ? theme.accent : isSubmitted ? theme.success : theme.textSoft
+  const iconBg = due.danger ? theme.brandCoralSoft : isSubmitted ? theme.schoolMintSoft : theme.brandYellowSoft
+  const iconFg = due.danger ? theme.brandCoral : isSubmitted ? theme.brandNavy : theme.brandOrange
 
   const content = (
     <>
@@ -36,40 +36,45 @@ export default function HomeworkRow({
         <Icon size={16} color={iconFg} strokeWidth={1.75} />
       </View>
       <View style={styles.body}>
+        <View style={styles.subjectRow}>
+          <Sparkles size={10} color={theme.brandYellow} strokeWidth={2} />
+          <Text
+            numberOfLines={1}
+            style={{
+              color: theme.textSoft,
+              fontFamily: theme.fonts.semibold,
+              fontSize: 10.5,
+              textTransform: 'uppercase',
+              letterSpacing: 0,
+            }}
+          >
+            {item.subject}{childName ? ` · ${childName}` : ''}
+          </Text>
+        </View>
         <Text
           numberOfLines={1}
           style={{
             color: theme.text,
-            fontFamily: theme.fonts.semibold,
-            fontSize: 13.5,
-          }}
-        >
-          {item.title}
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: theme.textSoft,
-            fontFamily: theme.fonts.regular,
-            fontSize: 11.5,
+            fontFamily: theme.fonts.bold,
+            fontSize: 14,
             marginTop: 3,
           }}
         >
-          {item.subject}{childName ? ` · ${childName}` : ''}
+          {item.title}
         </Text>
       </View>
       <View style={[
         styles.pill,
         {
-          backgroundColor: due.danger ? theme.dangerSurface : theme.surface,
-          borderColor: due.danger ? theme.accentSurface : theme.border,
+          backgroundColor: due.danger ? theme.brandCoralSoft : theme.paperWarm,
+          borderColor: due.danger ? 'rgba(230, 57, 70, 0.20)' : theme.border,
         },
       ]}>
         <Text style={{
-          color: due.danger ? theme.accent : theme.textSoft,
-          fontFamily: theme.fonts.medium,
+          color: due.danger ? theme.brandCoral : theme.textSoft,
+          fontFamily: theme.fonts.semibold,
           fontSize: 10.5,
-          letterSpacing: 0.2,
+          letterSpacing: 0,
         }}>
           {isSubmitted ? 'Rendu' : due.text}
         </Text>
@@ -85,7 +90,7 @@ export default function HomeworkRow({
             from={{ opacity: 0 }}
             animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
             transition={{ type: 'timing', duration: 200 }}
-            style={[styles.row, { backgroundColor: theme.card, borderColor: theme.border }]}
+            style={[styles.row, { backgroundColor: theme.paper, borderColor: theme.border }]}
           >
             {content}
           </MotiView>
@@ -99,7 +104,7 @@ export default function HomeworkRow({
       from={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ type: 'timing', duration: 200 }}
-      style={[styles.row, { backgroundColor: theme.card, borderColor: theme.border }]}
+      style={[styles.row, { backgroundColor: theme.paper, borderColor: theme.border }]}
     >
       {content}
     </MotiView>
@@ -110,17 +115,22 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems:    'center',
-    padding:       14,
-    borderRadius:  16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    marginBottom:  10,
+    padding:       13,
+    borderRadius:  18,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom:  9,
   },
   iconWrap: {
-    width: 36, height: 36, borderRadius: 12,
+    width: 42, height: 42, borderRadius: 15,
     alignItems: 'center', justifyContent: 'center',
     marginEnd: 12,
   },
   body: { flex: 1 },
+  subjectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   pill: {
     paddingHorizontal: 8,
     paddingVertical: 4,

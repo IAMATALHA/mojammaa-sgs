@@ -23,14 +23,14 @@ export default function EmptyState({
       from={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ type: 'timing', duration: 200 }}
-      style={styles.wrap}
+      style={[styles.wrap, { backgroundColor: theme.paperWarm, borderColor: theme.border }]}
     >
-      <View style={[styles.iconWrap, { backgroundColor: theme.surface }]}>
-        <Icon size={22} color={theme.textMuted} strokeWidth={1.75} />
+      <View style={[styles.iconWrap, { backgroundColor: theme.white }]}>
+        <Icon size={22} color={theme.brandOrange} strokeWidth={1.9} />
       </View>
       <Text style={{
         color: theme.text,
-        fontFamily: theme.fonts.semibold,
+        fontFamily: theme.fonts.bold,
         fontSize: 14,
         marginTop: 10,
         textAlign: 'center',
@@ -58,10 +58,13 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems:     'center',
     justifyContent: 'center',
-    paddingVertical: 32,
+    paddingVertical: 30,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   iconWrap: {
-    width: 50, height: 50, borderRadius: 16,
+    width: 52, height: 52, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
   },
 })

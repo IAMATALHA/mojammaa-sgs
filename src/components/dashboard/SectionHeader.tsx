@@ -6,6 +6,7 @@
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
+import { ArrowUpRight } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface SectionHeaderProps {
@@ -52,14 +53,22 @@ export default function SectionHeader({
             <MotiView
               animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.78 : 1 }}
               transition={{ type: 'timing', duration: 200 }}
+              style={[
+                styles.action,
+                {
+                  backgroundColor: theme.brandOrangeSoft,
+                  borderColor: 'rgba(247, 127, 0, 0.20)',
+                },
+              ]}
             >
               <Text style={{
-                color: theme.accent,
+                color: theme.brandOrange,
                 fontFamily: theme.fonts.semibold,
                 fontSize: theme.fontSize.small,
               }}>
                 {actionLabel}
               </Text>
+              <ArrowUpRight size={13} color={theme.brandOrange} strokeWidth={2.1} />
             </MotiView>
           )}
         </Pressable>
@@ -73,8 +82,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems:    'flex-end',
     justifyContent:'space-between',
-    marginBottom:  16,
+    marginBottom:  14,
   },
   titleBlock: { flex: 1, marginEnd: 16 },
-  title:      { letterSpacing: -0.45 },
+  title:      { letterSpacing: 0 },
+  action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
 })

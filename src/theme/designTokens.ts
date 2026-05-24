@@ -69,6 +69,25 @@ export const colors = {
 const light = colors.light
 
 export const palette = {
+  brandCream: '#F5F1E8',
+  brandCoral: '#E63946',
+  brandCoralDark: '#C92734',
+  brandCoralSoft: 'rgba(230, 57, 70, 0.12)',
+  brandOrange: '#F77F00',
+  brandOrangeSoft: 'rgba(247, 127, 0, 0.14)',
+  brandYellow: '#FCBF49',
+  brandYellowSoft: 'rgba(252, 191, 73, 0.20)',
+  brandNavy: '#1D3557',
+  brandNavySoft: 'rgba(29, 53, 87, 0.10)',
+  schoolMint: '#95D5B2',
+  schoolMintSoft: 'rgba(149, 213, 178, 0.22)',
+  schoolSky: '#A8DADC',
+  schoolSkySoft: 'rgba(168, 218, 220, 0.24)',
+  schoolLilac: '#CDB4DB',
+  schoolLilacSoft: 'rgba(205, 180, 219, 0.24)',
+  paper: '#FFFDF8',
+  paperWarm: '#FFF7EA',
+
   navy: light.primary.value,
   navyDark: light.primary.pressed,
   navySoft: light.primary.surface,

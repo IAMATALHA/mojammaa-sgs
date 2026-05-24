@@ -24,11 +24,12 @@ export default function Card({
 }: CardProps) {
   const theme = useTheme()
   const base: ViewStyle = {
-    backgroundColor: variant === 'flat' ? theme.surface : theme.card,
-    borderRadius:    theme.radius.lg,
-    padding:         padding ?? theme.spacing.xl,
+    backgroundColor: variant === 'flat' ? theme.paperWarm : theme.paper,
+    borderRadius:    theme.radius.xl,
+    padding:         padding ?? 20,
     borderWidth:     StyleSheet.hairlineWidth,
-    borderColor:     variant === 'outline' ? theme.borderStrong : theme.border,
+    borderColor:     variant === 'outline' ? theme.borderStrong : 'rgba(29, 53, 87, 0.11)',
+    overflow:        'hidden',
   }
   const elevation = variant === 'flat' || variant === 'outline'
     ? null

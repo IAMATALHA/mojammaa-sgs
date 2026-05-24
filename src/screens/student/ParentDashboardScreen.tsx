@@ -20,14 +20,19 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
+import { LinearGradient } from 'expo-linear-gradient'
+import { MotiView } from 'moti'
 import { useNavigation } from '@react-navigation/native'
 import {
   Megaphone, BookOpen, CalendarDays, Users, X, MapPin, Clock,
+  CalendarCheck, MessageCircle, Sparkles, SunMedium, GraduationCap,
 } from 'lucide-react-native'
+import Svg, { Circle, Path } from 'react-native-svg'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useParentData } from '../../hooks/useParentData'
 import { useUpcomingEvents } from '../../hooks/useUpcomingEvents'
+import { useParentMessages } from '../../hooks/useParentMessages'
 import {
   DashboardHeader, SectionHeader, Card,
   ChildCard, AttendanceRing, HomeworkRow, AnnouncementCard,
@@ -59,6 +64,7 @@ export default function ParentDashboardScreen() {
   const { profile, logout } = useAuth()
   const parent = useParentData()
   const { events: upcomingEvents } = useUpcomingEvents(6)
+  const { messages: liveMessages, loading: messagesLoading } = useParentMessages()
   const nav = useNavigation<any>()
   const [refreshing, setRefreshing] = useState(false)
   const loading = parent.loading
@@ -95,6 +101,22 @@ export default function ParentDashboardScreen() {
     [selectedChild],
   )
 
+  const announcementsForDashboard = useMemo(
+    () => (liveMessages.length > 0 ? liveMessages : PARENT_ANNOUNCEMENTS).slice(0, 3),
+    [liveMessages],
+  )
+
+  const familyAttendance = useMemo(() => {
+    if (parent.children.length === 0) return 0
+    const total = parent.children.reduce((sum, child) => sum + child.attendance, 0)
+    return Math.round(total / parent.children.length)
+  }, [parent.children])
+
+  const pendingHomeworkCount = useMemo(
+    () => parent.children.reduce((sum, child) => sum + child.pendingHomework, 0),
+    [parent.children],
+  )
+
   // ── Navigation handlers ────────────────────────────────────────────
   const goTo = (route: string) => nav.navigate(route)
 
@@ -126,9 +148,9 @@ export default function ParentDashboardScreen() {
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}> 
       <StatusBar style="dark" />
-      <View style={[styles.bgBlob, styles.bgBlobTop, { backgroundColor: theme.watercolorA }]} />
-      <View style={[styles.bgBlob, styles.bgBlobMiddle, { backgroundColor: theme.roseSurface }]} />
-      <View style={[styles.bgBlob, styles.bgBlobBottom, { backgroundColor: theme.violetSurface }]} />
+      <View style={[styles.bgBlob, styles.bgBlobTop, { backgroundColor: theme.brandYellowSoft }]} />
+      <View style={[styles.bgBlob, styles.bgBlobMiddle, { backgroundColor: theme.schoolSkySoft }]} />
+      <View style={[styles.bgBlob, styles.bgBlobBottom, { backgroundColor: theme.brandCoralSoft }]} />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -144,16 +166,25 @@ export default function ParentDashboardScreen() {
           greeting={`${greetingFor()},`}
           fullName={fullName}
           roleLabel="Parent"
-          notifications={2}
+          notifications={liveMessages.length || 2}
           onPressBell={() => goTo('StudentMessages')}
           onPressAvatar={handleAvatarPress}
         />
 
-        {/* ── My Children ───────────────────────────────────── */}
+        <TodayStoryCard
+          childrenCount={parent.children.length}
+          attendance={familyAttendance}
+          homeworkCount={pendingHomeworkCount}
+          messageCount={announcementsForDashboard.length}
+          onPressAbsences={() => goTo('StudentAbsences')}
+          onPressMessages={() => goTo('StudentMessages')}
+          theme={theme}
+        />
+
         <View style={styles.section}>
           <SectionHeader
             title="Mes enfants"
-            subtitle={`${parent.children.length} enfant${parent.children.length > 1 ? 's' : ''}`}
+            subtitle={`${parent.children.length} profil${parent.children.length > 1 ? 's' : ''} actif${parent.children.length > 1 ? 's' : ''}`}
             actionLabel="Voir tout"
             onAction={() => goTo('StudentNotes')}
           />
@@ -179,10 +210,9 @@ export default function ParentDashboardScreen() {
           )}
         </View>
 
-        {/* ── Attendance overview ──────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader
-            title="Aperçu de la présence"
+            title="Présence"
             subtitle={selectedChild ? `${selectedChild.firstName} · ${selectedChild.classe}` : undefined}
             actionLabel="Détail"
             onAction={() => goTo('StudentAbsences')}
@@ -192,30 +222,30 @@ export default function ParentDashboardScreen() {
             android_ripple={{ color: theme.border }}
             style={({ pressed }) => [pressed && { opacity: 0.96 }]}
           >
-            <Card>
+            <Card padding={18} style={styles.attendanceCard}>
               <View style={styles.attendanceRow}>
                 <AttendanceRing
                   value={selectedChild?.attendance ?? 0}
                   caption="présence"
-                  progressColor={theme.accent}
+                  progressColor={theme.brandOrange}
                 />
                 <View style={styles.attendanceMeta}>
                   <Stat
                     label="Moyenne"
                     value={selectedChild ? `${selectedChild.averageGrade.toFixed(1)}/20` : '—'}
-                    color={theme.success}
+                    color={theme.brandYellow}
                     theme={theme}
                   />
                   <Stat
                     label="Devoirs à faire"
                     value={String(selectedChild?.pendingHomework ?? 0)}
-                    color={theme.warning}
+                    color={theme.brandOrange}
                     theme={theme}
                   />
                   <Stat
                     label="Classe"
                     value={selectedChild?.classe ?? '—'}
-                    color={theme.primary}
+                    color={theme.brandNavy}
                     theme={theme}
                   />
                 </View>
@@ -224,7 +254,6 @@ export default function ParentDashboardScreen() {
           </Pressable>
         </View>
 
-        {/* ── Recent homework ───────────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader
             title="Devoirs récents"
@@ -232,7 +261,7 @@ export default function ParentDashboardScreen() {
             actionLabel="Tout voir"
             onAction={() => goTo('StudentDevoirs')}
           />
-          <Card padding={12}>
+          <Card padding={10}>
             {loading ? (
               <><SkeletonRow /><SkeletonRow /></>
             ) : homeworkForSelected.length === 0 ? (
@@ -254,14 +283,19 @@ export default function ParentDashboardScreen() {
           </Card>
         </View>
 
-        {/* ── Announcements ─────────────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader
             title="Annonces"
+            subtitle={liveMessages.length > 0 ? 'Messages récents de l’école' : 'Dernières informations'}
             actionLabel="Voir plus"
             onAction={() => goTo('StudentMessages')}
           />
-          {PARENT_ANNOUNCEMENTS.length === 0 ? (
+          {messagesLoading ? (
+            <Card padding={12}>
+              <SkeletonRow />
+              <SkeletonRow />
+            </Card>
+          ) : announcementsForDashboard.length === 0 ? (
             <Card>
               <EmptyState
                 icon={Megaphone}
@@ -270,7 +304,7 @@ export default function ParentDashboardScreen() {
             </Card>
           ) : (
             <View>
-              {PARENT_ANNOUNCEMENTS.map(a => (
+              {announcementsForDashboard.map(a => (
                 <AnnouncementCard
                   key={a.id}
                   item={a}
@@ -281,10 +315,10 @@ export default function ParentDashboardScreen() {
           )}
         </View>
 
-        {/* ── Upcoming events ───────────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader
-            title="Prochains événements"
+            title="Agenda"
+            subtitle="À noter cette semaine"
             actionLabel="Calendrier"
             onAction={() => goTo('StudentMessages')}
           />
@@ -306,11 +340,10 @@ export default function ParentDashboardScreen() {
           </Card>
         </View>
 
-        {/* ── Quick actions ─────────────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader
             title="Accès rapide"
-            subtitle="Petites cartes pour accéder aux essentiels"
+            subtitle="Les raccourcis du quotidien"
           />
           <QuickActions actions={PARENT_QUICK_ACTIONS} onPress={handleQuickAction} />
         </View>
@@ -320,9 +353,9 @@ export default function ParentDashboardScreen() {
             color: theme.textMuted,
             fontFamily: theme.fonts.medium,
             fontSize: 11,
-            letterSpacing: 0.3,
+            letterSpacing: 0,
           }}>
-            Mojammaa SGS — un espace parent chaleureux et illustré
+            Mojammaa Al Maarifa · مجمع المعرفة
           </Text>
         </View>
       </ScrollView>
@@ -349,6 +382,148 @@ export default function ParentDashboardScreen() {
   )
 }
 
+function TodayStoryCard({
+  childrenCount, attendance, homeworkCount, messageCount,
+  onPressAbsences, onPressMessages, theme,
+}: {
+  childrenCount: number
+  attendance: number
+  homeworkCount: number
+  messageCount: number
+  onPressAbsences: () => void
+  onPressMessages: () => void
+  theme: any
+}) {
+  return (
+    <MotiView
+      from={{ opacity: 0, translateY: 14 }}
+      animate={{ opacity: 1, translateY: 0 }}
+      transition={{ type: 'timing', duration: 460, delay: 80 }}
+      style={styles.todayWrap}
+    >
+      <LinearGradient
+        colors={[theme.brandNavy, '#25466F']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.todayCard}
+      >
+        <View style={[styles.todayGlow, { backgroundColor: theme.brandYellow }]} />
+        <View style={[styles.todayGlowSmall, { backgroundColor: theme.brandCoral }]} />
+
+        <View style={styles.todayTextBlock}>
+          <View style={[styles.todayKicker, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
+            <SunMedium size={13} color={theme.brandYellow} strokeWidth={2} />
+            <Text style={{
+              color: theme.white,
+              fontFamily: theme.fonts.semibold,
+              fontSize: 11,
+            }}>
+              Aujourd'hui
+            </Text>
+          </View>
+          <Text style={{
+            color: theme.white,
+            fontFamily: theme.fonts.black,
+            fontSize: 21,
+            lineHeight: 27,
+          }}>
+            La famille suit le rythme de l'école.
+          </Text>
+        </View>
+
+        <FamilyPath theme={theme} />
+
+        <View style={styles.snapshotGrid}>
+          <SnapshotPill
+            icon={<GraduationCap size={15} color={theme.brandNavy} strokeWidth={2} />}
+            label="Enfants"
+            value={String(childrenCount)}
+            theme={theme}
+          />
+          <SnapshotPill
+            icon={<CalendarCheck size={15} color={theme.brandNavy} strokeWidth={2} />}
+            label="Présence"
+            value={`${attendance}%`}
+            onPress={onPressAbsences}
+            theme={theme}
+          />
+          <SnapshotPill
+            icon={<BookOpen size={15} color={theme.brandNavy} strokeWidth={2} />}
+            label="Devoirs"
+            value={String(homeworkCount)}
+            theme={theme}
+          />
+          <SnapshotPill
+            icon={<MessageCircle size={15} color={theme.brandNavy} strokeWidth={2} />}
+            label="Messages"
+            value={String(messageCount)}
+            onPress={onPressMessages}
+            theme={theme}
+          />
+        </View>
+      </LinearGradient>
+    </MotiView>
+  )
+}
+
+function SnapshotPill({
+  icon, label, value, onPress, theme,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  onPress?: () => void
+  theme: any
+}) {
+  return (
+    <Pressable onPress={onPress} disabled={!onPress} style={styles.snapshotPressable}>
+      {({ pressed }) => (
+        <MotiView
+          animate={{ scale: pressed ? 0.97 : 1, opacity: pressed ? 0.9 : 1 }}
+          transition={{ type: 'timing', duration: 160 }}
+          style={[styles.snapshotPill, { backgroundColor: theme.white }]}
+        >
+          <View style={[styles.snapshotIcon, { backgroundColor: theme.brandYellowSoft }]}>
+            {icon}
+          </View>
+          <View style={styles.snapshotCopy}>
+            <Text style={{
+              color: theme.brandNavy,
+              fontFamily: theme.fonts.black,
+              fontSize: 15,
+              fontVariant: ['tabular-nums'],
+            }}>
+              {value}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={{
+                color: theme.textSoft,
+                fontFamily: theme.fonts.medium,
+                fontSize: 10.5,
+              }}
+            >
+              {label}
+            </Text>
+          </View>
+        </MotiView>
+      )}
+    </Pressable>
+  )
+}
+
+function FamilyPath({ theme }: { theme: any }) {
+  return (
+    <Svg width={116} height={66} viewBox="0 0 116 66" style={styles.familyPath}>
+      <Path d="M6 49C24 24 39 54 58 30C76 7 94 23 110 9" stroke={theme.brandYellow} strokeWidth={5} strokeLinecap="round" opacity={0.7} />
+      <Path d="M7 58C29 43 44 61 66 42C82 29 96 39 111 28" stroke={theme.schoolSky} strokeWidth={4} strokeLinecap="round" opacity={0.65} />
+      <Circle cx={22} cy={28} r={6} fill={theme.brandCoral} />
+      <Circle cx={58} cy={30} r={6} fill={theme.brandYellow} />
+      <Circle cx={92} cy={22} r={6} fill={theme.schoolMint} />
+    </Svg>
+  )
+}
+
 function Stat({
   label, value, color, theme,
 }: { label: string; value: string; color: string; theme: any }) {
@@ -361,7 +536,7 @@ function Stat({
           fontFamily: theme.fonts.medium,
           fontSize: 11,
           textTransform: 'uppercase',
-          letterSpacing: 0.4,
+          letterSpacing: 0,
         }}>
           {label}
         </Text>
@@ -506,7 +681,7 @@ function SheetHeader({
           fontFamily: theme.fonts.semibold,
           fontSize: 12,
           marginStart: 10,
-          letterSpacing: 0.4,
+          letterSpacing: 0,
           textTransform: 'uppercase',
         }}
       >
@@ -544,41 +719,126 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   bgBlobTop: {
-    width: 160,
-    height: 160,
-    top: -30,
-    right: -30,
+    width: 180,
+    height: 180,
+    top: -42,
+    right: -46,
   },
   bgBlobMiddle: {
-    width: 92,
-    height: 92,
-    top: 260,
-    left: -24,
+    width: 104,
+    height: 104,
+    top: 330,
+    left: -34,
   },
   bgBlobBottom: {
-    width: 150,
-    height: 150,
-    bottom: 100,
-    right: -42,
+    width: 170,
+    height: 170,
+    bottom: 80,
+    right: -58,
   },
   scroll: { paddingBottom: 132 },
-  section: { paddingHorizontal: 20, marginTop: 22 },
+  todayWrap: {
+    paddingHorizontal: 18,
+    marginTop: 16,
+  },
+  todayCard: {
+    borderRadius: 26,
+    overflow: 'hidden',
+    padding: 16,
+    minHeight: 206,
+  },
+  todayGlow: {
+    position: 'absolute',
+    width: 144,
+    height: 144,
+    borderRadius: 72,
+    top: -64,
+    right: -28,
+    opacity: 0.22,
+  },
+  todayGlowSmall: {
+    position: 'absolute',
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    bottom: 72,
+    left: -22,
+    opacity: 0.22,
+  },
+  todayTextBlock: {
+    maxWidth: 235,
+  },
+  todayKicker: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
+  },
+  familyPath: {
+    position: 'absolute',
+    top: 28,
+    right: 9,
+  },
+  snapshotGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+    marginTop: 18,
+  },
+  snapshotPressable: {
+    width: '47%',
+    flexGrow: 1,
+  },
+  snapshotPill: {
+    minHeight: 58,
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  snapshotIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  snapshotCopy: {
+    flex: 1,
+  },
+  section: { paddingHorizontal: 20, marginTop: 24 },
+  attendanceCard: {
+    backgroundColor: '#FFFDF8',
+  },
   attendanceRow: {
     flexDirection: 'row',
     alignItems:    'center',
-    gap:           14,
+    justifyContent:'center',
+    flexWrap:      'wrap',
+    gap:           16,
   },
-  attendanceMeta: { flex: 1, gap: 12, marginStart: 8 },
+  attendanceMeta: { flex: 1, minWidth: 148, gap: 11 },
   stat: {
     flexDirection: 'row',
     alignItems:    'center',
     gap:           10,
+    backgroundColor: 'rgba(29, 53, 87, 0.04)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  statDot: { width: 8, height: 8, borderRadius: 4 },
+  statDot: { width: 9, height: 9, borderRadius: 5 },
   footer: {
     alignItems:    'center',
     justifyContent:'center',
     marginTop:     28,
+    paddingBottom: 10,
   },
   // Modal
   backdrop: {
@@ -602,7 +862,7 @@ const styles = StyleSheet.create({
   sheetTitle: {
     fontSize: 20,
     marginTop: 12,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   sheetMetaRow: {
     flexDirection: 'row', alignItems: 'center',

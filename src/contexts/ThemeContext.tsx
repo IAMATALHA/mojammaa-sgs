@@ -30,6 +30,24 @@ export interface Theme {
   violet:          string
   violetSurface:   string
   cream:           string
+  brandCream:      string
+  brandCoral:      string
+  brandCoralDark:  string
+  brandCoralSoft:  string
+  brandOrange:     string
+  brandOrangeSoft: string
+  brandYellow:     string
+  brandYellowSoft: string
+  brandNavy:       string
+  brandNavySoft:   string
+  schoolMint:      string
+  schoolMintSoft:  string
+  schoolSky:       string
+  schoolSkySoft:   string
+  schoolLilac:     string
+  schoolLilacSoft: string
+  paper:           string
+  paperWarm:       string
   watercolorA:     string
   watercolorB:     string
   watercolorC:     string
@@ -82,6 +100,24 @@ const THEME: Theme = {
   violet:         palette.violet,
   violetSurface:  palette.violetSoft,
   cream:          palette.cream,
+  brandCream:     palette.brandCream,
+  brandCoral:     palette.brandCoral,
+  brandCoralDark: palette.brandCoralDark,
+  brandCoralSoft: palette.brandCoralSoft,
+  brandOrange:    palette.brandOrange,
+  brandOrangeSoft: palette.brandOrangeSoft,
+  brandYellow:    palette.brandYellow,
+  brandYellowSoft: palette.brandYellowSoft,
+  brandNavy:      palette.brandNavy,
+  brandNavySoft:  palette.brandNavySoft,
+  schoolMint:     palette.schoolMint,
+  schoolMintSoft: palette.schoolMintSoft,
+  schoolSky:      palette.schoolSky,
+  schoolSkySoft:  palette.schoolSkySoft,
+  schoolLilac:    palette.schoolLilac,
+  schoolLilacSoft: palette.schoolLilacSoft,
+  paper:          palette.paper,
+  paperWarm:      palette.paperWarm,
   watercolorA:    palette.watercolorA,
   watercolorB:    palette.watercolorB,
   watercolorC:    palette.watercolorC,

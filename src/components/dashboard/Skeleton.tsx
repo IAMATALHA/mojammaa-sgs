@@ -31,7 +31,7 @@ export function Skeleton({
           width: width as any,
           height,
           borderRadius: radius,
-          backgroundColor: theme.surfaceAlt,
+          backgroundColor: theme.brandNavySoft,
         },
         style,
       ]}
@@ -44,7 +44,7 @@ export function SkeletonCard({ height = 110 }: { height?: number }) {
   return (
     <View style={[
       styles.card,
-      { minHeight: height, backgroundColor: theme.card, borderColor: theme.border },
+      { minHeight: height, backgroundColor: theme.paper, borderColor: theme.border },
     ]}>
       <Skeleton width={36} height={36} radius={12} />
       <Skeleton width="60%" height={20} radius={6} style={{ marginTop: 16 }} />

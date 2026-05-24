@@ -35,20 +35,28 @@ export default function AttendanceRing({
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
   const offset = c - (clamped / 100) * c
+  const color = progressColor ?? theme.brandOrange
+  const angle = (clamped / 100) * 2 * Math.PI - Math.PI / 2
+  const knobX = size / 2 + r * Math.cos(angle)
+  const knobY = size / 2 + r * Math.sin(angle)
 
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       <Svg width={size} height={size}>
+        <Circle
+          cx={size / 2} cy={size / 2} r={r - stroke}
+          fill={theme.paperWarm}
+        />
         <G rotation={-90} origin={`${size / 2}, ${size / 2}`}>
           <Circle
             cx={size / 2} cy={size / 2} r={r}
-            stroke={trackColor ?? theme.surfaceAlt}
+            stroke={trackColor ?? theme.brandNavySoft}
             strokeWidth={stroke}
             fill="none"
           />
           <Circle
             cx={size / 2} cy={size / 2} r={r}
-            stroke={progressColor ?? theme.accent}
+            stroke={color}
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={`${c}, ${c}`}
@@ -56,13 +64,23 @@ export default function AttendanceRing({
             fill="none"
           />
         </G>
+        {clamped > 0 ? (
+          <Circle
+            cx={knobX}
+            cy={knobY}
+            r={stroke * 0.48}
+            fill={theme.white}
+            stroke={color}
+            strokeWidth={3}
+          />
+        ) : null}
       </Svg>
       <View style={styles.label}>
         <Text style={{
-            color: theme.text,
-            fontFamily: theme.fonts.black,
+          color: theme.brandNavy,
+          fontFamily: theme.fonts.black,
           fontSize: size * 0.23,
-          letterSpacing: -0.4,
+          letterSpacing: 0,
           fontVariant: ['tabular-nums'],
         }}>
           {label ?? `${Math.round(clamped)}%`}
@@ -74,7 +92,7 @@ export default function AttendanceRing({
             fontSize: 11,
             marginTop: 2,
             textTransform: 'uppercase',
-            letterSpacing: 0.4,
+            letterSpacing: 0,
           }}>
             {caption}
           </Text>

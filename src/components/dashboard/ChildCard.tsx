@@ -1,11 +1,11 @@
 /**
- * ChildCard — warm storybook tile for one child.
+ * ChildCard — friendly profile tile for one child.
  */
 
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
-import { ChevronRight, BookOpen, TrendingUp } from 'lucide-react-native'
+import { BookMarked, CalendarCheck, ChevronRight, GraduationCap } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import type { Child } from '../../utils/mockData'
 
@@ -20,32 +20,38 @@ function initialsOf(c: Child): string {
 
 export default function ChildCard({ child, onPress }: ChildCardProps) {
   const theme = useTheme()
+  const avatarColor = child.avatarColor || theme.brandCoral
 
   return (
     <Pressable onPress={onPress} android_ripple={{ color: theme.border }}>
       {({ pressed }) => (
         <MotiView
-          animate={{ scale: pressed ? 0.985 : 1, opacity: pressed ? 0.96 : 1 }}
-          transition={{ type: 'timing', duration: 180 }}
+          from={{ opacity: 0, translateY: 10 }}
+          animate={{
+            opacity: pressed ? 0.94 : 1,
+            scale: pressed ? 0.985 : 1,
+            translateY: 0,
+          }}
+          transition={{ type: 'timing', duration: 220 }}
           style={[
             styles.card,
             {
-              backgroundColor: theme.card,
-              borderColor: theme.border,
-              shadowColor: theme.primary,
+              backgroundColor: theme.paper,
+              borderColor: 'rgba(29, 53, 87, 0.12)',
+              shadowColor: theme.brandNavy,
             },
             theme.shadows.xs,
           ]}
         >
-          <View style={[styles.wash, { backgroundColor: theme.watercolorA }]} />
-          <View style={[styles.washSmall, { backgroundColor: theme.roseSurface }]} />
+          <View style={[styles.wash, { backgroundColor: theme.brandYellowSoft }]} />
+          <View style={[styles.washSmall, { backgroundColor: theme.schoolSkySoft }]} />
 
-          <View style={[styles.avatarShell, { backgroundColor: theme.greenSurface }]}> 
-            <View style={[styles.avatar, { backgroundColor: theme.white }]}> 
+          <View style={[styles.avatarShell, { backgroundColor: avatarColor }]}>
+            <View style={[styles.avatarInner, { backgroundColor: theme.white }]}>
               <Text style={{
-                color: theme.primary,
-                fontFamily: theme.fonts.bold,
-                fontSize: 18,
+                color: theme.brandNavy,
+                fontFamily: theme.fonts.black,
+                fontSize: 19,
               }}>
                 {initialsOf(child)}
               </Text>
@@ -53,48 +59,53 @@ export default function ChildCard({ child, onPress }: ChildCardProps) {
           </View>
 
           <View style={styles.body}>
-            <Text
-              numberOfLines={1}
-              style={{
-                color: theme.text,
-                fontFamily: theme.fonts.semibold,
-                fontSize: 16,
-              }}
-            >
-              {child.firstName} {child.lastName}
-            </Text>
-            <Text
-              numberOfLines={1}
-              style={{
-                color: theme.textSoft,
-                fontFamily: theme.fonts.regular,
-                fontSize: 12.5,
-                marginTop: 4,
-              }}
-            >
-              {child.classe} · {child.level}
-            </Text>
+            <View style={styles.nameRow}>
+              <Text
+                numberOfLines={1}
+                style={{
+                  flex: 1,
+                  color: theme.text,
+                  fontFamily: theme.fonts.bold,
+                  fontSize: 16,
+                }}
+              >
+                {child.firstName} {child.lastName}
+              </Text>
+              <View style={[styles.chevronWrap, { backgroundColor: theme.brandNavySoft }]}>
+                <ChevronRight size={17} color={theme.brandNavy} strokeWidth={2.1} />
+              </View>
+            </View>
+
+            <View style={styles.classRow}>
+              <GraduationCap size={13} color={theme.textSoft} strokeWidth={2} />
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: theme.textSoft,
+                  fontFamily: theme.fonts.medium,
+                  fontSize: 12,
+                }}
+              >
+                {child.classe} · {child.level}
+              </Text>
+            </View>
 
             <View style={styles.badgesRow}>
-              <Stat
-                icon={<TrendingUp size={12} color={theme.green} strokeWidth={1.9} />}
-                value={`${child.averageGrade.toFixed(1)}/20`}
-                label="Moyenne"
-                tone={theme.greenSurface}
+              <Metric
+                icon={<CalendarCheck size={12} color={theme.brandNavy} strokeWidth={2} />}
+                value={`${Math.round(child.attendance)}%`}
+                label="Présence"
+                tone={theme.schoolMintSoft}
                 theme={theme}
               />
-              <Stat
-                icon={<BookOpen size={12} color={theme.accent} strokeWidth={1.9} />}
+              <Metric
+                icon={<BookMarked size={12} color={theme.brandOrange} strokeWidth={2} />}
                 value={String(child.pendingHomework)}
-                label="À faire"
-                tone={theme.accentSurface}
+                label="Devoirs"
+                tone={theme.brandOrangeSoft}
                 theme={theme}
               />
             </View>
-          </View>
-
-          <View style={[styles.chevronWrap, { backgroundColor: theme.surface }]}> 
-            <ChevronRight size={18} color={theme.textMuted} strokeWidth={1.9} />
           </View>
         </MotiView>
       )}
@@ -102,7 +113,7 @@ export default function ChildCard({ child, onPress }: ChildCardProps) {
   )
 }
 
-function Stat({
+function Metric({
   icon, value, label, tone, theme,
 }: {
   icon: React.ReactNode
@@ -112,17 +123,18 @@ function Stat({
   theme: any
 }) {
   return (
-    <View style={[styles.stat, { backgroundColor: tone }]}> 
+    <View style={[styles.metric, { backgroundColor: tone }]}>
       {icon}
       <Text style={{
         color: theme.text,
-        fontFamily: theme.fonts.semibold,
+        fontFamily: theme.fonts.black,
         fontSize: 12,
+        fontVariant: ['tabular-nums'],
       }}>
         {value}
       </Text>
       <Text style={{
-        color: theme.textMuted,
+        color: theme.textSoft,
         fontFamily: theme.fonts.medium,
         fontSize: 10.5,
       }}>
@@ -136,51 +148,64 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
+    padding: 15,
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 12,
     overflow: 'hidden',
   },
   wash: {
     position: 'absolute',
-    width: 120,
-    height: 120,
+    width: 132,
+    height: 132,
     borderRadius: 999,
-    top: -36,
-    right: -18,
+    top: -50,
+    right: -20,
   },
   washSmall: {
     position: 'absolute',
-    width: 68,
-    height: 68,
+    width: 84,
+    height: 84,
     borderRadius: 999,
-    bottom: -18,
-    left: 40,
+    bottom: -28,
+    left: 42,
   },
   avatarShell: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 62,
+    height: 62,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginEnd: 12,
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  avatarInner: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  body: { flex: 1 },
+  body: {
+    flex: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  classRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 5,
+  },
   badgesRow: {
     flexDirection: 'row',
     gap: 8,
     flexWrap: 'wrap',
     marginTop: 10,
   },
-  stat: {
+  metric: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
@@ -189,11 +214,10 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   chevronWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 30,
+    height: 30,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginStart: 10,
   },
 })

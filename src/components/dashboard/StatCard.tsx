@@ -54,7 +54,7 @@ export default function StatCard({
           fontFamily: theme.fonts.black,
           fontSize: theme.fontSize.h3,
           marginTop: 16,
-          letterSpacing: -0.35,
+          letterSpacing: 0,
           fontVariant: ['tabular-nums'],
         }}
       >
