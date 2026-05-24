@@ -82,23 +82,28 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View entering={FadeInUp.duration(500)} style={styles.heroCard}>
-            <View style={[styles.heroSurface, { backgroundColor: theme.surface, borderColor: theme.border }, theme.shadows.sm]}>
-              <View style={styles.logoRow}>
-                <View style={[styles.logoShell, { backgroundColor: theme.white, borderColor: theme.border }]}> 
-                  <Image
-                    source={require('../../../assets/logo.png')}
-                    style={styles.logoImage}
-                    resizeMode="contain"
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.kicker, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>Application scolaire</Text>
-                  <Text style={[styles.title, { color: theme.primary, fontFamily: theme.fonts.serif }]}>Bonjour !</Text>
-                  <Text style={[styles.subtitle, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Un espace doux, moderne et rassurant pour l'école.</Text>
-                </View>
-              </View>
+          <Animated.View entering={FadeInUp.duration(500)} style={styles.logoBlock}>
+            <View style={[
+              styles.logoShell,
+              {
+                backgroundColor: theme.white,
+                borderColor: theme.border,
+                shadowColor: theme.text,
+                shadowOpacity: 0.10,
+                shadowRadius: 20,
+                shadowOffset: { width: 0, height: 8 },
+                elevation: 3,
+              },
+            ]}>
+              <Image
+                source={require('../../../assets/logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
+            <Text style={[styles.kicker, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>
+              Application scolaire
+            </Text>
           </Animated.View>
 
           <Animated.View entering={FadeInUp.delay(180).duration(500)} style={[styles.formCard, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.sm]}>
@@ -198,47 +203,29 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 22,
   },
-  heroCard: {
-    marginTop: 18,
-  },
-  heroSurface: {
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 18,
-  },
-  logoRow: {
-    flexDirection: 'row',
+  logoBlock: {
     alignItems: 'center',
-    gap: 14,
+    marginTop: 24,
+    marginBottom: 8,
   },
   logoShell: {
-    width: 92,
-    height: 92,
-    borderRadius: 24,
+    width: 180,
+    height: 180,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   logoImage: {
-    width: '88%',
-    height: '88%',
+    width: '90%',
+    height: '90%',
   },
   kicker: {
     fontSize: 11,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  title: {
-    fontSize: 38,
-    lineHeight: 44,
-    marginTop: 4,
-    letterSpacing: -0.8,
-  },
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 6,
+    letterSpacing: 1.2,
+    marginTop: 16,
   },
   formCard: {
     marginTop: 18,
