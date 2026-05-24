@@ -126,9 +126,11 @@ export default function ParentDashboardScreen() {
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}> 
       <StatusBar style="dark" />
-      <View style={[styles.bgBlob, styles.bgBlobTop, { backgroundColor: theme.watercolorA }]} />
-      <View style={[styles.bgBlob, styles.bgBlobMiddle, { backgroundColor: theme.roseSurface }]} />
-      <View style={[styles.bgBlob, styles.bgBlobBottom, { backgroundColor: theme.violetSurface }]} />
+      <View style={[styles.bgBlob, styles.bgBlob1, { backgroundColor: theme.watercolorPeach }]} />
+      <View style={[styles.bgBlob, styles.bgBlob2, { backgroundColor: theme.watercolorMint }]} />
+      <View style={[styles.bgBlob, styles.bgBlob3, { backgroundColor: theme.watercolorC }]} />
+      <View style={[styles.bgBlob, styles.bgBlob4, { backgroundColor: theme.watercolorB }]} />
+      <View style={[styles.bgBlob, styles.bgBlob5, { backgroundColor: theme.watercolorA }]} />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -543,26 +545,33 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderRadius: 999,
   },
-  bgBlobTop: {
-    width: 160,
-    height: 160,
-    top: -30,
-    right: -30,
+  bgBlob1: {
+    width: 280, height: 280,
+    top: -100, right: -80,
+    opacity: 0.8,
   },
-  bgBlobMiddle: {
-    width: 92,
-    height: 92,
-    top: 260,
-    left: -24,
+  bgBlob2: {
+    width: 180, height: 180,
+    top: 220, left: -60,
+    opacity: 0.7,
   },
-  bgBlobBottom: {
-    width: 150,
-    height: 150,
-    bottom: 100,
-    right: -42,
+  bgBlob3: {
+    width: 220, height: 220,
+    top: 450, right: -100,
+    opacity: 0.6,
+  },
+  bgBlob4: {
+    width: 140, height: 140,
+    bottom: 200, left: -30,
+    opacity: 0.8,
+  },
+  bgBlob5: {
+    width: 300, height: 300,
+    bottom: -120, right: -120,
+    opacity: 0.7,
   },
   scroll: { paddingBottom: 132 },
-  section: { paddingHorizontal: 20, marginTop: 22 },
+  section: { paddingHorizontal: 20, marginTop: 28 },
   attendanceRow: {
     flexDirection: 'row',
     alignItems:    'center',

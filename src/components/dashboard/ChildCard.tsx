@@ -136,10 +136,10 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
+    padding: 20,
+    borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 12,
+    marginBottom: 14,
     overflow: 'hidden',
   },
   wash: {

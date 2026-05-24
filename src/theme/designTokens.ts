@@ -62,6 +62,8 @@ export const colors = {
       watercolorA: 'rgba(255, 210, 63, 0.18)',
       watercolorB: 'rgba(242, 181, 212, 0.16)',
       watercolorC: 'rgba(184, 181, 255, 0.16)',
+      watercolorMint: 'rgba(82, 183, 136, 0.16)',
+      watercolorPeach: 'rgba(255, 140, 66, 0.14)',
     },
   },
 } as const
@@ -92,6 +94,8 @@ export const palette = {
   watercolorA: light.pastel.watercolorA,
   watercolorB: light.pastel.watercolorB,
   watercolorC: light.pastel.watercolorC,
+  watercolorMint: light.pastel.watercolorMint,
+  watercolorPeach: light.pastel.watercolorPeach,
 
   brandRed: light.accent.primary,
   brandRedDark: light.accent.pressed,
