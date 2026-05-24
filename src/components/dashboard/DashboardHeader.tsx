@@ -11,6 +11,7 @@ import {
 } from 'react-native'
 import { MotiView } from 'moti'
 import { Bell } from 'lucide-react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface DashboardHeaderProps {
@@ -18,6 +19,7 @@ interface DashboardHeaderProps {
   fullName:      string
   roleLabel:     string
   notifications?: number
+  tint?:         string
   onPressBell?:  () => void
   onPressAvatar?:() => void
 }
@@ -31,175 +33,228 @@ function initialsOf(name: string): string {
     .join('')
 }
 
+function hexWithAlpha(hex: string, alpha: number): string {
+  if (!hex) return `rgba(29, 53, 87, ${alpha})`
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 export default function DashboardHeader({
   greeting, fullName, roleLabel,
-  notifications = 0, onPressBell, onPressAvatar,
+  notifications = 0, tint, onPressBell, onPressAvatar,
 }: DashboardHeaderProps) {
   const theme = useTheme()
+  const activeTint = tint || theme.primary
+
   return (
-    <View>
-      {/* Brand strip */}
-      <View style={styles.brandStrip}>
-        <Image
-          source={require('../../../assets/icon.png')}
-          style={styles.brandLogo}
-          resizeMode="contain"
-        />
-        <View style={{ flex: 1, marginStart: 10 }}>
-          <Text
-            numberOfLines={1}
-            style={{
-              color: '#1D3557',                       // navy élégant (poster vibe)
-              fontFamily: theme.fonts.script,          // Great Vibes — calligraphie
-              fontSize: 22,
-              lineHeight: 26,
-              letterSpacing: 0.2,
-            }}
-          >
-            Mojammaa Al Maarifa
-          </Text>
-          <Text
-            numberOfLines={1}
-            style={{
-              color: theme.textSoft,
-              fontFamily: theme.fonts.arabicSemi,      // Cairo SemiBold pour l'arabe
-              fontSize: 11,
-              marginTop: 0,
-              writingDirection: 'rtl',
-            }}
-          >
-            مجمع المعرفة الخصوصية
-          </Text>
+    <View style={styles.wrapper}>
+      <LinearGradient
+        colors={[hexWithAlpha(activeTint, 0.15), theme.bg]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[
+          styles.panel,
+          {
+            backgroundColor: theme.card,
+            borderColor: hexWithAlpha(activeTint, 0.25),
+            shadowColor: activeTint,
+          },
+          theme.shadows.sm,
+        ]}
+      >
+        <View style={styles.topRow}>
+          <View style={styles.brandStrip}>
+            <Image
+              source={require('../../../assets/icon.png')}
+              style={styles.brandLogo}
+              resizeMode="contain"
+            />
+            <View style={{ flex: 1, marginStart: 12 }}>
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: theme.primary,
+                  fontFamily: theme.fonts.script,
+                  fontSize: 26,
+                  lineHeight: 30,
+                }}
+              >
+                Mojammaa Al Maarifa
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: theme.textSoft,
+                  fontFamily: theme.fonts.arabicSemi,
+                  fontSize: 11,
+                  marginTop: -2,
+                  writingDirection: 'rtl',
+                }}
+              >
+                مجمع المعرفة الخصوصية
+              </Text>
+            </View>
+          </View>
+
+          <Pressable onPress={onPressBell} hitSlop={8}>
+            {({ pressed }) => (
+              <MotiView
+                animate={{ scale: pressed ? 0.96 : 1, opacity: pressed ? 0.9 : 1 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 250 }}
+                style={[
+                  styles.bell,
+                  { backgroundColor: theme.surface, borderColor: theme.border },
+                ]}
+              >
+                <Bell size={20} color={theme.primary} strokeWidth={1.75} />
+                {notifications > 0 ? (
+                  <View style={[styles.dot, { backgroundColor: activeTint }]}> 
+                    <Text style={[styles.dotText, { fontFamily: theme.fonts.black }]}>
+                      {notifications > 9 ? '9+' : String(notifications)}
+                    </Text>
+                  </View>
+                ) : null}
+              </MotiView>
+            )}
+          </Pressable>
         </View>
-      </View>
 
-      <View style={styles.container}>
-      <Pressable
-        onPress={onPressAvatar}
-        hitSlop={8}
-      >
-        {({ pressed }) => (
-          <MotiView
-            animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
-            transition={{ type: 'timing', duration: 200 }}
-            style={[
-              styles.avatar,
-              {
-                backgroundColor: theme.primarySurface,
-                borderColor: theme.primaryBorder,
-              },
-            ]}
-          >
-            <Text style={{
-              color: theme.primary,
-              fontFamily: theme.fonts.semibold,
-              fontSize: 16,
-            }}>
-              {initialsOf(fullName)}
+        <View style={styles.bottomRow}>
+          <Pressable onPress={onPressAvatar} hitSlop={8}>
+            {({ pressed }) => (
+              <MotiView
+                animate={{ scale: pressed ? 0.96 : 1, opacity: pressed ? 0.94 : 1 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 250 }}
+                style={[
+                  styles.avatarShell,
+                  {
+                    backgroundColor: hexWithAlpha(activeTint, 0.15),
+                    borderColor: hexWithAlpha(activeTint, 0.4),
+                  },
+                ]}
+              >
+                <View style={[styles.avatar, { backgroundColor: theme.white }]}> 
+                  <Text style={{
+                    color: activeTint,
+                    fontFamily: theme.fonts.bold,
+                    fontSize: 18,
+                  }}>
+                    {initialsOf(fullName)}
+                  </Text>
+                </View>
+              </MotiView>
+            )}
+          </Pressable>
+
+          <View style={styles.textBlock}>
+            <Text
+              numberOfLines={1}
+              style={{
+                color: theme.primary,
+                fontFamily: theme.fonts.bold,
+                fontSize: theme.fontSize.h1,
+                lineHeight: 40,
+                letterSpacing: -0.6,
+              }}
+            >
+              {greeting} {fullName}
             </Text>
-          </MotiView>
-        )}
-      </Pressable>
-
-      <View style={styles.textBlock}>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: theme.textSoft,
-            fontFamily: theme.fonts.regular,
-            fontSize: theme.fontSize.small,
-          }}
-        >
-          {greeting}
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: theme.text,
-            fontFamily: theme.fonts.semibold,
-            fontSize: theme.fontSize.h3,
-            letterSpacing: -0.3,
-            marginTop: 2,
-          }}
-        >
-          {fullName}
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: theme.textMuted,
-            fontFamily: theme.fonts.medium,
-            fontSize: theme.fontSize.caption,
-            marginTop: 2,
-            textTransform: 'uppercase',
-            letterSpacing: 0.6,
-          }}
-        >
-          {roleLabel}
-        </Text>
-      </View>
-
-      <Pressable
-        onPress={onPressBell}
-        hitSlop={8}
-      >
-        {({ pressed }) => (
-          <MotiView
-            animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
-            transition={{ type: 'timing', duration: 200 }}
-            style={[
-              styles.bell,
-              { backgroundColor: theme.card, borderColor: theme.border },
-            ]}
-          >
-            <Bell size={20} color={theme.text} strokeWidth={1.75} />
-            {notifications > 0 ? (
-              <View style={[styles.dot, { backgroundColor: theme.primary }]}>
-                <Text style={[styles.dotText, { fontFamily: theme.fonts.black }]}>
-                  {notifications > 9 ? '9+' : String(notifications)}
-                </Text>
-              </View>
-            ) : null}
-          </MotiView>
-        )}
-      </Pressable>
-      </View>
+            <Text
+              numberOfLines={2}
+              style={{
+                color: theme.textSoft,
+                fontFamily: theme.fonts.regular,
+                fontSize: theme.fontSize.body,
+                lineHeight: 22,
+                marginTop: 2,
+              }}
+            >
+              Espace {roleLabel.toLowerCase()} chaleureux et premium.
+            </Text>
+          </View>
+        </View>
+      </LinearGradient>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  panel: {
+    overflow: 'hidden',
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    position: 'relative',
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
   brandStrip: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    paddingHorizontal: 24,
-    paddingTop:        8,
-    paddingBottom:     4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginEnd: 12,
   },
   brandLogo: {
-    width:  34, height: 34, borderRadius: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 8,
   },
-  container: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    paddingHorizontal: 24,
-    paddingVertical:   12,
-  },
-  avatar: {
-    width: 48, height: 48, borderRadius: 24,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  textBlock: { flex: 1, marginHorizontal: 14 },
   bell: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
   },
   dot: {
-    position: 'absolute', top: 6, right: 6,
-    minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4,
-    alignItems: 'center', justifyContent: 'center',
+    position: 'absolute',
+    top: 5,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  dotText: { color: '#fff', fontSize: 9 },
+  dotText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  avatarShell: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textBlock: {
+    flex: 1,
+    marginStart: 16,
+  },
 })

@@ -2,6 +2,7 @@ import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import ScreenLayout from '../../components/ScreenLayout';
 import AnimatedCard from '../../components/AnimatedCard';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -11,6 +12,7 @@ import { Users, BookOpen, GraduationCap, Percent } from 'lucide-react-native';
 export default function AdminDashboardScreen() {
   const theme = useTheme();
   const { stats, loading, error, refresh } = useDashboardStats();
+  const nav = useNavigation<any>();
 
   return (
     <ScreenLayout title="Dashboard">

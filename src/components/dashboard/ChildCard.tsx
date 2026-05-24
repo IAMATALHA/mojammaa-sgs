@@ -11,6 +11,7 @@ import type { Child } from '../../utils/mockData'
 
 interface ChildCardProps {
   child: Child
+  isActive?: boolean
   onPress?: () => void
 }
 
@@ -18,8 +19,10 @@ function initialsOf(c: Child): string {
   return `${c.firstName[0] ?? ''}${c.lastName[0] ?? ''}`.toUpperCase()
 }
 
-export default function ChildCard({ child, onPress }: ChildCardProps) {
+export default function ChildCard({ child, isActive = true, onPress }: ChildCardProps) {
   const theme = useTheme()
+  const tint = child.avatarColor || theme.primary
+
   return (
     <Pressable
       onPress={onPress}
@@ -27,22 +30,25 @@ export default function ChildCard({ child, onPress }: ChildCardProps) {
     >
       {({ pressed }) => (
         <MotiView
-          from={{ opacity: 0 }}
-          animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
-          transition={{ type: 'timing', duration: 200 }}
+          animate={{ 
+            scale: pressed ? 0.96 : isActive ? 1 : 0.96, 
+            opacity: pressed ? 0.9 : isActive ? 1 : 0.7 
+          }}
+          transition={{ type: 'timing', duration: 180 }}
           style={[
             styles.card,
             {
               backgroundColor: theme.card,
-              borderColor:     theme.border,
+              borderColor: isActive ? tint : theme.border,
+              borderWidth: isActive ? 1 : StyleSheet.hairlineWidth,
             },
-            theme.shadows.xs,
+            isActive ? theme.shadows.sm : theme.shadows.xs,
           ]}
         >
-          <View style={[styles.avatar, { backgroundColor: theme.primarySurface }]}>
+          <View style={[styles.avatar, { backgroundColor: tint }]}>
             <Text style={{
-              color: theme.primary,
-              fontFamily: theme.fonts.semibold,
+              color: '#FFFFFF',
+              fontFamily: theme.fonts.bold,
               fontSize: 18,
             }}>
               {initialsOf(child)}
