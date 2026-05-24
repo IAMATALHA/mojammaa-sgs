@@ -130,8 +130,7 @@ function TeacherTabs() {
         component={TeacherClassesScreen}
         options={{
           title: 'Classes',
-          tabBarItemStyle: { marginTop: -18 },
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} emphasized />,
+          tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} />,
         }}
       />
       <Tab.Screen

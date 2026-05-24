@@ -16,11 +16,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, ScrollView, RefreshControl, StyleSheet, Pressable, Text,
-  Alert, Modal,
+  Alert, Modal, Dimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
+
+const { width: SCREEN_W } = Dimensions.get('window')
+const CAROUSEL_CARD_W = SCREEN_W - 80
+
 import {
   Megaphone, BookOpen, CalendarDays, Users, X, MapPin, Clock,
 } from 'lucide-react-native'
@@ -147,32 +151,47 @@ export default function ParentDashboardScreen() {
         />
 
         {/* ── My Children ───────────────────────────────────── */}
-        <View style={styles.section}>
-          <SectionHeader
-            title="Mes enfants"
-            subtitle={`${parent.children.length} enfant${parent.children.length > 1 ? 's' : ''}`}
-            actionLabel="Voir tout"
-            onAction={() => goTo('StudentNotes')}
-          />
+        <View style={styles.sectionNoPadding}>
+          <View style={styles.sectionHeaderWrap}>
+            <SectionHeader
+              title="Mes enfants"
+              subtitle={`${parent.children.length} enfant${parent.children.length > 1 ? 's' : ''}`}
+              actionLabel="Voir tout"
+              onAction={() => goTo('StudentNotes')}
+            />
+          </View>
           {parent.children.length === 0 ? (
-            <Card>
-              <EmptyState
-                icon={Users}
-                title="Aucun enfant associé"
-                message="Contactez l'établissement pour lier votre compte à votre enfant."
-              />
-            </Card>
+            <View style={{ paddingHorizontal: 20 }}>
+              <Card>
+                <EmptyState
+                  icon={Users}
+                  title="Aucun enfant associé"
+                  message="Contactez l'établissement pour lier votre compte à votre enfant."
+                />
+              </Card>
+            </View>
           ) : (
-            parent.children.map(c => (
-              <ChildCard
-                key={c.id}
-                child={c}
-                onPress={() => {
-                  setSelectedChildId(c.id)
-                  goTo('StudentNotes')
-                }}
-              />
-            ))
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={CAROUSEL_CARD_W + 12}
+              decelerationRate="fast"
+              style={{ flexGrow: 0 }}
+              contentContainerStyle={styles.carouselScroll}
+            >
+              {parent.children.map((c, idx) => (
+                <View key={c.id} style={{ width: CAROUSEL_CARD_W, marginRight: 12 }}>
+                  <ChildCard
+                    child={c}
+                    isActive={c.id === selectedChildId}
+                    onPress={() => {
+                      setSelectedChildId(c.id)
+                      goTo('StudentNotes')
+                    }}
+                  />
+                </View>
+              ))}
+            </ScrollView>
           )}
         </View>
 
@@ -566,7 +585,10 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   scroll: { paddingBottom: 132 },
-  section: { paddingHorizontal: 20, marginTop: 28 },
+  section: { paddingHorizontal: 20, marginTop: 24 },
+  sectionNoPadding: { marginTop: 24 },
+  sectionHeaderWrap: { paddingHorizontal: 20 },
+  carouselScroll: { paddingHorizontal: 20, paddingBottom: 8 },
   attendanceRow: {
     flexDirection: 'row',
     alignItems:    'center',

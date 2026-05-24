@@ -112,7 +112,7 @@ export default function AdminStack() {
       <Tab.Screen
         name="AdminEdt"
         component={AdminEdtScreen}
-        options={{ title: 'EDT', tabBarItemStyle: { marginTop: -18 }, tabBarIcon: ({ color, focused }) => <TabIcon Icon={CalendarDays} color={color} focused={focused} theme={theme} emphasized /> }}
+        options={{ title: 'EDT', tabBarIcon: ({ color, focused }) => <TabIcon Icon={CalendarDays} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
         name="AdminBroadcast"

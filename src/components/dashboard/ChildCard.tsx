@@ -11,6 +11,7 @@ import type { Child } from '../../utils/mockData'
 
 interface ChildCardProps {
   child: Child
+  isActive?: boolean
   onPress?: () => void
 }
 
@@ -18,26 +19,27 @@ function initialsOf(c: Child): string {
   return `${c.firstName[0] ?? ''}${c.lastName[0] ?? ''}`.toUpperCase()
 }
 
-export default function ChildCard({ child, onPress }: ChildCardProps) {
+export default function ChildCard({ child, isActive = true, onPress }: ChildCardProps) {
   const theme = useTheme()
 
   return (
     <Pressable onPress={onPress} android_ripple={{ color: theme.border }}>
       {({ pressed }) => (
         <MotiView
-          animate={{ scale: pressed ? 0.985 : 1, opacity: pressed ? 0.96 : 1 }}
+          animate={{
+            scale: pressed ? 0.96 : isActive ? 1 : 0.95,
+            opacity: pressed ? 0.9 : isActive ? 1 : 0.65,
+            borderColor: isActive ? theme.geminiBorder : theme.border,
+          }}
           transition={{ type: 'spring', damping: 20, stiffness: 250 }}
           style={[
             styles.card,
-            {
-              backgroundColor: theme.card,
-              borderColor: theme.border,
-            },
-            theme.shadows.xs,
+            { backgroundColor: theme.card },
+            isActive && theme.shadows.xs,
           ]}
-          >
-          <View style={[styles.avatarShell, { backgroundColor: theme.geminiSurface, borderColor: theme.geminiBorder }]} />
-          <View style={{ position: 'absolute', left: 20, width: 44, height: 44, borderRadius: 14, backgroundColor: theme.geminiBlue, alignItems: 'center', justifyContent: 'center' }}>
+        >
+          <View style={[styles.avatarShell, { backgroundColor: isActive ? theme.geminiSurface : theme.surface, borderColor: isActive ? theme.geminiBorder : theme.border }]} />
+          <View style={{ position: 'absolute', left: 20, width: 44, height: 44, borderRadius: 14, backgroundColor: isActive ? theme.geminiBlue : theme.textMuted, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{
               color: theme.white,
               fontFamily: theme.fonts.bold,
@@ -46,7 +48,6 @@ export default function ChildCard({ child, onPress }: ChildCardProps) {
               {initialsOf(child)}
             </Text>
           </View>
-
           <View style={styles.body}>
             <Text
               numberOfLines={1}

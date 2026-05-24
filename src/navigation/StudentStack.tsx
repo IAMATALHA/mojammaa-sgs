@@ -124,8 +124,7 @@ export default function StudentStack() {
         component={ParentNotesScreen}
         options={{
           title: 'Notes',
-          tabBarItemStyle: { marginTop: -18 },
-          tabBarIcon: ({ color, focused }) => <TabIcon Icon={FileText} color={color} focused={focused} theme={theme} emphasized />,
+          tabBarIcon: ({ color, focused }) => <TabIcon Icon={FileText} color={color} focused={focused} theme={theme} />,
         }}
       />
       <Tab.Screen
