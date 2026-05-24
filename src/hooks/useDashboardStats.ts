@@ -1,16 +1,16 @@
 /**
  * Hook qui agrège les compteurs du dashboard admin depuis Firestore :
  *   - nombre d'élèves (collection eleves)
- *   - nombre de profs   (users where role='professeur')
+ *   - nombre de profs   (users where role='professeur' ou 'teacher')
  *   - nombre de classes (distinct sur eleves.classe)
  *   - taux de présence du jour
  *
- * Pas d'onSnapshot : un getDocs / getCountFromServer suffit. On expose
+ * Pas d'onSnapshot : un getDocs suffit. On expose
  * { loading, error, refresh } pour permettre un pull-to-refresh.
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  collection, getCountFromServer, getDocs, query, where,
+  collection, getDocs, query, where,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 
@@ -34,20 +34,30 @@ export function useDashboardStats() {
     setLoading(true); setError(null)
     try {
       const today = todayISO()
-      const [elevesSnap, profsCount, absentsCount] = await Promise.all([
+      const [elevesSnap, usersSnap, absencesSnap] = await Promise.all([
         getDocs(collection(db, 'eleves')),
-        getCountFromServer(query(collection(db, 'users'),    where('role',   '==', 'professeur'))),
-        getCountFromServer(query(collection(db, 'absences'), where('date',   '==', today),
-                                                            where('statut', '==', 'absent'))),
+        getDocs(collection(db, 'users')),
+        getDocs(query(collection(db, 'absences'), where('date', '==', today))),
       ])
       const totalEleves   = elevesSnap.size
-      const totalProfs    = profsCount.data().count
+      let totalProfs      = 0
       const classeSet     = new Set<string>()
+      
       elevesSnap.forEach(d => {
         const c = (d.data() as any).classe
         if (c) classeSet.add(String(c))
       })
-      const absentsToday  = absentsCount.data().count
+
+      usersSnap.forEach(d => {
+        const role = (d.data() as any).role
+        if (role === 'professeur' || role === 'teacher') totalProfs += 1
+      })
+
+      let absentsToday = 0
+      absencesSnap.forEach(d => {
+        if ((d.data() as any).statut === 'absent') absentsToday += 1
+      })
+
       const attendanceRate = totalEleves > 0
         ? Math.round(((totalEleves - absentsToday) / totalEleves) * 100)
         : 100

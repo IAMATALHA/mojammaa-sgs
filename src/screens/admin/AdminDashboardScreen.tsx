@@ -71,7 +71,7 @@ export default function AdminDashboardScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingBottom: 40,
+    paddingBottom: 124,
   },
   row: {
     flexDirection: 'row',
