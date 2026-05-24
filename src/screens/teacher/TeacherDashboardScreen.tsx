@@ -7,11 +7,13 @@
 
 import React, { useCallback, useState } from 'react'
 import {
-  View, ScrollView, RefreshControl, StyleSheet, Text, Pressable,
-  Alert, Modal,
+  View, ScrollView, RefreshControl, StyleSheet, Text, Pressable, Image,
+  Alert, Modal, Dimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
+import { LinearGradient } from 'expo-linear-gradient'
+import { MotiView } from 'moti'
 import { useNavigation } from '@react-navigation/native'
 import {
   Users, GraduationCap, CheckCircle2, ListTodo,
@@ -22,7 +24,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useTeacherData } from '../../hooks/useTeacherData'
 import { useTeacherMessages } from '../../hooks/useTeacherMessages'
 import {
-  DashboardHeader, SectionHeader, StatCard, Card,
+  SectionHeader, StatCard, Card,
   ScheduleItem, AnnouncementCard, QuickActions,
   PerformanceBars, SkeletonCard, SkeletonRow, EmptyState,
 } from '../../components/dashboard'
@@ -31,11 +33,21 @@ import {
   type ScheduleEntry, type Announcement, type QuickAction,
 } from '../../utils/mockData'
 
+const { width: SCREEN_W } = Dimensions.get('window')
+
 function greetingFor(date = new Date()): string {
   const h = date.getHours()
   if (h < 12) return 'Bonjour'
   if (h < 18) return 'Bon après-midi'
   return 'Bonsoir'
+}
+
+function hexWithAlpha(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '')
+  const r = parseInt(clean.substring(0, 2), 16)
+  const g = parseInt(clean.substring(2, 4), 16)
+  const b = parseInt(clean.substring(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 // Mapping action.id → tab route (qa1 = "Faire l'appel" is handled separately)
@@ -117,9 +129,21 @@ export default function TeacherDashboardScreen() {
     )
   }
 
+  const tint = theme.green   // signature couleur prof = vert pastel
+
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
       <StatusBar style="dark" />
+
+      {/* Watermark icon.png discret */}
+      <View pointerEvents="none" style={styles.watermarkWrap}>
+        <Image
+          source={require('../../../assets/icon.png')}
+          style={styles.watermark}
+          resizeMode="contain"
+        />
+      </View>
+
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -127,18 +151,109 @@ export default function TeacherDashboardScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={theme.primary}
+            tintColor={theme.accent}
           />
         }
       >
-        <DashboardHeader
-          greeting={`${greetingFor()},`}
-          fullName={fullName}
-          roleLabel="Enseignant"
-          notifications={3}
-          onPressBell={() => goTo('TeacherMessages')}
-          onPressAvatar={handleAvatarPress}
-        />
+        {/* ── Hero ──────────────────────────────────────────── */}
+        <MotiView
+          from={{ opacity: 0, translateY: -8 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 480 }}
+        >
+          <LinearGradient
+            colors={[hexWithAlpha(tint, 0.14), theme.bg]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.hero}
+          >
+            <View style={styles.heroTopRow}>
+              <Pressable onPress={handleAvatarPress} hitSlop={8}>
+                {({ pressed }) => (
+                  <MotiView
+                    animate={{ scale: pressed ? 0.94 : 1 }}
+                    transition={{ type: 'timing', duration: 150 }}
+                    style={[styles.heroAvatar, {
+                      backgroundColor: theme.white,
+                      borderColor: hexWithAlpha(tint, 0.35),
+                    }]}
+                  >
+                    <Text style={{
+                      color: theme.text,
+                      fontFamily: theme.fonts.bold,
+                      fontSize: 15,
+                    }}>
+                      {fullName.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('')}
+                    </Text>
+                  </MotiView>
+                )}
+              </Pressable>
+
+              <View style={styles.heroBrandBlock}>
+                <View style={styles.heroBrandRow}>
+                  <Image
+                    source={require('../../../assets/icon.png')}
+                    style={styles.heroBrandLogo}
+                    resizeMode="contain"
+                  />
+                  <View style={{ marginStart: 8 }}>
+                    <Text numberOfLines={1} style={{
+                      color: theme.text,
+                      fontFamily: theme.fonts.bold,
+                      fontSize: 13,
+                      letterSpacing: -0.2,
+                    }}>
+                      Mojammaa Al Maarifa
+                    </Text>
+                    <Text numberOfLines={1} style={{
+                      color: theme.textSoft,
+                      fontFamily: theme.fonts.arabicSemi,
+                      fontSize: 11,
+                      marginTop: 1,
+                    }}>
+                      مجمع المعرفة الخصوصية
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <Pressable onPress={() => goTo('TeacherMessages')} hitSlop={8}>
+                {({ pressed }) => (
+                  <MotiView
+                    animate={{ scale: pressed ? 0.94 : 1 }}
+                    transition={{ type: 'timing', duration: 150 }}
+                    style={[styles.heroBell, { backgroundColor: theme.white }]}
+                  >
+                    <Megaphone size={18} color={theme.text} strokeWidth={1.75} />
+                    <View style={[styles.bellDot, { backgroundColor: theme.accent }]}>
+                      <Text style={{ color: '#fff', fontFamily: theme.fonts.bold, fontSize: 9 }}>3</Text>
+                    </View>
+                  </MotiView>
+                )}
+              </Pressable>
+            </View>
+
+            <View style={styles.heroGreetBlock}>
+              <Text style={{
+                color: theme.textSoft,
+                fontFamily: theme.fonts.medium,
+                fontSize: 12,
+                letterSpacing: 0.4,
+              }}>
+                {greetingFor().toUpperCase()} · ENSEIGNANT
+              </Text>
+              <Text numberOfLines={1} style={{
+                color: '#1D3557',
+                fontFamily: theme.fonts.script,
+                fontSize: 34,
+                lineHeight: 42,
+                marginTop: 2,
+              }}>
+                {fullName.split(' ')[0] || 'Professeur'}
+              </Text>
+            </View>
+          </LinearGradient>
+        </MotiView>
 
         {/* ── KPI row ────────────────────────────────────────── */}
         <View style={styles.kpiRow}>
@@ -409,7 +524,62 @@ function AnnouncementDetailModal({
 
 const styles = StyleSheet.create({
   safe:   { flex: 1 },
-  scroll: { paddingBottom: 32 },
+  scroll: { paddingBottom: 180 },
+
+  // Watermark icon.png — très discret, derrière tout
+  watermarkWrap: {
+    position: 'absolute',
+    top: SCREEN_W * 0.35,
+    left: 0, right: 0,
+    alignItems: 'center',
+  },
+  watermark: {
+    width: SCREEN_W * 0.95,
+    height: SCREEN_W * 0.95,
+    opacity: 0.045,
+  },
+
+  // Hero
+  hero: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 22,
+    borderBottomLeftRadius:  28,
+    borderBottomRightRadius: 28,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  heroAvatar: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  heroBrandBlock: {
+    flex: 1,
+    marginHorizontal: 12,
+  },
+  heroBrandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  heroBrandLogo: {
+    width: 32, height: 32,
+  },
+  heroBell: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  bellDot: {
+    position: 'absolute', top: 4, right: 4,
+    minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  heroGreetBlock: {
+    marginTop: 16,
+  },
+
   kpiRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,

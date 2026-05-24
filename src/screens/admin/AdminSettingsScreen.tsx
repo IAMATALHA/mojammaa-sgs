@@ -27,7 +27,7 @@ export default function AdminSettingsScreen() {
 
   return (
     <ScreenLayout title="Paramètres">
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 160 }}>
         {/* Profile card */}
         <View style={[styles.profileCard, { backgroundColor: theme.primary }]}>
           <View style={[styles.avatar, { backgroundColor: theme.white }]}>
