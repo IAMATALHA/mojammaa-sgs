@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
-import { getSchedule, type WeeklySlot } from '../../services/scheduleService'
+import { subscribeSchedule, type ScheduleDoc, type WeeklySlot } from '../../services/scheduleService'
 
 interface ClasseRow {
   name:         string
@@ -36,16 +36,28 @@ export default function TeacherClassesScreen() {
   const [error,   setError]   = useState<string | null>(null)
 
   const profileClasses = useMemo(() => getClassesFromProfile(profile), [profile])
+  const [scheduleDoc, setScheduleDoc] = useState<ScheduleDoc | null>(null)
 
+  // Subscribe to schedule (realtime)
+  useEffect(() => {
+    if (!profile?.uid) return
+    const unsub = subscribeSchedule(
+      profile.uid,
+      doc => setScheduleDoc(doc),
+      err => setError(err.message),
+    )
+    return unsub
+  }, [profile?.uid])
+
+  // Build class rows from schedule + profile.classes + eleves count
   const load = useCallback(async () => {
     if (!profile?.uid) return
     setLoading(true); setError(null)
     try {
-      const schedule = await getSchedule(profile.uid)
       const subjectsByClasse = new Map<string, Set<string>>()
 
-      if (schedule?.weeklySlots) {
-        schedule.weeklySlots.forEach((s: WeeklySlot) => {
+      if (scheduleDoc?.weeklySlots) {
+        scheduleDoc.weeklySlots.forEach((s: WeeklySlot) => {
           const set = subjectsByClasse.get(s.classe) || new Set<string>()
           if (s.subject) set.add(s.subject)
           subjectsByClasse.set(s.classe, set)
@@ -74,13 +86,13 @@ export default function TeacherClassesScreen() {
     } finally {
       setLoading(false)
     }
-  }, [profile?.uid, profileClasses.join('|')])
+  }, [profile?.uid, profileClasses.join('|'), scheduleDoc])
 
   useEffect(() => { load() }, [load])
 
   const renderItem = ({ item }: { item: ClasseRow }) => (
     <TouchableOpacity
-      onPress={() => navigation.navigate('ClasseFolder', { classe: item.name })}
+      onPress={() => navigation.navigate('TeacherClasseFolder', { classe: item.name })}
       style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
       activeOpacity={0.85}
     >

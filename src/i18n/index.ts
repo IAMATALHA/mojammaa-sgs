@@ -43,11 +43,12 @@ export async function storeLanguage(lang: AppLanguage): Promise<void> {
   await AsyncStorage.setItem(LANG_KEY, lang)
 }
 
-export function applyRTL(lang: AppLanguage) {
-  const isRTL = lang === 'ar'
-  if (I18nManager.isRTL !== isRTL) {
-    I18nManager.allowRTL(isRTL)
-    I18nManager.forceRTL(isRTL)
+export function applyRTL(_lang: AppLanguage) {
+  // RTL disabled for now — layout stays LTR even in Arabic.
+  // Phase 2 post-launch: enable RTL with proper layout adjustments.
+  if (I18nManager.isRTL) {
+    I18nManager.allowRTL(false)
+    I18nManager.forceRTL(false)
   }
 }
 

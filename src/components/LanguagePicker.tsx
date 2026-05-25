@@ -31,16 +31,6 @@ export default function LanguagePicker({ visible, onClose }: Props) {
     }
     onClose()
     await changeLanguage(lang)
-    if (lang === 'ar' || current === 'ar') {
-      Alert.alert(
-        lang === 'ar' ? 'إعادة التشغيل مطلوبة' : lang === 'fr' ? 'Redémarrage requis' : 'Restart required',
-        lang === 'ar'
-          ? 'يرجى إعادة تشغيل التطبيق لتفعيل اللغة العربية بالكامل.'
-          : lang === 'fr'
-            ? 'Veuillez redémarrer l\'application pour appliquer la mise en page.'
-            : 'Please restart the app to fully apply the layout.',
-      )
-    }
   }
 
   return (

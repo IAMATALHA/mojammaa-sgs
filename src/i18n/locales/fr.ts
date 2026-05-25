@@ -292,6 +292,10 @@ const fr = {
     scheduleTitle: 'Emploi du temps',
     allClasses: 'Toutes',
     noCourse: 'Aucun cours',
+    profsDidAppel: '{{count}} profs ont fait l\'appel',
+    profsMissingAppel: '{{count}} profs n\'ont pas fait l\'appel',
+    homeworkActive: '{{count}} devoirs en cours',
+    messagesToday: '{{count}} messages aujourd\'hui',
   },
 
   attendance: {
@@ -308,6 +312,32 @@ const fr = {
     send: 'Envoyer',
     urgent: 'Urgent',
     selectClasses: 'Sélectionner les classes',
+  },
+
+  actions: {
+    takeAttendance: 'Faire l\'appel',
+    newHomework: 'Nouveau devoir',
+    sendMessage: 'Envoyer message',
+    toPending: 'À traiter',
+    viewBulletin: 'Voir bulletin',
+    absences: 'Absences',
+    homework: 'Devoirs',
+    contactTeacher: 'Contacter prof',
+  },
+
+  calendar: {
+    title: 'Calendrier scolaire',
+    addDay: 'Ajouter un jour spécial',
+    addButton: 'Ajouter ce jour',
+    upcoming: 'Jours spéciaux à venir',
+    noSpecialDays: 'Aucun jour spécial programmé.',
+    vacances: 'Vacances',
+    evenement: 'Événement',
+    examen: 'Examen',
+    coursesCancelled: 'Cours annulés',
+    deleteConfirm: 'Supprimer ce jour spécial ?',
+    alreadyExists: 'Ce jour est déjà marqué.',
+    specialDay: 'Journée spéciale',
   },
 
   langPicker: {

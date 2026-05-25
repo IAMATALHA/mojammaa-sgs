@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  getSchedule, type ScheduleDoc, type WeeklySlot, type WeekDay,
+  subscribeSchedule, type ScheduleDoc, type WeeklySlot, type WeekDay,
 } from '../../services/scheduleService';
 
 const DAY_ORDER: WeekDay[] = [
@@ -35,20 +35,20 @@ export default function TeacherEdtScreen() {
 
   const today = useMemo(() => todayWeekDay(), [])
 
-  const load = async () => {
-    if (!profile?.uid) return
-    setLoading(true); setError(null)
-    try {
-      const doc = await getSchedule(profile.uid)
-      setSchedule(doc)
-    } catch (e: any) {
-      setError(e?.message || t('common.error'))
-    } finally {
+  useEffect(() => {
+    if (!profile?.uid) {
+      setSchedule(null)
       setLoading(false)
+      return
     }
-  }
-
-  useEffect(() => { load() }, [profile?.uid])
+    setLoading(true)
+    const unsub = subscribeSchedule(
+      profile.uid,
+      doc => { setSchedule(doc); setLoading(false); setError(null) },
+      err => { setError(err.message); setLoading(false) },
+    )
+    return unsub
+  }, [profile?.uid])
 
   const grouped = useMemo(() => {
     if (!schedule?.weeklySlots) return []
@@ -117,7 +117,7 @@ export default function TeacherEdtScreen() {
           keyExtractor={item => item.day}
           renderItem={renderGroup}
           contentContainerStyle={{ paddingBottom: 24 }}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.primary} />}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={() => {}} tintColor={theme.primary} />}
         />
       )}
     </ScreenLayout>

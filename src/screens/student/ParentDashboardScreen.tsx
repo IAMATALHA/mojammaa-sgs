@@ -862,7 +862,7 @@ function SheetMeta({
 
 const styles = StyleSheet.create({
   safe:   { flex: 1 },
-  scroll: { paddingBottom: 180 },
+  scroll: { paddingBottom: 32 },
 
   // Watermark icon.png — très discret, derrière tout
   watermarkWrap: {

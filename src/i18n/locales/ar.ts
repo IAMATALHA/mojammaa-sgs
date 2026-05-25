@@ -292,6 +292,10 @@ const ar = {
     scheduleTitle: 'الجدول الزمني',
     allClasses: 'الكل',
     noCourse: 'لا حصص',
+    profsDidAppel: '{{count}} أساتذة سجلوا الحضور',
+    profsMissingAppel: '{{count}} أساتذة لم يسجلوا الحضور',
+    homeworkActive: '{{count}} واجبات جارية',
+    messagesToday: '{{count}} رسائل اليوم',
   },
 
   attendance: {
@@ -308,6 +312,32 @@ const ar = {
     send: 'إرسال',
     urgent: 'عاجل',
     selectClasses: 'اختيار الأقسام',
+  },
+
+  actions: {
+    takeAttendance: 'تسجيل الحضور',
+    newHomework: 'واجب جديد',
+    sendMessage: 'إرسال رسالة',
+    toPending: 'قيد المعالجة',
+    viewBulletin: 'عرض كشف النقط',
+    absences: 'الغيابات',
+    homework: 'الواجبات',
+    contactTeacher: 'مراسلة الأستاذ',
+  },
+
+  calendar: {
+    title: 'التقويم المدرسي',
+    addDay: 'إضافة يوم خاص',
+    addButton: 'إضافة هذا اليوم',
+    upcoming: 'الأيام الخاصة القادمة',
+    noSpecialDays: 'لا أيام خاصة مبرمجة.',
+    vacances: 'عطلة',
+    evenement: 'حدث',
+    examen: 'امتحان',
+    coursesCancelled: 'الحصص ملغاة',
+    deleteConfirm: 'حذف هذا اليوم الخاص؟',
+    alreadyExists: 'هذا اليوم مسجل بالفعل.',
+    specialDay: 'يوم خاص',
   },
 
   langPicker: {

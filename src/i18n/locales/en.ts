@@ -292,6 +292,10 @@ const en = {
     scheduleTitle: 'Schedule',
     allClasses: 'All',
     noCourse: 'No courses',
+    profsDidAppel: '{{count}} teachers took attendance',
+    profsMissingAppel: '{{count}} teachers haven\'t taken attendance',
+    homeworkActive: '{{count}} homework active',
+    messagesToday: '{{count}} messages today',
   },
 
   attendance: {
@@ -308,6 +312,32 @@ const en = {
     send: 'Send',
     urgent: 'Urgent',
     selectClasses: 'Select classes',
+  },
+
+  actions: {
+    takeAttendance: 'Take attendance',
+    newHomework: 'New homework',
+    sendMessage: 'Send message',
+    toPending: 'Pending',
+    viewBulletin: 'View report',
+    absences: 'Absences',
+    homework: 'Homework',
+    contactTeacher: 'Contact teacher',
+  },
+
+  calendar: {
+    title: 'School calendar',
+    addDay: 'Add a special day',
+    addButton: 'Add this day',
+    upcoming: 'Upcoming special days',
+    noSpecialDays: 'No special days scheduled.',
+    vacances: 'Holiday',
+    evenement: 'Event',
+    examen: 'Exam',
+    coursesCancelled: 'Courses cancelled',
+    deleteConfirm: 'Delete this special day?',
+    alreadyExists: 'This day is already marked.',
+    specialDay: 'Special day',
   },
 
   langPicker: {

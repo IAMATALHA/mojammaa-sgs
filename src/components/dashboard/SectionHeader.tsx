@@ -6,6 +6,7 @@
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface SectionHeaderProps {
@@ -19,15 +20,18 @@ export default function SectionHeader({
   title, subtitle, actionLabel, onAction,
 }: SectionHeaderProps) {
   const theme = useTheme()
+  const { i18n } = useTranslation()
+  const isAr = i18n.language === 'ar'
   return (
-    <View style={styles.container}>
-      <View style={styles.titleBlock}>
+    <View style={[styles.container, isAr && { flexDirection: 'row-reverse' }]}>
+      <View style={[styles.titleBlock, isAr && { alignItems: 'flex-end' }]}>
         <Text
           numberOfLines={1}
           style={[styles.title, {
             color: theme.primary,
-            fontFamily: theme.fonts.serif,
+            fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.serif,
             fontSize: theme.fontSize.h3,
+            writingDirection: isAr ? 'rtl' : 'ltr',
           }]}
         >
           {title}
@@ -38,8 +42,9 @@ export default function SectionHeader({
             style={{
               marginTop: 2,
               color: theme.textSoft,
-              fontFamily: theme.fonts.regular,
+              fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.regular,
               fontSize: theme.fontSize.small,
+              writingDirection: isAr ? 'rtl' : 'ltr',
             }}
           >
             {subtitle}

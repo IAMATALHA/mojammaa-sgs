@@ -121,7 +121,7 @@ export default function TeacherMessagesScreen() {
 }
 
 const styles = StyleSheet.create({
-  listContainer: { paddingBottom: 160 },
+  listContainer: { paddingBottom: 32 },
   card:          { padding: 14, marginBottom: 10, borderRadius: 12, borderWidth: 1.5 },
   row:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   fromText:      { fontSize: 14, flex: 1, marginEnd: 8 },

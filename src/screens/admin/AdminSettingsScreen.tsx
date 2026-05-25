@@ -34,7 +34,7 @@ export default function AdminSettingsScreen() {
 
   return (
     <ScreenLayout title={t('tabs.settings')}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 160 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
         {/* Profile card */}
         <View style={[styles.profileCard, { backgroundColor: theme.primary }]}>
           <View style={[styles.avatar, { backgroundColor: theme.white }]}>

@@ -5,18 +5,16 @@
  * KPIs read real Firestore data via useTeacherData().
  */
 
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import {
   View, ScrollView, RefreshControl, StyleSheet, Text, Pressable, Image,
-  Alert, Modal, Dimensions,
+  Alert, Modal,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { LinearGradient } from 'expo-linear-gradient'
-import { MotiView } from 'moti'
 import { useNavigation } from '@react-navigation/native'
 import {
-  Users, GraduationCap, CheckCircle2, ListTodo,
+  Users,
   CalendarClock, Megaphone, BarChart3, Sparkles, X, Clock, MapPin,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -25,16 +23,13 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useTeacherData } from '../../hooks/useTeacherData'
 import { useTeacherMessages } from '../../hooks/useTeacherMessages'
 import {
-  SectionHeader, StatCard, Card,
+  SectionHeader, Card,
   ScheduleItem, AnnouncementCard, QuickActions,
-  PerformanceBars, SkeletonCard, SkeletonRow, EmptyState,
+  PerformanceBars, SkeletonRow, EmptyState,
 } from '../../components/dashboard'
 import {
-  TEACHER_QUICK_ACTIONS,
   type ScheduleEntry, type Announcement, type QuickAction,
 } from '../../utils/mockData'
-
-const { width: SCREEN_W } = Dimensions.get('window')
 
 function greetingKey(date = new Date()): string {
   const h = date.getHours()
@@ -43,19 +38,17 @@ function greetingKey(date = new Date()): string {
   return 'greeting.evening'
 }
 
-function hexWithAlpha(hex: string, alpha: number): string {
-  const clean = hex.replace('#', '')
-  const r = parseInt(clean.substring(0, 2), 16)
-  const g = parseInt(clean.substring(2, 4), 16)
-  const b = parseInt(clean.substring(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
+const TEACHER_QUICK_ACTIONS: QuickAction[] = [
+  { id: 'qa1', label: 'Faire l\'appel',  labelKey: 'actions.takeAttendance', icon: 'check-circle', tint: 'primary' },
+  { id: 'qa3', label: 'Nouveau devoir',  labelKey: 'actions.newHomework',    icon: 'book-open',    tint: 'info'    },
+  { id: 'qa4', label: 'Envoyer message', labelKey: 'actions.sendMessage',    icon: 'send',         tint: 'success' },
+  { id: 'qa5', label: 'À traiter',       labelKey: 'actions.toPending',      icon: 'pencil-line',  tint: 'accent'  },
+]
 
-// Mapping action.id → tab route (qa1 = "Faire l'appel" is handled separately)
 const QUICK_ACTION_ROUTES: Record<string, string> = {
-  qa2: 'TeacherClasses',   // Saisir une note
   qa3: 'TeacherDevoirs',   // Nouveau devoir
-  qa4: 'TeacherCompose',   // Envoyer message → direct au form de compose
+  qa4: 'TeacherCompose',   // Envoyer message
+  qa5: 'TeacherDevoirs',   // À traiter → devoirs
 }
 
 function seanceForSlot(entry: ScheduleEntry): string {
@@ -69,7 +62,8 @@ function seanceForSlot(entry: ScheduleEntry): string {
 
 export default function TeacherDashboardScreen() {
   const theme = useTheme()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language === 'ar'
   const { profile, logout } = useAuth()
   const teacher = useTeacherData()
   const { messages: teacherInbox } = useTeacherMessages()
@@ -131,19 +125,21 @@ export default function TeacherDashboardScreen() {
     )
   }
 
-  const tint = theme.green   // signature couleur prof = vert pastel
+  const enrichedActions = useMemo(() =>
+    TEACHER_QUICK_ACTIONS.map(a =>
+      a.id === 'qa5' ? { ...a, badge: teacher.kpis.pending } : a,
+    ),
+  [teacher.kpis.pending])
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
       <StatusBar style="dark" />
 
-      {/* Watermark icon.png discret */}
-      <View pointerEvents="none" style={styles.watermarkWrap}>
-        <Image
-          source={require('../../../assets/icon.png')}
-          style={styles.watermark}
-          resizeMode="contain"
-        />
+      {/* Watercolor blobs background (same as ScreenLayout) */}
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={[styles.blob, styles.blobA, { backgroundColor: theme.watercolorA }]} />
+        <View style={[styles.blob, styles.blobB, { backgroundColor: theme.roseSurface }]} />
+        <View style={[styles.blob, styles.blobC, { backgroundColor: theme.violetSurface }]} />
       </View>
 
       <ScrollView
@@ -157,146 +153,43 @@ export default function TeacherDashboardScreen() {
           />
         }
       >
-        {/* ── Hero ──────────────────────────────────────────── */}
-        <MotiView
-          from={{ opacity: 0, translateY: -8 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 480 }}
-        >
-          <LinearGradient
-            colors={[hexWithAlpha(tint, 0.14), theme.bg]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.hero}
-          >
-            <View style={styles.heroTopRow}>
-              <Pressable onPress={handleAvatarPress} hitSlop={8}>
-                {({ pressed }) => (
-                  <MotiView
-                    animate={{ scale: pressed ? 0.94 : 1 }}
-                    transition={{ type: 'timing', duration: 150 }}
-                    style={[styles.heroAvatar, {
-                      backgroundColor: theme.white,
-                      borderColor: hexWithAlpha(tint, 0.35),
-                    }]}
-                  >
-                    <Text style={{
-                      color: theme.text,
-                      fontFamily: theme.fonts.bold,
-                      fontSize: 15,
-                    }}>
-                      {fullName.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('')}
-                    </Text>
-                  </MotiView>
-                )}
-              </Pressable>
-
-              <View style={styles.heroBrandBlock}>
-                <View style={styles.heroBrandRow}>
-                  <Image
-                    source={require('../../../assets/icon.png')}
-                    style={styles.heroBrandLogo}
-                    resizeMode="contain"
-                  />
-                  <View style={{ marginStart: 8 }}>
-                    <Text numberOfLines={1} style={{
-                      color: theme.text,
-                      fontFamily: theme.fonts.bold,
-                      fontSize: 13,
-                      letterSpacing: -0.2,
-                    }}>
-                      Mojammaa Al Maarifa
-                    </Text>
-                    <Text numberOfLines={1} style={{
-                      color: theme.textSoft,
-                      fontFamily: theme.fonts.arabicSemi,
-                      fontSize: 11,
-                      marginTop: 1,
-                    }}>
-                      مجمع المعرفة الخصوصية
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              <Pressable onPress={() => goTo('TeacherMessages')} hitSlop={8}>
-                {({ pressed }) => (
-                  <MotiView
-                    animate={{ scale: pressed ? 0.94 : 1 }}
-                    transition={{ type: 'timing', duration: 150 }}
-                    style={[styles.heroBell, { backgroundColor: theme.white }]}
-                  >
-                    <Megaphone size={18} color={theme.text} strokeWidth={1.75} />
-                    <View style={[styles.bellDot, { backgroundColor: theme.accent }]}>
-                      <Text style={{ color: '#fff', fontFamily: theme.fonts.bold, fontSize: 9 }}>3</Text>
-                    </View>
-                  </MotiView>
-                )}
-              </Pressable>
-            </View>
-
-            <View style={styles.heroGreetBlock}>
-              <Text style={{
-                color: theme.textSoft,
-                fontFamily: theme.fonts.medium,
-                fontSize: 12,
-                letterSpacing: 0.4,
-              }}>
-                {t(greetingKey()).toUpperCase()} · {t('roles.teacher')}
-              </Text>
-              <Text numberOfLines={1} style={{
-                color: '#1D3557',
-                fontFamily: theme.fonts.script,
-                fontSize: 34,
-                lineHeight: 42,
-                marginTop: 2,
-              }}>
-                {fullName.split(' ')[0] || 'Professeur'}
-              </Text>
-            </View>
-          </LinearGradient>
-        </MotiView>
-
-        {/* ── KPI row ────────────────────────────────────────── */}
-        <View style={styles.kpiRow}>
-          {loading ? (
-            <>
-              <SkeletonCard /><SkeletonCard />
-            </>
-          ) : (
-            <>
-              <StatCard
-                icon={<GraduationCap size={18} color={theme.primary} strokeWidth={2.2} />}
-                value={teacher.kpis.classes}
-                label={t('teacher.classes')}
-                tint="primary"
-                onPress={() => goTo('TeacherClasses')}
+        {/* ── Header strip ──────────────────────────────── */}
+        <View style={styles.headerStrip}>
+          <Pressable onPress={handleAvatarPress} hitSlop={8}>
+            <View style={[styles.avatarCircle, { borderColor: theme.accent }]}>
+              <Image
+                source={require('../../../assets/favicon.png')}
+                style={styles.avatarImg}
+                resizeMode="contain"
               />
-              <StatCard
-                icon={<Users size={18} color={theme.info} strokeWidth={2.2} />}
-                value={teacher.kpis.students}
-                label={t('teacher.students')}
-                tint="info"
-                onPress={() => goTo('TeacherClasses')}
-              />
-            </>
-          )}
-        </View>
-        <View style={[styles.kpiRow, { marginTop: 10 }]}>
-          <StatCard
-            icon={<CheckCircle2 size={18} color={theme.success} strokeWidth={2.2} />}
-            value={`${teacher.kpis.attendance}%`}
-            label={t('teacher.attendanceRate')}
-            tint="success"
-            onPress={() => goTo('TeacherClasses')}
-          />
-          <StatCard
-            icon={<ListTodo size={18} color={theme.warning} strokeWidth={2.2} />}
-            value={teacher.kpis.pending}
-            label={t('teacher.pending')}
-            tint="warning"
-            onPress={() => goTo('TeacherDevoirs')}
-          />
+            </View>
+          </Pressable>
+          <View style={{ flex: 1, marginStart: 12 }}>
+            <Text numberOfLines={1} style={{
+              color: theme.text,
+              fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
+              fontSize: isAr ? 16 : 15,
+              writingDirection: isAr ? 'rtl' : 'ltr',
+              textAlign: isAr ? 'right' : 'left',
+            }}>
+              {t(greetingKey())}, {fullName.split(' ')[0] || 'Professeur'}
+            </Text>
+            <Text style={{
+              color: theme.textSoft,
+              fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium,
+              fontSize: 11,
+              letterSpacing: isAr ? 0 : 0.5,
+              marginTop: 2,
+              textTransform: 'uppercase',
+              writingDirection: isAr ? 'rtl' : 'ltr',
+              textAlign: isAr ? 'right' : 'left',
+            }}>
+              {t('roles.teacher')}
+            </Text>
+          </View>
+          <Pressable onPress={() => goTo('TeacherMessages')} hitSlop={8} style={[styles.avatarCircle, { borderColor: theme.accent }]}>
+            <Megaphone size={18} color={theme.accent} strokeWidth={1.75} />
+          </Pressable>
         </View>
 
         {/* ── Today's schedule ──────────────────────────────── */}
@@ -330,6 +223,41 @@ export default function TeacherDashboardScreen() {
           </Card>
         </View>
 
+        {/* ── Quick actions (4 solid tiles) ─────────────────── */}
+        <View style={styles.section}>
+          <SectionHeader
+            title={t('teacher.quickActions')}
+          />
+          <QuickActions actions={enrichedActions} onPress={handleQuickAction} />
+        </View>
+
+        {/* ── Class performance ─────────────────────────────── */}
+        <View style={styles.section}>
+          <SectionHeader
+            title={t('teacher.classPerformance')}
+            subtitle={t('teacher.perfSubtitle')}
+            actionLabel={t('teacher.see')}
+            onAction={() => goTo('TeacherStats')}
+          />
+          <Pressable
+            onPress={() => goTo('TeacherStats')}
+            android_ripple={{ color: theme.border }}
+            style={({ pressed }) => [pressed && { opacity: 0.96 }]}
+          >
+            <Card>
+              <View style={styles.perfHeader}>
+                <View style={[styles.legendDot, { backgroundColor: theme.primary }]} />
+                <Text style={[styles.legendText, { color: theme.textSoft }]}>{t('teacher.avgLabel')}</Text>
+                <View style={[styles.legendDot, { backgroundColor: theme.accent, marginStart: 14 }]} />
+                <Text style={[styles.legendText, { color: theme.textSoft }]}>{t('teacher.topNote')}</Text>
+                <View style={{ flex: 1 }} />
+                <BarChart3 size={16} color={theme.textMuted} strokeWidth={2} />
+              </View>
+              <PerformanceBars data={teacher.classPerformance} />
+            </Card>
+          </Pressable>
+        </View>
+
         {/* ── Announcements ─────────────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader
@@ -360,45 +288,8 @@ export default function TeacherDashboardScreen() {
           )}
         </View>
 
-        {/* ── Class performance ─────────────────────────────── */}
-        <View style={styles.section}>
-          <SectionHeader
-            title={t('teacher.classPerformance')}
-            subtitle={t('teacher.perfSubtitle')}
-            actionLabel={t('teacher.see')}
-            onAction={() => goTo('TeacherClasses')}
-          />
-          <Pressable
-            onPress={() => goTo('TeacherClasses')}
-            android_ripple={{ color: theme.border }}
-            style={({ pressed }) => [pressed && { opacity: 0.96 }]}
-          >
-            <Card>
-              <View style={styles.perfHeader}>
-                <View style={[styles.legendDot, { backgroundColor: theme.primary }]} />
-                <Text style={[styles.legendText, { color: theme.textSoft }]}>{t('teacher.avgLabel')}</Text>
-                <View style={[styles.legendDot, { backgroundColor: theme.accent, marginStart: 14 }]} />
-                <Text style={[styles.legendText, { color: theme.textSoft }]}>{t('teacher.topNote')}</Text>
-                <View style={{ flex: 1 }} />
-                <BarChart3 size={16} color={theme.textMuted} strokeWidth={2} />
-              </View>
-              <PerformanceBars data={teacher.classPerformance} />
-            </Card>
-          </Pressable>
-        </View>
-
-        {/* ── Quick actions ─────────────────────────────────── */}
-        <View style={styles.section}>
-          <SectionHeader
-            title={t('teacher.quickActions')}
-            subtitle={t('teacher.shortcuts')}
-          />
-          <QuickActions actions={TEACHER_QUICK_ACTIONS} onPress={handleQuickAction} />
-        </View>
-
         {/* ── Footer accent ─────────────────────────────────── */}
         <View style={styles.footer}>
-          <Sparkles size={12} color={theme.accent} strokeWidth={2.2} />
           <Text style={{
             color: theme.textMuted,
             fontFamily: theme.fonts.medium,
@@ -406,7 +297,7 @@ export default function TeacherDashboardScreen() {
             marginStart: 6,
             letterSpacing: 0.3,
           }}>
-            Mojammaa SGS — version mobile
+            Mojammaa Al Maarifa — version mobile
           </Text>
         </View>
       </ScrollView>
@@ -527,67 +418,31 @@ function AnnouncementDetailModal({
 
 const styles = StyleSheet.create({
   safe:   { flex: 1 },
-  scroll: { paddingBottom: 180 },
+  scroll: { paddingBottom: 32 },
 
-  // Watermark icon.png — très discret, derrière tout
-  watermarkWrap: {
-    position: 'absolute',
-    top: SCREEN_W * 0.35,
-    left: 0, right: 0,
+  headerStrip: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  watermark: {
-    width: SCREEN_W * 0.95,
-    height: SCREEN_W * 0.95,
-    opacity: 0.045,
-  },
-
-  // Hero
-  hero: {
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 22,
-    borderBottomLeftRadius:  28,
-    borderBottomRightRadius: 28,
+    paddingVertical: 14,
   },
-  heroTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  heroAvatar: {
+  avatarCircle: {
     width: 44, height: 44, borderRadius: 22,
+    borderWidth: 2,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5,
+    backgroundColor: '#FFFFFF',
   },
-  heroBrandBlock: {
-    flex: 1,
-    marginHorizontal: 12,
+  avatarImg: {
+    width: 28, height: 28,
   },
-  heroBrandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  heroBrandLogo: {
-    width: 32, height: 32,
-  },
-  heroBell: {
+  bellBtn: {
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
   },
-  bellDot: {
-    position: 'absolute', top: 4, right: 4,
-    minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  heroGreetBlock: {
-    marginTop: 16,
-  },
-
-  kpiRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 10,
-  },
+  blob: { position: 'absolute' as const, borderRadius: 999 },
+  blobA: { width: 148, height: 148, top: -30, right: -24 },
+  blobB: { width: 88, height: 88, top: 120, left: -24 },
+  blobC: { width: 128, height: 128, bottom: 36, right: -40 },
   section: {
     paddingHorizontal: 20,
     marginTop: 22,

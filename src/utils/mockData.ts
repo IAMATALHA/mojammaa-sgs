@@ -61,10 +61,12 @@ export interface UpcomingEvent {
 }
 
 export interface QuickAction {
-  id:       string
-  label:    string
-  icon:     string  // lucide-react-native icon name
-  tint:     'primary' | 'accent' | 'success' | 'info' | 'warning'
+  id:        string
+  label:     string
+  labelKey?: string
+  icon:      string  // lucide-react-native icon name
+  tint:      'primary' | 'accent' | 'success' | 'info' | 'warning'
+  badge?:    number | string
 }
 
 export interface ClassPerformance {
@@ -90,31 +92,7 @@ export const TEACHER_KPIS = {
   pending:    12,    // pending tasks/reviews
 }
 
-export const TEACHER_SCHEDULE: ScheduleEntry[] = [
-  { id: 's1', subject: 'Mathématiques',  classe: '6ème A', room: 'Salle 12', startTime: '08:30', endTime: '09:30', status: 'done' },
-  { id: 's2', subject: 'Algèbre',        classe: '5ème B', room: 'Salle 12', startTime: '09:40', endTime: '10:40', status: 'now' },
-  { id: 's3', subject: 'Géométrie',      classe: '4ème C', room: 'Salle 14', startTime: '11:00', endTime: '12:00', status: 'upcoming' },
-  { id: 's4', subject: 'Atelier maths',  classe: '6ème A', room: 'Salle 03', startTime: '14:00', endTime: '15:00', status: 'upcoming' },
-]
 
-export const TEACHER_ANNOUNCEMENTS: Announcement[] = [
-  { id: 'a1', title: 'Réunion pédagogique', body: 'Salle des profs — 16h00. Bilan trimestre + planification.', author: 'Direction', date: today(),     priority: 'urgent', category: 'staff'  },
-  { id: 'a2', title: 'Cantine — nouveau menu', body: 'Le menu hebdomadaire est disponible dans l\'app.',          author: 'Admin',     date: inDays(-1),  priority: 'normal', category: 'school' },
-  { id: 'a3', title: 'Sortie scolaire 6ème A', body: 'Validation des autorisations parents avant vendredi.',      author: 'CPE',       date: inDays(-2),  priority: 'normal', category: 'event'  },
-]
-
-export const TEACHER_QUICK_ACTIONS: QuickAction[] = [
-  { id: 'qa1', label: 'Faire l\'appel',   icon: 'check-circle',  tint: 'primary' },
-  { id: 'qa2', label: 'Saisir une note',  icon: 'pencil-line',   tint: 'accent'  },
-  { id: 'qa3', label: 'Nouveau devoir',   icon: 'book-open',     tint: 'info'    },
-  { id: 'qa4', label: 'Envoyer message',  icon: 'send',          tint: 'success' },
-]
-
-export const CLASS_PERFORMANCE: ClassPerformance[] = [
-  { classe: '6ème A', average: 14.2, topMark: 18.5, trend: 'up'   },
-  { classe: '5ème B', average: 12.6, topMark: 17.0, trend: 'flat' },
-  { classe: '4ème C', average: 13.4, topMark: 19.0, trend: 'up'   },
-]
 
 // ── Parent dashboard ─────────────────────────────────────────────────────
 export const PARENT_CHILDREN: Child[] = [
@@ -163,10 +141,10 @@ export const PARENT_UPCOMING_EVENTS: UpcomingEvent[] = [
 ]
 
 export const PARENT_QUICK_ACTIONS: QuickAction[] = [
-  { id: 'pqa1', label: 'Voir bulletin',   icon: 'graduation-cap', tint: 'primary' },
-  { id: 'pqa2', label: 'Absences',        icon: 'calendar-x',     tint: 'warning' },
-  { id: 'pqa3', label: 'Devoirs',         icon: 'book-open',      tint: 'info'    },
-  { id: 'pqa4', label: 'Contacter prof',  icon: 'message-circle', tint: 'success' },
+  { id: 'pqa1', label: 'Voir bulletin',   labelKey: 'actions.viewBulletin',    icon: 'graduation-cap', tint: 'primary' },
+  { id: 'pqa2', label: 'Absences',        labelKey: 'actions.absences',        icon: 'calendar-x',     tint: 'warning' },
+  { id: 'pqa3', label: 'Devoirs',         labelKey: 'actions.homework',        icon: 'book-open',      tint: 'info'    },
+  { id: 'pqa4', label: 'Contacter prof',  labelKey: 'actions.contactTeacher',  icon: 'message-circle', tint: 'success' },
 ]
 
 // ── Bulletin / notes ─────────────────────────────────────────────────────

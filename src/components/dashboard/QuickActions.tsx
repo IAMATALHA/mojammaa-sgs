@@ -1,7 +1,3 @@
-/**
- * QuickActions — storybook-style quick access square cards.
- */
-
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
@@ -10,6 +6,7 @@ import {
   GraduationCap, CalendarX, MessageCircle, Bell,
   type LucideIcon,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import type { QuickAction } from '../../utils/mockData'
 
@@ -24,6 +21,14 @@ const ICONS: Record<string, LucideIcon> = {
   bell: Bell,
 }
 
+const SOLID_COLORS: Record<string, { bg: string; fg: string }> = {
+  primary: { bg: '#E63946', fg: '#FFFFFF' },  // rouge corail (M logo)
+  accent:  { bg: '#D95B00', fg: '#FFFFFF' },  // ambre foncé (fleur logo)
+  info:    { bg: '#1D3557', fg: '#FFFFFF' },  // navy (brand)
+  success: { bg: '#D4A017', fg: '#FFFFFF' },  // jaune doré (M logo)
+  warning: { bg: '#F77F00', fg: '#FFFFFF' },  // orange
+}
+
 interface QuickActionsProps {
   actions: QuickAction[]
   onPress?: (action: QuickAction) => void
@@ -31,70 +36,51 @@ interface QuickActionsProps {
 
 export default function QuickActions({ actions, onPress }: QuickActionsProps) {
   const theme = useTheme()
-
-  const palettes = [
-    { bg: theme.roseSurface, circle: theme.rose, icon: theme.primary },
-    { bg: theme.violetSurface, circle: theme.violet, icon: theme.primary },
-    { bg: theme.greenSurface, circle: theme.green, icon: theme.primary },
-    { bg: theme.accentSurface, circle: theme.accent, icon: theme.primary },
-  ]
-
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language === 'ar'
   return (
     <View style={styles.grid}>
-      {actions.map((action, index) => {
+      {actions.map(action => {
         const Icon = ICONS[action.icon] ?? Bell
-        const tint = palettes[index % palettes.length]
-
+        const tint = SOLID_COLORS[action.tint] || SOLID_COLORS.primary
         return (
           <Pressable
             key={action.id}
             onPress={() => onPress?.(action)}
-            android_ripple={{ color: theme.border }}
+            android_ripple={{ color: '#ffffff40' }}
             style={styles.tilePressable}
           >
             {({ pressed }) => (
               <MotiView
+                from={{ opacity: 0 }}
                 animate={{ scale: pressed ? 0.97 : 1, opacity: pressed ? 0.92 : 1 }}
-                transition={{ type: 'timing', duration: 180 }}
-                style={[
-                  styles.tile,
-                  {
-                    backgroundColor: theme.card,
-                    borderColor: theme.border,
-                    shadowColor: theme.primary,
-                  },
-                  theme.shadows.xs,
-                ]}
+                transition={{ type: 'timing', duration: 200 }}
+                style={[styles.tile, { backgroundColor: tint.bg }]}
               >
-                <View style={[styles.cornerWash, { backgroundColor: tint.bg }]} />
-                <View style={[styles.iconCircle, { backgroundColor: tint.circle }]}> 
-                  <Icon size={21} color={tint.icon} strokeWidth={1.9} />
+                {action.badge != null && action.badge !== 0 ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {typeof action.badge === 'number' && action.badge > 99 ? '99+' : String(action.badge)}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={styles.iconCircle}>
+                  <Icon size={22} color={tint.fg} strokeWidth={1.75} />
                 </View>
                 <Text
                   numberOfLines={2}
                   style={{
-                    color: theme.text,
-                    fontFamily: theme.fonts.semibold,
-                    fontSize: 13,
-                    lineHeight: 18,
-                    marginTop: 12,
+                    color: tint.fg,
+                    fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
+                    fontSize: isAr ? 14 : 13,
+                    marginTop: 10,
                     textAlign: 'center',
+                    lineHeight: isAr ? 20 : 17,
+                    letterSpacing: -0.1,
+                    writingDirection: isAr ? 'rtl' : 'ltr',
                   }}
                 >
-                  {action.label}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: theme.textMuted,
-                    fontFamily: theme.fonts.medium,
-                    fontSize: 10.5,
-                    marginTop: 6,
-                    textTransform: 'uppercase',
-                    letterSpacing: 0.5,
-                  }}
-                >
-                  Accès rapide
+                  {action.labelKey ? t(action.labelKey) : action.label}
                 </Text>
               </MotiView>
             )}
@@ -116,28 +102,36 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   tile: {
-    minHeight: 132,
+    flex: 1,
+    minHeight: 112,
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
-  cornerWash: {
-    position: 'absolute',
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    top: -18,
-    right: -12,
-    opacity: 0.9,
   },
   iconCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  badge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  badgeText: {
+    color: '#1D3557',
+    fontSize: 11,
+    fontWeight: '800',
   },
 })

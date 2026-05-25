@@ -1,10 +1,11 @@
 import React from 'react'
 import { StyleSheet, View } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
-  LayoutDashboard, Users, GraduationCap, CalendarDays, Megaphone, BarChart3, Settings,
+  LayoutDashboard, Users, GraduationCap, Megaphone, Settings,
   type LucideIcon,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -12,12 +13,14 @@ import { useTheme } from '../contexts/ThemeContext'
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen'
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen'
 import AdminClassesScreen from '../screens/admin/AdminClassesScreen'
-import AdminEdtScreen from '../screens/admin/AdminEdtScreen'
 import AdminBroadcastScreen from '../screens/admin/AdminBroadcastScreen'
-import AdminStatsScreen from '../screens/admin/AdminStatsScreen'
 import AdminSettingsScreen from '../screens/admin/AdminSettingsScreen'
+import AdminStatsScreen from '../screens/admin/AdminStatsScreen'
+import AdminEdtScreen from '../screens/admin/AdminEdtScreen'
+import AdminCalendarScreen from '../screens/admin/AdminCalendarScreen'
 
 const Tab = createBottomTabNavigator()
+const Stack = createNativeStackNavigator()
 
 function TabIcon({
   Icon, color, focused, theme,
@@ -42,7 +45,7 @@ function TabIcon({
   )
 }
 
-export default function AdminStack() {
+function AdminTabs() {
   const theme = useTheme()
   const { t } = useTranslation()
   const insets = useSafeAreaInsets()
@@ -54,32 +57,21 @@ export default function AdminStack() {
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSoft,
         tabBarStyle: {
-          position: 'absolute',
-          left: 10,
-          right: 10,
-          bottom: Math.max(insets.bottom, 8),
-          backgroundColor: 'rgba(255,255,255,0.97)',
-          borderTopWidth: 0,
-          minHeight: 82,
-          height: 82,
+          backgroundColor: theme.card,
+          borderTopColor: theme.border,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 10,
-          paddingBottom: 12,
-          borderRadius: 26,
+          minHeight: 68 + Math.max(insets.bottom, 0),
           shadowColor: '#1D3557',
-          shadowOpacity: 0.12,
-          shadowRadius: 22,
-          shadowOffset: { width: 0, height: 10 },
-          elevation: 12,
+          shadowOpacity: 0.08,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: -4 },
+          elevation: 8,
         },
-        sceneStyle: {
-          backgroundColor: theme.bg,
-        },
+        sceneStyle: { backgroundColor: theme.bg },
         tabBarItemStyle: { minHeight: 46 },
-        tabBarLabelStyle: {
-          fontSize: 10.5,
-          fontFamily: theme.fonts.medium,
-          marginTop: 2,
-        },
+        tabBarLabelStyle: { fontSize: 10.5, fontFamily: theme.fonts.medium, marginTop: 2 },
       }}
     >
       <Tab.Screen
@@ -98,19 +90,9 @@ export default function AdminStack() {
         options={{ title: t('tabs.classes'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={GraduationCap} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
-        name="AdminEdt"
-        component={AdminEdtScreen}
-        options={{ title: t('tabs.edt'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={CalendarDays} color={color} focused={focused} theme={theme} /> }}
-      />
-      <Tab.Screen
         name="AdminBroadcast"
         component={AdminBroadcastScreen}
         options={{ title: t('tabs.announcements'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={Megaphone} color={color} focused={focused} theme={theme} /> }}
-      />
-      <Tab.Screen
-        name="AdminStats"
-        component={AdminStatsScreen}
-        options={{ title: t('tabs.stats'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={BarChart3} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
         name="AdminSettings"
@@ -121,27 +103,29 @@ export default function AdminStack() {
   )
 }
 
+export default function AdminStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="AdminTabs" component={AdminTabs} />
+      <Stack.Screen name="AdminStats" component={AdminStatsScreen} />
+      <Stack.Screen name="AdminEdt" component={AdminEdtScreen} />
+      <Stack.Screen name="AdminCalendar" component={AdminCalendarScreen} />
+    </Stack.Navigator>
+  )
+}
+
 const styles = StyleSheet.create({
   iconActive: {
-    width: 40,
-    height: 32,
-    borderRadius: 16,
+    width: 40, height: 32, borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   iconInactive: {
-    width: 40,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 40, height: 32,
+    alignItems: 'center', justifyContent: 'center',
   },
   statusDot: {
-    position: 'absolute',
-    top: 6,
-    end: 8,
-    width: 5,
-    height: 5,
-    borderRadius: 3,
+    position: 'absolute', top: 6, end: 8,
+    width: 5, height: 5, borderRadius: 3,
   },
 })

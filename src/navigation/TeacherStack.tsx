@@ -24,6 +24,7 @@ import TeacherClasseFolderScreen from '../screens/teacher/TeacherClasseFolderScr
 import TeacherClasseElevesScreen from '../screens/teacher/TeacherClasseElevesScreen'
 import TeacherNotesScreen from '../screens/teacher/TeacherNotesScreen'
 import TeacherComposeScreen from '../screens/teacher/TeacherComposeScreen'
+import TeacherStatsScreen from '../screens/teacher/TeacherStatsScreen'
 
 const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
@@ -68,22 +69,17 @@ function TeacherTabs() {
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSoft,
         tabBarStyle: {
-          position: 'absolute',
-          left: 14,
-          right: 14,
-          bottom: Math.max(insets.bottom, 10),
-          backgroundColor: 'rgba(255,255,255,0.96)',
-          borderTopWidth: 0,
-          minHeight: 78,
-          height: 78,
+          backgroundColor: theme.card,
+          borderTopColor: theme.border,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 10,
-          paddingBottom: 12,
-          borderRadius: 26,
+          minHeight: 68 + Math.max(insets.bottom, 0),
           shadowColor: '#1D3557',
-          shadowOpacity: 0.12,
-          shadowRadius: 22,
-          shadowOffset: { width: 0, height: 10 },
-          elevation: 12,
+          shadowOpacity: 0.08,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: -4 },
+          elevation: 8,
         },
         sceneStyle: {
           backgroundColor: theme.bg,
@@ -148,7 +144,9 @@ export default function TeacherStack() {
       <Stack.Screen name="TeacherClasseFolder" component={TeacherClasseFolderScreen} />
       <Stack.Screen name="TeacherClasseEleves" component={TeacherClasseElevesScreen} />
       <Stack.Screen name="TeacherNotes" component={TeacherNotesScreen} />
+      <Stack.Screen name="TeacherDevoirsDetail" component={TeacherDevoirsScreen} />
       <Stack.Screen name="TeacherCompose" component={TeacherComposeScreen} />
+      <Stack.Screen name="TeacherStats" component={TeacherStatsScreen} />
     </Stack.Navigator>
   )
 }

@@ -60,7 +60,7 @@ export default function TeacherClasseFolderScreen() {
     if (openAttendance && classe) {
       // Petit délai pour éviter une transition saccadée
       const id = setTimeout(() => {
-        navigation.navigate('Attendance', { classe, seance })
+        navigation.navigate('TeacherAttendance', { classe, seance })
       }, 250)
       return () => clearTimeout(id)
     }
@@ -103,7 +103,7 @@ export default function TeacherClasseFolderScreen() {
 
         {/* Action grosse : appel */}
         <TouchableOpacity
-          onPress={() => navigation.navigate('Attendance', { classe, seance })}
+          onPress={() => navigation.navigate('TeacherAttendance', { classe, seance })}
           style={[styles.bigBtn, { backgroundColor: theme.primary }]}
           activeOpacity={0.85}
         >
@@ -116,19 +116,19 @@ export default function TeacherClasseFolderScreen() {
           icon="people-outline"
           label={t('teacher.studentList')}
           sub={eleveCount != null ? t('teacher.studentsCount', { count: eleveCount }) : t('teacher.seeDetail')}
-          onPress={() => navigation.navigate('ClasseEleves', { classe })}
+          onPress={() => navigation.navigate('TeacherClasseEleves', { classe })}
         />
         <Action
           icon="book-outline"
           label={t('tabs.homework')}
           sub={devoirsCount != null ? `${devoirsCount} devoir(s)` : t('teacher.homeworkSeeCreate')}
-          onPress={() => navigation.navigate('ClasseDevoirs', { classe })}
+          onPress={() => navigation.navigate('TeacherDevoirsDetail', { classe })}
         />
         <Action
           icon="document-text-outline"
           label={t('tabs.grades')}
           sub={notesCount != null ? `${notesCount} note(s)` : t('teacher.notesSeeEnter')}
-          onPress={() => navigation.navigate('ClasseNotes', { classe })}
+          onPress={() => navigation.navigate('TeacherNotes', { classe })}
         />
       </ScrollView>
     </ScreenLayout>
