@@ -25,6 +25,7 @@ import {
   Megaphone, BookOpen, CalendarDays, Users, X, MapPin, Clock,
   ChevronRight,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useParentData } from '../../hooks/useParentData'
@@ -44,11 +45,11 @@ import {
 const { width: SCREEN_W } = Dimensions.get('window')
 const CAROUSEL_CARD_W = SCREEN_W - 76
 
-function greetingFor(date = new Date()): string {
+function greetingKey(date = new Date()): string {
   const h = date.getHours()
-  if (h < 12) return 'Bonjour'
-  if (h < 18) return 'Bon après-midi'
-  return 'Bonsoir'
+  if (h < 12) return 'greeting.morning'
+  if (h < 18) return 'greeting.afternoon'
+  return 'greeting.evening'
 }
 
 const QUICK_ACTION_ROUTES: Record<string, string> = {
@@ -71,9 +72,10 @@ function hexWithAlpha(hex: string, alpha: number): string {
 // ────────────────────────────────────────────────────────────────────────
 
 function Hero({
-  greeting, fullName, selectedChild, notifications, onPressBell, onPressAvatar, theme,
+  greeting, roleLabel, fullName, selectedChild, notifications, onPressBell, onPressAvatar, theme,
 }: {
   greeting: string
+  roleLabel: string
   fullName: string
   selectedChild?: Child
   notifications: number
@@ -180,7 +182,7 @@ function Hero({
             fontSize: 12,
             letterSpacing: 0.4,
           }}>
-            {greeting.toUpperCase()}
+            {greeting.toUpperCase()} · {roleLabel}
           </Text>
           <Text
             numberOfLines={1}
@@ -207,6 +209,7 @@ function Hero({
 function ChildSlide({
   child, isActive, onPress, theme,
 }: { child: Child; isActive: boolean; onPress: () => void; theme: any }) {
+  const { t } = useTranslation()
   return (
     <Pressable onPress={onPress} android_ripple={{ color: theme.border }} style={styles.carouselSlot}>
       {({ pressed }) => (
@@ -264,16 +267,16 @@ function ChildSlide({
           </View>
 
           <View style={styles.carouselStatsRow}>
-            <MiniStat label="Présence" value={`${child.attendance}%`} theme={theme} />
+            <MiniStat label={t('parent.attendance')} value={`${child.attendance}%`} theme={theme} />
             <View style={[styles.statSep, { backgroundColor: theme.border }]} />
             <MiniStat
-              label="Moyenne"
+              label={t('parent.average')}
               value={child.averageGrade > 0 ? child.averageGrade.toFixed(1) : '—'}
               theme={theme}
             />
             <View style={[styles.statSep, { backgroundColor: theme.border }]} />
             <MiniStat
-              label="Devoirs"
+              label={t('tabs.homework')}
               value={String(child.pendingHomework)}
               theme={theme}
             />
@@ -332,6 +335,7 @@ function AnimatedSection({
 
 export default function ParentDashboardScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const { profile, logout } = useAuth()
   const parent = useParentData()
   const { events: upcomingEvents } = useUpcomingEvents(6)
@@ -380,11 +384,11 @@ export default function ParentDashboardScreen() {
   const handleAvatarPress = () => {
     Alert.alert(
       fullName,
-      profile?.email ?? 'Compte parent',
+      profile?.email ?? t('parent.accountParent'),
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Se déconnecter',
+          text: t('common.logout'),
           style: 'destructive',
           onPress: () => logout().catch(() => {}),
         },
@@ -425,7 +429,8 @@ export default function ParentDashboardScreen() {
       >
         {/* ── Hero ──────────────────────────────────────────── */}
         <Hero
-          greeting={greetingFor()}
+          greeting={t(greetingKey())}
+          roleLabel={t('roles.parent')}
           fullName={fullName}
           selectedChild={selectedChild}
           notifications={2}
@@ -437,17 +442,17 @@ export default function ParentDashboardScreen() {
         {/* ── Mes enfants ──────────────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader
-            title="Mes enfants"
-            subtitle={`${parent.children.length} enfant${parent.children.length > 1 ? 's' : ''}`}
-            actionLabel="Voir tout"
+            title={t('parent.myChildren')}
+            subtitle={t('parent.childCount', { count: parent.children.length })}
+            actionLabel={t('common.seeAll')}
             onAction={() => goTo('StudentNotes')}
           />
           {parent.children.length === 0 ? (
             <Card>
               <EmptyState
                 icon={Users}
-                title="Aucun enfant associé"
-                message="Contactez l'établissement pour lier votre compte à votre enfant."
+                title={t('parent.noChildren')}
+                message={t('parent.noChildrenMsg')}
               />
             </Card>
           ) : (
@@ -477,9 +482,9 @@ export default function ParentDashboardScreen() {
         <AnimatedSection delay={100}>
           <View style={styles.section}>
             <SectionHeader
-              title="Aperçu de la présence"
+              title={t('parent.attendanceOverview')}
               subtitle={selectedChild ? `${selectedChild.firstName} · ${selectedChild.classe}` : undefined}
-              actionLabel="Détail"
+              actionLabel={t('parent.detail')}
               onAction={() => goTo('StudentAbsences')}
             />
             <Pressable
@@ -499,7 +504,7 @@ export default function ParentDashboardScreen() {
                   />
                   <View style={styles.attendanceMeta}>
                     <Stat
-                      label="Moyenne"
+                      label={t('parent.average')}
                       value={selectedChild && selectedChild.averageGrade > 0
                         ? `${selectedChild.averageGrade.toFixed(1)}/20`
                         : '—'}
@@ -507,13 +512,13 @@ export default function ParentDashboardScreen() {
                       theme={theme}
                     />
                     <Stat
-                      label="Devoirs à faire"
+                      label={t('parent.homeworkTodo')}
                       value={String(selectedChild?.pendingHomework ?? 0)}
                       color={theme.warning}
                       theme={theme}
                     />
                     <Stat
-                      label="Classe"
+                      label={t('parent.class')}
                       value={selectedChild?.classe ?? '—'}
                       color={tint}
                       theme={theme}
@@ -529,9 +534,9 @@ export default function ParentDashboardScreen() {
         <AnimatedSection delay={140}>
           <View style={styles.section}>
             <SectionHeader
-              title="Devoirs récents"
-              subtitle={selectedChild ? `Pour ${selectedChild.firstName}` : undefined}
-              actionLabel="Tout voir"
+              title={t('parent.recentHomework')}
+              subtitle={selectedChild ? t('parent.forChild', { name: selectedChild.firstName }) : undefined}
+              actionLabel={t('common.seeAll')}
               onAction={() => goTo('StudentDevoirs')}
             />
             <Card padding={12}>
@@ -540,8 +545,8 @@ export default function ParentDashboardScreen() {
               ) : homeworkForSelected.length === 0 ? (
                 <EmptyState
                   icon={BookOpen}
-                  title="Aucun devoir en attente"
-                  message="Les nouveaux devoirs s'afficheront ici."
+                  title={t('parent.noHomework')}
+                  message={t('parent.noHomeworkMsg')}
                 />
               ) : (
                 homeworkForSelected.map(h => (
@@ -561,15 +566,15 @@ export default function ParentDashboardScreen() {
         <AnimatedSection delay={180}>
           <View style={styles.section}>
             <SectionHeader
-              title="Annonces"
-              actionLabel="Voir plus"
+              title={t('parent.announcementsTitle')}
+              actionLabel={t('common.seeMore')}
               onAction={() => goTo('StudentMessages')}
             />
             {PARENT_ANNOUNCEMENTS.length === 0 ? (
               <Card>
                 <EmptyState
                   icon={Megaphone}
-                  title="Pas d'annonce pour l'instant"
+                  title={t('parent.noAnnouncements')}
                 />
               </Card>
             ) : (
@@ -590,15 +595,15 @@ export default function ParentDashboardScreen() {
         <AnimatedSection delay={220}>
           <View style={styles.section}>
             <SectionHeader
-              title="Prochains événements"
-              actionLabel="Calendrier"
+              title={t('parent.upcomingEvents')}
+              actionLabel={t('parent.calendar')}
               onAction={() => goTo('StudentMessages')}
             />
             <Card padding={12}>
               {upcomingEvents.length === 0 ? (
                 <EmptyState
                   icon={CalendarDays}
-                  title="Aucun événement à venir"
+                  title={t('parent.noEvents')}
                 />
               ) : (
                 upcomingEvents.map(e => (
@@ -617,7 +622,7 @@ export default function ParentDashboardScreen() {
         <AnimatedSection delay={260}>
           <View style={styles.section}>
             <SectionHeader
-              title="Accès rapide"
+              title={t('parent.quickAccess')}
             />
             <QuickActions actions={PARENT_QUICK_ACTIONS} onPress={handleQuickAction} />
           </View>
@@ -701,6 +706,7 @@ function HomeworkDetailModal({
   theme: any
   tint: string
 }) {
+  const { t } = useTranslation()
   if (!item) return null
   const due = new Date(item.dueDate).toLocaleDateString('fr-FR', {
     weekday: 'long', day: 'numeric', month: 'long',
@@ -723,7 +729,7 @@ function HomeworkDetailModal({
             style={[styles.cta, { backgroundColor: tint }]}
           >
             <Text style={{ color: '#fff', fontFamily: theme.fonts.bold, fontSize: 13 }}>
-              Voir tous les devoirs
+              {t('parent.seeAllHomework')}
             </Text>
             <ChevronRight size={16} color="#fff" strokeWidth={2.4} style={{ marginStart: 4 }} />
           </Pressable>
@@ -774,6 +780,7 @@ function AnnouncementDetailModal({
 function EventDetailModal({
   item, onClose, theme,
 }: { item: UpcomingEvent | null; onClose: () => void; theme: any }) {
+  const { t } = useTranslation()
   if (!item) return null
   const date = new Date(item.date).toLocaleDateString('fr-FR', {
     weekday: 'long', day: 'numeric', month: 'long',
@@ -782,7 +789,7 @@ function EventDetailModal({
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={[styles.sheet, { backgroundColor: theme.card }]}>
-          <SheetHeader theme={theme} onClose={onClose} icon={<CalendarDays size={20} color={theme.green} strokeWidth={2.2} />} label="Événement" />
+          <SheetHeader theme={theme} onClose={onClose} icon={<CalendarDays size={20} color={theme.green} strokeWidth={2.2} />} label={t('parent.event')} />
           <Text style={[styles.sheetTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}>
             {item.title}
           </Text>

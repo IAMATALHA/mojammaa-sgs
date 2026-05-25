@@ -5,21 +5,23 @@ import {
 } from 'react-native';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import ScreenLayout from '../../components/ScreenLayout';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 
 type Audience = 'all' | 'admins' | 'teachers' | 'parents';
 
-const AUDIENCES: { key: Audience; label: string; toId: string }[] = [
-  { key: 'all',      label: 'Tout le monde',      toId: 'all' },
-  { key: 'admins',   label: 'Administrateurs',    toId: 'admin' },
-  { key: 'teachers', label: 'Professeurs',        toId: 'teachers' },
-  { key: 'parents',  label: 'Parents (broadcast)', toId: 'all' }, // 'all' inclut les parents
-];
-
 export default function AdminBroadcastScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
+
+  const AUDIENCES: { key: Audience; label: string; toId: string }[] = [
+    { key: 'all',      label: t('admin.everyone'),         toId: 'all' },
+    { key: 'admins',   label: t('admin.administrators'),   toId: 'admin' },
+    { key: 'teachers', label: t('admin.teachers'),         toId: 'teachers' },
+    { key: 'parents',  label: t('admin.parentsBroadcast'), toId: 'all' },
+  ];
   const { profile } = useAuth();
   const [subject,  setSubject]  = useState('');
   const [body,     setBody]     = useState('');
@@ -29,8 +31,8 @@ export default function AdminBroadcastScreen() {
   const [error,    setError]    = useState('');
 
   const handleSend = async () => {
-    if (!subject.trim()) { setError("L'objet est requis."); return }
-    if (!body.trim())    { setError('Le message est requis.'); return }
+    if (!subject.trim()) { setError(t('admin.subjectRequired')); return }
+    if (!body.trim())    { setError(t('admin.messageRequired')); return }
     if (!profile)        { setError('Profil non chargé.'); return }
     setSending(true); setError('');
     try {
@@ -52,7 +54,7 @@ export default function AdminBroadcastScreen() {
         lu:       false,
         createdAt: serverTimestamp(),
       })
-      Alert.alert('Envoyé', `Annonce envoyée à : ${target.label}.`)
+      Alert.alert(t('admin.sent'), t('admin.sentTo', { target: target.label }))
       setSubject(''); setBody(''); setPriority('normal')
     } catch (e: any) {
       setError(e?.message || "Erreur lors de l'envoi.")
@@ -62,7 +64,7 @@ export default function AdminBroadcastScreen() {
   };
 
   return (
-    <ScreenLayout title="Messagerie">
+    <ScreenLayout title={t('admin.broadcast')}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView keyboardShouldPersistTaps="handled">
           {error ? (
@@ -72,7 +74,7 @@ export default function AdminBroadcastScreen() {
           ) : null}
 
           {/* Audience */}
-          <Text style={[styles.label, { color: theme.textSoft }]}>Destinataires</Text>
+          <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.recipients')}</Text>
           <View style={styles.row}>
             {AUDIENCES.map(a => {
               const active = audience === a.key
@@ -94,7 +96,7 @@ export default function AdminBroadcastScreen() {
           </View>
 
           {/* Subject */}
-          <Text style={[styles.label, { color: theme.textSoft, marginTop: 16 }]}>Objet</Text>
+          <Text style={[styles.label, { color: theme.textSoft, marginTop: 16 }]}>{t('compose.subject')}</Text>
           <TextInput
             value={subject}
             onChangeText={setSubject}
@@ -105,7 +107,7 @@ export default function AdminBroadcastScreen() {
           />
 
           {/* Body */}
-          <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>Message</Text>
+          <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>{t('compose.body')}</Text>
           <TextInput
             value={body}
             onChangeText={setBody}
@@ -118,7 +120,7 @@ export default function AdminBroadcastScreen() {
           />
 
           {/* Priority */}
-          <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>Priorité</Text>
+          <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>{t('admin.priority')}</Text>
           <View style={styles.row}>
             {(['normal', 'urgent'] as const).map(p => {
               const active = priority === p
@@ -133,7 +135,7 @@ export default function AdminBroadcastScreen() {
                   ]}
                 >
                   <Text style={{ color: active ? color : theme.textSoft, fontWeight: active ? '700' : '500', fontSize: 12 }}>
-                    {p === 'urgent' ? '🚨 Urgent' : 'Normale'}
+                    {p === 'urgent' ? t('admin.urgentPriority') : t('admin.normal')}
                   </Text>
                 </TouchableOpacity>
               )
@@ -147,7 +149,7 @@ export default function AdminBroadcastScreen() {
           >
             {sending
               ? <ActivityIndicator color="#fff" />
-              : <Text style={{ color: theme.white, fontSize: 15, fontWeight: '800' }}>Envoyer l'annonce</Text>}
+              : <Text style={{ color: theme.white, fontSize: 15, fontWeight: '800' }}>{t('admin.sendAnnouncement')}</Text>}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

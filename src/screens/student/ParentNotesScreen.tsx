@@ -15,6 +15,7 @@ import { StatusBar } from 'expo-status-bar'
 import {
   Award, TrendingUp, TrendingDown, Minus, Trophy, FileText,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { Card, EmptyState, SectionHeader } from '../../components/dashboard'
 import { useParentData } from '../../hooks/useParentData'
@@ -23,14 +24,15 @@ import {
   type SubjectGrade,
 } from '../../utils/mockData'
 
-const HONOR_LABEL: Record<string, { label: string; tint: 'success' | 'info' | 'warning' }> = {
-  felicitations:  { label: 'Félicitations',   tint: 'success' },
-  encouragements: { label: 'Encouragements',  tint: 'info'    },
-  avertissement:  { label: 'Avertissement',   tint: 'warning' },
-}
-
 export default function ParentNotesScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
+
+  const HONOR_LABEL: Record<string, { label: string; tint: 'success' | 'info' | 'warning' }> = {
+    felicitations:  { label: t('parent.felicitations'), tint: 'success' },
+    encouragements: { label: t('parent.encouragements'), tint: 'info'    },
+    avertissement:  { label: t('parent.avertissement'),  tint: 'warning' },
+  }
   const parent = useParentData()
   const [selectedChildId, setSelectedChildId] = useState<string>('')
 
@@ -62,7 +64,7 @@ export default function ParentNotesScreen() {
           fontSize: theme.fontSize.h2,
           letterSpacing: -0.5,
         }}>
-          Bulletin
+          {t('parent.bulletin')}
         </Text>
         <Text style={{
           color: theme.textSoft,
@@ -112,8 +114,8 @@ export default function ParentNotesScreen() {
             <Card>
               <EmptyState
                 icon={FileText}
-                title="Pas encore de bulletin"
-                message="Le bulletin sera disponible à la fin du trimestre."
+                title={t('parent.noBulletin')}
+                message={t('parent.bulletinAvailable')}
               />
             </Card>
           </View>
@@ -131,7 +133,7 @@ export default function ParentNotesScreen() {
                       textTransform: 'uppercase',
                       letterSpacing: 0.6,
                     }}>
-                      Moyenne générale
+                      {t('parent.generalAvg')}
                     </Text>
                     <Text style={{
                       color: theme.text,
@@ -166,7 +168,7 @@ export default function ParentNotesScreen() {
                       fontSize: 9.5,
                       letterSpacing: 0.5,
                     }}>
-                      RANG
+                      {t('parent.rank')}
                     </Text>
                   </View>
                 </View>
@@ -194,8 +196,8 @@ export default function ParentNotesScreen() {
             {/* Subjects */}
             <View style={styles.section}>
               <SectionHeader
-                title="Détail par matière"
-                subtitle={`${report.subjects.length} matière${report.subjects.length > 1 ? 's' : ''}`}
+                title={t('parent.subjectDetail')}
+                subtitle={t('parent.subjectCount', { count: report.subjects.length })}
               />
               <Card padding={4}>
                 {report.subjects.map((s, idx) => (
@@ -218,6 +220,7 @@ export default function ParentNotesScreen() {
 function SubjectRow({
   grade, isLast, theme,
 }: { grade: SubjectGrade; isLast: boolean; theme: any }) {
+  const { t } = useTranslation()
   const diff = grade.average - grade.classAvg
   const TrendIcon = grade.trend === 'up' ? TrendingUp
                   : grade.trend === 'down' ? TrendingDown
@@ -245,7 +248,7 @@ function SubjectRow({
           fontSize: 11,
           marginTop: 2,
         }}>
-          {grade.teacher} · moy. classe {grade.classAvg.toFixed(1)}
+          {grade.teacher} · {t('parent.classAvg', { avg: grade.classAvg.toFixed(1) })}
         </Text>
         {grade.comment ? (
           <Text

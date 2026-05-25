@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { collection, getDocs } from 'firebase/firestore';
 import ScreenLayout from '../../components/ScreenLayout';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { db } from '../../config/firebase';
 
@@ -16,6 +17,7 @@ interface ClasseStat {
 
 export default function AdminClassesScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const [classes, setClasses] = useState<ClasseStat[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -59,14 +61,14 @@ export default function AdminClassesScreen() {
         </View>
         <View style={styles.countWrap}>
           <Text style={[styles.count, { color: theme.primary }]}>{item.eleveCount}</Text>
-          <Text style={[styles.countLabel, { color: theme.textSoft }]}>élève{item.eleveCount > 1 ? 's' : ''}</Text>
+          <Text style={[styles.countLabel, { color: theme.textSoft }]}>{t('admin.eleves').toLowerCase()}</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <ScreenLayout title="Classes">
+    <ScreenLayout title={t('admin.classesTitle')}>
       {error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
           <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
@@ -78,14 +80,14 @@ export default function AdminClassesScreen() {
       ) : classes.length === 0 ? (
         <View style={styles.empty}>
           <Text style={{ color: theme.textSoft, fontSize: 14, textAlign: 'center' }}>
-            Aucune classe dans la base.
+            {t('admin.noClassInDb')}
           </Text>
         </View>
       ) : (
         <>
           <View style={[styles.summary, { backgroundColor: theme.primarySurface }]}>
             <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>
-              {classes.length} classes · {totalEleves} élèves au total
+              {t('admin.classesTotal', { classes: classes.length, students: totalEleves })}
             </Text>
           </View>
           <FlatList

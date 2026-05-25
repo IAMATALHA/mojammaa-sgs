@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Users, GraduationCap, CalendarDays, Megaphone, BarChart3, Settings,
   type LucideIcon,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../contexts/ThemeContext'
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen'
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen'
@@ -43,6 +44,7 @@ function TabIcon({
 
 export default function AdminStack() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const insets = useSafeAreaInsets()
 
   return (
@@ -83,37 +85,37 @@ export default function AdminStack() {
       <Tab.Screen
         name="AdminDashboard"
         component={AdminDashboardScreen}
-        options={{ title: 'Accueil', tabBarIcon: ({ color, focused }) => <TabIcon Icon={LayoutDashboard} color={color} focused={focused} theme={theme} /> }}
+        options={{ title: t('tabs.home'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={LayoutDashboard} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
         name="AdminUsers"
         component={AdminUsersScreen}
-        options={{ title: 'Users', tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} /> }}
+        options={{ title: t('tabs.users'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
         name="AdminClasses"
         component={AdminClassesScreen}
-        options={{ title: 'Classes', tabBarIcon: ({ color, focused }) => <TabIcon Icon={GraduationCap} color={color} focused={focused} theme={theme} /> }}
+        options={{ title: t('tabs.classes'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={GraduationCap} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
         name="AdminEdt"
         component={AdminEdtScreen}
-        options={{ title: 'EDT', tabBarIcon: ({ color, focused }) => <TabIcon Icon={CalendarDays} color={color} focused={focused} theme={theme} /> }}
+        options={{ title: t('tabs.edt'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={CalendarDays} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
         name="AdminBroadcast"
         component={AdminBroadcastScreen}
-        options={{ title: 'Annonces', tabBarIcon: ({ color, focused }) => <TabIcon Icon={Megaphone} color={color} focused={focused} theme={theme} /> }}
+        options={{ title: t('tabs.announcements'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={Megaphone} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
         name="AdminStats"
         component={AdminStatsScreen}
-        options={{ title: 'Stats', tabBarIcon: ({ color, focused }) => <TabIcon Icon={BarChart3} color={color} focused={focused} theme={theme} /> }}
+        options={{ title: t('tabs.stats'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={BarChart3} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
         name="AdminSettings"
         component={AdminSettingsScreen}
-        options={{ title: 'Réglages', tabBarIcon: ({ color, focused }) => <TabIcon Icon={Settings} color={color} focused={focused} theme={theme} /> }}
+        options={{ title: t('tabs.settings'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={Settings} color={color} focused={focused} theme={theme} /> }}
       />
     </Tab.Navigator>
   )

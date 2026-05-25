@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { BookOpen, X, Check, Clock, AlertCircle } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import {
   Card, HomeworkRow, EmptyState, SectionHeader,
@@ -22,14 +23,15 @@ import {
   type HomeworkItem,
 } from '../../utils/mockData'
 
-const STATUS_LABEL = {
-  pending:   'En attente',
-  submitted: 'Rendu',
-  graded:    'Noté',
-} as const
-
 export default function ParentDevoirsScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
+
+  const STATUS_LABEL: Record<string, string> = {
+    pending:   t('parent.statusPending'),
+    submitted: t('parent.statusSubmitted'),
+    graded:    t('parent.statusGraded'),
+  }
   const parent = useParentData()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
   const [detail, setDetail] = useState<HomeworkItem | null>(null)
@@ -59,7 +61,7 @@ export default function ParentDevoirsScreen() {
           fontSize: theme.fontSize.h2,
           letterSpacing: -0.5,
         }}>
-          Devoirs
+          {t('tabs.homework')}
         </Text>
         <Text style={{
           color: theme.textSoft,
@@ -67,7 +69,7 @@ export default function ParentDevoirsScreen() {
           fontSize: theme.fontSize.small,
           marginTop: 2,
         }}>
-          {filtered.length} devoir{filtered.length > 1 ? 's' : ''} · {pending.length} en attente
+          {t('parent.homeworkCount', { count: filtered.length, pending: pending.length })}
         </Text>
       </View>
 
@@ -79,7 +81,7 @@ export default function ParentDevoirsScreen() {
         contentContainerStyle={styles.chips}
       >
         <FilterChip
-          label="Tous"
+          label={t('parent.allFilter')}
           active={selectedChildId === 'all'}
           onPress={() => setSelectedChildId('all')}
           theme={theme}
@@ -99,13 +101,13 @@ export default function ParentDevoirsScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Pending */}
         <View style={styles.section}>
-          <SectionHeader title="À rendre" subtitle={`${pending.length} en cours`} />
+          <SectionHeader title={t('parent.toSubmit')} subtitle={t('parent.inProgress', { count: pending.length })} />
           <Card padding={12}>
             {pending.length === 0 ? (
               <EmptyState
                 icon={Check}
-                title="Aucun devoir en attente"
-                message="Tous les devoirs ont été rendus. Bravo !"
+                title={t('parent.noHomework')}
+                message={t('parent.allDone')}
               />
             ) : (
               pending.map(h => (
@@ -123,7 +125,7 @@ export default function ParentDevoirsScreen() {
         {/* Submitted */}
         {submitted.length > 0 ? (
           <View style={styles.section}>
-            <SectionHeader title="Rendus" subtitle={`${submitted.length} archivé${submitted.length > 1 ? 's' : ''}`} />
+            <SectionHeader title={t('parent.submitted')} subtitle={t('parent.archived', { count: submitted.length })} />
             <Card padding={12}>
               {submitted.map(h => (
                 <HomeworkRow
@@ -144,6 +146,7 @@ export default function ParentDevoirsScreen() {
         onClose={() => setDetail(null)}
         childName={detail ? childName(detail.childId) : ''}
         theme={theme}
+        statusLabel={STATUS_LABEL}
       />
     </SafeAreaView>
   )
@@ -177,8 +180,9 @@ function FilterChip({
 }
 
 function DetailModal({
-  item, onClose, childName, theme,
-}: { item: HomeworkItem | null; onClose: () => void; childName: string; theme: any }) {
+  item, onClose, childName, theme, statusLabel,
+}: { item: HomeworkItem | null; onClose: () => void; childName: string; theme: any; statusLabel: Record<string, string> }) {
+  const { t } = useTranslation()
   if (!item) return null
   const due = new Date(item.dueDate)
   const dueStr = due.toLocaleDateString('fr-FR', {
@@ -240,7 +244,7 @@ function DetailModal({
               fontSize: 13,
               marginStart: 8,
             }}>
-              {STATUS_LABEL[item.status]}
+              {statusLabel[item.status]}
             </Text>
           </View>
 
@@ -268,7 +272,7 @@ function DetailModal({
                 marginStart: 8,
                 flex: 1,
               }}>
-                Pensez à rappeler à votre enfant de rendre ce devoir avant l'échéance.
+                {t('parent.remindChild')}
               </Text>
             </View>
           ) : null}

@@ -5,6 +5,7 @@ import {
 import { useRoute } from '@react-navigation/native'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import ScreenLayout from '../../components/ScreenLayout'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 
@@ -17,6 +18,7 @@ interface Eleve {
 
 export default function TeacherClasseElevesScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const route = useRoute()
   const { classe } = (route.params || {}) as { classe: string }
   const [eleves,  setEleves]  = useState<Eleve[]>([])
@@ -45,7 +47,7 @@ export default function TeacherClasseElevesScreen() {
   useEffect(() => { load() }, [load])
 
   return (
-    <ScreenLayout title={`Élèves · ${classe}`}>
+    <ScreenLayout title={t('teacher.studentsOf', { classe })}>
       {error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
           <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
@@ -59,7 +61,7 @@ export default function TeacherClasseElevesScreen() {
           keyExtractor={item => item.id}
           ListHeaderComponent={
             <Text style={[styles.count, { color: theme.textSoft }]}>
-              {eleves.length} élève{eleves.length > 1 ? 's' : ''}
+              {t('teacher.studentCount', { count: eleves.length })}
             </Text>
           }
           renderItem={({ item, index }) => (

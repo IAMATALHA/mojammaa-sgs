@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import ScreenLayout from '../../components/ScreenLayout';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { db } from '../../config/firebase';
 
@@ -23,6 +24,7 @@ function todayISO(): string {
 
 export default function AdminStatsScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const [stats,   setStats]   = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -83,7 +85,7 @@ export default function AdminStatsScreen() {
   useEffect(() => { load() }, [load])
 
   return (
-    <ScreenLayout title="Statistiques">
+    <ScreenLayout title={t('admin.statsTitle')}>
       <ScrollView
         contentContainerStyle={{ paddingBottom: 24 }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.primary} />}
@@ -100,15 +102,15 @@ export default function AdminStatsScreen() {
           <>
             {/* Présence du jour */}
             <View style={[styles.bigCard, { backgroundColor: theme.primary }]}>
-              <Text style={styles.bigCardLabel}>Présence aujourd'hui</Text>
+              <Text style={styles.bigCardLabel}>{t('admin.attendanceToday')}</Text>
               <Text style={styles.bigCardValue}>{stats.attendanceRate}%</Text>
               <Text style={styles.bigCardSub}>
-                {stats.absentsToday} absent{stats.absentsToday > 1 ? 's' : ''} sur {stats.totalEleves} élèves
+                {t('admin.absentsOf', { absents: stats.absentsToday, total: stats.totalEleves })}
               </Text>
             </View>
 
             {/* Comptes utilisateurs */}
-            <Text style={[styles.section, { color: theme.textSoft }]}>Utilisateurs</Text>
+            <Text style={[styles.section, { color: theme.textSoft }]}>{t('admin.usersSection')}</Text>
             <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               {Object.entries(stats.byRole)
                 .sort((a, b) => b[1] - a[1])
@@ -119,7 +121,7 @@ export default function AdminStatsScreen() {
                   </View>
                 ))}
               <View style={[styles.rowItem, styles.totalRow, { borderTopColor: theme.border }]}>
-                <Text style={[styles.rowLabel, { color: theme.text, fontWeight: '800' }]}>Total</Text>
+                <Text style={[styles.rowLabel, { color: theme.text, fontWeight: '800' }]}>{t('admin.total')}</Text>
                 <Text style={[styles.rowValue, { color: theme.text }]}>{stats.totalUsers}</Text>
               </View>
             </View>
@@ -127,7 +129,7 @@ export default function AdminStatsScreen() {
             {/* Par niveau */}
             {Object.keys(stats.byNiveau).length > 0 && (
               <>
-                <Text style={[styles.section, { color: theme.textSoft }]}>Élèves par niveau</Text>
+                <Text style={[styles.section, { color: theme.textSoft }]}>{t('admin.byLevel')}</Text>
                 <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   {Object.entries(stats.byNiveau)
                     .sort((a, b) => b[1] - a[1])
@@ -144,7 +146,7 @@ export default function AdminStatsScreen() {
             {/* Top classes */}
             {stats.topClasses.length > 0 && (
               <>
-                <Text style={[styles.section, { color: theme.textSoft }]}>Top classes (effectif)</Text>
+                <Text style={[styles.section, { color: theme.textSoft }]}>{t('admin.topClasses')}</Text>
                 <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   {stats.topClasses.map((c, i) => (
                     <View key={c.name} style={styles.rowItem}>

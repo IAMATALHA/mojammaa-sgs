@@ -15,6 +15,7 @@ import { StatusBar } from 'expo-status-bar'
 import {
   CalendarX, Clock, LogOut, Check, AlertTriangle, CalendarCheck,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import {
   Card, StatCard, EmptyState, SectionHeader,
@@ -25,14 +26,15 @@ import {
   type AbsenceEntry,
 } from '../../utils/mockData'
 
-const TYPE_META = {
-  absence: { icon: CalendarX, label: 'Absence' },
-  retard:  { icon: Clock,     label: 'Retard'  },
-  depart:  { icon: LogOut,    label: 'Départ anticipé' },
-} as const
-
 export default function ParentAbsencesScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
+
+  const TYPE_META: Record<string, { icon: typeof CalendarX; label: string }> = {
+    absence: { icon: CalendarX, label: t('parent.absence') },
+    retard:  { icon: Clock,     label: t('parent.late')  },
+    depart:  { icon: LogOut,    label: t('parent.earlyLeave') },
+  }
   const parent = useParentData()
   const { absences: live } = useParentAbsences()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
@@ -69,7 +71,7 @@ export default function ParentAbsencesScreen() {
           fontSize: theme.fontSize.h2,
           letterSpacing: -0.5,
         }}>
-          Absences
+          {t('tabs.absences')}
         </Text>
         <Text style={{
           color: theme.textSoft,
@@ -77,7 +79,7 @@ export default function ParentAbsencesScreen() {
           fontSize: theme.fontSize.small,
           marginTop: 2,
         }}>
-          {filtered.length} entrée{filtered.length > 1 ? 's' : ''} sur ce trimestre
+          {t('parent.entriesCount', { count: filtered.length })}
         </Text>
       </View>
 
@@ -87,19 +89,19 @@ export default function ParentAbsencesScreen() {
           <StatCard
             icon={<Check size={18} color={theme.success} strokeWidth={2.2} />}
             value={stats.justified}
-            label="Justifiées"
+            label={t('parent.justified')}
             tint="success"
           />
           <StatCard
             icon={<AlertTriangle size={18} color={theme.primary} strokeWidth={2.2} />}
             value={stats.unjustified}
-            label="Non-justifiées"
+            label={t('parent.unjustified')}
             tint="primary"
           />
           <StatCard
             icon={<Clock size={18} color={theme.warning} strokeWidth={2.2} />}
             value={stats.retards}
-            label="Retards"
+            label={t('parent.lateArrivals')}
             tint="warning"
           />
         </View>
@@ -112,7 +114,7 @@ export default function ParentAbsencesScreen() {
           contentContainerStyle={styles.chips}
         >
           <Chip
-            label="Tous"
+            label={t('parent.allFilter')}
             active={selectedChildId === 'all'}
             onPress={() => setSelectedChildId('all')}
             theme={theme}
@@ -131,13 +133,13 @@ export default function ParentAbsencesScreen() {
 
         {/* Entries */}
         <View style={styles.section}>
-          <SectionHeader title="Historique" subtitle="Du plus récent au plus ancien" />
+          <SectionHeader title={t('parent.history')} subtitle={t('parent.recentFirst')} />
           <Card padding={4}>
             {filtered.length === 0 ? (
               <EmptyState
                 icon={CalendarCheck}
-                title="Aucune absence"
-                message="Votre enfant a une présence parfaite. Bravo !"
+                title={t('parent.noAbsence')}
+                message={t('parent.perfectAttendance')}
               />
             ) : (
               filtered.map((a, idx) => (
@@ -147,6 +149,7 @@ export default function ParentAbsencesScreen() {
                   childName={childName(a.childId)}
                   isLast={idx === filtered.length - 1}
                   theme={theme}
+                  typeMeta={TYPE_META}
                 />
               ))
             )}
@@ -185,9 +188,10 @@ function Chip({
 }
 
 function AbsenceRow({
-  item, childName, isLast, theme,
-}: { item: AbsenceEntry; childName: string; isLast: boolean; theme: any }) {
-  const meta = TYPE_META[item.type]
+  item, childName, isLast, theme, typeMeta,
+}: { item: AbsenceEntry; childName: string; isLast: boolean; theme: any; typeMeta: Record<string, { icon: typeof CalendarX; label: string }> }) {
+  const { t } = useTranslation()
+  const meta = typeMeta[item.type]
   const Icon = meta.icon
   const tint = item.justified ? theme.success : theme.primary
   const tintSurface = item.justified ? theme.successSurface : theme.dangerSurface
@@ -234,7 +238,7 @@ function AbsenceRow({
           fontSize: 10,
           letterSpacing: 0.4,
         }}>
-          {item.justified ? 'JUSTIFIÉ' : 'NON JUST.'}
+          {item.justified ? t('parent.justifiedLabel') : t('parent.unjustifiedLabel')}
         </Text>
       </View>
     </View>

@@ -17,6 +17,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
 import PressableScale from '../../components/PressableScale'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
@@ -58,6 +59,7 @@ function todayISO(): string {
 
 export default function TeacherTodayScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const navigation = useNavigation<any>()
   const { profile } = useAuth()
   const [cours,   setCours]   = useState<Cours[]>([])
@@ -116,7 +118,7 @@ export default function TeacherTodayScreen() {
   }
 
   return (
-    <ScreenLayout title="Aujourd'hui">
+    <ScreenLayout title={t('teacher.today')}>
       <ScrollView
         contentContainerStyle={{ paddingBottom: 30 }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.primary} />}
@@ -129,7 +131,7 @@ export default function TeacherTodayScreen() {
 
         {profile && (
           <Text style={[styles.greeting, { color: theme.textSoft }]}>
-            Bonjour {profile.prenom} 👋
+            {t('greeting.morning')} {profile.prenom} 👋
           </Text>
         )}
 
@@ -173,7 +175,7 @@ export default function TeacherTodayScreen() {
               <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Text style={{ fontSize: 28, marginBottom: 8 }}>🌴</Text>
                 <Text style={[styles.emptyTitle, { color: theme.text }]}>
-                  {cours.length === 0 ? 'Pas de cours aujourd\'hui' : 'Journée terminée'}
+                  {cours.length === 0 ? t('teacher.noCourseAlert') : t('teacher.today')}
                 </Text>
                 <Text style={[styles.emptySub, { color: theme.textSoft }]}>
                   À demain !
@@ -231,6 +233,7 @@ function BigCard({
   onCallAppel: () => void
   theme: any
 }) {
+  const { t } = useTranslation()
   return (
     <Animated.View
       entering={FadeInDown.duration(450).springify().damping(18)}
@@ -258,7 +261,7 @@ function BigCard({
       </Text>
       <PressableScale onPress={onCallAppel} style={styles.callBtn}>
         <Ionicons name="checkmark-circle" size={22} color={theme.primary} />
-        <Text style={[styles.callBtnText, { color: theme.primary, fontFamily: theme.fonts.black }]}>Faire l'appel</Text>
+        <Text style={[styles.callBtnText, { color: theme.primary, fontFamily: theme.fonts.black }]}>{t('teacher.takeAttendance')}</Text>
       </PressableScale>
     </Animated.View>
   )

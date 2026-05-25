@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { useTranslation } from 'react-i18next';
 import ScreenLayout from '../../components/ScreenLayout';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -30,6 +31,7 @@ function shortTime(ts?: Timestamp): string {
 
 export default function TeacherMessagesScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user, logout } = useAuth();
   const [items,   setItems]   = useState<MsgRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -87,13 +89,13 @@ export default function TeacherMessagesScreen() {
   };
 
   return (
-    <ScreenLayout title="Messages">
+    <ScreenLayout title={t('tabs.messages')}>
       {loading ? (
         <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
       ) : items.length === 0 ? (
         <View style={styles.empty}>
           <Text style={{ color: theme.textSoft, fontSize: 14, textAlign: 'center' }}>
-            Aucun message pour l'instant.
+            {t('teacher.noMessages')}
           </Text>
         </View>
       ) : (
@@ -107,12 +109,12 @@ export default function TeacherMessagesScreen() {
 
       <TouchableOpacity
         style={[styles.logoutBtn, { borderColor: theme.danger }]}
-        onPress={() => Alert.alert('Déconnexion', 'Confirmer la déconnexion ?', [
-          { text: 'Annuler', style: 'cancel' },
-          { text: 'Se déconnecter', style: 'destructive', onPress: () => logout() },
+        onPress={() => Alert.alert(t('common.logoutTitle'), t('common.logoutConfirm'), [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('common.logout'), style: 'destructive', onPress: () => logout() },
         ])}
       >
-        <Text style={{ color: theme.danger, fontWeight: '700' }}>Se déconnecter</Text>
+        <Text style={{ color: theme.danger, fontWeight: '700' }}>{t('common.logout')}</Text>
       </TouchableOpacity>
     </ScreenLayout>
   );

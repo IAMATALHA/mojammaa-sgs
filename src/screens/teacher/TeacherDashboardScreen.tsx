@@ -19,6 +19,7 @@ import {
   Users, GraduationCap, CheckCircle2, ListTodo,
   CalendarClock, Megaphone, BarChart3, Sparkles, X, Clock, MapPin,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTeacherData } from '../../hooks/useTeacherData'
@@ -29,17 +30,17 @@ import {
   PerformanceBars, SkeletonCard, SkeletonRow, EmptyState,
 } from '../../components/dashboard'
 import {
-  TEACHER_QUICK_ACTIONS, CLASS_PERFORMANCE,
+  TEACHER_QUICK_ACTIONS,
   type ScheduleEntry, type Announcement, type QuickAction,
 } from '../../utils/mockData'
 
 const { width: SCREEN_W } = Dimensions.get('window')
 
-function greetingFor(date = new Date()): string {
+function greetingKey(date = new Date()): string {
   const h = date.getHours()
-  if (h < 12) return 'Bonjour'
-  if (h < 18) return 'Bon après-midi'
-  return 'Bonsoir'
+  if (h < 12) return 'greeting.morning'
+  if (h < 18) return 'greeting.afternoon'
+  return 'greeting.evening'
 }
 
 function hexWithAlpha(hex: string, alpha: number): string {
@@ -57,17 +58,18 @@ const QUICK_ACTION_ROUTES: Record<string, string> = {
   qa4: 'TeacherCompose',   // Envoyer message → direct au form de compose
 }
 
-// Convertit l'heure de début d'un créneau → identifiant séance MASSAR
-function timeToSeance(startTime: string): string {
+function seanceForSlot(entry: ScheduleEntry): string {
+  if ((entry as any).seance) return (entry as any).seance
   const seances: Record<string, string> = {
     '08:30': 'S1', '09:30': 'S2', '10:30': 'S3', '11:30': 'S4',
     '13:00': 'S5', '14:00': 'S6',
   }
-  return seances[startTime] || 'S1'
+  return seances[entry.startTime] || 'S1'
 }
 
 export default function TeacherDashboardScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const { profile, logout } = useAuth()
   const teacher = useTeacherData()
   const { messages: teacherInbox } = useTeacherMessages()
@@ -100,12 +102,12 @@ export default function TeacherDashboardScreen() {
       if (target) {
         nav.navigate('TeacherAttendance', {
           classe: target.classe,
-          seance: timeToSeance(target.startTime),
+          seance: seanceForSlot(target),
         })
       } else {
         Alert.alert(
-          'Pas de cours aujourd\'hui',
-          'Va sur l\'onglet Classes pour choisir une classe et faire l\'appel.',
+          t('teacher.noCourseAlert'),
+          t('teacher.noCourseAlertMsg'),
         )
       }
       return
@@ -117,11 +119,11 @@ export default function TeacherDashboardScreen() {
   const handleAvatarPress = () => {
     Alert.alert(
       fullName,
-      profile?.email ?? 'Compte enseignant',
+      profile?.email ?? t('teacher.accountTeacher'),
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Se déconnecter',
+          text: t('common.logout'),
           style: 'destructive',
           onPress: () => logout().catch(() => {}),
         },
@@ -240,7 +242,7 @@ export default function TeacherDashboardScreen() {
                 fontSize: 12,
                 letterSpacing: 0.4,
               }}>
-                {greetingFor().toUpperCase()} · ENSEIGNANT
+                {t(greetingKey()).toUpperCase()} · {t('roles.teacher')}
               </Text>
               <Text numberOfLines={1} style={{
                 color: '#1D3557',
@@ -266,14 +268,14 @@ export default function TeacherDashboardScreen() {
               <StatCard
                 icon={<GraduationCap size={18} color={theme.primary} strokeWidth={2.2} />}
                 value={teacher.kpis.classes}
-                label="Classes"
+                label={t('teacher.classes')}
                 tint="primary"
                 onPress={() => goTo('TeacherClasses')}
               />
               <StatCard
                 icon={<Users size={18} color={theme.info} strokeWidth={2.2} />}
                 value={teacher.kpis.students}
-                label="Élèves"
+                label={t('teacher.students')}
                 tint="info"
                 onPress={() => goTo('TeacherClasses')}
               />
@@ -284,14 +286,14 @@ export default function TeacherDashboardScreen() {
           <StatCard
             icon={<CheckCircle2 size={18} color={theme.success} strokeWidth={2.2} />}
             value={`${teacher.kpis.attendance}%`}
-            label="Présence"
+            label={t('teacher.attendanceRate')}
             tint="success"
             onPress={() => goTo('TeacherClasses')}
           />
           <StatCard
             icon={<ListTodo size={18} color={theme.warning} strokeWidth={2.2} />}
             value={teacher.kpis.pending}
-            label="À traiter"
+            label={t('teacher.pending')}
             tint="warning"
             onPress={() => goTo('TeacherDevoirs')}
           />
@@ -300,9 +302,9 @@ export default function TeacherDashboardScreen() {
         {/* ── Today's schedule ──────────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader
-            title="Emploi du temps"
-            subtitle="Aujourd'hui"
-            actionLabel="Tout voir"
+            title={t('teacher.todaySchedule')}
+            subtitle={t('teacher.today')}
+            actionLabel={t('common.seeAll')}
             onAction={() => goTo('TeacherEdt')}
           />
           <Card padding={12}>
@@ -313,8 +315,8 @@ export default function TeacherDashboardScreen() {
             ) : teacher.todaySlots.length === 0 ? (
               <EmptyState
                 icon={CalendarClock}
-                title="Aucun cours aujourd'hui"
-                message="Profitez d'une journée calme — ou consultez la semaine."
+                title={t('teacher.noCourseToday')}
+                message={t('teacher.noCourseMsg')}
               />
             ) : (
               teacher.todaySlots.map(s => (
@@ -331,8 +333,8 @@ export default function TeacherDashboardScreen() {
         {/* ── Announcements ─────────────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader
-            title="Annonces récentes"
-            actionLabel="Voir plus"
+            title={t('teacher.recentAnnouncements')}
+            actionLabel={t('common.seeMore')}
             onAction={() => goTo('TeacherMessages')}
           />
           {loading ? (
@@ -341,8 +343,8 @@ export default function TeacherDashboardScreen() {
             <Card>
               <EmptyState
                 icon={Megaphone}
-                title="Pas d'annonce pour l'instant"
-                message="Les communications de la direction apparaîtront ici."
+                title={t('parent.noAnnouncements')}
+                message={t('teacher.noAnnouncementMsg')}
               />
             </Card>
           ) : (
@@ -361,9 +363,9 @@ export default function TeacherDashboardScreen() {
         {/* ── Class performance ─────────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader
-            title="Performance des classes"
-            subtitle="Moyenne · top note"
-            actionLabel="Voir"
+            title={t('teacher.classPerformance')}
+            subtitle={t('teacher.perfSubtitle')}
+            actionLabel={t('teacher.see')}
             onAction={() => goTo('TeacherClasses')}
           />
           <Pressable
@@ -374,13 +376,13 @@ export default function TeacherDashboardScreen() {
             <Card>
               <View style={styles.perfHeader}>
                 <View style={[styles.legendDot, { backgroundColor: theme.primary }]} />
-                <Text style={[styles.legendText, { color: theme.textSoft }]}>Moyenne</Text>
+                <Text style={[styles.legendText, { color: theme.textSoft }]}>{t('teacher.avgLabel')}</Text>
                 <View style={[styles.legendDot, { backgroundColor: theme.accent, marginStart: 14 }]} />
-                <Text style={[styles.legendText, { color: theme.textSoft }]}>Top note</Text>
+                <Text style={[styles.legendText, { color: theme.textSoft }]}>{t('teacher.topNote')}</Text>
                 <View style={{ flex: 1 }} />
                 <BarChart3 size={16} color={theme.textMuted} strokeWidth={2} />
               </View>
-              <PerformanceBars data={CLASS_PERFORMANCE} />
+              <PerformanceBars data={teacher.classPerformance} />
             </Card>
           </Pressable>
         </View>
@@ -388,8 +390,8 @@ export default function TeacherDashboardScreen() {
         {/* ── Quick actions ─────────────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader
-            title="Actions rapides"
-            subtitle="Raccourcis fréquents"
+            title={t('teacher.quickActions')}
+            subtitle={t('teacher.shortcuts')}
           />
           <QuickActions actions={TEACHER_QUICK_ACTIONS} onPress={handleQuickAction} />
         </View>
@@ -428,6 +430,7 @@ export default function TeacherDashboardScreen() {
 function ScheduleDetailModal({
   item, onClose, onOpenEdt, theme,
 }: { item: ScheduleEntry | null; onClose: () => void; onOpenEdt: () => void; theme: any }) {
+  const { t } = useTranslation()
   if (!item) return null
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -468,7 +471,7 @@ function ScheduleDetailModal({
             style={[styles.cta, { backgroundColor: theme.primary }]}
           >
             <Text style={{ color: '#fff', fontFamily: theme.fonts.bold, fontSize: 13 }}>
-              Voir l'emploi du temps complet
+              {t('teacher.seeFullSchedule')}
             </Text>
           </Pressable>
         </Pressable>

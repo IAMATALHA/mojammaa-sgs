@@ -12,6 +12,7 @@ import {
   LayoutDashboard, CalendarDays, Users, BookOpenCheck, MessageSquare,
   type LucideIcon,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../contexts/ThemeContext'
 import TeacherDashboardScreen from '../screens/teacher/TeacherDashboardScreen'
 import TeacherEdtScreen from '../screens/teacher/TeacherEdtScreen'
@@ -57,6 +58,7 @@ function TabIcon({
 
 function TeacherTabs() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const insets = useSafeAreaInsets()
 
   return (
@@ -98,7 +100,7 @@ function TeacherTabs() {
         name="TeacherHome"
         component={TeacherDashboardScreen}
         options={{
-          title: 'Accueil',
+          title: t('tabs.home'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={LayoutDashboard} color={color} focused={focused} theme={theme} />,
         }}
       />
@@ -106,7 +108,7 @@ function TeacherTabs() {
         name="TeacherEdt"
         component={TeacherEdtScreen}
         options={{
-          title: 'Horaires',
+          title: t('tabs.schedule'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={CalendarDays} color={color} focused={focused} theme={theme} />,
         }}
       />
@@ -114,7 +116,7 @@ function TeacherTabs() {
         name="TeacherClasses"
         component={TeacherClassesScreen}
         options={{
-          title: 'Classes',
+          title: t('tabs.classes'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={Users} color={color} focused={focused} theme={theme} />,
         }}
       />
@@ -122,7 +124,7 @@ function TeacherTabs() {
         name="TeacherDevoirs"
         component={TeacherDevoirsScreen}
         options={{
-          title: 'Devoirs',
+          title: t('tabs.homework'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={BookOpenCheck} color={color} focused={focused} theme={theme} />,
         }}
       />
@@ -130,7 +132,7 @@ function TeacherTabs() {
         name="TeacherMessages"
         component={TeacherMessagesScreen}
         options={{
-          title: 'Messages',
+          title: t('tabs.messages'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={MessageSquare} color={color} focused={focused} theme={theme} />,
         }}
       />

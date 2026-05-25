@@ -24,12 +24,14 @@ import { useNavigation } from '@react-navigation/native'
 import {
   ChevronLeft, Send, AlertCircle, Users, Megaphone,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { broadcastToClasses } from '../../services/messagesService'
 
 export default function TeacherComposeScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const { profile } = useAuth()
   const nav = useNavigation<any>()
 
@@ -73,15 +75,15 @@ export default function TeacherComposeScreen() {
         teacher:  { uid: profile.uid, nom: profile.nom, prenom: profile.prenom },
       })
       Alert.alert(
-        'Message envoyé',
+        t('teacher.messageSent'),
         result.parentsTargeted === 0
-          ? 'Aucun parent ne correspond à ces classes.'
+          ? t('teacher.noParents')
           : `${result.parentsTargeted} parent${result.parentsTargeted > 1 ? 's' : ''} touché${result.parentsTargeted > 1 ? 's' : ''} ` +
             `· ${result.pushSent} notif${result.pushSent > 1 ? 's' : ''} push envoyée${result.pushSent > 1 ? 's' : ''}.`,
         [{ text: 'OK', onPress: () => nav.goBack() }],
       )
     } catch (e: any) {
-      Alert.alert('Échec', e?.message || 'Erreur lors de l\'envoi.')
+      Alert.alert(t('teacher.sendFailed'), e?.message || t('common.error'))
     } finally {
       setSending(false)
     }
@@ -106,7 +108,7 @@ export default function TeacherComposeScreen() {
             fontFamily: theme.fonts.black,
             fontSize: theme.fontSize.h3,
           }}>
-            Nouveau message
+            {t('teacher.newMessage')}
           </Text>
           <Text style={{
             color: theme.textSoft,
@@ -114,18 +116,18 @@ export default function TeacherComposeScreen() {
             fontSize: 12,
             marginTop: 2,
           }}>
-            Aux parents des classes sélectionnées
+            {t('teacher.toParentsOf')}
           </Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Classes selector */}
-        <Text style={[styles.label, { color: theme.textSoft }]}>Destinataires</Text>
+        <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.recipients')}</Text>
         <View style={styles.chipsRow}>
           {availableClasses.length === 0 ? (
             <Text style={{ color: theme.textSoft, fontSize: 13 }}>
-              Aucune classe attribuée à ton compte.
+              {t('teacher.noClassAssigned')}
             </Text>
           ) : (
             availableClasses.map(c => {
@@ -160,7 +162,7 @@ export default function TeacherComposeScreen() {
         </View>
 
         {/* Subject */}
-        <Text style={[styles.label, { color: theme.textSoft, marginTop: 18 }]}>Sujet</Text>
+        <Text style={[styles.label, { color: theme.textSoft, marginTop: 18 }]}>{t('compose.subject')}</Text>
         <View style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <TextInput
             value={subject}
@@ -178,12 +180,12 @@ export default function TeacherComposeScreen() {
         </View>
 
         {/* Body */}
-        <Text style={[styles.label, { color: theme.textSoft, marginTop: 18 }]}>Message</Text>
+        <Text style={[styles.label, { color: theme.textSoft, marginTop: 18 }]}>{t('compose.body')}</Text>
         <View style={[styles.input, styles.inputMulti, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <TextInput
             value={body}
             onChangeText={setBody}
-            placeholder="Écrivez votre message ici…"
+            placeholder={t('teacher.writeMessage')}
             placeholderTextColor={theme.textMuted}
             multiline
             textAlignVertical="top"
@@ -224,7 +226,7 @@ export default function TeacherComposeScreen() {
               fontFamily: theme.fonts.bold,
               fontSize: 13.5,
             }}>
-              Marquer comme urgent
+              {t('teacher.markUrgent')}
             </Text>
             <Text style={{
               color: theme.textSoft,
@@ -232,7 +234,7 @@ export default function TeacherComposeScreen() {
               fontSize: 11.5,
               marginTop: 2,
             }}>
-              La notification arrivera avec un préfixe 🚨 et un badge rouge.
+              {t('teacher.urgentDesc')}
             </Text>
           </View>
           <View style={[
@@ -271,7 +273,7 @@ export default function TeacherComposeScreen() {
                 fontSize: 15,
                 marginStart: 8,
               }}>
-                Envoyer
+                {t('compose.send')}
               </Text>
             </>
           )}

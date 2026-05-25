@@ -10,6 +10,7 @@ import {
   LayoutDashboard, BookOpen, FileText, CalendarX, MessageSquare,
   type LucideIcon,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../contexts/ThemeContext'
 import ParentDashboardScreen from '../screens/student/ParentDashboardScreen'
 import ParentDevoirsScreen from '../screens/student/ParentDevoirsScreen'
@@ -49,6 +50,7 @@ function TabIcon({
 
 export default function StudentStack() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const insets = useSafeAreaInsets()
 
   return (
@@ -92,7 +94,7 @@ export default function StudentStack() {
         name="StudentHome"
         component={ParentDashboardScreen}
         options={{
-          title: 'Accueil',
+          title: t('tabs.home'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={LayoutDashboard} color={color} focused={focused} theme={theme} />,
         }}
       />
@@ -100,7 +102,7 @@ export default function StudentStack() {
         name="StudentDevoirs"
         component={ParentDevoirsScreen}
         options={{
-          title: 'Devoirs',
+          title: t('tabs.homework'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={BookOpen} color={color} focused={focused} theme={theme} />,
         }}
       />
@@ -108,7 +110,7 @@ export default function StudentStack() {
         name="StudentNotes"
         component={ParentNotesScreen}
         options={{
-          title: 'Notes',
+          title: t('tabs.grades'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={FileText} color={color} focused={focused} theme={theme} />,
         }}
       />
@@ -116,7 +118,7 @@ export default function StudentStack() {
         name="StudentAbsences"
         component={ParentAbsencesScreen}
         options={{
-          title: 'Absences',
+          title: t('tabs.absences'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={CalendarX} color={color} focused={focused} theme={theme} />,
         }}
       />
@@ -124,7 +126,7 @@ export default function StudentStack() {
         name="StudentMessages"
         component={ParentMessagesScreen}
         options={{
-          title: 'Messages',
+          title: t('tabs.messages'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={MessageSquare} color={color} focused={focused} theme={theme} />,
         }}
       />

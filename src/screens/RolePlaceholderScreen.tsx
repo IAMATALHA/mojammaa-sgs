@@ -7,6 +7,7 @@
 import React from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 
@@ -19,6 +20,7 @@ interface Props {
 export default function RolePlaceholderScreen({ title, subtitle, tabKey }: Props) {
   const { profile, role, logout } = useAuth()
   const theme  = useTheme()
+  const { t } = useTranslation()
   const insets = useSafeAreaInsets()
 
   return (
@@ -51,7 +53,7 @@ export default function RolePlaceholderScreen({ title, subtitle, tabKey }: Props
           onPress={logout}
           style={[styles.logoutBtn, { borderColor: theme.danger }]}
         >
-          <Text style={[styles.logoutText, { color: theme.danger }]}>Se déconnecter</Text>
+          <Text style={[styles.logoutText, { color: theme.danger }]}>{t('common.logout')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

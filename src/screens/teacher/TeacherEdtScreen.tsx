@@ -1,106 +1,93 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl,
 } from 'react-native';
-import { collection, getDocs, query, where } from 'firebase/firestore';
 import ScreenLayout from '../../components/ScreenLayout';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { db } from '../../config/firebase';
+import {
+  getSchedule, type ScheduleDoc, type WeeklySlot, type WeekDay,
+} from '../../services/scheduleService';
 
-type Jour = 'Lun' | 'Mar' | 'Mer' | 'Jeu' | 'Ven' | 'Sam' | 'Dim'
-const JOURS: Jour[] = ['Sam', 'Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven']
-
-interface Cours {
-  id:           string
-  classeId:     string
-  jour:         Jour
-  seance:       string  // S1..S6
-  matiere:      string
-  salle?:       string
-  professeurNom?: string
+const DAY_ORDER: WeekDay[] = [
+  'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+]
+const DAY_LABEL: Record<WeekDay, string> = {
+  saturday:  'Sam', sunday: 'Dim', monday: 'Lun', tuesday: 'Mar',
+  wednesday: 'Mer', thursday: 'Jeu', friday: 'Ven',
 }
 
-const SEANCE_LABEL: Record<string, string> = {
-  S1: '08:30 – 09:30',
-  S2: '09:30 – 10:30',
-  S3: '10:30 – 11:30',
-  S4: '11:30 – 12:30',
-  S5: '13:00 – 14:00',
-  S6: '14:00 – 15:00',
-}
-
-function jourFromDate(d: Date): Jour {
-  return ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][d.getDay()] as Jour
+function todayWeekDay(): WeekDay {
+  const names: WeekDay[] = [
+    'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+  ]
+  return names[new Date().getDay()]
 }
 
 export default function TeacherEdtScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { profile } = useAuth();
-  const [cours,   setCours]   = useState<Cours[]>([])
+  const [schedule, setSchedule] = useState<ScheduleDoc | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const fullName = profile ? `${profile.prenom} ${profile.nom}`.trim() : ''
-  const today    = useMemo(() => jourFromDate(new Date()), [])
+  const today = useMemo(() => todayWeekDay(), [])
 
-  const load = useCallback(async () => {
-    if (!fullName) return
+  const load = async () => {
+    if (!profile?.uid) return
     setLoading(true); setError(null)
     try {
-      // Le schema actuel d'emploiDuTemps n'a pas professeurUid, on filtre
-      // par nom complet. Pas idéal mais consistant avec l'app parent.
-      const snap = await getDocs(
-        query(collection(db, 'emploiDuTemps'), where('professeurNom', '==', fullName))
-      )
-      const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Cours[]
-      // Tri par jour puis par seance.
-      list.sort((a, b) => {
-        const dj = JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour)
-        if (dj !== 0) return dj
-        return a.seance.localeCompare(b.seance)
-      })
-      setCours(list)
+      const doc = await getSchedule(profile.uid)
+      setSchedule(doc)
     } catch (e: any) {
-      setError(e?.message || 'Impossible de charger l\'emploi du temps.')
+      setError(e?.message || t('common.error'))
     } finally {
       setLoading(false)
     }
-  }, [fullName])
+  }
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [profile?.uid])
 
   const grouped = useMemo(() => {
-    const map = new Map<Jour, Cours[]>()
-    cours.forEach(c => {
-      const arr = map.get(c.jour) || []
-      arr.push(c)
-      map.set(c.jour, arr)
+    if (!schedule?.weeklySlots) return []
+    const map = new Map<WeekDay, WeeklySlot[]>()
+    schedule.weeklySlots.forEach(s => {
+      const arr = map.get(s.day) || []
+      arr.push(s)
+      map.set(s.day, arr)
     })
-    return JOURS.filter(j => map.has(j)).map(j => ({ jour: j, items: map.get(j)! }))
-  }, [cours])
+    return DAY_ORDER
+      .filter(d => map.has(d))
+      .map(d => ({
+        day: d,
+        label: DAY_LABEL[d],
+        items: map.get(d)!.slice().sort((a, b) => a.startTime.localeCompare(b.startTime)),
+      }))
+  }, [schedule])
 
-  const renderGroup = ({ item }: { item: { jour: Jour; items: Cours[] } }) => {
-    const isToday = item.jour === today
+  const renderGroup = ({ item }: { item: { day: WeekDay; label: string; items: WeeklySlot[] } }) => {
+    const isToday = item.day === today
     return (
       <View style={styles.group}>
         <View style={[styles.dayHeader, isToday && { backgroundColor: theme.primarySurface }]}>
           <Text style={[styles.dayTitle, { color: isToday ? theme.primary : theme.textSoft }]}>
-            {item.jour}{isToday ? ' · aujourd\'hui' : ''}
+            {item.label}{isToday ? ` · ${t('teacher.todayLabel')}` : ''}
           </Text>
         </View>
-        {item.items.map(c => (
-          <View key={c.id} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        {item.items.map((s, idx) => (
+          <View key={`${s.day}-${s.startTime}-${idx}`} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.timeRow}>
-              <Text style={[styles.seance, { color: theme.primary }]}>{c.seance}</Text>
+              <Text style={[styles.seance, { color: theme.primary }]}>{s.seance || ''}</Text>
               <Text style={[styles.timeText, { color: theme.textSoft }]}>
-                {SEANCE_LABEL[c.seance] || ''}
+                {s.startTime} – {s.endTime}
               </Text>
             </View>
-            <Text style={[styles.matiere, { color: theme.text }]}>{c.matiere}</Text>
+            <Text style={[styles.matiere, { color: theme.text }]}>{s.subject || '—'}</Text>
             <View style={styles.metaRow}>
-              <Text style={[styles.classe, { color: theme.text }]}>📚 {c.classeId}</Text>
-              {c.salle ? <Text style={[styles.salle, { color: theme.textSoft }]}>📍 {c.salle}</Text> : null}
+              <Text style={[styles.classe, { color: theme.text }]}>📚 {s.classe}</Text>
+              {s.room ? <Text style={[styles.salle, { color: theme.textSoft }]}>📍 {s.room}</Text> : null}
             </View>
           </View>
         ))}
@@ -109,28 +96,25 @@ export default function TeacherEdtScreen() {
   }
 
   return (
-    <ScreenLayout title="Mon emploi du temps">
+    <ScreenLayout title={t('teacher.mySchedule')}>
       {error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
           <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
         </View>
       ) : null}
 
-      {loading && cours.length === 0 ? (
+      {loading ? (
         <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
       ) : grouped.length === 0 ? (
         <View style={styles.empty}>
           <Text style={{ color: theme.textSoft, fontSize: 14, textAlign: 'center' }}>
-            Aucun cours trouvé pour vous.{'\n'}
-            <Text style={{ fontSize: 12 }}>
-              (recherché par nom complet "{fullName}")
-            </Text>
+            {t('teacher.noCourseFound')}
           </Text>
         </View>
       ) : (
         <FlatList
           data={grouped}
-          keyExtractor={item => item.jour}
+          keyExtractor={item => item.day}
           renderItem={renderGroup}
           contentContainerStyle={{ paddingBottom: 24 }}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.primary} />}

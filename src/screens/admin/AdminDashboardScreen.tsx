@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar'
 import { LinearGradient } from 'expo-linear-gradient'
 import { MotiView } from 'moti'
 import { useNavigation } from '@react-navigation/native'
+import { useTranslation } from 'react-i18next'
 import AnimatedCard from '../../components/AnimatedCard'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -22,11 +23,11 @@ import { Users, BookOpen, GraduationCap, Percent, Megaphone } from 'lucide-react
 
 const { width: SCREEN_W } = Dimensions.get('window')
 
-function greetingFor(date = new Date()): string {
+function greetingKey(date = new Date()): string {
   const h = date.getHours()
-  if (h < 12) return 'Bonjour'
-  if (h < 18) return 'Bon après-midi'
-  return 'Bonsoir'
+  if (h < 12) return 'greeting.morning'
+  if (h < 18) return 'greeting.afternoon'
+  return 'greeting.evening'
 }
 
 function hexWithAlpha(hex: string, alpha: number): string {
@@ -39,6 +40,7 @@ function hexWithAlpha(hex: string, alpha: number): string {
 
 export default function AdminDashboardScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const { profile, logout } = useAuth()
   const { stats, loading, error, refresh } = useDashboardStats()
   const nav = useNavigation<any>()
@@ -51,17 +53,17 @@ export default function AdminDashboardScreen() {
   const handleAvatarPress = useCallback(() => {
     Alert.alert(
       fullName,
-      profile?.email ?? 'Compte direction',
+      profile?.email ?? t('admin.accountAdmin'),
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Se déconnecter',
+          text: t('common.logout'),
           style: 'destructive',
           onPress: () => logout().catch(() => {}),
         },
       ],
     )
-  }, [fullName, profile, logout])
+  }, [fullName, profile, logout, t])
 
   const tint = theme.accent   // signature couleur admin = corail
 
@@ -167,7 +169,7 @@ export default function AdminDashboardScreen() {
                 fontSize: 12,
                 letterSpacing: 0.4,
               }}>
-                {greetingFor().toUpperCase()} · DIRECTION
+                {t(greetingKey()).toUpperCase()} · {t('roles.admin')}
               </Text>
               <Text numberOfLines={1} style={{
                 color: '#1D3557',
@@ -198,13 +200,13 @@ export default function AdminDashboardScreen() {
               <AnimatedCard style={styles.statBox} delay={100} onPress={() => goTo('AdminUsers')}>
                 <Users color={theme.accent} size={26} style={styles.icon} />
                 <Text style={[styles.statValue, { color: theme.text, fontFamily: theme.fonts.bold }]}>{stats?.totalEleves ?? 0}</Text>
-                <Text style={[styles.statLabel, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>Élèves</Text>
+                <Text style={[styles.statLabel, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>{t('admin.eleves')}</Text>
               </AnimatedCard>
 
               <AnimatedCard style={styles.statBox} delay={200} onPress={() => goTo('AdminUsers')}>
                 <BookOpen color={theme.accent} size={26} style={styles.icon} />
                 <Text style={[styles.statValue, { color: theme.text, fontFamily: theme.fonts.bold }]}>{stats?.totalProfs ?? 0}</Text>
-                <Text style={[styles.statLabel, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>Profs</Text>
+                <Text style={[styles.statLabel, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>{t('admin.profs')}</Text>
               </AnimatedCard>
             </View>
 
@@ -212,13 +214,13 @@ export default function AdminDashboardScreen() {
               <AnimatedCard style={styles.statBox} delay={300} onPress={() => goTo('AdminClasses')}>
                 <GraduationCap color={theme.accent} size={26} style={styles.icon} />
                 <Text style={[styles.statValue, { color: theme.text, fontFamily: theme.fonts.bold }]}>{stats?.totalClasses ?? 0}</Text>
-                <Text style={[styles.statLabel, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>Classes</Text>
+                <Text style={[styles.statLabel, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>{t('tabs.classes')}</Text>
               </AnimatedCard>
 
               <AnimatedCard style={styles.statBox} delay={400} onPress={() => goTo('AdminStats')}>
                 <Percent color={theme.accent} size={26} style={styles.icon} />
                 <Text style={[styles.statValue, { color: theme.text, fontFamily: theme.fonts.bold }]}>{stats?.attendanceRate ?? 0}%</Text>
-                <Text style={[styles.statLabel, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>Présence</Text>
+                <Text style={[styles.statLabel, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>{t('admin.attendanceRate')}</Text>
               </AnimatedCard>
             </View>
           </View>
@@ -232,7 +234,7 @@ export default function AdminDashboardScreen() {
             letterSpacing: 0.4,
             textTransform: 'uppercase',
           }}>
-            Mojammaa Al Maarifa · Direction
+            Mojammaa Al Maarifa · {t('roles.admin')}
           </Text>
         </View>
       </ScrollView>

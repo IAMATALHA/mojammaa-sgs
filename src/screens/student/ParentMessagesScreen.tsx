@@ -15,19 +15,13 @@ import { StatusBar } from 'expo-status-bar'
 import {
   X, Search, Megaphone, Calendar, School, ShieldCheck, AlertCircle,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import {
   Card, AnnouncementCard, EmptyState, SectionHeader,
 } from '../../components/dashboard'
 import { useParentMessages } from '../../hooks/useParentMessages'
 import { type Announcement } from '../../utils/mockData'
-
-const TAB_DEFS: { id: string; label: string; filter: (a: Announcement) => boolean }[] = [
-  { id: 'all',    label: 'Tout',         filter: ()  => true },
-  { id: 'urgent', label: 'Urgent',       filter: a   => a.priority === 'urgent' },
-  { id: 'school', label: 'École',        filter: a   => a.category === 'school' || a.category === 'admin' },
-  { id: 'event',  label: 'Événements',   filter: a   => a.category === 'event' },
-]
 
 const CATEGORY_ICON = {
   school: School,
@@ -38,6 +32,14 @@ const CATEGORY_ICON = {
 
 export default function ParentMessagesScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
+
+  const TAB_DEFS: { id: string; label: string; filter: (a: Announcement) => boolean }[] = [
+    { id: 'all',    label: t('parent.all'),    filter: ()  => true },
+    { id: 'urgent', label: t('parent.urgent'), filter: a   => a.priority === 'urgent' },
+    { id: 'school', label: t('parent.school'), filter: a   => a.category === 'school' || a.category === 'admin' },
+    { id: 'event',  label: t('parent.events'), filter: a   => a.category === 'event' },
+  ]
   const { messages: liveMessages } = useParentMessages()
   const [activeTab, setActiveTab] = useState('all')
   const [query, setQuery] = useState('')
@@ -69,7 +71,7 @@ export default function ParentMessagesScreen() {
           fontSize: theme.fontSize.h2,
           letterSpacing: -0.5,
         }}>
-          Messages
+          {t('tabs.messages')}
         </Text>
         <Text style={{
           color: theme.textSoft,
@@ -77,7 +79,7 @@ export default function ParentMessagesScreen() {
           fontSize: theme.fontSize.small,
           marginTop: 2,
         }}>
-          {allMessages.length} message{allMessages.length > 1 ? 's' : ''} reçu{allMessages.length > 1 ? 's' : ''}
+          {t('parent.messagesReceived', { count: allMessages.length })}
         </Text>
       </View>
 
@@ -87,7 +89,7 @@ export default function ParentMessagesScreen() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Rechercher dans les messages…"
+          placeholder={t('parent.searchMessages')}
           placeholderTextColor={theme.textMuted}
           style={{
             flex: 1,
@@ -140,15 +142,15 @@ export default function ParentMessagesScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <SectionHeader
-            title="Boîte de réception"
-            subtitle={`${filtered.length} résultat${filtered.length > 1 ? 's' : ''}`}
+            title={t('parent.inbox')}
+            subtitle={t('parent.results', { count: filtered.length })}
           />
           {filtered.length === 0 ? (
             <Card>
               <EmptyState
                 icon={Megaphone}
-                title="Aucun message"
-                message={query ? 'Essayez un autre mot-clé.' : 'Votre boîte est vide pour cette catégorie.'}
+                title={t('parent.noMessage')}
+                message={query ? t('parent.tryKeyword') : t('parent.emptyCategory')}
               />
             </Card>
           ) : (
@@ -171,6 +173,7 @@ export default function ParentMessagesScreen() {
 function AnnouncementDetailModal({
   item, onClose, theme,
 }: { item: Announcement | null; onClose: () => void; theme: any }) {
+  const { t } = useTranslation()
   if (!item) return null
   const Icon = CATEGORY_ICON[item.category] ?? Megaphone
   const isUrgent = item.priority === 'urgent'

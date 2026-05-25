@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { collection, getDocs } from 'firebase/firestore';
 import ScreenLayout from '../../components/ScreenLayout';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { db } from '../../config/firebase';
 import type { RoleRaw } from '../../types';
@@ -27,6 +28,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 export default function AdminUsersScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const [users,   setUsers]   = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -108,18 +110,18 @@ export default function AdminUsersScreen() {
         style={[styles.btn, { backgroundColor: theme.primarySurface }]}
         onPress={() => handleImpersonate(item)}
       >
-        <Text style={[styles.btnText, { color: theme.primary }]}>Voir comme</Text>
+        <Text style={[styles.btnText, { color: theme.primary }]}>{t('admin.viewAs')}</Text>
       </TouchableOpacity>
     </View>
   );
 
   return (
-    <ScreenLayout title="Utilisateurs">
+    <ScreenLayout title={t('admin.users')}>
       <View style={styles.filterRow}>
-        <FilterChip value="all"        label={`Tous (${users.length})`} />
-        <FilterChip value="admin"      label={`Admin (${users.filter(u => u.role === 'admin').length})`} />
-        <FilterChip value="professeur" label={`Profs (${users.filter(u => u.role === 'professeur').length})`} />
-        <FilterChip value="parent"     label={`Parents (${users.filter(u => u.role === 'parent').length})`} />
+        <FilterChip value="all"        label={t('admin.allUsers', { count: users.length })} />
+        <FilterChip value="admin"      label={t('admin.adminCount', { count: users.filter(u => u.role === 'admin').length })} />
+        <FilterChip value="professeur" label={t('admin.profCount', { count: users.filter(u => u.role === 'professeur').length })} />
+        <FilterChip value="parent"     label={t('admin.parentCount', { count: users.filter(u => u.role === 'parent').length })} />
       </View>
 
       {error ? (
@@ -133,7 +135,7 @@ export default function AdminUsersScreen() {
       ) : displayed.length === 0 ? (
         <View style={styles.empty}>
           <Text style={{ color: theme.textSoft, fontSize: 14 }}>
-            Aucun utilisateur pour ce filtre.
+            {t('admin.noUserFilter')}
           </Text>
         </View>
       ) : (
