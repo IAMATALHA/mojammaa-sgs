@@ -270,11 +270,9 @@ export default function AdminDashboardScreen() {
             {/* ── État de l'école ────────────────────────── */}
             <View style={styles.section}>
               <SectionHeader title={t('admin.attendanceToday')} />
-              <Pressable onPress={() => goTo('AdminStats')}>
+              <Pressable onPress={() => goTo('AdminAbsences')}>
                 <View style={[styles.stateCard, { backgroundColor: state.absentsToday > 5 ? '#FEF2F0' : '#F0F7F4', borderColor: state.absentsToday > 5 ? '#FADAD4' : '#D4EDDA' }]}>
                   <View style={styles.stateRow}>
-                    <StatBlock value={String(state.totalEleves)} label={t('admin.eleves')} color={theme.primary} theme={theme} isAr={isAr} />
-                    <View style={[styles.statSep, { backgroundColor: theme.border }]} />
                     <StatBlock value={String(state.absentsToday)} label={t('tabs.absences')} color={state.absentsToday > 0 ? theme.danger : theme.success} theme={theme} isAr={isAr} />
                     <View style={[styles.statSep, { backgroundColor: theme.border }]} />
                     <StatBlock value={String(state.retardsToday)} label={t('parent.lateArrivals')} color={state.retardsToday > 0 ? theme.warning : theme.success} theme={theme} isAr={isAr} />
@@ -294,7 +292,7 @@ export default function AdminDashboardScreen() {
                 <Pressable style={{ flex: 1 }} onPress={() => goTo('AdminClasses')}>
                   <SummaryChip icon={<GraduationCap size={14} color="#1D3557" strokeWidth={2} />} value={state.totalClasses} label={t('tabs.classes')} bg="#E8EEF4" theme={theme} />
                 </Pressable>
-                <Pressable style={{ flex: 1 }} onPress={() => goTo('AdminStats')}>
+                <Pressable style={{ flex: 1 }} onPress={() => goTo('AdminDevoirs')}>
                   <SummaryChip icon={<BookOpen size={14} color="#D95B00" strokeWidth={2} />} value={state.devoirsToday} label={t('tabs.homework')} bg="#FFF3E0" theme={theme} />
                 </Pressable>
               </View>
@@ -307,7 +305,7 @@ export default function AdminDashboardScreen() {
                 <ActivityRow
                   icon={<CheckCircle2 size={16} color={theme.success} strokeWidth={2} />}
                   text={t('admin.profsDidAppel', { count: state.profsDoneAppel })}
-                  onPress={() => goTo('AdminUsers')}
+                  onPress={() => goTo('AdminAbsences')}
                   theme={theme}
                   isAr={isAr}
                 />
@@ -315,7 +313,7 @@ export default function AdminDashboardScreen() {
                   <ActivityRow
                     icon={<CalendarX size={16} color={theme.danger} strokeWidth={2} />}
                     text={t('admin.profsMissingAppel', { count: state.profsMissingAppel })}
-                    onPress={() => goTo('AdminUsers')}
+                    onPress={() => goTo('AdminAbsences')}
                     theme={theme}
                     isAr={isAr}
                   />
@@ -323,7 +321,7 @@ export default function AdminDashboardScreen() {
                 <ActivityRow
                   icon={<BookOpen size={16} color={theme.accent} strokeWidth={2} />}
                   text={t('admin.homeworkActive', { count: state.devoirsToday })}
-                  onPress={() => goTo('AdminStats')}
+                  onPress={() => goTo('AdminDevoirs')}
                   theme={theme}
                   isAr={isAr}
                 />

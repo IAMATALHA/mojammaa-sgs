@@ -18,6 +18,8 @@ import AdminSettingsScreen from '../screens/admin/AdminSettingsScreen'
 import AdminStatsScreen from '../screens/admin/AdminStatsScreen'
 import AdminEdtScreen from '../screens/admin/AdminEdtScreen'
 import AdminCalendarScreen from '../screens/admin/AdminCalendarScreen'
+import AdminAbsencesScreen from '../screens/admin/AdminAbsencesScreen'
+import AdminDevoirsScreen from '../screens/admin/AdminDevoirsScreen'
 
 const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
@@ -110,6 +112,8 @@ export default function AdminStack() {
       <Stack.Screen name="AdminStats" component={AdminStatsScreen} />
       <Stack.Screen name="AdminEdt" component={AdminEdtScreen} />
       <Stack.Screen name="AdminCalendar" component={AdminCalendarScreen} />
+      <Stack.Screen name="AdminAbsences" component={AdminAbsencesScreen} />
+      <Stack.Screen name="AdminDevoirs" component={AdminDevoirsScreen} />
     </Stack.Navigator>
   )
 }

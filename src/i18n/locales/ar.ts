@@ -294,6 +294,8 @@ const ar = {
     noCourse: 'لا حصص',
     profsDidAppel: '{{count}} أساتذة سجلوا الحضور',
     profsMissingAppel: '{{count}} أساتذة لم يسجلوا الحضور',
+    recidivistes: 'المتكررون',
+    noRecidivistes: 'لا تلاميذ متكررون هذا الشهر.',
     homeworkActive: '{{count}} واجبات جارية',
     messagesToday: '{{count}} رسائل اليوم',
   },

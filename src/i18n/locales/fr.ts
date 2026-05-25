@@ -294,6 +294,8 @@ const fr = {
     noCourse: 'Aucun cours',
     profsDidAppel: '{{count}} profs ont fait l\'appel',
     profsMissingAppel: '{{count}} profs n\'ont pas fait l\'appel',
+    recidivistes: 'Récidivistes',
+    noRecidivistes: 'Aucun élève récidiviste ce mois.',
     homeworkActive: '{{count}} devoirs en cours',
     messagesToday: '{{count}} messages aujourd\'hui',
   },

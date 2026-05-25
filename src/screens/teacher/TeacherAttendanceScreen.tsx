@@ -115,6 +115,7 @@ async function notifyParentsOfAbsents(
 
     // 3.a — message Firestore (historique permanent)
     writes.push(sendMessage({
+      type:     'attendance',
       subject:  'Absence signalée',
       body,
       fromId:   teacher.uid,

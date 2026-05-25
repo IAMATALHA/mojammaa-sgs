@@ -294,6 +294,8 @@ const en = {
     noCourse: 'No courses',
     profsDidAppel: '{{count}} teachers took attendance',
     profsMissingAppel: '{{count}} teachers haven\'t taken attendance',
+    recidivistes: 'Repeat offenders',
+    noRecidivistes: 'No repeat offenders this month.',
     homeworkActive: '{{count}} homework active',
     messagesToday: '{{count}} messages today',
   },
