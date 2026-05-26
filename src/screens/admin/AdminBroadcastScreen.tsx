@@ -13,6 +13,7 @@ import {
   broadcast, getRecipientsList,
   type MessageToType, type MessageType,
 } from '../../services/messagesService'
+import { MESSAGE_TEMPLATES, fillTemplate, type MessageTemplate } from '../../data/messageTemplates'
 
 type Step = 'type' | 'target' | 'compose' | 'confirm'
 type MsgType = 'announcement' | 'direct'
@@ -29,7 +30,8 @@ interface Recipient {
 
 export default function AdminBroadcastScreen() {
   const theme = useTheme()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const lang = i18n.language as 'fr' | 'ar' | 'en'
   const { profile } = useAuth()
 
   const [step, setStep] = useState<Step>('type')
@@ -42,6 +44,9 @@ export default function AdminBroadcastScreen() {
   const [priority, setPriority] = useState<'normal' | 'urgent'>('normal')
   const [sending, setSending] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedTemplate, setSelectedTemplate] = useState<MessageTemplate | null>(null)
+  const [templateVars, setTemplateVars] = useState<Record<string, string>>({})
+  const [useTemplate, setUseTemplate] = useState(false)
 
   const [availableClasses, setAvailableClasses] = useState<string[]>([])
   const [allParents, setAllParents] = useState<Recipient[]>([])
@@ -308,19 +313,126 @@ export default function AdminBroadcastScreen() {
             <View>
               <Text style={[styles.stepTitle, { color: theme.text }]}>3. {t('compose.body')}</Text>
 
-              <Text style={[styles.label, { color: theme.textSoft }]}>{t('compose.subject')}</Text>
-              <TextInput value={subject} onChangeText={setSubject}
-                placeholder="Ex : Réunion parents-profs"
-                placeholderTextColor={theme.textMuted}
-                style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
-                maxLength={120} />
+              {/* Template toggle for direct messages */}
+              {msgType === 'direct' && !useTemplate && (
+                <TouchableOpacity
+                  onPress={() => setUseTemplate(true)}
+                  style={[styles.templateToggle, { backgroundColor: theme.primarySurface, borderColor: theme.primaryBorder }]}
+                >
+                  <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 13 }}>
+                    📋 {lang === 'ar' ? 'استخدم نموذج جاهز' : lang === 'en' ? 'Use a template' : 'Utiliser un modèle prédéfini'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-              <Text style={[styles.label, { color: theme.textSoft, marginTop: 14 }]}>{t('compose.body')}</Text>
-              <TextInput value={body} onChangeText={setBody}
-                placeholder={t('teacher.writeMessage')}
-                placeholderTextColor={theme.textMuted}
-                style={[styles.input, styles.textarea, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
-                multiline textAlignVertical="top" maxLength={2000} />
+              {/* Template selection */}
+              {useTemplate && !selectedTemplate && (
+                <>
+                  <TouchableOpacity onPress={() => setUseTemplate(false)} style={{ marginBottom: 10 }}>
+                    <Text style={{ color: theme.textSoft, fontSize: 13 }}>← {lang === 'ar' ? 'رسالة حرة' : lang === 'en' ? 'Free message' : 'Message libre'}</Text>
+                  </TouchableOpacity>
+                  {MESSAGE_TEMPLATES.map(tmpl => (
+                    <Pressable key={tmpl.id}
+                      onPress={() => {
+                        setSelectedTemplate(tmpl)
+                        setTemplateVars({})
+                        const titleKey = lang === 'ar' ? tmpl.title_ar : lang === 'en' ? tmpl.title_en : tmpl.title_fr
+                        setSubject(titleKey)
+                      }}
+                      style={[styles.templateCard, { borderColor: tmpl.color + '40', backgroundColor: tmpl.color + '10' }]}>
+                      <View style={[styles.templateIcon, { backgroundColor: tmpl.color }]}>
+                        <Text style={{ fontSize: 16 }}>{tmpl.icon}</Text>
+                      </View>
+                      <View style={{ flex: 1, marginStart: 10 }}>
+                        <Text style={{ color: theme.text, fontWeight: '700', fontSize: 13 }}>
+                          {lang === 'ar' ? tmpl.title_ar : lang === 'en' ? tmpl.title_en : tmpl.title_fr}
+                        </Text>
+                        <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 1 }}>{tmpl.categorie}</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </>
+              )}
+
+              {/* Template variables */}
+              {selectedTemplate && (
+                <>
+                  <View style={[styles.templateHeader, { backgroundColor: selectedTemplate.color + '15', borderColor: selectedTemplate.color + '30' }]}>
+                    <Text style={{ fontSize: 18 }}>{selectedTemplate.icon}</Text>
+                    <Text style={{ color: theme.text, fontWeight: '800', fontSize: 15, marginStart: 8, flex: 1 }}>
+                      {lang === 'ar' ? selectedTemplate.title_ar : lang === 'en' ? selectedTemplate.title_en : selectedTemplate.title_fr}
+                    </Text>
+                    <TouchableOpacity onPress={() => { setSelectedTemplate(null); setBody('') }}>
+                      <X size={18} color={theme.textSoft} strokeWidth={2} />
+                    </TouchableOpacity>
+                  </View>
+                  {selectedTemplate.variables.map(v => (
+                    <View key={v.key} style={{ marginBottom: 12 }}>
+                      <Text style={[styles.label, { color: theme.textSoft }]}>
+                        {lang === 'ar' ? v.label_ar : lang === 'en' ? v.label_en : v.label_fr}
+                      </Text>
+                      {v.type === 'select' && v.options ? (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6 }}>
+                          {v.options.map(opt => {
+                            const active = templateVars[v.key] === opt
+                            return (
+                              <TouchableOpacity key={opt} onPress={() => {
+                                const nv = { ...templateVars, [v.key]: opt }
+                                setTemplateVars(nv)
+                                const tmpl = lang === 'ar' ? selectedTemplate.template_ar : lang === 'en' ? selectedTemplate.template_en : selectedTemplate.template_fr
+                                setBody(fillTemplate(tmpl, { ...nv, elevePrenom: selectedPerson?.prenom || '{élève}' }))
+                              }}
+                                style={[styles.chip, { borderColor: active ? theme.primary : theme.border, backgroundColor: active ? theme.primary : 'transparent' }]}>
+                                <Text style={{ color: active ? '#fff' : theme.text, fontWeight: '600', fontSize: 12 }}>{opt}</Text>
+                              </TouchableOpacity>
+                            )
+                          })}
+                        </ScrollView>
+                      ) : (
+                        <TextInput
+                          value={templateVars[v.key] || ''}
+                          onChangeText={val => {
+                            const nv = { ...templateVars, [v.key]: val }
+                            setTemplateVars(nv)
+                            const tmpl = lang === 'ar' ? selectedTemplate.template_ar : lang === 'en' ? selectedTemplate.template_en : selectedTemplate.template_fr
+                            setBody(fillTemplate(tmpl, { ...nv, elevePrenom: selectedPerson?.prenom || '{élève}' }))
+                          }}
+                          placeholder={v.placeholder}
+                          placeholderTextColor={theme.textMuted}
+                          keyboardType={v.type === 'number' ? 'numeric' : 'default'}
+                          style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
+                        />
+                      )}
+                    </View>
+                  ))}
+                  {/* Preview */}
+                  <View style={[styles.previewBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <Text style={{ color: theme.textSoft, fontWeight: '700', fontSize: 11, textTransform: 'uppercase', marginBottom: 6 }}>
+                      {lang === 'ar' ? 'معاينة' : lang === 'en' ? 'Preview' : 'Aperçu'}
+                    </Text>
+                    <Text style={{ color: theme.text, fontSize: 14, lineHeight: 21 }}>{body}</Text>
+                  </View>
+                </>
+              )}
+
+              {/* Free compose (no template) */}
+              {!useTemplate && (
+                <>
+                  <Text style={[styles.label, { color: theme.textSoft }]}>{t('compose.subject')}</Text>
+                  <TextInput value={subject} onChangeText={setSubject}
+                    placeholder="Ex : Réunion parents-profs"
+                    placeholderTextColor={theme.textMuted}
+                    style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
+                    maxLength={120} />
+
+                  <Text style={[styles.label, { color: theme.textSoft, marginTop: 14 }]}>{t('compose.body')}</Text>
+                  <TextInput value={body} onChangeText={setBody}
+                    placeholder={t('teacher.writeMessage')}
+                    placeholderTextColor={theme.textMuted}
+                    style={[styles.input, styles.textarea, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
+                    multiline textAlignVertical="top" maxLength={2000} />
+                </>
+              )}
 
               <Text style={[styles.label, { color: theme.textSoft, marginTop: 14 }]}>{t('admin.priority')}</Text>
               <View style={styles.priorityRow}>
@@ -404,6 +516,11 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1.5, borderRadius: 12, padding: 14, fontSize: 15 },
   textarea: { minHeight: 120 },
   priorityRow: { flexDirection: 'row', gap: 8 },
+  templateToggle: { padding: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginBottom: 14 },
+  templateCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 6 },
+  templateIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  templateHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 14 },
+  previewBox: { padding: 14, borderRadius: 12, borderWidth: 1, marginTop: 12 },
   confirmCard: { padding: 18, borderRadius: 16, borderWidth: 1 },
   confirmDivider: { height: 1, marginVertical: 12 },
   bottomBar: { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: StyleSheet.hairlineWidth },

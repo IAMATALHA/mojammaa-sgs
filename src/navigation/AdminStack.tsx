@@ -14,6 +14,7 @@ import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen'
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen'
 import AdminClassesScreen from '../screens/admin/AdminClassesScreen'
 import AdminBroadcastScreen from '../screens/admin/AdminBroadcastScreen'
+import AdminMessagesScreen from '../screens/admin/AdminMessagesScreen'
 import AdminSettingsScreen from '../screens/admin/AdminSettingsScreen'
 import AdminStatsScreen from '../screens/admin/AdminStatsScreen'
 import AdminEdtScreen from '../screens/admin/AdminEdtScreen'
@@ -92,9 +93,9 @@ function AdminTabs() {
         options={{ title: t('tabs.classes'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={GraduationCap} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
-        name="AdminBroadcast"
-        component={AdminBroadcastScreen}
-        options={{ title: t('tabs.announcements'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={Megaphone} color={color} focused={focused} theme={theme} /> }}
+        name="AdminMessages"
+        component={AdminMessagesScreen}
+        options={{ title: t('tabs.messages'), tabBarIcon: ({ color, focused }) => <TabIcon Icon={Megaphone} color={color} focused={focused} theme={theme} /> }}
       />
       <Tab.Screen
         name="AdminSettings"
@@ -112,6 +113,7 @@ export default function AdminStack() {
       <Stack.Screen name="AdminStats" component={AdminStatsScreen} />
       <Stack.Screen name="AdminEdt" component={AdminEdtScreen} />
       <Stack.Screen name="AdminCalendar" component={AdminCalendarScreen} />
+      <Stack.Screen name="AdminBroadcast" component={AdminBroadcastScreen} />
       <Stack.Screen name="AdminAbsences" component={AdminAbsencesScreen} />
       <Stack.Screen name="AdminDevoirs" component={AdminDevoirsScreen} />
     </Stack.Navigator>

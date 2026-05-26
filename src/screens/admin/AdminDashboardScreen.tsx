@@ -247,7 +247,7 @@ export default function AdminDashboardScreen() {
               {t('roles.admin')}
             </Text>
           </View>
-          <Pressable onPress={() => goTo('AdminBroadcast')} hitSlop={8} style={[styles.bellBtn, { backgroundColor: theme.surface }]}>
+          <Pressable onPress={() => goTo('AdminMessages')} hitSlop={8} style={[styles.bellBtn, { backgroundColor: theme.surface }]}>
             <Megaphone size={18} color={theme.text} strokeWidth={1.75} />
           </Pressable>
         </View>
@@ -328,7 +328,7 @@ export default function AdminDashboardScreen() {
                 <ActivityRow
                   icon={<Send size={16} color={theme.primary} strokeWidth={2} />}
                   text={t('admin.messagesToday', { count: state.messagesToday })}
-                  onPress={() => goTo('AdminBroadcast')}
+                  onPress={() => goTo('AdminMessages')}
                   theme={theme}
                   isAr={isAr}
                   last
@@ -347,7 +347,7 @@ export default function AdminDashboardScreen() {
               <SectionHeader
                 title={t('teacher.recentAnnouncements')}
                 actionLabel={t('common.seeMore')}
-                onAction={() => goTo('AdminBroadcast')}
+                onAction={() => goTo('AdminMessages')}
               />
               {messages.length === 0 ? (
                 <Card>
@@ -358,7 +358,7 @@ export default function AdminDashboardScreen() {
                 </Card>
               ) : (
                 messages.map(m => (
-                  <AnnouncementCard key={m.id} item={m} onPress={() => goTo('AdminBroadcast')} />
+                  <AnnouncementCard key={m.id} item={m} onPress={() => goTo('AdminMessages')} />
                 ))
               )}
             </View>

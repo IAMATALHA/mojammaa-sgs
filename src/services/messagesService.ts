@@ -61,12 +61,14 @@ const COL = 'messages'
 // ── Create ───────────────────────────────────────────────────────────────
 
 export async function sendMessage(msg: Omit<MessageDoc, 'createdAt' | 'id'>): Promise<string> {
-  const ref = await addDoc(collection(db, COL), {
-    ...msg,
-    readBy:    msg.readBy ?? [],
-    status:    'sent',
-    createdAt: serverTimestamp(),
+  const clean: Record<string, any> = {}
+  Object.entries(msg).forEach(([k, v]) => {
+    if (v !== undefined) clean[k] = v
   })
+  clean.readBy = clean.readBy ?? []
+  clean.status = 'sent'
+  clean.createdAt = serverTimestamp()
+  const ref = await addDoc(collection(db, COL), clean)
   return ref.id
 }
 
@@ -92,7 +94,7 @@ export function subscribeMessages(
   onError?: (err: Error) => void,
 ): Unsubscribe {
   const merged = new Map<string, MessageDoc>()
-  let ready = 0
+  const unsubs: Unsubscribe[] = []
 
   const apply = () => {
     const arr = [...merged.values()].sort(
@@ -101,34 +103,41 @@ export function subscribeMessages(
     onChange(arr)
   }
 
-  const handleSnap = (label: string) => (snap: any) => {
+  const handleSnap = (snap: any) => {
     snap.docs.forEach((d: any) => merged.set(d.id, { id: d.id, ...(d.data() as MessageDoc) }))
-    ready++
     apply()
   }
 
   const handleErr = (err: any) => {
     console.warn('[messages]', err?.code || err?.message)
-    ready++
-    if (ready >= 2) apply()
   }
 
-  // Direct messages to this user
-  const u1 = onSnapshot(
+  // 1. Direct messages (new format: toIds array)
+  unsubs.push(onSnapshot(
     query(collection(db, COL), where('toIds', 'array-contains', uid)),
-    handleSnap('toIds'),
-    handleErr,
-  )
+    handleSnap, handleErr,
+  ))
 
-  // Broadcast to all or to this role
-  const toTypeForRole = role === 'professeur' ? 'teachers' : role === 'parent' ? 'parents' : 'all'
-  const u2 = onSnapshot(
-    query(collection(db, COL), where('toType', 'in', ['all', toTypeForRole])),
-    handleSnap('broadcast'),
-    handleErr,
-  )
+  // 2. Broadcasts by toType (new format)
+  const toTypes = ['all']
+  if (role === 'professeur') toTypes.push('teachers')
+  else if (role === 'parent') toTypes.push('parents')
+  else if (role === 'admin') toTypes.push('teachers', 'parents')
+  unsubs.push(onSnapshot(
+    query(collection(db, COL), where('toType', 'in', toTypes)),
+    handleSnap, handleErr,
+  ))
 
-  return () => { u1(); u2() }
+  // 3. Old format compatibility (toId string field)
+  const oldToIds = [uid, 'all']
+  if (role === 'professeur') oldToIds.push('teachers')
+  else if (role === 'admin') oldToIds.push('admin', 'teachers')
+  unsubs.push(onSnapshot(
+    query(collection(db, COL), where('toId', 'in', oldToIds)),
+    handleSnap, handleErr,
+  ))
+
+  return () => unsubs.forEach(u => u())
 }
 
 // Sent messages by a user
