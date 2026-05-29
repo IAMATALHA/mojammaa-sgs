@@ -33,7 +33,15 @@ export function toDate(value: unknown): Date | null {
     const d = (value as any).toDate()
     return d instanceof Date && !isNaN(d.getTime()) ? d : null
   }
-  if (typeof value === 'string' || typeof value === 'number') {
+  if (typeof value === 'number') {
+    // 0 (and other falsy epochs) come from legacy/unset records — treat as
+    // missing rather than rendering 1 Jan 1970.
+    if (!value) return null
+    const d = new Date(value)
+    return isNaN(d.getTime()) ? null : d
+  }
+  if (typeof value === 'string') {
+    if (!value.trim()) return null
     const d = new Date(value)
     return isNaN(d.getTime()) ? null : d
   }

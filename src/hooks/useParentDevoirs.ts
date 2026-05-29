@@ -35,18 +35,31 @@ export function useParentDevoirs() {
     const today = new Date().toISOString().split('T')[0]
     const unsubs: Unsubscribe[] = []
 
-    const merged = new Map<string, ParentDevoir>()
-    let ready = 0
+    // One bucket per query chunk, each rebuilt from scratch on every snapshot so
+    // devoirs deleted by a teacher disappear instead of lingering in a map that
+    // is only ever added to.
+    const buckets = new Map<number, Map<string, ParentDevoir>>()
+    const chunkCount = Math.ceil(classes.length / 10)
+    const readyBuckets = new Set<number>()
+
+    const apply = () => {
+      const merged = new Map<string, ParentDevoir>()
+      buckets.forEach(bucket => bucket.forEach((dev, id) => merged.set(id, dev)))
+      setDevoirs([...merged.values()].sort((a, b) => b.dateLimite.localeCompare(a.dateLimite)))
+    }
 
     for (let i = 0; i < classes.length; i += 10) {
       const chunk = classes.slice(i, i + 10)
+      const bucketId = i / 10
+      buckets.set(bucketId, new Map())
       unsubs.push(onSnapshot(
         query(collection(db, 'devoirs'), where('classeId', 'in', chunk)),
         snap => {
+          const next = new Map<string, ParentDevoir>()
           snap.docs.forEach(d => {
             const data = d.data() as Record<string, unknown>
             const dateLimite = asString(data.dateLimite)
-            merged.set(d.id, {
+            next.set(d.id, {
               id: d.id,
               title: asString(data.titre),
               description: asString(data.description),
@@ -57,11 +70,10 @@ export function useParentDevoirs() {
               isPast: dateLimite < today,
             })
           })
-          ready++
-          if (ready >= Math.ceil(classes.length / 10)) {
-            setDevoirs([...merged.values()].sort((a, b) => b.dateLimite.localeCompare(a.dateLimite)))
-            setLoading(false)
-          }
+          buckets.set(bucketId, next)
+          readyBuckets.add(bucketId)
+          apply()
+          if (readyBuckets.size >= chunkCount) setLoading(false)
         },
         () => { setLoading(false) },
       ))

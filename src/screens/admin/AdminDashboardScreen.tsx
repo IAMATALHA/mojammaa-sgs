@@ -237,7 +237,7 @@ export default function AdminDashboardScreen() {
                 <View style={{ flex: 1 }}>
                   <SummaryChip icon={<Users size={14} color="#457B9D" strokeWidth={2} />} value={state.totalProfs} label={t('admin.profs')} bg="#E4F0F6" theme={theme} />
                 </View>
-                <Pressable style={{ flex: 1 }} onPress={() => goTo('AdminClasses')}>
+                <Pressable style={{ flex: 1 }} onPress={() => goTo('AdminStatsTab')}>
                   <SummaryChip icon={<GraduationCap size={14} color="#1D3557" strokeWidth={2} />} value={state.totalClasses} label={t('tabs.classes')} bg="#E8EEF4" theme={theme} />
                 </Pressable>
                 <Pressable style={{ flex: 1 }} onPress={() => goTo('AdminDevoirs')}>

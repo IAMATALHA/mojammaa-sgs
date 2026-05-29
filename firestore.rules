@@ -66,7 +66,13 @@ service cloud.firestore {
     match /messages/{messageId} {
       allow read:   if isSignedIn();
       allow create: if isSignedIn();
-      allow update: if isSignedIn() && (resource.data.fromId == myUid() || isAdmin());
+      // Sender / admin may edit freely. Any recipient may mark a message read
+      // or soft-delete it for themselves — but only by touching readBy /
+      // deletedBy, never the content.
+      allow update: if isSignedIn() && (
+        resource.data.fromId == myUid() || isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy'])
+      );
       allow delete: if isAdmin();
     }
 
