@@ -27,6 +27,7 @@ import { sendPush } from '../../services/pushService'
 import { sendMessage } from '../../services/messagesService'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
@@ -114,6 +115,7 @@ async function notifyParentsOfAbsents(
 
     // 3.a — message Firestore (historique permanent)
     writes.push(sendMessage({
+      type:     'attendance',
       subject:  'Absence signalée',
       body,
       fromId:   teacher.uid,
@@ -150,6 +152,7 @@ async function notifyParentsOfAbsents(
 
 export default function TeacherAttendanceScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const navigation = useNavigation<any>()
   const route = useRoute()
   const { classe, seance: initialSeance } = (route.params || {}) as RouteParams
@@ -247,11 +250,11 @@ export default function TeacherAttendanceScreen() {
 
       const count = absent.size
       Alert.alert(
-        'Appel sauvegardé',
+        t('teacher.attendanceSaved'),
         count === 0
-          ? `Tous les élèves de ${classe} sont présents pour ${seance}.`
-          : `${count} absent${count > 1 ? 's' : ''} enregistré${count > 1 ? 's' : ''} pour ${classe} · ${seance}.` +
-            (notifSent > 0 ? `\n\n${notifSent} parent${notifSent > 1 ? 's' : ''} notifié${notifSent > 1 ? 's' : ''}.` : ''),
+          ? t('teacher.allPresent', { classe, seance })
+          : t('teacher.absentsRecorded', { count, classe, seance }) +
+            (notifSent > 0 ? `\n\n${t('teacher.parentsNotified', { count: notifSent })}` : ''),
         [{ text: 'OK', onPress: () => navigation.goBack() }],
       )
     } catch (e: any) {
@@ -298,17 +301,13 @@ export default function TeacherAttendanceScreen() {
             },
           ]}
         >
-          <View style={[styles.initials, { backgroundColor: isAbsent ? theme.danger : theme.success }]}>
-            <Text style={{ color: '#fff', fontSize: 15, fontFamily: theme.fonts.black }}>
-              {(item.prenom[0] || '?').toUpperCase()}{(item.nom[0] || '').toUpperCase()}
-            </Text>
-          </View>
-          <View style={{ flex: 1, marginStart: 14 }}>
+          <View style={[styles.statusStripe, { backgroundColor: isAbsent ? theme.danger : theme.success }]} />
+          <View style={{ flex: 1 }}>
             <Text style={[styles.eleveName, { color: theme.text, fontFamily: theme.fonts.bold }]}>
               {item.prenom} {item.nom}
             </Text>
             <Text style={[styles.eleveStatus, { color: isAbsent ? theme.danger : theme.success, fontFamily: theme.fonts.semibold }]}>
-              {isAbsent ? '🚫 ABSENT — tap pour annuler' : '✓ Présent'}
+              {isAbsent ? t('teacher.absentTapCancel') : t('teacher.presentLabel')}
             </Text>
           </View>
         </PressableScale>
@@ -317,24 +316,24 @@ export default function TeacherAttendanceScreen() {
   }
 
   return (
-    <ScreenLayout title={`Appel · ${classe}`}>
+    <ScreenLayout title={t('teacher.attendanceTitle', { classe })}>
       {error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
           <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
         </View>
       ) : null}
 
-      <Text style={[styles.label, { color: theme.textSoft }]}>Séance</Text>
+      <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.session')}</Text>
       <View style={styles.chipRow}>
         {SEANCES.map(s => <SeanceChip key={s} value={s} />)}
       </View>
 
       <View style={[styles.summary, { backgroundColor: theme.primarySurface }]}>
         <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700' }}>
-          {date} · {seance} · {eleves.length} élèves · {absent.size} absent{absent.size > 1 ? 's' : ''}
+          {date} · {seance} · {t('teacher.studentsCount', { count: eleves.length })} · {t('teacher.absentCount', { count: absent.size })}
         </Text>
         <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>
-          Tape les absents (deviennent rouges). Tout le monde est présent par défaut.
+          {t('teacher.tapAbsent')}
         </Text>
       </View>
 
@@ -343,7 +342,7 @@ export default function TeacherAttendanceScreen() {
       ) : eleves.length === 0 ? (
         <View style={styles.empty}>
           <Text style={{ color: theme.textSoft, fontSize: 14 }}>
-            Aucun élève dans cette classe.
+            {t('teacher.noStudentsInClass')}
           </Text>
         </View>
       ) : (
@@ -375,7 +374,7 @@ export default function TeacherAttendanceScreen() {
             : (
               <>
                 <Ionicons name="save" size={18} color="#fff" />
-                <Text style={[styles.saveBtnText, { fontFamily: theme.fonts.black }]}>Sauvegarder l'appel</Text>
+                <Text style={[styles.saveBtnText, { fontFamily: theme.fonts.black }]}>{t('teacher.saveAttendance')}</Text>
               </>
             )}
         </PressableScale>
@@ -389,8 +388,8 @@ const styles = StyleSheet.create({
   chipRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   chip:         { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, minWidth: 50, alignItems: 'center' },
   summary:      { padding: 10, borderRadius: 10, marginBottom: 12 },
-  card:         { flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 10, borderRadius: 14, borderWidth: 2 },
-  initials:     { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  card:         { flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 10, borderRadius: 14, borderWidth: 2, overflow: 'hidden' },
+  statusStripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   eleveName:    { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   eleveStatus:  { fontSize: 12, fontWeight: '600' },
   loading:      { paddingVertical: 40, alignItems: 'center' },

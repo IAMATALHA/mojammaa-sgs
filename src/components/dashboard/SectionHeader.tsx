@@ -6,6 +6,7 @@
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface SectionHeaderProps {
@@ -19,15 +20,18 @@ export default function SectionHeader({
   title, subtitle, actionLabel, onAction,
 }: SectionHeaderProps) {
   const theme = useTheme()
+  const { i18n } = useTranslation()
+  const isAr = i18n.language === 'ar'
   return (
-    <View style={styles.container}>
-      <View style={styles.titleBlock}>
+    <View style={[styles.container, isAr && { flexDirection: 'row-reverse' }]}>
+      <View style={[styles.titleBlock, isAr && { alignItems: 'flex-end' }]}>
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           style={[styles.title, {
             color: theme.text,
-            fontFamily: theme.fonts.semibold,
+            fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
             fontSize: theme.fontSize.title,
+            writingDirection: isAr ? 'rtl' : 'ltr',
           }]}
         >
           {title}
@@ -38,8 +42,9 @@ export default function SectionHeader({
             style={{
               marginTop: 2,
               color: theme.textSoft,
-              fontFamily: theme.fonts.regular,
+              fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.regular,
               fontSize: theme.fontSize.small,
+              writingDirection: isAr ? 'rtl' : 'ltr',
             }}
           >
             {subtitle}
@@ -52,11 +57,12 @@ export default function SectionHeader({
             <MotiView
               animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.78 : 1 }}
               transition={{ type: 'timing', duration: 200 }}
+              style={[styles.actionPill, { backgroundColor: theme.accentSurface }]}
             >
               <Text style={{
-                color: theme.primary,
-                fontFamily: theme.fonts.medium,
-                fontSize: theme.fontSize.small,
+                color: theme.accent,
+                fontFamily: theme.fonts.semibold,
+                fontSize: 11,
               }}>
                 {actionLabel}
               </Text>
@@ -71,10 +77,17 @@ export default function SectionHeader({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    alignItems:    'flex-end',
+    alignItems:    'center',
     justifyContent:'space-between',
-    marginBottom:  14,
+    marginBottom:  12,
   },
   titleBlock: { flex: 1, marginEnd: 16 },
-  title:      { letterSpacing: -0.25 },
+  title:      { lineHeight: 23 },
+  actionPill: {
+    minHeight: 30,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 })

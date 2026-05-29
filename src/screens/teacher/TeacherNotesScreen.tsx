@@ -24,6 +24,7 @@ import {
 import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenLayout from '../../components/ScreenLayout';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
@@ -52,6 +53,7 @@ interface NoteEntry {
 
 export default function TeacherNotesScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const route = useRoute()
   const { profile } = useAuth()
   // Si la classe est fournie via les params (drill-down depuis le folder),
@@ -133,7 +135,7 @@ export default function TeacherNotesScreen() {
       const parsed: ParsedNoteRow[] = await parseNotesFile(a.uri, a.mimeType || '')
 
       if (parsed.length === 0) {
-        Alert.alert('Aucune note', 'Le fichier ne contient aucune ligne avec une note entre 0 et 20.')
+        Alert.alert(t('common.noData'), t('teacher.noNotes'))
         return
       }
 
@@ -153,15 +155,15 @@ export default function TeacherNotesScreen() {
       })
 
       Alert.alert(
-        'Confirmer l\'import',
-        `${matched.length} note${matched.length > 1 ? 's' : ''} prête${matched.length > 1 ? 's' : ''} à enregistrer pour ${matiere} · ${semestre}.\n` +
+        t('teacher.confirmImport'),
+        t('teacher.notesReady', { count: matched.length, subject: matiere, semester: semestre }) +
         (unmatched.length > 0
-          ? `${unmatched.length} ligne${unmatched.length > 1 ? 's' : ''} ignorée${unmatched.length > 1 ? 's' : ''} (élève non trouvé).`
+          ? '\n' + t('teacher.linesIgnored', { count: unmatched.length })
           : ''),
         [
-          { text: 'Annuler', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Importer',
+            text: t('teacher.import'),
             onPress: async () => {
               try {
                 const batch = writeBatch(db)
@@ -182,17 +184,17 @@ export default function TeacherNotesScreen() {
                   }, { merge: true })
                 })
                 await batch.commit()
-                Alert.alert('Import terminé', `${matched.length} note${matched.length > 1 ? 's' : ''} enregistrée${matched.length > 1 ? 's' : ''}.`)
+                Alert.alert(t('teacher.importDone'), t('teacher.notesImported', { count: matched.length }))
                 load()
               } catch (e: any) {
-                Alert.alert('Erreur', e?.message || 'Sauvegarde impossible.')
+                Alert.alert(t('common.error'), e?.message || t('teacher.saveFailed'))
               }
             },
           },
         ],
       )
     } catch (e: any) {
-      Alert.alert('Erreur', e?.message || 'Lecture du fichier impossible.')
+      Alert.alert(t('common.error'), e?.message || t('teacher.readFailed'))
     }
   }, [profile, classe, matiere, semestre, load])
 
@@ -234,11 +236,11 @@ export default function TeacherNotesScreen() {
 
   if (!classe) {
     return (
-      <ScreenLayout title="Notes">
+      <ScreenLayout title={t('teacher.notesTitle')}>
         <View style={styles.empty}>
           <Text style={{ color: theme.textSoft, fontSize: 14, textAlign: 'center' }}>
-            Aucune classe assignée à votre profil.{'\n'}
-            Contactez l'administration pour mettre à jour votre fiche.
+            {t('teacher.noClassProfile')}{'\n'}
+            {t('teacher.contactAdmin')}
           </Text>
         </View>
       </ScreenLayout>
@@ -246,19 +248,19 @@ export default function TeacherNotesScreen() {
   }
 
   return (
-    <ScreenLayout title="Notes">
+    <ScreenLayout title={t('teacher.notesTitle')}>
       {error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
           <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
         </View>
       ) : null}
 
-      <Text style={[styles.label, { color: theme.textSoft }]}>Matière</Text>
+      <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.subject')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
         {MATIERES.map(m => <Chip key={m} value={m} active={matiere === m} onPress={() => setMatiere(m)} />)}
       </ScrollView>
 
-      <Text style={[styles.label, { color: theme.textSoft, marginTop: 10 }]}>Semestre</Text>
+      <Text style={[styles.label, { color: theme.textSoft, marginTop: 10 }]}>{t('teacher.semester')}</Text>
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
         {SEMESTRES.map(s => <Chip key={s} value={s} active={semestre === s} onPress={() => setSemestre(s)} />)}
       </View>
@@ -276,7 +278,7 @@ export default function TeacherNotesScreen() {
       >
         <Ionicons name="cloud-upload-outline" size={18} color={theme.primary} />
         <Text style={{ color: theme.primary, fontWeight: '700', marginStart: 8, fontSize: 13 }}>
-          Importer un fichier Excel / CSV
+          {t('teacher.importExcel')}
         </Text>
       </TouchableOpacity>
 
@@ -328,6 +330,7 @@ function EditNoteModal({
   onSaved:    () => void
 }) {
   const theme = useTheme()
+  const { t } = useTranslation()
   const [value,  setValue]  = useState('')
   const [saving, setSaving] = useState(false)
   const [err,    setErr]    = useState('')
@@ -342,7 +345,7 @@ function EditNoteModal({
     if (!eleve) return
     const num = parseFloat(value.replace(',', '.'))
     if (Number.isNaN(num) || num < 0 || num > 20) {
-      setErr('Note invalide. Doit être entre 0 et 20.')
+      setErr(t('teacher.invalidNote'))
       return
     }
     setSaving(true); setErr('')
@@ -363,8 +366,8 @@ function EditNoteModal({
       }, { merge: true })
       onSaved()
     } catch (e: any) {
-      setErr(e?.message || 'Erreur lors de la sauvegarde.')
-      Alert.alert('Erreur', e?.message || 'Impossible de sauvegarder.')
+      setErr(e?.message || t('teacher.saveFailed'))
+      Alert.alert(t('common.error'), e?.message || t('teacher.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -375,13 +378,13 @@ function EditNoteModal({
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: theme.bg }}>
         <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
           <TouchableOpacity onPress={onClose}>
-            <Text style={{ color: theme.text, fontSize: 16 }}>Annuler</Text>
+            <Text style={{ color: theme.text, fontSize: 16 }}>{t('common.cancel')}</Text>
           </TouchableOpacity>
-          <Text style={[styles.modalTitle, { color: theme.text }]}>Saisir une note</Text>
+          <Text style={[styles.modalTitle, { color: theme.text }]}>{t('teacher.enterNote')}</Text>
           <TouchableOpacity onPress={submit} disabled={saving}>
             {saving
               ? <ActivityIndicator color={theme.primary} />
-              : <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '700' }}>Sauver</Text>}
+              : <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '700' }}>{t('teacher.saveDone')}</Text>}
           </TouchableOpacity>
         </View>
 
@@ -403,7 +406,7 @@ function EditNoteModal({
             </View>
           ) : null}
 
-          <Text style={[styles.label, { color: theme.textSoft }]}>Note / 20</Text>
+          <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.noteLabel')}</Text>
           <TextInput
             value={value}
             onChangeText={setValue}

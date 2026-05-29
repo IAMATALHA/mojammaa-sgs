@@ -1,7 +1,7 @@
 /**
  * Skeleton — minimal animated placeholder using Moti.
  *
- * Used to indicate loading state on cards, lines, avatars.
+ * Used to indicate loading state on cards and lines.
  * Falls back gracefully when Moti is unavailable (static block).
  */
 

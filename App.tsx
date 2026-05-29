@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { View, ActivityIndicator } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -27,8 +27,15 @@ import {
 import { AuthProvider } from './src/contexts/AuthContext'
 import { ThemeProvider } from './src/contexts/ThemeContext'
 import NavigationRoot from './src/navigation/NavigationRoot'
+import { initI18n } from './src/i18n'
 
 export default function App() {
+  const [i18nReady, setI18nReady] = useState(false)
+
+  useEffect(() => {
+    initI18n().then(() => setI18nReady(true))
+  }, [])
+
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -46,7 +53,7 @@ export default function App() {
     Cairo_700Bold,
   })
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || !i18nReady) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F7F4ED' }}>
         <ActivityIndicator color="#7BA67B" />

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { collection, getDocs } from 'firebase/firestore';
 import ScreenLayout from '../../components/ScreenLayout';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { db } from '../../config/firebase';
 
@@ -27,6 +28,7 @@ const JOURS = ['Sam', 'Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven']
 
 export default function AdminEdtScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const [cours,   setCours]   = useState<Cours[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -76,7 +78,7 @@ export default function AdminEdtScreen() {
   )
 
   return (
-    <ScreenLayout title="Emploi du temps">
+    <ScreenLayout title={t('admin.scheduleTitle')}>
       {error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
           <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
@@ -90,7 +92,7 @@ export default function AdminEdtScreen() {
             style={[styles.chip, { borderColor: !classeFilter ? theme.primary : theme.border, backgroundColor: !classeFilter ? theme.primarySurface : 'transparent' }]}
           >
             <Text style={{ color: !classeFilter ? theme.primary : theme.textSoft, fontWeight: !classeFilter ? '700' : '500', fontSize: 12 }}>
-              Toutes
+              {t('admin.allClasses')}
             </Text>
           </TouchableOpacity>
           {allClasses.map(c => {
@@ -112,7 +114,7 @@ export default function AdminEdtScreen() {
       ) : filtered.length === 0 ? (
         <View style={styles.empty}>
           <Text style={{ color: theme.textSoft, fontSize: 14, textAlign: 'center' }}>
-            Aucun cours{classeFilter ? ` pour ${classeFilter}` : ''}.
+            {t('admin.noCourse')}{classeFilter ? ` (${classeFilter})` : ''}.
           </Text>
         </View>
       ) : (

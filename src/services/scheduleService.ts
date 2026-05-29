@@ -23,6 +23,7 @@ export interface WeeklySlot {
   classe:      string
   room?:       string
   subject?:    string
+  seance?:     string   // 'S1'..'S6' — if present, used directly for attendance
 }
 
 export interface ScheduleDoc {

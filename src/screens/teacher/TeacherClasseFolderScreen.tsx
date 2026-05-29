@@ -13,6 +13,7 @@ import { useRoute, useNavigation } from '@react-navigation/native'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 
@@ -24,6 +25,7 @@ interface RouteParams {
 
 export default function TeacherClasseFolderScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const navigation = useNavigation<any>()
   const route = useRoute()
   const { classe, seance, openAttendance } = (route.params || {}) as RouteParams
@@ -58,7 +60,7 @@ export default function TeacherClasseFolderScreen() {
     if (openAttendance && classe) {
       // Petit délai pour éviter une transition saccadée
       const id = setTimeout(() => {
-        navigation.navigate('Attendance', { classe, seance })
+        navigation.navigate('TeacherAttendance', { classe, seance })
       }, 250)
       return () => clearTimeout(id)
     }
@@ -85,7 +87,7 @@ export default function TeacherClasseFolderScreen() {
   )
 
   return (
-    <ScreenLayout title={`Classe ${classe}`}>
+    <ScreenLayout title={t('teacher.classFolder', { classe })}>
       <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
         {/* Header */}
         <View style={[styles.header, { backgroundColor: theme.primary }]}>
@@ -94,39 +96,39 @@ export default function TeacherClasseFolderScreen() {
             <ActivityIndicator color="#fff" style={{ marginTop: 8 }} />
           ) : (
             <Text style={styles.headerMeta}>
-              {eleveCount ?? '?'} élèves · {devoirsCount ?? 0} devoirs · {notesCount ?? 0} notes
+              {t('teacher.studentsCount', { count: eleveCount ?? 0 })} · {devoirsCount ?? 0} {t('tabs.homework').toLowerCase()} · {notesCount ?? 0} {t('tabs.grades').toLowerCase()}
             </Text>
           )}
         </View>
 
         {/* Action grosse : appel */}
         <TouchableOpacity
-          onPress={() => navigation.navigate('Attendance', { classe, seance })}
+          onPress={() => navigation.navigate('TeacherAttendance', { classe, seance })}
           style={[styles.bigBtn, { backgroundColor: theme.primary }]}
           activeOpacity={0.85}
         >
           <Ionicons name="checkmark-circle" size={26} color="#fff" />
-          <Text style={styles.bigBtnText}>Faire l'appel</Text>
+          <Text style={styles.bigBtnText}>{t('teacher.takeAttendance')}</Text>
         </TouchableOpacity>
 
         {/* Autres actions */}
         <Action
           icon="people-outline"
-          label="Liste des élèves"
-          sub={eleveCount != null ? `${eleveCount} élèves` : 'Voir le détail'}
-          onPress={() => navigation.navigate('ClasseEleves', { classe })}
+          label={t('teacher.studentList')}
+          sub={eleveCount != null ? t('teacher.studentsCount', { count: eleveCount }) : t('teacher.seeDetail')}
+          onPress={() => navigation.navigate('TeacherClasseEleves', { classe })}
         />
         <Action
           icon="book-outline"
-          label="Devoirs"
-          sub={devoirsCount != null ? `${devoirsCount} devoir(s)` : 'Voir et créer'}
-          onPress={() => navigation.navigate('ClasseDevoirs', { classe })}
+          label={t('tabs.homework')}
+          sub={devoirsCount != null ? `${devoirsCount} devoir(s)` : t('teacher.homeworkSeeCreate')}
+          onPress={() => navigation.navigate('TeacherDevoirsDetail', { classe })}
         />
         <Action
           icon="document-text-outline"
-          label="Notes"
-          sub={notesCount != null ? `${notesCount} note(s)` : 'Voir et saisir'}
-          onPress={() => navigation.navigate('ClasseNotes', { classe })}
+          label={t('tabs.grades')}
+          sub={notesCount != null ? `${notesCount} note(s)` : t('teacher.notesSeeEnter')}
+          onPress={() => navigation.navigate('TeacherNotes', { classe })}
         />
       </ScrollView>
     </ScreenLayout>

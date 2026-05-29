@@ -11,13 +11,15 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { collection, getDocs, query, where } from 'firebase/firestore'
 import { useAuth } from '../contexts/AuthContext'
 import { subscribeEleves, groupByClasse, type EleveDoc } from '../services/elevesService'
 import {
   subscribeSchedule, type ScheduleDoc, type WeeklySlot, type WeekDay,
 } from '../services/scheduleService'
 import { computeTeacherPresenceRate } from '../services/absencesService'
-import type { ScheduleEntry, ScheduleStatus } from '../utils/mockData'
+import { db } from '../config/firebase'
+import type { ScheduleEntry, ScheduleStatus, ClassPerformance } from '../utils/mockData'
 
 export interface TeacherKpis {
   classes:    number
@@ -27,14 +29,15 @@ export interface TeacherKpis {
 }
 
 export interface TeacherData {
-  loading:    boolean
-  error:      string | null
-  eleves:     EleveDoc[]
-  byClasse:   Record<string, EleveDoc[]>
-  classes:    string[]
-  kpis:       TeacherKpis
-  schedule:   ScheduleDoc | null
-  todaySlots: ScheduleEntry[]
+  loading:          boolean
+  error:            string | null
+  eleves:           EleveDoc[]
+  byClasse:         Record<string, EleveDoc[]>
+  classes:          string[]
+  kpis:             TeacherKpis
+  schedule:         ScheduleDoc | null
+  todaySlots:       ScheduleEntry[]
+  classPerformance: ClassPerformance[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -67,7 +70,7 @@ function statusOf(slot: WeeklySlot, now: Date): ScheduleStatus {
 
 function toScheduleEntry(
   slot: WeeklySlot, idx: number, status: ScheduleStatus, subject: string,
-): ScheduleEntry {
+): ScheduleEntry & { seance?: string } {
   return {
     id:        `${slot.day}-${slot.startTime}-${idx}`,
     subject:   slot.subject || subject,
@@ -76,6 +79,7 @@ function toScheduleEntry(
     startTime: slot.startTime,
     endTime:   slot.endTime,
     status,
+    seance:    slot.seance,
   }
 }
 
@@ -90,12 +94,14 @@ function getClassesFromProfile(profile: any): string[] {
 
 export function useTeacherData(): TeacherData {
   const { profile } = useAuth()
-  const [eleves,   setEleves]    = useState<EleveDoc[]>([])
-  const [schedule, setSchedule]  = useState<ScheduleDoc | null>(null)
-  const [presence, setPresence]  = useState<number>(100)
-  const [loading,  setLoading]   = useState(true)
-  const [error,    setError]     = useState<string | null>(null)
-  const [tick,     setTick]      = useState(0)   // re-render every minute for status
+  const [eleves,           setEleves]          = useState<EleveDoc[]>([])
+  const [schedule,         setSchedule]        = useState<ScheduleDoc | null>(null)
+  const [presence,         setPresence]        = useState<number>(100)
+  const [pendingCount,     setPendingCount]    = useState<number>(0)
+  const [classPerformance, setClassPerformance] = useState<ClassPerformance[]>([])
+  const [loading,          setLoading]         = useState(true)
+  const [error,            setError]           = useState<string | null>(null)
+  const [tick,             setTick]            = useState(0)
 
   const classes = useMemo(() => getClassesFromProfile(profile), [profile])
 
@@ -142,8 +148,7 @@ export function useTeacherData(): TeacherData {
     return () => clearInterval(id)
   }, [])
 
-  // Recalcule le taux de présence du jour quand les classes changent ou
-  // à chaque tick (refresh chaque minute, suffisant pour un KPI).
+  // Presence rate: only recompute on mount or when classes change (not every tick)
   useEffect(() => {
     if (classes.length === 0) {
       setPresence(100)
@@ -152,7 +157,44 @@ export function useTeacherData(): TeacherData {
     computeTeacherPresenceRate(classes)
       .then(setPresence)
       .catch(() => setPresence(100))
-  }, [classes.join('|'), tick])
+  }, [classes.join('|')])
+
+  // Count pending devoirs (dateLimite >= today)
+  useEffect(() => {
+    if (!profile?.uid) { setPendingCount(0); return }
+    const today = new Date().toISOString().split('T')[0]
+    getDocs(query(
+      collection(db, 'devoirs'),
+      where('teacherId', '==', profile.uid),
+    )).then(snap => {
+      const count = snap.docs.filter(d => {
+        const dl = (d.data() as any).dateLimite
+        return typeof dl === 'string' && dl >= today
+      }).length
+      setPendingCount(count)
+    }).catch(() => setPendingCount(0))
+  }, [profile?.uid])
+
+  // Class performance from real notes
+  useEffect(() => {
+    if (classes.length === 0) { setClassPerformance([]); return }
+    Promise.all(
+      classes.map(async (c) => {
+        const snap = await getDocs(query(collection(db, 'notes'), where('classe', '==', c)))
+        const notes: number[] = []
+        snap.forEach(d => {
+          const n = (d.data() as any).note
+          if (typeof n === 'number' && n >= 0 && n <= 20) notes.push(n)
+        })
+        if (notes.length === 0) return { classe: c, average: 0, topMark: 0, trend: 'flat' as const }
+        const avg = notes.reduce((s, v) => s + v, 0) / notes.length
+        const top = Math.max(...notes)
+        return { classe: c, average: Math.round(avg * 10) / 10, topMark: top, trend: 'flat' as const }
+      }),
+    )
+      .then(results => setClassPerformance(results.filter(r => r.average > 0)))
+      .catch(() => setClassPerformance([]))
+  }, [classes.join('|')])
 
   const byClasse = useMemo(() => groupByClasse(eleves), [eleves])
 
@@ -174,8 +216,8 @@ export function useTeacherData(): TeacherData {
     classes:    classes.length,
     students:   eleves.length,
     attendance: presence,
-    pending:    0,
-  }), [classes.length, eleves.length, presence])
+    pending:    pendingCount,
+  }), [classes.length, eleves.length, presence, pendingCount])
 
   return {
     loading,
@@ -186,5 +228,6 @@ export function useTeacherData(): TeacherData {
     kpis,
     schedule,
     todaySlots,
+    classPerformance,
   }
 }

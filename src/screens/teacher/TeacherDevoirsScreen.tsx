@@ -8,7 +8,7 @@
  * Convention `attachments` sur le doc devoir :
  *   attachments: [{ url, name, mime, size }]
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Modal,
   TextInput, ScrollView, Alert, ActivityIndicator, RefreshControl,
@@ -23,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenLayout from '../../components/ScreenLayout';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
@@ -52,6 +53,7 @@ function formatDate(iso: string): string {
 
 export default function TeacherDevoirsScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const route = useRoute();
   const { profile } = useAuth();
   const routeClasse = (route.params as { classe?: string } | undefined)?.classe
@@ -103,19 +105,19 @@ export default function TeacherDevoirsScreen() {
       ) : null}
       <View style={styles.metaRow}>
         <Text style={[styles.classText, { color: theme.text }]}>{item.classeId}</Text>
-        <Text style={[styles.dueDate, { color: theme.textSoft }]}>À rendre : {formatDate(item.dateLimite)}</Text>
+        <Text style={[styles.dueDate, { color: theme.textSoft }]}>{t('teacher.dueDate', { date: formatDate(item.dateLimite) })}</Text>
       </View>
       <TouchableOpacity onPress={() => openWithReuse(item)} style={[styles.reuseChip, { backgroundColor: theme.primarySurface }]}>
         <Ionicons name="copy-outline" size={12} color={theme.primary} />
         <Text style={{ color: theme.primary, fontSize: 11, fontWeight: '700', marginStart: 4 }}>
-          Réutiliser
+          {t('teacher.reuse')}
         </Text>
       </TouchableOpacity>
     </View>
   );
 
   return (
-    <ScreenLayout title="Mes devoirs">
+    <ScreenLayout title={t('teacher.myHomework')}>
       {error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
           <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
@@ -127,7 +129,7 @@ export default function TeacherDevoirsScreen() {
       ) : devoirs.length === 0 ? (
         <View style={styles.empty}>
           <Text style={{ color: theme.textSoft, fontSize: 14, textAlign: 'center' }}>
-            Aucun devoir pour l'instant.{'\n'}Touche le bouton + pour en créer un.
+            {t('teacher.noHomeworkYet')}{'\n'}{t('teacher.touchPlus')}
           </Text>
         </View>
       ) : (
@@ -159,6 +161,32 @@ export default function TeacherDevoirsScreen() {
   );
 }
 
+// ─── Helpers for date chips ──────────────────────────────────────────────────
+function generateDateChips(count: number): { iso: string; label: string; sub: string }[] {
+  const chips: { iso: string; label: string; sub: string }[] = []
+  const now = new Date()
+  const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
+  const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
+  for (let i = 1; i <= count; i++) {
+    const d = new Date(now)
+    d.setDate(d.getDate() + i)
+    const iso = d.toISOString().split('T')[0]
+    chips.push({
+      iso,
+      label: `${dayNames[d.getDay()]} ${d.getDate()}`,
+      sub: monthNames[d.getMonth()],
+    })
+  }
+  return chips
+}
+
+function getAvailableClasses(profile: any): string[] {
+  if (!profile) return []
+  if (Array.isArray(profile.classes) && profile.classes.length > 0) return profile.classes
+  if (typeof profile.classe === 'string' && profile.classe) return [profile.classe]
+  return []
+}
+
 // ─── Create devoir modal ─────────────────────────────────────────────────────
 function CreateDevoirModal({
   visible, defaultClasse, prefill, onClose, onCreated,
@@ -170,6 +198,7 @@ function CreateDevoirModal({
   onCreated:     () => void
 }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { profile } = useAuth();
   const [titre,       setTitre]       = useState('');
   const [description, setDescription] = useState('');
@@ -181,7 +210,9 @@ function CreateDevoirModal({
   const [saving,      setSaving]      = useState(false);
   const [err,         setErr]         = useState('');
 
-  // Init form quand le modal s'ouvre (prefill éventuel)
+  const dateChips = useMemo(() => generateDateChips(30), [])
+  const availableClasses = useMemo(() => getAvailableClasses(profile), [profile])
+
   useEffect(() => {
     if (!visible) return
     if (prefill) {
@@ -189,8 +220,6 @@ function CreateDevoirModal({
       setDescription(prefill.description || '')
       setType(prefill.type || TYPES[0])
       setClasseId(prefill.classeId || defaultClasse || '')
-      // On laisse dateLimite VIDE volontairement : le prof doit choisir
-      // une nouvelle date pour le devoir réutilisé.
       setDateLimite('')
       setAttachments(prefill.attachments ? [...prefill.attachments] : [])
     } else {
@@ -207,7 +236,7 @@ function CreateDevoirModal({
         ? await ImagePicker.requestCameraPermissionsAsync()
         : await ImagePicker.requestMediaLibraryPermissionsAsync()
       if (perm.status !== 'granted') {
-        Alert.alert('Permission refusée', 'Impossible d\'accéder à la caméra / galerie.')
+        Alert.alert(t('teacher.permissionDenied'), t('teacher.cameraAccessDenied'))
         return
       }
       const result = fromCamera
@@ -221,12 +250,12 @@ function CreateDevoirModal({
         const att = await uploadAttachment(a.uri, 'devoirs', profile.uid, name, a.mimeType || 'image/jpeg')
         setAttachments(prev => [...prev, att])
       } catch (e: any) {
-        Alert.alert('Erreur', e?.message || 'Upload échoué.')
+        Alert.alert(t('common.error'), e?.message || t('teacher.uploadFailed'))
       } finally {
         setUploading(false)
       }
     } catch (e: any) {
-      Alert.alert('Erreur', e?.message || 'Sélection d\'image impossible.')
+      Alert.alert(t('common.error'), e?.message || t('teacher.imageSelectFailed'))
     }
   }
 
@@ -245,12 +274,12 @@ function CreateDevoirModal({
         const att = await uploadAttachment(a.uri, 'devoirs', profile.uid, a.name, a.mimeType || 'application/octet-stream')
         setAttachments(prev => [...prev, att])
       } catch (e: any) {
-        Alert.alert('Erreur', e?.message || 'Upload échoué.')
+        Alert.alert(t('common.error'), e?.message || t('teacher.uploadFailed'))
       } finally {
         setUploading(false)
       }
     } catch (e: any) {
-      Alert.alert('Erreur', e?.message || 'Sélection de fichier impossible.')
+      Alert.alert(t('common.error'), e?.message || t('teacher.fileSelectFailed'))
     }
   }
 
@@ -259,12 +288,10 @@ function CreateDevoirModal({
   }
 
   const submit = async () => {
-    if (!profile) { setErr('Profil non chargé.'); return }
-    if (!titre.trim())    { setErr('Le titre est requis.'); return }
-    if (!classeId.trim()) { setErr('La classe cible est requise.'); return }
-    if (!dateLimite.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(dateLimite)) {
-      setErr('Date limite invalide (format YYYY-MM-DD).'); return
-    }
+    if (!profile) return
+    if (!titre.trim())    { setErr(t('teacher.titleRequired')); return }
+    if (!classeId.trim()) { setErr(t('teacher.classRequired')); return }
+    if (!dateLimite)      { setErr(t('teacher.invalidDate')); return }
     setSaving(true); setErr('');
     try {
       await addDoc(collection(db, 'devoirs'), {
@@ -280,8 +307,8 @@ function CreateDevoirModal({
       })
       onCreated()
     } catch (e: any) {
-      setErr(e?.message || 'Erreur lors de la création.')
-      Alert.alert('Erreur', e?.message || 'Impossible de créer le devoir.')
+      setErr(e?.message || t('teacher.createFailed'))
+      Alert.alert(t('common.error'), e?.message || t('teacher.createFailed'))
     } finally {
       setSaving(false)
     }
@@ -292,15 +319,15 @@ function CreateDevoirModal({
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: theme.bg }}>
         <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
           <TouchableOpacity onPress={onClose}>
-            <Text style={{ color: theme.text, fontSize: 16 }}>Annuler</Text>
+            <Text style={{ color: theme.text, fontSize: 16 }}>{t('common.cancel')}</Text>
           </TouchableOpacity>
           <Text style={[styles.modalTitle, { color: theme.text }]}>
-            {prefill ? 'Réutiliser un devoir' : 'Nouveau devoir'}
+            {prefill ? t('teacher.reuseHomework') : t('teacher.newHomework')}
           </Text>
           <TouchableOpacity onPress={submit} disabled={saving || uploading}>
             {saving
               ? <ActivityIndicator color={theme.primary} />
-              : <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '700' }}>Créer</Text>}
+              : <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '700' }}>{t('teacher.create')}</Text>}
           </TouchableOpacity>
         </View>
 
@@ -309,7 +336,7 @@ function CreateDevoirModal({
             <View style={[styles.prefillBanner, { backgroundColor: theme.primarySurface }]}>
               <Ionicons name="copy-outline" size={14} color={theme.primary} />
               <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '600', marginStart: 6, flex: 1 }}>
-                Brouillon basé sur "{prefill.titre}". Ajuste les champs au besoin.
+                {t('teacher.prefillNote', { title: prefill.titre })}
               </Text>
             </View>
           ) : null}
@@ -320,7 +347,7 @@ function CreateDevoirModal({
             </View>
           ) : null}
 
-          <Text style={[styles.label, { color: theme.textSoft }]}>Titre *</Text>
+          <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.titleLabel')}</Text>
           <TextInput
             value={titre} onChangeText={setTitre}
             placeholder="Ex : Exercices Chapitre 3"
@@ -329,7 +356,7 @@ function CreateDevoirModal({
             maxLength={100}
           />
 
-          <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>Description</Text>
+          <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>{t('teacher.descriptionLabel')}</Text>
           <TextInput
             value={description} onChangeText={setDescription}
             placeholder="Détails, consignes…"
@@ -339,45 +366,62 @@ function CreateDevoirModal({
             maxLength={1000}
           />
 
-          <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>Type</Text>
+          <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>{t('teacher.typeLabel')}</Text>
           <View style={styles.chipRow}>
-            {TYPES.map(t => {
-              const active = type === t
+            {TYPES.map(tp => {
+              const active = type === tp
               return (
-                <TouchableOpacity key={t}
-                  onPress={() => setType(t)}
+                <TouchableOpacity key={tp}
+                  onPress={() => setType(tp)}
                   style={[styles.chip, { borderColor: active ? theme.primary : theme.border, backgroundColor: active ? theme.primarySurface : 'transparent' }]}
                 >
-                  <Text style={{ color: active ? theme.primary : theme.textSoft, fontWeight: active ? '700' : '500', fontSize: 12 }}>{t}</Text>
+                  <Text style={{ color: active ? theme.primary : theme.textSoft, fontWeight: active ? '700' : '500', fontSize: 12 }}>{tp}</Text>
                 </TouchableOpacity>
               )
             })}
           </View>
 
-          <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>Classe cible *</Text>
-          <TextInput
-            value={classeId} onChangeText={setClasseId}
-            placeholder="Ex : 1APIC-3"
-            placeholderTextColor={theme.textSoft}
-            style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
-            autoCapitalize="characters"
-            maxLength={20}
-          />
+          {/* Class selector — scrollable chips */}
+          <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>{t('teacher.targetClass')}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
+            {availableClasses.map(c => {
+              const active = classeId === c
+              return (
+                <TouchableOpacity key={c}
+                  onPress={() => setClasseId(c)}
+                  style={[styles.chip, {
+                    borderColor: active ? theme.primary : theme.border,
+                    backgroundColor: active ? theme.primary : 'transparent',
+                  }]}
+                >
+                  <Text style={{ color: active ? '#fff' : theme.textSoft, fontWeight: active ? '700' : '500', fontSize: 13 }}>{c}</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </ScrollView>
 
-          <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>
-            Date limite * <Text style={{ fontWeight: '400', textTransform: 'none' }}>(YYYY-MM-DD)</Text>
-          </Text>
-          <TextInput
-            value={dateLimite} onChangeText={setDateLimite}
-            placeholder="2026-05-30"
-            placeholderTextColor={theme.textSoft}
-            style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white, fontFamily: 'monospace' }]}
-            keyboardType="numbers-and-punctuation"
-            maxLength={10}
-          />
+          {/* Date picker — scrollable day chips, today+ only */}
+          <Text style={[styles.label, { color: theme.textSoft, marginTop: 14 }]}>{t('teacher.deadlineLabel')}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
+            {dateChips.map(dc => {
+              const active = dateLimite === dc.iso
+              return (
+                <TouchableOpacity key={dc.iso}
+                  onPress={() => setDateLimite(dc.iso)}
+                  style={[styles.dateChip, {
+                    borderColor: active ? theme.primary : theme.border,
+                    backgroundColor: active ? theme.primary : theme.surface,
+                  }]}
+                >
+                  <Text style={{ color: active ? '#fff' : theme.text, fontWeight: '700', fontSize: 14, textAlign: 'center' }}>{dc.label}</Text>
+                  <Text style={{ color: active ? 'rgba(255,255,255,0.8)' : theme.textSoft, fontSize: 10, textAlign: 'center', marginTop: 2 }}>{dc.sub}</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </ScrollView>
 
           {/* Pièces jointes */}
-          <Text style={[styles.label, { color: theme.textSoft, marginTop: 14 }]}>Pièces jointes</Text>
+          <Text style={[styles.label, { color: theme.textSoft, marginTop: 14 }]}>{t('teacher.attachments')}</Text>
           <View style={styles.attachBtnRow}>
             <TouchableOpacity
               style={[styles.attachBtn, { borderColor: theme.border, backgroundColor: theme.white }]}
@@ -385,7 +429,7 @@ function CreateDevoirModal({
               disabled={uploading}
             >
               <Ionicons name="camera-outline" size={18} color={theme.primary} />
-              <Text style={[styles.attachBtnText, { color: theme.text }]}>Photo du tableau</Text>
+              <Text style={[styles.attachBtnText, { color: theme.text }]}>{t('teacher.boardPhoto')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.attachBtn, { borderColor: theme.border, backgroundColor: theme.white }]}
@@ -393,7 +437,7 @@ function CreateDevoirModal({
               disabled={uploading}
             >
               <Ionicons name="image-outline" size={18} color={theme.primary} />
-              <Text style={[styles.attachBtnText, { color: theme.text }]}>Galerie</Text>
+              <Text style={[styles.attachBtnText, { color: theme.text }]}>{t('teacher.gallery')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.attachBtn, { borderColor: theme.border, backgroundColor: theme.white }]}
@@ -401,14 +445,14 @@ function CreateDevoirModal({
               disabled={uploading}
             >
               <Ionicons name="document-outline" size={18} color={theme.primary} />
-              <Text style={[styles.attachBtnText, { color: theme.text }]}>PDF / Fichier</Text>
+              <Text style={[styles.attachBtnText, { color: theme.text }]}>{t('teacher.pdfFile')}</Text>
             </TouchableOpacity>
           </View>
 
           {uploading ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
               <ActivityIndicator color={theme.primary} />
-              <Text style={{ color: theme.textSoft, fontSize: 13 }}>Téléversement en cours…</Text>
+              <Text style={{ color: theme.textSoft, fontSize: 13 }}>{t('teacher.uploading')}</Text>
             </View>
           ) : null}
 
@@ -474,6 +518,7 @@ const styles = StyleSheet.create({
   input:       { borderWidth: 1.5, borderRadius: 10, padding: 12, fontSize: 15 },
   chipRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip:        { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5 },
+  dateChip:    { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, minWidth: 60, alignItems: 'center' as const },
 
   prefillBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginBottom: 12 },
 

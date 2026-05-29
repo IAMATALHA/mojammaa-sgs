@@ -1,10 +1,3 @@
-/**
- * QuickActions — 4-up button grid (2x2 on phone widths).
- *
- * Icon names come from `lucide-react-native`. We resolve at runtime via a
- * tiny lookup map so callers can pass strings (mock data stays clean).
- */
-
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
@@ -13,18 +6,29 @@ import {
   GraduationCap, CalendarX, MessageCircle, Bell,
   type LucideIcon,
 } from 'lucide-react-native'
-import { useTheme } from '../../contexts/ThemeContext'
+import { useTranslation } from 'react-i18next'
+import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import type { QuickAction } from '../../utils/mockData'
 
 const ICONS: Record<string, LucideIcon> = {
-  'check-circle':   CheckCircle,
-  'pencil-line':    PencilLine,
-  'book-open':      BookOpen,
-  'send':           Send,
+  'check-circle': CheckCircle,
+  'pencil-line': PencilLine,
+  'book-open': BookOpen,
+  send: Send,
   'graduation-cap': GraduationCap,
-  'calendar-x':     CalendarX,
+  'calendar-x': CalendarX,
   'message-circle': MessageCircle,
-  'bell':           Bell,
+  bell: Bell,
+}
+
+function actionTone(theme: Theme): Record<string, { bg: string; fg: string; border: string }> {
+  return {
+    primary: { bg: theme.primarySurface, fg: theme.primary, border: theme.primaryBorder },
+    accent:  { bg: theme.accentSurface,  fg: theme.accent,  border: theme.accentSurface },
+    info:    { bg: theme.infoSurface,    fg: theme.info,    border: theme.infoSurface },
+    success: { bg: theme.successSurface, fg: theme.success, border: theme.successSurface },
+    warning: { bg: theme.warningSurface, fg: theme.warning, border: theme.warningSurface },
+  }
 }
 
 interface QuickActionsProps {
@@ -32,23 +36,16 @@ interface QuickActionsProps {
   onPress?: (action: QuickAction) => void
 }
 
-// Quick Actions = cards solides matchant les 4 couleurs du logo M✿M
-// (rouge corail + orange + jaune) + un info blue neutre.
-const SOLID_COLORS: Record<string, { bg: string; fg: string }> = {
-  primary: { bg: '#E63946', fg: '#FFFFFF' },  // coral (M rouge logo)
-  accent:  { bg: '#F77F00', fg: '#FFFFFF' },  // orange (fleur logo)
-  info:    { bg: '#457B9D', fg: '#FFFFFF' },  // info blue (neutre)
-  warning: { bg: '#F77F00', fg: '#FFFFFF' },  // orange (= accent)
-  success: { bg: '#FCBF49', fg: '#2A1F1A' },  // jaune (M jaune logo) avec warm-dark
-}
-
 export default function QuickActions({ actions, onPress }: QuickActionsProps) {
   const theme = useTheme()
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language === 'ar'
+  const tones = actionTone(theme)
   return (
     <View style={styles.grid}>
       {actions.map(action => {
         const Icon = ICONS[action.icon] ?? Bell
-        const tint = SOLID_COLORS[action.tint] || SOLID_COLORS.primary
+        const tint = tones[action.tint] || tones.primary
         return (
           <Pressable
             key={action.id}
@@ -63,25 +60,37 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
                 transition={{ type: 'timing', duration: 200 }}
                 style={[
                   styles.tile,
-                  { backgroundColor: tint.bg },
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: tint.border,
+                  },
+                  theme.shadows.xs,
                 ]}
               >
-                <View style={styles.iconCircle}>
-                  <Icon size={22} color={tint.fg} strokeWidth={1.75} />
+                <View style={[styles.accentLine, { backgroundColor: tint.fg }]} />
+                {action.badge != null && action.badge !== 0 ? (
+                  <View style={[styles.badge, { backgroundColor: tint.fg }]}>
+                    <Text style={styles.badgeText}>
+                      {typeof action.badge === 'number' && action.badge > 99 ? '99+' : String(action.badge)}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={[styles.iconCircle, { backgroundColor: tint.bg }]}>
+                  <Icon size={21} color={tint.fg} strokeWidth={1.9} />
                 </View>
                 <Text
                   numberOfLines={2}
                   style={{
-                    color: tint.fg,
-                    fontFamily: theme.fonts.bold,
-                    fontSize: 13,
-                    marginTop: 10,
-                    textAlign: 'center',
-                    lineHeight: 17,
-                    letterSpacing: -0.1,
+                    color: theme.text,
+                    fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
+                    fontSize: isAr ? 14 : 13,
+                    marginTop: 12,
+                    textAlign: isAr ? 'right' : 'left',
+                    lineHeight: isAr ? 20 : 17,
+                    writingDirection: isAr ? 'rtl' : 'ltr',
                   }}
                 >
-                  {action.label}
+                  {action.labelKey ? t(action.labelKey) : action.label}
                 </Text>
               </MotiView>
             )}
@@ -95,24 +104,51 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
 const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
-    flexWrap:      'wrap',
-    gap:           12,
+    flexWrap: 'wrap',
+    gap: 12,
   },
   tilePressable: {
-    width:        '47%',
-    flexGrow:     1,
+    width: '47%',
+    flexGrow: 1,
   },
   tile: {
-    flex:         1,
-    minHeight:    112,
+    flex: 1,
+    minHeight: 104,
     borderRadius: 16,
-    padding:      16,
-    alignItems:   'center',
-    justifyContent:'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  accentLine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
   },
   iconCircle: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',  // halo léger sur le fond solide
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
   },
 })

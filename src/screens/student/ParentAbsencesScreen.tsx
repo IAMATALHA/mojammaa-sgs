@@ -12,27 +12,29 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
+import { CalendarCheck } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
+import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import {
-  CalendarX, Clock, LogOut, Check, AlertTriangle, CalendarCheck,
-} from 'lucide-react-native'
-import { useTheme } from '../../contexts/ThemeContext'
-import {
-  Card, StatCard, EmptyState, SectionHeader,
+  Card, EmptyState, SectionHeader,
 } from '../../components/dashboard'
 import { useParentData } from '../../hooks/useParentData'
 import { useParentAbsences } from '../../hooks/useParentAbsences'
 import {
   type AbsenceEntry,
 } from '../../utils/mockData'
-
-const TYPE_META = {
-  absence: { icon: CalendarX, label: 'Absence' },
-  retard:  { icon: Clock,     label: 'Retard'  },
-  depart:  { icon: LogOut,    label: 'Départ anticipé' },
-} as const
+import ScreenBackground from '../../components/ScreenBackground'
+import { localeFor } from '../../utils/format'
 
 export default function ParentAbsencesScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
+
+  const TYPE_META: Record<string, { color: string; label: string }> = {
+    absence: { color: theme.danger,  label: t('parent.absence') },
+    retard:  { color: theme.warning, label: t('parent.late')  },
+    depart:  { color: theme.info,    label: t('parent.earlyLeave') },
+  }
   const parent = useParentData()
   const { absences: live } = useParentAbsences()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
@@ -61,6 +63,7 @@ export default function ParentAbsencesScreen() {
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
       <StatusBar style="dark" />
+      <ScreenBackground />
 
       <View style={styles.header}>
         <Text style={{
@@ -69,7 +72,7 @@ export default function ParentAbsencesScreen() {
           fontSize: theme.fontSize.h2,
           letterSpacing: -0.5,
         }}>
-          Absences
+          {t('tabs.absences')}
         </Text>
         <Text style={{
           color: theme.textSoft,
@@ -77,31 +80,16 @@ export default function ParentAbsencesScreen() {
           fontSize: theme.fontSize.small,
           marginTop: 2,
         }}>
-          {filtered.length} entrée{filtered.length > 1 ? 's' : ''} sur ce trimestre
+          {t('parent.entriesCount', { count: filtered.length })}
         </Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Stat strip */}
         <View style={styles.kpiRow}>
-          <StatCard
-            icon={<Check size={18} color={theme.success} strokeWidth={2.2} />}
-            value={stats.justified}
-            label="Justifiées"
-            tint="success"
-          />
-          <StatCard
-            icon={<AlertTriangle size={18} color={theme.primary} strokeWidth={2.2} />}
-            value={stats.unjustified}
-            label="Non-justifiées"
-            tint="primary"
-          />
-          <StatCard
-            icon={<Clock size={18} color={theme.warning} strokeWidth={2.2} />}
-            value={stats.retards}
-            label="Retards"
-            tint="warning"
-          />
+          <KpiChip value={stats.justified} label={t('parent.justified')} color={theme.success} theme={theme} />
+          <KpiChip value={stats.unjustified} label={t('parent.unjustified')} color={theme.danger} theme={theme} />
+          <KpiChip value={stats.retards} label={t('parent.lateArrivals')} color={theme.warning} theme={theme} />
         </View>
 
         {/* Child filter */}
@@ -112,7 +100,7 @@ export default function ParentAbsencesScreen() {
           contentContainerStyle={styles.chips}
         >
           <Chip
-            label="Tous"
+            label={t('parent.allFilter')}
             active={selectedChildId === 'all'}
             onPress={() => setSelectedChildId('all')}
             theme={theme}
@@ -131,13 +119,13 @@ export default function ParentAbsencesScreen() {
 
         {/* Entries */}
         <View style={styles.section}>
-          <SectionHeader title="Historique" subtitle="Du plus récent au plus ancien" />
+          <SectionHeader title={t('parent.history')} subtitle={t('parent.recentFirst')} />
           <Card padding={4}>
             {filtered.length === 0 ? (
               <EmptyState
                 icon={CalendarCheck}
-                title="Aucune absence"
-                message="Votre enfant a une présence parfaite. Bravo !"
+                title={t('parent.noAbsence')}
+                message={t('parent.perfectAttendance')}
               />
             ) : (
               filtered.map((a, idx) => (
@@ -147,6 +135,7 @@ export default function ParentAbsencesScreen() {
                   childName={childName(a.childId)}
                   isLast={idx === filtered.length - 1}
                   theme={theme}
+                  typeMeta={TYPE_META}
                 />
               ))
             )}
@@ -159,7 +148,7 @@ export default function ParentAbsencesScreen() {
 
 function Chip({
   label, active, onPress, color, theme,
-}: { label: string; active: boolean; onPress: () => void; color?: string; theme: any }) {
+}: { label: string; active: boolean; onPress: () => void; color?: string; theme: Theme }) {
   return (
     <Pressable
       onPress={onPress}
@@ -184,15 +173,24 @@ function Chip({
   )
 }
 
-function AbsenceRow({
-  item, childName, isLast, theme,
-}: { item: AbsenceEntry; childName: string; isLast: boolean; theme: any }) {
-  const meta = TYPE_META[item.type]
-  const Icon = meta.icon
-  const tint = item.justified ? theme.success : theme.primary
-  const tintSurface = item.justified ? theme.successSurface : theme.dangerSurface
+function KpiChip({ value, label, color, theme }: { value: number; label: string; color: string; theme: Theme }) {
+  return (
+    <View style={[styles.kpiChip, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <View style={[styles.kpiDot, { backgroundColor: color }]} />
+      <Text style={{ color: theme.text, fontFamily: theme.fonts.bold, fontSize: 18, marginTop: 4 }}>{value}</Text>
+      <Text style={{ color: theme.textSoft, fontFamily: theme.fonts.medium, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.3, marginTop: 2 }}>{label}</Text>
+    </View>
+  )
+}
 
-  const date = new Date(item.date).toLocaleDateString('fr-FR', {
+function AbsenceRow({
+  item, childName, isLast, theme, typeMeta,
+}: { item: AbsenceEntry; childName: string; isLast: boolean; theme: Theme; typeMeta: Record<string, { color: string; label: string }> }) {
+  const { t } = useTranslation()
+  const meta = typeMeta[item.type]
+  const tint = item.justified ? theme.success : theme.danger
+
+  const date = new Date(item.date).toLocaleDateString(localeFor(), {
     day: '2-digit', month: 'short', year: 'numeric',
   })
 
@@ -201,9 +199,7 @@ function AbsenceRow({
       styles.row,
       !isLast && { borderBottomWidth: 1, borderBottomColor: theme.border },
     ]}>
-      <View style={[styles.iconWrap, { backgroundColor: tintSurface }]}>
-        <Icon size={16} color={tint} strokeWidth={2.2} />
-      </View>
+      <View style={[styles.rowDot, { backgroundColor: meta.color }]} />
       <View style={{ flex: 1 }}>
         <Text style={{
           color: theme.text,
@@ -226,7 +222,7 @@ function AbsenceRow({
       </View>
       <View style={[
         styles.pill,
-        { backgroundColor: tintSurface },
+        { backgroundColor: item.justified ? theme.successSurface : theme.dangerSurface },
       ]}>
         <Text style={{
           color: tint,
@@ -234,7 +230,7 @@ function AbsenceRow({
           fontSize: 10,
           letterSpacing: 0.4,
         }}>
-          {item.justified ? 'JUSTIFIÉ' : 'NON JUST.'}
+          {item.justified ? t('parent.justifiedLabel') : t('parent.unjustifiedLabel')}
         </Text>
       </View>
     </View>
@@ -260,14 +256,21 @@ const styles = StyleSheet.create({
     marginEnd: 6,
   },
   section: { paddingHorizontal: 20, marginTop: 18 },
+  kpiChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  kpiDot: { width: 8, height: 8, borderRadius: 4 },
   row: {
     flexDirection: 'row',
     alignItems:    'center',
     padding:       12,
   },
-  iconWrap: {
-    width: 36, height: 36, borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center',
+  rowDot: {
+    width: 10, height: 10, borderRadius: 5,
     marginEnd: 12,
   },
   pill: {

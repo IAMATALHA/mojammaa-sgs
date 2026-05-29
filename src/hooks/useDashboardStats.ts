@@ -34,22 +34,33 @@ export function useDashboardStats() {
     setLoading(true); setError(null)
     try {
       const today = todayISO()
-      const [elevesSnap, profsCount, absentsCount] = await Promise.all([
+      // Pour éviter un index composé Firestore (date + statut), on lit
+      // toutes les absences du jour puis on filtre localement par statut.
+      const [elevesSnap, profsCount, absencesSnap] = await Promise.all([
         getDocs(collection(db, 'eleves')),
-        getCountFromServer(query(collection(db, 'users'),    where('role',   '==', 'professeur'))),
-        getCountFromServer(query(collection(db, 'absences'), where('date',   '==', today),
-                                                            where('statut', '==', 'absent'))),
+        getCountFromServer(query(collection(db, 'users'),    where('role', '==', 'professeur'))),
+        getDocs(            query(collection(db, 'absences'), where('date', '==', today))),
       ])
-      const totalEleves   = elevesSnap.size
-      const totalProfs    = profsCount.data().count
-      const classeSet     = new Set<string>()
+      const totalEleves = elevesSnap.size
+      const totalProfs  = profsCount.data().count
+      const classeSet   = new Set<string>()
       elevesSnap.forEach(d => {
         const c = (d.data() as any).classe
         if (c) classeSet.add(String(c))
       })
-      const absentsToday  = absentsCount.data().count
+
+      // Comptage local des absents — unique par eleveId (pas de double
+      // compte si l'élève est absent à plusieurs séances).
+      const absentEleves = new Set<string>()
+      absencesSnap.forEach(d => {
+        const data = d.data() as any
+        if (data?.statut === 'absent' && data?.eleveId) {
+          absentEleves.add(String(data.eleveId))
+        }
+      })
+
       const attendanceRate = totalEleves > 0
-        ? Math.round(((totalEleves - absentsToday) / totalEleves) * 100)
+        ? Math.round(((totalEleves - absentEleves.size) / totalEleves) * 100)
         : 100
 
       setStats({

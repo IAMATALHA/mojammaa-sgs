@@ -1,11 +1,4 @@
-/**
- * Liste UNIQUEMENT les classes que ce prof enseigne (pas toutes les
- * classes de l'école). On déduit ça depuis `emploiDuTemps` :
- *   classes distinctes des cours dont professeurNom == nom complet
- * Union avec `users/{uid}.classe` (la classe attribuée principale) pour
- * couvrir les cas où l'emploi du temps n'est pas encore renseigné.
- */
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -14,74 +7,92 @@ import { useNavigation } from '@react-navigation/native'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
+import { subscribeSchedule, type ScheduleDoc, type WeeklySlot } from '../../services/scheduleService'
 
 interface ClasseRow {
   name:         string
   studentCount: number
-  matieres:     string[]  // matières que ce prof y enseigne
+  subjects:     string[]
+}
+
+function getClassesFromProfile(profile: any): string[] {
+  if (!profile) return []
+  if (Array.isArray(profile.classes) && profile.classes.length > 0) return profile.classes
+  if (typeof profile.classe === 'string' && profile.classe) return [profile.classe]
+  return []
 }
 
 export default function TeacherClassesScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const navigation = useNavigation<any>()
   const { profile } = useAuth()
   const [classes, setClasses] = useState<ClasseRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
+  const profileClasses = useMemo(() => getClassesFromProfile(profile), [profile])
+  const [scheduleDoc, setScheduleDoc] = useState<ScheduleDoc | null>(null)
+
+  // Subscribe to schedule (realtime)
+  useEffect(() => {
+    if (!profile?.uid) return
+    const unsub = subscribeSchedule(
+      profile.uid,
+      doc => setScheduleDoc(doc),
+      err => setError(err.message),
+    )
+    return unsub
+  }, [profile?.uid])
+
+  // Build class rows from schedule + profile.classes + eleves count
   const load = useCallback(async () => {
-    if (!profile) return
+    if (!profile?.uid) return
     setLoading(true); setError(null)
     try {
-      const fullName = `${profile.prenom} ${profile.nom}`.trim()
-      // 1. Classes via emploiDuTemps
-      const edtSnap = await getDocs(query(
-        collection(db, 'emploiDuTemps'),
-        where('professeurNom', '==', fullName),
-      ))
-      const matieresByClasse = new Map<string, Set<string>>()
-      edtSnap.forEach(d => {
-        const data = d.data() as any
-        const c = String(data.classeId || '')
-        if (!c) return
-        const m = String(data.matiere || '')
-        const set = matieresByClasse.get(c) || new Set<string>()
-        if (m) set.add(m)
-        matieresByClasse.set(c, set)
-      })
-      // 2. Ajouter la classe assignée du profil si pas déjà présente
-      if (profile.classe && !matieresByClasse.has(profile.classe)) {
-        matieresByClasse.set(profile.classe, new Set<string>())
+      const subjectsByClasse = new Map<string, Set<string>>()
+
+      if (scheduleDoc?.weeklySlots) {
+        scheduleDoc.weeklySlots.forEach((s: WeeklySlot) => {
+          const set = subjectsByClasse.get(s.classe) || new Set<string>()
+          if (s.subject) set.add(s.subject)
+          subjectsByClasse.set(s.classe, set)
+        })
       }
 
-      // 3. Compter les élèves de ces classes
+      profileClasses.forEach(c => {
+        if (!subjectsByClasse.has(c)) subjectsByClasse.set(c, new Set<string>())
+      })
+
+      const classeNames = [...subjectsByClasse.keys()]
       const rows: ClasseRow[] = []
-      const classeNames = [...matieresByClasse.keys()]
+
       for (const c of classeNames) {
         const elevesSnap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', c)))
         rows.push({
           name:         c,
           studentCount: elevesSnap.size,
-          matieres:     [...matieresByClasse.get(c)!],
+          subjects:     [...subjectsByClasse.get(c)!],
         })
       }
       rows.sort((a, b) => a.name.localeCompare(b.name, 'fr'))
       setClasses(rows)
     } catch (e: any) {
-      setError(e?.message || 'Impossible de charger les classes.')
+      setError(e?.message || t('common.error'))
     } finally {
       setLoading(false)
     }
-  }, [profile])
+  }, [profile?.uid, profileClasses.join('|'), scheduleDoc])
 
   useEffect(() => { load() }, [load])
 
   const renderItem = ({ item }: { item: ClasseRow }) => (
     <TouchableOpacity
-      onPress={() => navigation.navigate('ClasseFolder', { classe: item.name })}
+      onPress={() => navigation.navigate('TeacherClasseFolder', { classe: item.name })}
       style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
       activeOpacity={0.85}
     >
@@ -93,8 +104,8 @@ export default function TeacherClassesScreen() {
       <View style={{ flex: 1, marginStart: 14 }}>
         <Text style={[styles.name, { color: theme.text }]}>{item.name}</Text>
         <Text style={[styles.meta, { color: theme.textSoft }]}>
-          {item.studentCount} élève{item.studentCount > 1 ? 's' : ''}
-          {item.matieres.length > 0 ? ` · ${item.matieres.join(', ')}` : ''}
+          {t('teacher.studentCount', { count: item.studentCount })}
+          {item.subjects.length > 0 ? ` · ${item.subjects.join(', ')}` : ''}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={theme.textSoft} />
@@ -102,7 +113,7 @@ export default function TeacherClassesScreen() {
   )
 
   return (
-    <ScreenLayout title="Mes classes">
+    <ScreenLayout title={t('teacher.myClasses')}>
       {error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
           <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
@@ -114,9 +125,9 @@ export default function TeacherClassesScreen() {
       ) : classes.length === 0 ? (
         <View style={styles.empty}>
           <Text style={{ color: theme.textSoft, fontSize: 14, textAlign: 'center' }}>
-            Aucune classe assignée pour l'instant.{'\n'}
+            {t('teacher.noClassYet')}{'\n'}
             <Text style={{ fontSize: 12 }}>
-              L'administration doit ajouter vos cours dans l'emploi du temps.
+              {t('teacher.adminMustAdd')}
             </Text>
           </Text>
         </View>

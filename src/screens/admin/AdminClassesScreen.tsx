@@ -1,116 +1,563 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react'
 import {
-  View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl,
-  TouchableOpacity,
-} from 'react-native';
-import { collection, getDocs } from 'firebase/firestore';
-import ScreenLayout from '../../components/ScreenLayout';
-import { useTheme } from '../../contexts/ThemeContext';
-import { db } from '../../config/firebase';
+  View, Text, StyleSheet, FlatList, ActivityIndicator,
+} from 'react-native'
+import { collection, onSnapshot, type Unsubscribe } from 'firebase/firestore'
+import { useTranslation } from 'react-i18next'
+import {
+  Activity, AlertTriangle, BookOpen, CheckCircle2, GraduationCap, TrendingUp, Users,
+} from 'lucide-react-native'
+import Svg, { Circle } from 'react-native-svg'
+import ScreenLayout from '../../components/ScreenLayout'
+import { useTheme, type Theme } from '../../contexts/ThemeContext'
+import { db } from '../../config/firebase'
+
+type CollectionName = 'eleves' | 'notes' | 'absences' | 'devoirs'
+
+interface EleveRow {
+  id: string
+  classe: string
+  niveau: string
+}
+
+interface NoteRow {
+  id: string
+  eleveId: string
+  classe: string
+  note: number | null
+}
+
+interface AbsenceRow {
+  id: string
+  eleveId: string
+  classe: string
+  date: string
+  statut: string
+}
+
+interface DevoirRow {
+  id: string
+  classeId: string
+  dateLimite: string
+}
+
+interface TrendPoint {
+  label: string
+  value: number
+}
 
 interface ClasseStat {
-  name:       string
-  niveau:     string
+  name: string
+  niveau: string
   eleveCount: number
+  presenceRate: number
+  avgNote: number | null
+  successRate: number | null
+  notesCount: number
+  absentsToday: number
+  incidentsMonth: number
+  activeHomework: number
+  healthScore: number
+  trend: TrendPoint[]
+}
+
+interface SnapshotCache {
+  eleves: EleveRow[]
+  notes: NoteRow[]
+  absences: AbsenceRow[]
+  devoirs: DevoirRow[]
+}
+
+const COLLECTIONS: CollectionName[] = ['eleves', 'notes', 'absences', 'devoirs']
+const RING_SIZE = 74
+const RING_STROKE = 8
+
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(',', '.'))
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function todayISO(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+function monthStartISO(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+function lastDays(count: number): { iso: string; label: string }[] {
+  return Array.from({ length: count }, (_, index) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (count - 1 - index))
+    return {
+      iso: d.toISOString().split('T')[0],
+      label: String(d.getDate()).padStart(2, '0'),
+    }
+  })
+}
+
+function clamp(value: number, min = 0, max = 100): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10
+}
+
+function isAbsent(row: AbsenceRow): boolean {
+  return row.statut === 'absent'
+}
+
+function isLate(row: AbsenceRow): boolean {
+  return row.statut === 'retard' || row.statut === 'late'
+}
+
+function isActiveHomework(row: DevoirRow, today: string): boolean {
+  return !row.dateLimite || row.dateLimite >= today
+}
+
+function buildClassStats(cache: SnapshotCache): ClasseStat[] {
+  const today = todayISO()
+  const monthStart = monthStartISO()
+  const days = lastDays(5)
+  const classStudents = new Map<string, EleveRow[]>()
+  const notesByClass = new Map<string, NoteRow[]>()
+  const absentTodayByClass = new Map<string, Set<string>>()
+  const incidentsMonthByClass = new Map<string, number>()
+  const homeworkByClass = new Map<string, number>()
+  const trendByClass = new Map<string, Map<string, Set<string>>>()
+
+  cache.eleves.forEach(eleve => {
+    if (!eleve.classe) return
+    const rows = classStudents.get(eleve.classe) || []
+    rows.push(eleve)
+    classStudents.set(eleve.classe, rows)
+  })
+
+  cache.notes.forEach(note => {
+    if (!note.classe || note.note == null || note.note < 0 || note.note > 20) return
+    const rows = notesByClass.get(note.classe) || []
+    rows.push(note)
+    notesByClass.set(note.classe, rows)
+  })
+
+  cache.absences.forEach(absence => {
+    if (!absence.classe || (!isAbsent(absence) && !isLate(absence))) return
+    if (absence.date === today && isAbsent(absence)) {
+      const rows = absentTodayByClass.get(absence.classe) || new Set<string>()
+      rows.add(absence.eleveId || absence.id)
+      absentTodayByClass.set(absence.classe, rows)
+    }
+    if (absence.date >= monthStart) {
+      incidentsMonthByClass.set(absence.classe, (incidentsMonthByClass.get(absence.classe) || 0) + 1)
+    }
+    const day = days.find(item => item.iso === absence.date)
+    if (day) {
+      const classMap = trendByClass.get(absence.classe) || new Map<string, Set<string>>()
+      const set = classMap.get(day.iso) || new Set<string>()
+      set.add(`${absence.eleveId || absence.id}-${absence.statut}`)
+      classMap.set(day.iso, set)
+      trendByClass.set(absence.classe, classMap)
+    }
+  })
+
+  cache.devoirs.forEach(devoir => {
+    if (!devoir.classeId || !isActiveHomework(devoir, today)) return
+    homeworkByClass.set(devoir.classeId, (homeworkByClass.get(devoir.classeId) || 0) + 1)
+  })
+
+  return [...classStudents.entries()].map(([name, students]) => {
+    const classNotes = notesByClass.get(name) || []
+    const notesByEleve = new Map<string, number[]>()
+    classNotes.forEach(note => {
+      if (!note.eleveId || note.note == null) return
+      const rows = notesByEleve.get(note.eleveId) || []
+      rows.push(note.note)
+      notesByEleve.set(note.eleveId, rows)
+    })
+
+    const noteValues = classNotes.map(note => note.note!).filter(value => value >= 0 && value <= 20)
+    const averages = [...notesByEleve.values()].map(values => values.reduce((sum, value) => sum + value, 0) / values.length)
+    const absentsToday = absentTodayByClass.get(name)?.size || 0
+    const presenceRate = students.length > 0 ? Math.round(((students.length - absentsToday) / students.length) * 100) : 100
+    const avgNote = noteValues.length > 0 ? round1(noteValues.reduce((sum, value) => sum + value, 0) / noteValues.length) : null
+    const successRate = averages.length > 0
+      ? Math.round((averages.filter(value => value >= 10).length / averages.length) * 100)
+      : null
+    const noteScore = avgNote == null ? 55 : (avgNote / 20) * 100
+    const successScore = successRate ?? 55
+    const incidentsPenalty = Math.min(24, (incidentsMonthByClass.get(name) || 0) * 2)
+    const niveau = students.find(eleve => eleve.niveau)?.niveau || ''
+    const classTrend = trendByClass.get(name)
+
+    return {
+      name,
+      niveau,
+      eleveCount: students.length,
+      presenceRate: clamp(presenceRate),
+      avgNote,
+      successRate,
+      notesCount: noteValues.length,
+      absentsToday,
+      incidentsMonth: incidentsMonthByClass.get(name) || 0,
+      activeHomework: homeworkByClass.get(name) || 0,
+      healthScore: clamp(Math.round((presenceRate * 0.45) + (noteScore * 0.35) + (successScore * 0.20) - incidentsPenalty)),
+      trend: days.map(day => ({
+        label: day.label,
+        value: classTrend?.get(day.iso)?.size || 0,
+      })),
+    }
+  }).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
 }
 
 export default function AdminClassesScreen() {
-  const theme = useTheme();
+  const theme = useTheme()
+  const { t } = useTranslation()
   const [classes, setClasses] = useState<ClasseStat[]>([])
   const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null)
-    try {
-      const snap = await getDocs(collection(db, 'eleves'))
-      const map = new Map<string, { niveau: string; count: number }>()
-      snap.forEach(d => {
-        const data   = d.data() as any
-        const c      = String(data.classe || '')
-        const niveau = String(data.niveau || '')
-        if (!c) return
-        const cur = map.get(c) || { niveau, count: 0 }
-        cur.count += 1
-        if (!cur.niveau && niveau) cur.niveau = niveau
-        map.set(c, cur)
-      })
-      const rows: ClasseStat[] = [...map.entries()]
-        .map(([name, v]) => ({ name, niveau: v.niveau, eleveCount: v.count }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
-      setClasses(rows)
-    } catch (e: any) {
-      setError(e?.message || 'Impossible de charger les classes.')
-    } finally {
+  useEffect(() => {
+    const cache: SnapshotCache = {
+      eleves: [],
+      notes: [],
+      absences: [],
+      devoirs: [],
+    }
+    const ready = new Set<CollectionName>()
+
+    const recompute = () => {
+      if (ready.size !== COLLECTIONS.length) return
+      setClasses(buildClassStats(cache))
+      setLoading(false)
+      setError(null)
+    }
+
+    const handleError = (err: Error) => {
+      setError(err.message || t('common.error'))
       setLoading(false)
     }
-  }, [])
 
-  useEffect(() => { load() }, [load])
+    const unsubs: Unsubscribe[] = [
+      onSnapshot(collection(db, 'eleves'), snap => {
+        cache.eleves = snap.docs.map(docSnap => {
+          const row = docSnap.data() as Record<string, unknown>
+          return {
+            id: docSnap.id,
+            classe: asString(row.classe),
+            niveau: asString(row.niveau),
+          }
+        })
+        ready.add('eleves')
+        recompute()
+      }, handleError),
+      onSnapshot(collection(db, 'notes'), snap => {
+        cache.notes = snap.docs.map(docSnap => {
+          const row = docSnap.data() as Record<string, unknown>
+          return {
+            id: docSnap.id,
+            eleveId: asString(row.eleveId),
+            classe: asString(row.classe),
+            note: asNumber(row.note),
+          }
+        })
+        ready.add('notes')
+        recompute()
+      }, handleError),
+      onSnapshot(collection(db, 'absences'), snap => {
+        cache.absences = snap.docs.map(docSnap => {
+          const row = docSnap.data() as Record<string, unknown>
+          return {
+            id: docSnap.id,
+            eleveId: asString(row.eleveId),
+            classe: asString(row.classe),
+            date: asString(row.date),
+            statut: asString(row.statut),
+          }
+        })
+        ready.add('absences')
+        recompute()
+      }, handleError),
+      onSnapshot(collection(db, 'devoirs'), snap => {
+        cache.devoirs = snap.docs.map(docSnap => {
+          const row = docSnap.data() as Record<string, unknown>
+          return {
+            id: docSnap.id,
+            classeId: asString(row.classeId) || asString(row.classe),
+            dateLimite: asString(row.dateLimite),
+          }
+        })
+        ready.add('devoirs')
+        recompute()
+      }, handleError),
+    ]
 
-  const totalEleves = classes.reduce((sum, c) => sum + c.eleveCount, 0)
+    return () => unsubs.forEach(unsub => unsub())
+  }, [t])
 
-  const renderItem = ({ item }: { item: ClasseStat }) => (
-    <TouchableOpacity style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <View style={styles.row}>
-        <View>
-          <Text style={[styles.name, { color: theme.text }]}>{item.name}</Text>
-          {item.niveau ? <Text style={[styles.niveau, { color: theme.textSoft }]}>{item.niveau}</Text> : null}
-        </View>
-        <View style={styles.countWrap}>
-          <Text style={[styles.count, { color: theme.primary }]}>{item.eleveCount}</Text>
-          <Text style={[styles.countLabel, { color: theme.textSoft }]}>élève{item.eleveCount > 1 ? 's' : ''}</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+  const totalEleves = useMemo(() => classes.reduce((sum, item) => sum + item.eleveCount, 0), [classes])
+  const averageSize = classes.length > 0 ? Math.round(totalEleves / classes.length) : 0
+  const bestPresence = classes.reduce((best, item) => Math.max(best, item.presenceRate), 0)
 
-  return (
-    <ScreenLayout title="Classes">
+  const renderHeader = () => (
+    <>
       {error ? (
-        <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
-          <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
+        <View style={[styles.errorBox, { backgroundColor: theme.dangerSurface }]}>
+          <Text style={{ color: theme.danger, fontSize: 13, fontWeight: '600' }}>{error}</Text>
         </View>
       ) : null}
 
+      <View style={[styles.livePanel, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View>
+          <Text style={[styles.eyebrow, { color: theme.textSoft }]}>{t('admin.classAnalytics')}</Text>
+          <Text style={[styles.liveTitle, { color: theme.text }]}>
+            {t('admin.classesTotal', { classes: classes.length, students: totalEleves })}
+          </Text>
+        </View>
+        <View style={[styles.liveBadge, { backgroundColor: theme.successSurface }]}>
+          <View style={[styles.liveDot, { backgroundColor: theme.info }]} />
+          <Text style={[styles.liveBadgeText, { color: theme.text }]}>{t('admin.live')}</Text>
+        </View>
+      </View>
+
+      <View style={styles.summaryGrid}>
+        <SummaryCard icon={<GraduationCap size={17} color={theme.primary} />} value={String(classes.length)} label={t('tabs.classes')} bg={theme.primarySurface} theme={theme} />
+        <SummaryCard icon={<Users size={17} color={theme.info} />} value={String(totalEleves)} label={t('admin.eleves')} bg={theme.infoSurface} theme={theme} />
+        <SummaryCard icon={<Activity size={17} color={theme.accent} />} value={String(averageSize)} label={t('admin.averageSize')} bg={theme.accentSurface} theme={theme} />
+        <SummaryCard icon={<CheckCircle2 size={17} color={theme.warning} />} value={`${bestPresence}%`} label={t('admin.bestPresence')} bg={theme.warningSurface} theme={theme} />
+      </View>
+    </>
+  )
+
+  const renderItem = ({ item }: { item: ClasseStat }) => (
+    <ClassCard item={item} theme={theme} t={t} />
+  )
+
+  return (
+    <ScreenLayout title={t('admin.classesTitle')}>
       {loading && classes.length === 0 ? (
         <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
-      ) : classes.length === 0 ? (
+      ) : classes.length === 0 && !error ? (
         <View style={styles.empty}>
           <Text style={{ color: theme.textSoft, fontSize: 14, textAlign: 'center' }}>
-            Aucune classe dans la base.
+            {t('admin.noClassInDb')}
           </Text>
         </View>
       ) : (
-        <>
-          <View style={[styles.summary, { backgroundColor: theme.primarySurface }]}>
-            <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>
-              {classes.length} classes · {totalEleves} élèves au total
-            </Text>
-          </View>
-          <FlatList
-            data={classes}
-            keyExtractor={item => item.name}
-            renderItem={renderItem}
-            contentContainerStyle={{ paddingBottom: 24 }}
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.primary} />}
-          />
-        </>
+        <FlatList
+          data={classes}
+          keyExtractor={item => item.name}
+          renderItem={renderItem}
+          ListHeaderComponent={renderHeader}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
       )}
     </ScreenLayout>
-  );
+  )
+}
+
+function SummaryCard({ icon, value, label, bg, theme }: {
+  icon: React.ReactNode
+  value: string
+  label: string
+  bg: string
+  theme: Theme
+}) {
+  return (
+    <View style={[styles.summaryCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <View style={[styles.summaryIcon, { backgroundColor: bg }]}>{icon}</View>
+      <Text style={[styles.summaryValue, { color: theme.text }]}>{value}</Text>
+      <Text numberOfLines={1} style={[styles.summaryLabel, { color: theme.textSoft }]}>{label}</Text>
+    </View>
+  )
+}
+
+function ClassCard({ item, theme, t }: { item: ClasseStat; theme: Theme; t: (key: string, params?: Record<string, unknown>) => string }) {
+  const healthColor = item.healthScore >= 75 ? theme.info : item.healthScore >= 55 ? theme.warning : theme.danger
+  return (
+    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <View style={styles.cardHeader}>
+        <View style={styles.classTitleArea}>
+          <Text style={[styles.name, { color: theme.text }]}>{item.name}</Text>
+          {item.niveau ? <Text style={[styles.niveau, { color: theme.textSoft }]}>{item.niveau}</Text> : null}
+        </View>
+        <View style={[styles.countPill, { backgroundColor: theme.primarySurface }]}>
+          <Users size={13} color={theme.primary} />
+          <Text style={[styles.countPillText, { color: theme.primary }]}>{item.eleveCount}</Text>
+        </View>
+      </View>
+
+      <View style={styles.cardBody}>
+        <RingGauge value={item.presenceRate} color={healthColor} trackColor={theme.surfaceAlt} textColor={theme.text} label={t('admin.attendanceRate')} />
+        <View style={styles.metricColumn}>
+          <MetricRow icon={<TrendingUp size={15} color={theme.primary} />} label={t('admin.avgGrade')} value={item.avgNote == null ? '—' : `${item.avgNote}/20`} theme={theme} />
+          <MetricRow icon={<CheckCircle2 size={15} color={theme.info} />} label={t('admin.successRate')} value={item.successRate == null ? '—' : `${item.successRate}%`} theme={theme} />
+          <MetricRow icon={<BookOpen size={15} color={theme.warning} />} label={t('admin.homeworkShort')} value={item.activeHomework} theme={theme} />
+        </View>
+      </View>
+
+      <View style={styles.healthLine}>
+        <Text style={[styles.healthLabel, { color: theme.textSoft }]}>{t('admin.classHealth')}</Text>
+        <View style={[styles.healthBar, { backgroundColor: theme.surfaceAlt }]}>
+          <View style={[styles.healthFill, { width: `${item.healthScore}%`, backgroundColor: healthColor }]} />
+        </View>
+        <Text style={[styles.healthValue, { color: healthColor }]}>{item.healthScore}%</Text>
+      </View>
+
+      <View style={styles.footerRow}>
+        <View style={[styles.footerPill, { backgroundColor: theme.dangerSurface }]}>
+          <AlertTriangle size={12} color={theme.danger} />
+          <Text style={[styles.footerPillText, { color: theme.danger }]}>
+            {item.incidentsMonth} {t('admin.monthIncidents')}
+          </Text>
+        </View>
+        <MiniTrend points={item.trend} color={theme.primary} mutedColor={theme.primarySurface} textColor={theme.textSoft} />
+      </View>
+    </View>
+  )
+}
+
+function MetricRow({ icon, label, value, theme }: {
+  icon: React.ReactNode
+  label: string
+  value: number | string
+  theme: Theme
+}) {
+  return (
+    <View style={styles.metricRow}>
+      <View style={styles.metricRowIcon}>{icon}</View>
+      <Text numberOfLines={1} style={[styles.metricRowLabel, { color: theme.textSoft }]}>{label}</Text>
+      <Text style={[styles.metricRowValue, { color: theme.text }]}>{value}</Text>
+    </View>
+  )
+}
+
+function RingGauge({ value, color, trackColor, textColor, label }: {
+  value: number
+  color: string
+  trackColor: string
+  textColor: string
+  label: string
+}) {
+  const radius = (RING_SIZE - RING_STROKE) / 2
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (circumference * clamp(value)) / 100
+
+  return (
+    <View style={styles.ringWrap}>
+      <Svg width={RING_SIZE} height={RING_SIZE}>
+        <Circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={radius} stroke={trackColor} strokeWidth={RING_STROKE} fill="transparent" />
+        <Circle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={radius}
+          stroke={color}
+          strokeWidth={RING_STROKE}
+          strokeLinecap="round"
+          fill="transparent"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={offset}
+          transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+        />
+      </Svg>
+      <View style={styles.ringCenter}>
+        <Text style={[styles.ringValue, { color: textColor }]}>{clamp(value)}%</Text>
+        <Text style={[styles.ringLabel, { color: textColor }]}>{label}</Text>
+      </View>
+    </View>
+  )
+}
+
+function MiniTrend({ points, color, mutedColor, textColor }: {
+  points: TrendPoint[]
+  color: string
+  mutedColor: string
+  textColor: string
+}) {
+  const max = Math.max(1, ...points.map(point => point.value))
+  return (
+    <View style={styles.trendWrap}>
+      {points.map(point => (
+        <View key={point.label} style={styles.trendItem}>
+          <View style={[styles.trendTrack, { backgroundColor: mutedColor }]}>
+            <View style={[styles.trendFill, { height: Math.max(4, Math.round((point.value / max) * 26)), backgroundColor: color }]} />
+          </View>
+          <Text style={[styles.trendLabel, { color: textColor }]}>{point.label}</Text>
+        </View>
+      ))}
+    </View>
+  )
 }
 
 const styles = StyleSheet.create({
-  summary:    { padding: 12, borderRadius: 10, marginBottom: 12 },
-  card:       { padding: 14, marginBottom: 10, borderRadius: 12, borderWidth: 1 },
-  row:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  name:       { fontSize: 16, fontWeight: '800', marginBottom: 2 },
-  niveau:     { fontSize: 12 },
-  countWrap:  { alignItems: 'flex-end' },
-  count:      { fontSize: 22, fontWeight: '800' },
-  countLabel: { fontSize: 11 },
-  loading:    { paddingVertical: 40, alignItems: 'center' },
-  empty:      { paddingVertical: 60, alignItems: 'center' },
-  errorBox:   { padding: 12, borderRadius: 10, marginBottom: 12 },
-});
+  listContent: { paddingBottom: 28 },
+  loading: { paddingVertical: 48, alignItems: 'center' },
+  empty: { paddingVertical: 60, alignItems: 'center' },
+  errorBox: { padding: 12, borderRadius: 8, marginBottom: 12 },
+
+  livePanel: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  eyebrow: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
+  liveTitle: { fontSize: 17, fontWeight: '900', marginTop: 4 },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, marginEnd: 6 },
+  liveBadgeText: { fontSize: 11, fontWeight: '900' },
+
+  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
+  summaryCard: { width: '48.5%', minHeight: 112, borderWidth: 1, borderRadius: 8, padding: 12 },
+  summaryIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  summaryValue: { fontSize: 24, fontWeight: '900' },
+  summaryLabel: { fontSize: 11, fontWeight: '700', marginTop: 4 },
+
+  card: { borderWidth: 1, borderRadius: 8, padding: 14, marginBottom: 12 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  classTitleArea: { flex: 1, paddingEnd: 10 },
+  name: { fontSize: 18, fontWeight: '900' },
+  niveau: { fontSize: 12, fontWeight: '700', marginTop: 2 },
+  countPill: { minWidth: 52, height: 32, borderRadius: 999, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  countPillText: { fontSize: 13, fontWeight: '900', marginStart: 5 },
+
+  cardBody: { flexDirection: 'row', gap: 14, alignItems: 'center' },
+  ringWrap: { width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' },
+  ringCenter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  ringValue: { fontSize: 16, fontWeight: '900' },
+  ringLabel: { fontSize: 8, fontWeight: '800', opacity: 0.62 },
+  metricColumn: { flex: 1, gap: 7 },
+  metricRow: { minHeight: 28, flexDirection: 'row', alignItems: 'center' },
+  metricRowIcon: { width: 25, alignItems: 'flex-start' },
+  metricRowLabel: { flex: 1, fontSize: 11, fontWeight: '700' },
+  metricRowValue: { fontSize: 13, fontWeight: '900', marginStart: 8 },
+
+  healthLine: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
+  healthLabel: { width: 68, fontSize: 10, fontWeight: '800' },
+  healthBar: { flex: 1, height: 8, borderRadius: 999, overflow: 'hidden' },
+  healthFill: { height: 8, borderRadius: 999 },
+  healthValue: { width: 38, textAlign: 'right', fontSize: 11, fontWeight: '900' },
+
+  footerRow: { marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  footerPill: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6, flexDirection: 'row', alignItems: 'center' },
+  footerPillText: { fontSize: 10, fontWeight: '900', marginStart: 5 },
+  trendWrap: { flex: 1, height: 38, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'flex-end', gap: 5 },
+  trendItem: { width: 16, alignItems: 'center' },
+  trendTrack: { width: 12, height: 28, borderRadius: 7, overflow: 'hidden', justifyContent: 'flex-end' },
+  trendFill: { width: 12, borderTopLeftRadius: 7, borderTopRightRadius: 7 },
+  trendLabel: { fontSize: 8, fontWeight: '700', marginTop: 2 },
+})
