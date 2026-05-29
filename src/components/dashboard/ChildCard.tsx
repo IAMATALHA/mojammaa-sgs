@@ -6,16 +6,12 @@ import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
 import { ChevronRight, BookOpen, TrendingUp } from 'lucide-react-native'
-import { useTheme } from '../../contexts/ThemeContext'
+import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import type { Child } from '../../utils/mockData'
 
 interface ChildCardProps {
   child: Child
   onPress?: () => void
-}
-
-function initialsOf(c: Child): string {
-  return `${c.firstName[0] ?? ''}${c.lastName[0] ?? ''}`.toUpperCase()
 }
 
 export default function ChildCard({ child, onPress }: ChildCardProps) {
@@ -39,18 +35,6 @@ export default function ChildCard({ child, onPress }: ChildCardProps) {
         >
           <View style={[styles.wash, { backgroundColor: theme.watercolorA }]} />
           <View style={[styles.washSmall, { backgroundColor: theme.roseSurface }]} />
-
-          <View style={[styles.avatarShell, { backgroundColor: theme.greenSurface }]}> 
-            <View style={[styles.avatar, { backgroundColor: theme.white }]}> 
-              <Text style={{
-                color: theme.primary,
-                fontFamily: theme.fonts.bold,
-                fontSize: 18,
-              }}>
-                {initialsOf(child)}
-              </Text>
-            </View>
-          </View>
 
           <View style={styles.body}>
             <Text
@@ -109,7 +93,7 @@ function Stat({
   value: string
   label: string
   tone: string
-  theme: any
+  theme: Theme
 }) {
   return (
     <View style={[styles.stat, { backgroundColor: tone }]}> 
@@ -157,21 +141,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     bottom: -18,
     left: 40,
-  },
-  avatarShell: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginEnd: 12,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   body: { flex: 1 },
   badgesRow: {

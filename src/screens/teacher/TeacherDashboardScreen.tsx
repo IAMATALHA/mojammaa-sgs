@@ -7,7 +7,7 @@
 
 import React, { useCallback, useMemo, useState } from 'react'
 import {
-  View, ScrollView, RefreshControl, StyleSheet, Text, Pressable, Image,
+  View, ScrollView, RefreshControl, StyleSheet, Text, Pressable,
   Alert, Modal,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -18,7 +18,7 @@ import {
   CalendarClock, Megaphone, BarChart3, Sparkles, X, Clock, MapPin,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import { useTheme } from '../../contexts/ThemeContext'
+import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTeacherData } from '../../hooks/useTeacherData'
 import { useTeacherMessages } from '../../hooks/useTeacherMessages'
@@ -30,13 +30,7 @@ import {
 import {
   type ScheduleEntry, type Announcement, type QuickAction,
 } from '../../utils/mockData'
-
-function greetingKey(date = new Date()): string {
-  const h = date.getHours()
-  if (h < 12) return 'greeting.morning'
-  if (h < 18) return 'greeting.afternoon'
-  return 'greeting.evening'
-}
+import { greetingKey, formatLongDate } from '../../utils/format'
 
 const TEACHER_QUICK_ACTIONS: QuickAction[] = [
   { id: 'qa1', label: 'Faire l\'appel',  labelKey: 'actions.takeAttendance', icon: 'check-circle', tint: 'primary' },
@@ -47,7 +41,7 @@ const TEACHER_QUICK_ACTIONS: QuickAction[] = [
 
 const QUICK_ACTION_ROUTES: Record<string, string> = {
   qa3: 'TeacherDevoirs',   // Nouveau devoir
-  qa4: 'TeacherCompose',   // Envoyer message
+  qa4: 'TeacherMessages',  // Envoyer message
   qa5: 'TeacherDevoirs',   // À traiter → devoirs
 }
 
@@ -110,7 +104,7 @@ export default function TeacherDashboardScreen() {
     if (route) goTo(route)
   }
 
-  const handleAvatarPress = () => {
+  const handleAccountPress = () => {
     Alert.alert(
       fullName,
       profile?.email ?? t('teacher.accountTeacher'),
@@ -154,17 +148,8 @@ export default function TeacherDashboardScreen() {
         }
       >
         {/* ── Header strip ──────────────────────────────── */}
-        <View style={styles.headerStrip}>
-          <Pressable onPress={handleAvatarPress} hitSlop={8}>
-            <View style={[styles.avatarCircle, { borderColor: theme.accent }]}>
-              <Image
-                source={require('../../../assets/favicon.png')}
-                style={styles.avatarImg}
-                resizeMode="contain"
-              />
-            </View>
-          </Pressable>
-          <View style={{ flex: 1, marginStart: 12 }}>
+        <View style={[styles.headerStrip, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>
+          <Pressable onPress={handleAccountPress} hitSlop={8} style={styles.accountBlock}>
             <Text numberOfLines={1} style={{
               color: theme.text,
               fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
@@ -186,8 +171,8 @@ export default function TeacherDashboardScreen() {
             }}>
               {t('roles.teacher')}
             </Text>
-          </View>
-          <Pressable onPress={() => goTo('TeacherMessages')} hitSlop={8} style={[styles.avatarCircle, { borderColor: theme.accent }]}>
+          </Pressable>
+          <Pressable onPress={() => goTo('TeacherMessages')} hitSlop={8} style={[styles.headerIconButton, { borderColor: theme.accent, backgroundColor: theme.surface }]}>
             <Megaphone size={18} color={theme.accent} strokeWidth={1.75} />
           </Pressable>
         </View>
@@ -320,7 +305,7 @@ export default function TeacherDashboardScreen() {
 
 function ScheduleDetailModal({
   item, onClose, onOpenEdt, theme,
-}: { item: ScheduleEntry | null; onClose: () => void; onOpenEdt: () => void; theme: any }) {
+}: { item: ScheduleEntry | null; onClose: () => void; onOpenEdt: () => void; theme: Theme }) {
   const { t } = useTranslation()
   if (!item) return null
   return (
@@ -373,11 +358,9 @@ function ScheduleDetailModal({
 
 function AnnouncementDetailModal({
   item, onClose, theme,
-}: { item: Announcement | null; onClose: () => void; theme: any }) {
+}: { item: Announcement | null; onClose: () => void; theme: Theme }) {
   if (!item) return null
-  const date = new Date(item.date).toLocaleDateString('fr-FR', {
-    weekday: 'long', day: 'numeric', month: 'long',
-  })
+  const date = formatLongDate(item.date)
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -423,17 +406,21 @@ const styles = StyleSheet.create({
   headerStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    marginHorizontal: 20,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  avatarCircle: {
+  accountBlock: {
+    flex: 1,
+    paddingVertical: 2,
+  },
+  headerIconButton: {
     width: 44, height: 44, borderRadius: 22,
     borderWidth: 2,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  avatarImg: {
-    width: 28, height: 28,
   },
   bellBtn: {
     width: 40, height: 40, borderRadius: 20,

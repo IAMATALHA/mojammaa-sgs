@@ -1,16 +1,3 @@
-/**
- * ParentDashboardScreen — Direction Claude v2 : "Marocain premium / institutionnel"
- *
- * Refonte selon brief :
- *   - Plus de décorations enfantines (suppression étoile / feuille / soleil)
- *   - Lavis watercolor subtils uniquement (cream / navy / corail / orange / jaune)
- *   - Logo école fortement en valeur dans le hero
- *   - icon.png comme watermark de fond, très discret
- *   - Réduction des cards imbriquées (consolidation)
- *   - Toutes les interactions préservées (onPress, modals, navigation)
- *   - Le dashboard adopte la teinte de l'enfant sélectionné (gradient subtil)
- */
-
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, ScrollView, RefreshControl, StyleSheet, Pressable, Text, Image,
@@ -18,39 +5,32 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { LinearGradient } from 'expo-linear-gradient'
 import { MotiView } from 'moti'
 import { useNavigation } from '@react-navigation/native'
 import {
-  Megaphone, BookOpen, CalendarDays, Users, X, MapPin, Clock,
+  Megaphone, BookOpen, Users, X, Clock,
   ChevronRight,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import { useTheme } from '../../contexts/ThemeContext'
+import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useParentData } from '../../hooks/useParentData'
-import { useUpcomingEvents } from '../../hooks/useUpcomingEvents'
 import {
   SectionHeader, Card,
-  AttendanceRing, HomeworkRow, AnnouncementCard,
-  EventCard, QuickActions, EmptyState, SkeletonRow,
+  HomeworkRow, AnnouncementCard,
+  QuickActions, EmptyState, SkeletonRow,
 } from '../../components/dashboard'
 import {
-  PARENT_RECENT_HOMEWORK, PARENT_ANNOUNCEMENTS,
   PARENT_QUICK_ACTIONS,
-  type Announcement, type HomeworkItem, type UpcomingEvent, type QuickAction,
+  type Announcement, type HomeworkItem, type QuickAction,
   type Child,
 } from '../../utils/mockData'
+import { useParentDevoirs } from '../../hooks/useParentDevoirs'
+import { useParentMessages } from '../../hooks/useParentMessages'
+import { greetingKey, hexWithAlpha, formatLongDate } from '../../utils/format'
 
 const { width: SCREEN_W } = Dimensions.get('window')
-const CAROUSEL_CARD_W = SCREEN_W - 76
-
-function greetingKey(date = new Date()): string {
-  const h = date.getHours()
-  if (h < 12) return 'greeting.morning'
-  if (h < 18) return 'greeting.afternoon'
-  return 'greeting.evening'
-}
+const CAROUSEL_CARD_W = SCREEN_W - 42
 
 const QUICK_ACTION_ROUTES: Record<string, string> = {
   pqa1: 'StudentNotes',
@@ -59,156 +39,13 @@ const QUICK_ACTION_ROUTES: Record<string, string> = {
   pqa4: 'StudentMessages',
 }
 
-function hexWithAlpha(hex: string, alpha: number): string {
-  const clean = hex.replace('#', '')
-  const r = parseInt(clean.substring(0, 2), 16)
-  const g = parseInt(clean.substring(2, 4), 16)
-  const b = parseInt(clean.substring(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
-
-// ────────────────────────────────────────────────────────────────────────
-// Hero — logo prominent + greeting calligraphié, gradient subtil tinté
-// ────────────────────────────────────────────────────────────────────────
-
-function Hero({
-  greeting, roleLabel, fullName, selectedChild, notifications, onPressBell, onPressAvatar, theme,
-}: {
-  greeting: string
-  roleLabel: string
-  fullName: string
-  selectedChild?: Child
-  notifications: number
-  onPressBell: () => void
-  onPressAvatar: () => void
-  theme: any
-}) {
-  const tint = selectedChild?.avatarColor || theme.accent
-
-  return (
-    <MotiView
-      from={{ opacity: 0, translateY: -8 }}
-      animate={{ opacity: 1, translateY: 0 }}
-      transition={{ type: 'timing', duration: 480 }}
-    >
-      <LinearGradient
-        colors={[hexWithAlpha(tint, 0.12), theme.bg]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.hero}
-      >
-        {/* Row 1 : avatar parent + brand identity + bell */}
-        <View style={styles.heroTopRow}>
-          <Pressable onPress={onPressAvatar} hitSlop={8}>
-            {({ pressed }) => (
-              <MotiView
-                animate={{ scale: pressed ? 0.94 : 1 }}
-                transition={{ type: 'timing', duration: 150 }}
-                style={[styles.heroAvatar, {
-                  backgroundColor: theme.white,
-                  borderColor: hexWithAlpha(tint, 0.35),
-                }]}
-              >
-                <Text style={{
-                  color: theme.text,
-                  fontFamily: theme.fonts.bold,
-                  fontSize: 15,
-                }}>
-                  {fullName.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('')}
-                </Text>
-              </MotiView>
-            )}
-          </Pressable>
-
-          <View style={styles.heroBrandBlock}>
-            <View style={styles.heroBrandRow}>
-              <Image
-                source={require('../../../assets/icon.png')}
-                style={styles.heroBrandLogo}
-                resizeMode="contain"
-              />
-              <View style={{ marginStart: 8 }}>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: theme.text,
-                    fontFamily: theme.fonts.bold,
-                    fontSize: 13,
-                    letterSpacing: -0.2,
-                  }}
-                >
-                  Mojammaa Al Maarifa
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: theme.textSoft,
-                    fontFamily: theme.fonts.arabicSemi,
-                    fontSize: 11,
-                    marginTop: 1,
-                  }}
-                >
-                  مجمع المعرفة الخصوصية
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <Pressable onPress={onPressBell} hitSlop={8}>
-            {({ pressed }) => (
-              <MotiView
-                animate={{ scale: pressed ? 0.94 : 1 }}
-                transition={{ type: 'timing', duration: 150 }}
-                style={[styles.heroBell, { backgroundColor: theme.white }]}
-              >
-                <Megaphone size={18} color={theme.text} strokeWidth={1.75} />
-                {notifications > 0 ? (
-                  <View style={[styles.bellDot, { backgroundColor: theme.accent }]}>
-                    <Text style={{ color: '#fff', fontFamily: theme.fonts.bold, fontSize: 9 }}>
-                      {notifications > 9 ? '9+' : String(notifications)}
-                    </Text>
-                  </View>
-                ) : null}
-              </MotiView>
-            )}
-          </Pressable>
-        </View>
-
-        {/* Row 2 : greeting + name (calligraphie) */}
-        <View style={styles.heroGreetBlock}>
-          <Text style={{
-            color: theme.textSoft,
-            fontFamily: theme.fonts.medium,
-            fontSize: 12,
-            letterSpacing: 0.4,
-          }}>
-            {greeting.toUpperCase()} · {roleLabel}
-          </Text>
-          <Text
-            numberOfLines={1}
-            style={{
-              color: '#1D3557',
-              fontFamily: theme.fonts.script,
-              fontSize: 34,
-              lineHeight: 42,
-              marginTop: 2,
-            }}
-          >
-            {fullName.split(' ')[0] || 'Parent'}
-          </Text>
-        </View>
-      </LinearGradient>
-    </MotiView>
-  )
-}
-
 // ────────────────────────────────────────────────────────────────────────
 // Children carousel — restrained, institutional
 // ────────────────────────────────────────────────────────────────────────
 
 function ChildSlide({
   child, isActive, onPress, theme,
-}: { child: Child; isActive: boolean; onPress: () => void; theme: any }) {
+}: { child: Child; isActive: boolean; onPress: () => void; theme: Theme }) {
   const { t } = useTranslation()
   return (
     <Pressable onPress={onPress} android_ripple={{ color: theme.border }} style={styles.carouselSlot}>
@@ -229,24 +66,16 @@ function ChildSlide({
             theme.shadows.sm,
           ]}
         >
+          <View style={[styles.childAccent, { backgroundColor: child.avatarColor }]} />
           <View style={styles.carouselRow}>
-            <View style={[styles.carouselAvatar, { backgroundColor: child.avatarColor }]}>
-              <Text style={{
-                color: '#fff',
-                fontFamily: theme.fonts.bold,
-                fontSize: 18,
-              }}>
-                {(child.firstName[0] || '').toUpperCase()}{(child.lastName[0] || '').toUpperCase()}
-              </Text>
-            </View>
-            <View style={{ flex: 1, marginStart: 14 }}>
+            <View style={{ flex: 1 }}>
               <Text
                 numberOfLines={1}
                 style={{
                   color: theme.text,
                   fontFamily: theme.fonts.bold,
-                  fontSize: 16,
-                  letterSpacing: -0.2,
+                  fontSize: 18,
+                  letterSpacing: -0.3,
                 }}
               >
                 {child.firstName} {child.lastName}
@@ -256,14 +85,14 @@ function ChildSlide({
                 style={{
                   color: theme.textSoft,
                   fontFamily: theme.fonts.medium,
-                  fontSize: 12,
-                  marginTop: 2,
+                  fontSize: 13,
+                  marginTop: 3,
                 }}
               >
                 {child.classe} · {child.level}
               </Text>
             </View>
-            <ChevronRight size={18} color={theme.textMuted} strokeWidth={1.75} />
+            <ChevronRight size={20} color={theme.textMuted} strokeWidth={1.75} />
           </View>
 
           <View style={styles.carouselStatsRow}>
@@ -287,23 +116,23 @@ function ChildSlide({
   )
 }
 
-function MiniStat({ label, value, theme }: { label: string; value: string; theme: any }) {
+function MiniStat({ label, value, theme }: { label: string; value: string; theme: Theme }) {
   return (
     <View style={styles.miniStatItem}>
       <Text style={{
         color: theme.text,
         fontFamily: theme.fonts.bold,
-        fontSize: 15,
+        fontSize: 18,
       }}>
         {value}
       </Text>
       <Text style={{
         color: theme.textSoft,
         fontFamily: theme.fonts.medium,
-        fontSize: 10,
+        fontSize: 11,
         textTransform: 'uppercase',
         letterSpacing: 0.4,
-        marginTop: 2,
+        marginTop: 3,
       }}>
         {label}
       </Text>
@@ -335,10 +164,12 @@ function AnimatedSection({
 
 export default function ParentDashboardScreen() {
   const theme = useTheme()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language === 'ar'
   const { profile, logout } = useAuth()
   const parent = useParentData()
-  const { events: upcomingEvents } = useUpcomingEvents(6)
+  const { devoirs: allDevoirs } = useParentDevoirs()
+  const { messages: liveMessages, unread: unreadMessages } = useParentMessages()
   const nav = useNavigation<any>()
   const [refreshing, setRefreshing] = useState(false)
   const loading = parent.loading
@@ -347,7 +178,6 @@ export default function ParentDashboardScreen() {
   // Detail modal state
   const [hwDetail,    setHwDetail]    = useState<HomeworkItem | null>(null)
   const [annDetail,   setAnnDetail]   = useState<Announcement | null>(null)
-  const [eventDetail, setEventDetail] = useState<UpcomingEvent | null>(null)
 
   const fullName = profile
     ? `${profile.prenom} ${profile.nom}`.trim()
@@ -369,10 +199,14 @@ export default function ParentDashboardScreen() {
     [parent.children, selectedChildId],
   )
 
-  const homeworkForSelected = useMemo(
-    () => PARENT_RECENT_HOMEWORK.filter(h => h.childId === selectedChild?.id).slice(0, 4),
-    [selectedChild],
-  )
+  const homeworkForSelected = useMemo(() => {
+    const childClasse = selectedChild?.classe
+    if (!childClasse) return []
+    return allDevoirs
+      .filter(d => d.classeId === childClasse && !d.isPast)
+      .slice(0, 4)
+      .map(d => ({ id: d.id, subject: d.type, title: d.title, dueDate: d.dateLimite, childId: d.childId || '', status: 'pending' as const }))
+  }, [allDevoirs, selectedChild])
 
   const goTo = (route: string) => nav.navigate(route)
 
@@ -381,7 +215,7 @@ export default function ParentDashboardScreen() {
     if (route) goTo(route)
   }
 
-  const handleAvatarPress = () => {
+  const handleAccountPress = () => {
     Alert.alert(
       fullName,
       profile?.email ?? t('parent.accountParent'),
@@ -407,13 +241,10 @@ export default function ParentDashboardScreen() {
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
       <StatusBar style="dark" />
 
-      {/* ── Subtle watermark icon.png ───────────────────────── */}
-      <View pointerEvents="none" style={styles.watermarkWrap}>
-        <Image
-          source={require('../../../assets/icon.png')}
-          style={styles.watermark}
-          resizeMode="contain"
-        />
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={[styles.blob, styles.blobA, { backgroundColor: theme.watercolorA }]} />
+        <View style={[styles.blob, styles.blobB, { backgroundColor: theme.roseSurface }]} />
+        <View style={[styles.blob, styles.blobC, { backgroundColor: theme.violetSurface }]} />
       </View>
 
       <ScrollView
@@ -427,17 +258,44 @@ export default function ParentDashboardScreen() {
           />
         }
       >
-        {/* ── Hero ──────────────────────────────────────────── */}
-        <Hero
-          greeting={t(greetingKey())}
-          roleLabel={t('roles.parent')}
-          fullName={fullName}
-          selectedChild={selectedChild}
-          notifications={2}
-          onPressBell={() => goTo('StudentMessages')}
-          onPressAvatar={handleAvatarPress}
-          theme={theme}
-        />
+        {/* ── Header strip ──────────────────────────────── */}
+        <View style={styles.headerStrip}>
+          <Pressable onPress={handleAccountPress} hitSlop={8}>
+            <View style={[styles.avatarCircle, { borderColor: theme.accent }]}>
+              <Image
+                source={require('../../../assets/favicon.png')}
+                style={styles.avatarImg}
+                resizeMode="contain"
+              />
+            </View>
+          </Pressable>
+          <View style={{ flex: 1, marginStart: 12 }}>
+            <Text numberOfLines={1} style={{
+              color: theme.text,
+              fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
+              fontSize: isAr ? 16 : 15,
+              writingDirection: isAr ? 'rtl' : 'ltr',
+              textAlign: isAr ? 'right' : 'left',
+            }}>
+              {t(greetingKey())}, {fullName.split(' ')[0] || 'Parent'}
+            </Text>
+            <Text style={{
+              color: theme.textSoft,
+              fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium,
+              fontSize: 11,
+              letterSpacing: isAr ? 0 : 0.5,
+              marginTop: 2,
+              textTransform: 'uppercase',
+              writingDirection: isAr ? 'rtl' : 'ltr',
+              textAlign: isAr ? 'right' : 'left',
+            }}>
+              {t('roles.parent')}
+            </Text>
+          </View>
+          <Pressable onPress={() => goTo('StudentMessages')} hitSlop={8} style={[styles.avatarCircle, { borderColor: theme.accent }]}>
+            <Megaphone size={18} color={theme.accent} strokeWidth={1.75} />
+          </Pressable>
+        </View>
 
         {/* ── Mes enfants ──────────────────────────────────── */}
         <View style={styles.section}>
@@ -462,7 +320,10 @@ export default function ParentDashboardScreen() {
               snapToInterval={CAROUSEL_CARD_W + 12}
               decelerationRate="fast"
               style={{ flexGrow: 0 }}
-              contentContainerStyle={styles.carouselScroll}
+              contentContainerStyle={[
+                styles.carouselScroll,
+                parent.children.length === 1 && { flex: 1, justifyContent: 'center', paddingHorizontal: 0 },
+              ]}
             >
               {parent.children.map((c, idx) => (
                 <AnimatedSection key={c.id} delay={60 + idx * 40}>
@@ -478,60 +339,8 @@ export default function ParentDashboardScreen() {
           )}
         </View>
 
-        {/* ── Présence ──────────────────────────────────────── */}
-        <AnimatedSection delay={100}>
-          <View style={styles.section}>
-            <SectionHeader
-              title={t('parent.attendanceOverview')}
-              subtitle={selectedChild ? `${selectedChild.firstName} · ${selectedChild.classe}` : undefined}
-              actionLabel={t('parent.detail')}
-              onAction={() => goTo('StudentAbsences')}
-            />
-            <Pressable
-              onPress={() => goTo('StudentAbsences')}
-              android_ripple={{ color: theme.border }}
-              style={({ pressed }) => [pressed && { opacity: 0.96 }]}
-            >
-              <View style={[styles.attendanceCard, {
-                backgroundColor: theme.card,
-                borderColor: hexWithAlpha(tint, 0.22),
-              }, theme.shadows.sm]}>
-                <View style={styles.attendanceRow}>
-                  <AttendanceRing
-                    value={selectedChild?.attendance ?? 0}
-                    caption="présence"
-                    progressColor={tint}
-                  />
-                  <View style={styles.attendanceMeta}>
-                    <Stat
-                      label={t('parent.average')}
-                      value={selectedChild && selectedChild.averageGrade > 0
-                        ? `${selectedChild.averageGrade.toFixed(1)}/20`
-                        : '—'}
-                      color={theme.success}
-                      theme={theme}
-                    />
-                    <Stat
-                      label={t('parent.homeworkTodo')}
-                      value={String(selectedChild?.pendingHomework ?? 0)}
-                      color={theme.warning}
-                      theme={theme}
-                    />
-                    <Stat
-                      label={t('parent.class')}
-                      value={selectedChild?.classe ?? '—'}
-                      color={tint}
-                      theme={theme}
-                    />
-                  </View>
-                </View>
-              </View>
-            </Pressable>
-          </View>
-        </AnimatedSection>
-
         {/* ── Devoirs récents ──────────────────────────────── */}
-        <AnimatedSection delay={140}>
+        <AnimatedSection delay={100}>
           <View style={styles.section}>
             <SectionHeader
               title={t('parent.recentHomework')}
@@ -570,7 +379,7 @@ export default function ParentDashboardScreen() {
               actionLabel={t('common.seeMore')}
               onAction={() => goTo('StudentMessages')}
             />
-            {PARENT_ANNOUNCEMENTS.length === 0 ? (
+            {liveMessages.length === 0 ? (
               <Card>
                 <EmptyState
                   icon={Megaphone}
@@ -579,7 +388,7 @@ export default function ParentDashboardScreen() {
               </Card>
             ) : (
               <View>
-                {PARENT_ANNOUNCEMENTS.map(a => (
+                {liveMessages.slice(0, 3).map(a => (
                   <AnnouncementCard
                     key={a.id}
                     item={a}
@@ -591,35 +400,8 @@ export default function ParentDashboardScreen() {
           </View>
         </AnimatedSection>
 
-        {/* ── Événements ───────────────────────────────────── */}
-        <AnimatedSection delay={220}>
-          <View style={styles.section}>
-            <SectionHeader
-              title={t('parent.upcomingEvents')}
-              actionLabel={t('parent.calendar')}
-              onAction={() => goTo('StudentMessages')}
-            />
-            <Card padding={12}>
-              {upcomingEvents.length === 0 ? (
-                <EmptyState
-                  icon={CalendarDays}
-                  title={t('parent.noEvents')}
-                />
-              ) : (
-                upcomingEvents.map(e => (
-                  <EventCard
-                    key={e.id}
-                    event={e}
-                    onPress={() => setEventDetail(e)}
-                  />
-                ))
-              )}
-            </Card>
-          </View>
-        </AnimatedSection>
-
         {/* ── Accès rapide ─────────────────────────────────── */}
-        <AnimatedSection delay={260}>
+        <AnimatedSection delay={180}>
           <View style={styles.section}>
             <SectionHeader
               title={t('parent.quickAccess')}
@@ -655,44 +437,7 @@ export default function ParentDashboardScreen() {
         onClose={() => setAnnDetail(null)}
         theme={theme}
       />
-      <EventDetailModal
-        item={eventDetail}
-        onClose={() => setEventDetail(null)}
-        theme={theme}
-      />
     </SafeAreaView>
-  )
-}
-
-function Stat({
-  label, value, color, theme,
-}: { label: string; value: string; color: string; theme: any }) {
-  return (
-    <View style={styles.stat}>
-      <View style={[styles.statDot, { backgroundColor: color }]} />
-      <View style={{ flex: 1 }}>
-        <Text style={{
-          color: theme.textSoft,
-          fontFamily: theme.fonts.medium,
-          fontSize: 11,
-          textTransform: 'uppercase',
-          letterSpacing: 0.4,
-        }}>
-          {label}
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: theme.text,
-            fontFamily: theme.fonts.bold,
-            fontSize: 15,
-            marginTop: 2,
-          }}
-        >
-          {value}
-        </Text>
-      </View>
-    </View>
   )
 }
 
@@ -703,14 +448,12 @@ function HomeworkDetailModal({
   childName: string
   onClose: () => void
   onOpenList: () => void
-  theme: any
+  theme: Theme
   tint: string
 }) {
   const { t } = useTranslation()
   if (!item) return null
-  const due = new Date(item.dueDate).toLocaleDateString('fr-FR', {
-    weekday: 'long', day: 'numeric', month: 'long',
-  })
+  const due = formatLongDate(item.dueDate)
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -741,11 +484,9 @@ function HomeworkDetailModal({
 
 function AnnouncementDetailModal({
   item, onClose, theme,
-}: { item: Announcement | null; onClose: () => void; theme: any }) {
+}: { item: Announcement | null; onClose: () => void; theme: Theme }) {
   if (!item) return null
-  const date = new Date(item.date).toLocaleDateString('fr-FR', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  })
+  const date = formatLongDate(item.date, undefined, true)
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -777,38 +518,9 @@ function AnnouncementDetailModal({
   )
 }
 
-function EventDetailModal({
-  item, onClose, theme,
-}: { item: UpcomingEvent | null; onClose: () => void; theme: any }) {
-  const { t } = useTranslation()
-  if (!item) return null
-  const date = new Date(item.date).toLocaleDateString('fr-FR', {
-    weekday: 'long', day: 'numeric', month: 'long',
-  })
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={[styles.sheet, { backgroundColor: theme.card }]}>
-          <SheetHeader theme={theme} onClose={onClose} icon={<CalendarDays size={20} color={theme.green} strokeWidth={2.2} />} label={t('parent.event')} />
-          <Text style={[styles.sheetTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}>
-            {item.title}
-          </Text>
-          <SheetMeta theme={theme} icon={<CalendarDays size={14} color={theme.textSoft} strokeWidth={2} />} text={date} />
-          {item.time ? (
-            <SheetMeta theme={theme} icon={<Clock size={14} color={theme.textSoft} strokeWidth={2} />} text={item.time} />
-          ) : null}
-          {item.location ? (
-            <SheetMeta theme={theme} icon={<MapPin size={14} color={theme.textSoft} strokeWidth={2} />} text={item.location} />
-          ) : null}
-        </Pressable>
-      </Pressable>
-    </Modal>
-  )
-}
-
 function SheetHeader({
   theme, onClose, icon, label,
-}: { theme: any; onClose: () => void; icon: React.ReactNode; label: string }) {
+}: { theme: Theme; onClose: () => void; icon: React.ReactNode; label: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
       <View style={[
@@ -840,7 +552,7 @@ function SheetHeader({
 
 function SheetMeta({
   theme, icon, text,
-}: { theme: any; icon: React.ReactNode; text: string }) {
+}: { theme: Theme; icon: React.ReactNode; text: string }) {
   return (
     <View style={[styles.sheetMetaRow, { backgroundColor: theme.surface }]}>
       {icon}
@@ -864,58 +576,25 @@ const styles = StyleSheet.create({
   safe:   { flex: 1 },
   scroll: { paddingBottom: 32 },
 
-  // Watermark icon.png — très discret, derrière tout
-  watermarkWrap: {
-    position: 'absolute',
-    top: SCREEN_W * 0.35,
-    left: 0, right: 0,
-    alignItems: 'center',
-  },
-  watermark: {
-    width: SCREEN_W * 0.95,
-    height: SCREEN_W * 0.95,
-    opacity: 0.045,
-  },
+  blob: { position: 'absolute' as const, borderRadius: 999 },
+  blobA: { width: 148, height: 148, top: -30, right: -24 },
+  blobB: { width: 88, height: 88, top: 120, left: -24 },
+  blobC: { width: 128, height: 128, bottom: 36, right: -40 },
 
-  // Hero
-  hero: {
+  headerStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 22,
-    borderBottomLeftRadius:  28,
-    borderBottomRightRadius: 28,
+    paddingVertical: 14,
   },
-  heroTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  heroAvatar: {
+  avatarCircle: {
     width: 44, height: 44, borderRadius: 22,
+    borderWidth: 2,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5,
+    backgroundColor: '#FFFFFF',
   },
-  heroBrandBlock: {
-    flex: 1,
-    marginHorizontal: 12,
-  },
-  heroBrandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  heroBrandLogo: {
-    width: 32, height: 32,
-  },
-  heroBell: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  bellDot: {
-    position: 'absolute', top: 4, right: 4,
-    minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  heroGreetBlock: {
-    marginTop: 16,
+  avatarImg: {
+    width: 28, height: 28,
   },
 
   // Carousel enfants
@@ -929,22 +608,26 @@ const styles = StyleSheet.create({
     width: CAROUSEL_CARD_W,
   },
   carouselCard: {
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 22,
+    padding: 20,
+    overflow: 'hidden',
+  },
+  childAccent: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: 4,
   },
   carouselRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  carouselAvatar: {
-    width: 52, height: 52, borderRadius: 26,
-    alignItems: 'center', justifyContent: 'center',
-  },
   carouselStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 14,
-    paddingTop: 12,
+    marginTop: 16,
+    paddingTop: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(29, 53, 87, 0.08)',
   },
@@ -960,25 +643,6 @@ const styles = StyleSheet.create({
 
   // Sections
   section: { paddingHorizontal: 20, marginTop: 22 },
-
-  // Attendance card
-  attendanceCard: {
-    borderRadius: 20,
-    padding: 18,
-    borderWidth: 1,
-  },
-  attendanceRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           14,
-  },
-  attendanceMeta: { flex: 1, gap: 12, marginStart: 8 },
-  stat: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           10,
-  },
-  statDot: { width: 8, height: 8, borderRadius: 4 },
 
   // Footer
   footer: {

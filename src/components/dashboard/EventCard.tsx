@@ -7,6 +7,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
 import { MapPin, Clock } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
+import { formatDateChip } from '../../utils/format'
 import type { UpcomingEvent } from '../../utils/mockData'
 
 const TYPE_LABEL: Record<UpcomingEvent['type'], string> = {
@@ -16,19 +17,11 @@ const TYPE_LABEL: Record<UpcomingEvent['type'], string> = {
   holiday: 'Vacances',
 }
 
-function fmtMonthDay(iso: string): { day: string; month: string } {
-  const d = new Date(iso)
-  return {
-    day:   d.toLocaleDateString('fr-FR', { day: '2-digit' }),
-    month: d.toLocaleDateString('fr-FR', { month: 'short' }).toUpperCase().replace('.', ''),
-  }
-}
-
 export default function EventCard({
   event, onPress,
 }: { event: UpcomingEvent; onPress?: () => void }) {
   const theme = useTheme()
-  const { day, month } = fmtMonthDay(event.date)
+  const { day, month } = formatDateChip(event.date)
   const tint =
     event.type === 'exam'    ? theme.accent :
     event.type === 'holiday' ? theme.success :

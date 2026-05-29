@@ -5,13 +5,12 @@ import React from 'react'
 import { StyleSheet, View } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { LinearGradient } from 'expo-linear-gradient'
 import {
   LayoutDashboard, BookOpen, FileText, CalendarX, MessageSquare,
   type LucideIcon,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import { useTheme } from '../contexts/ThemeContext'
+import { useTheme, type Theme } from '../contexts/ThemeContext'
 import ParentDashboardScreen from '../screens/student/ParentDashboardScreen'
 import ParentDevoirsScreen from '../screens/student/ParentDevoirsScreen'
 import ParentNotesScreen from '../screens/student/ParentNotesScreen'
@@ -26,19 +25,13 @@ function TabIcon({
   Icon: LucideIcon
   color: string
   focused: boolean
-  theme: any
+  theme: Theme
 }) {
   if (focused) {
     return (
-      <LinearGradient
-        colors={[theme.primarySurface, theme.violetSurface]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.iconActive, { borderColor: theme.primaryBorder }]}
-      >
-        <Icon color={color} size={20} strokeWidth={1.8} />
-        <View style={[styles.statusDot, { backgroundColor: theme.accent }]} />
-      </LinearGradient>
+      <View style={[styles.iconActive, { backgroundColor: theme.primary }]}>
+        <Icon color="#FFFFFF" size={20} strokeWidth={1.9} />
+      </View>
     )
   }
   return (
@@ -67,10 +60,10 @@ export default function StudentStack() {
           paddingTop: 10,
           minHeight: 68 + Math.max(insets.bottom, 0),
           shadowColor: '#1D3557',
-          shadowOpacity: 0.08,
-          shadowRadius: 18,
-          shadowOffset: { width: 0, height: -4 },
-          elevation: 8,
+          shadowOpacity: 0.06,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: -3 },
+          elevation: 6,
         },
         sceneStyle: {
           backgroundColor: theme.bg,
@@ -80,7 +73,7 @@ export default function StudentStack() {
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontFamily: theme.fonts.medium,
+          fontFamily: theme.fonts.semibold,
           marginTop: 2,
         },
       }}
@@ -131,10 +124,9 @@ export default function StudentStack() {
 
 const styles = StyleSheet.create({
   iconActive: {
-    width: 42,
+    width: 40,
     height: 34,
-    borderRadius: 17,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -143,13 +135,5 @@ const styles = StyleSheet.create({
     height: 34,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  statusDot: {
-    position: 'absolute',
-    top: 6,
-    end: 8,
-    width: 5,
-    height: 5,
-    borderRadius: 3,
   },
 })

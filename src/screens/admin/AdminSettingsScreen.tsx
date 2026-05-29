@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Globe } from 'lucide-react-native';
 import ScreenLayout from '../../components/ScreenLayout';
 import LanguagePicker from '../../components/LanguagePicker';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 
 const APP_VERSION = '1.0.0'
@@ -37,11 +37,6 @@ export default function AdminSettingsScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
         {/* Profile card */}
         <View style={[styles.profileCard, { backgroundColor: theme.primary }]}>
-          <View style={[styles.avatar, { backgroundColor: theme.white }]}>
-            <Text style={{ color: theme.primary, fontSize: 22, fontWeight: '800' }}>
-              {(profile?.prenom?.[0] || '?').toUpperCase()}{(profile?.nom?.[0] || '').toUpperCase()}
-            </Text>
-          </View>
           <Text style={styles.profileName}>
             {profile ? `${profile.prenom} ${profile.nom}` : '—'}
           </Text>
@@ -115,7 +110,7 @@ export default function AdminSettingsScreen() {
   )
 }
 
-function Row({ label, value, theme }: { label: string; value: string; theme: any }) {
+function Row({ label, value, theme }: { label: string; value: string; theme: Theme }) {
   return (
     <View style={styles.kvRow}>
       <Text style={[styles.kvLabel, { color: theme.textSoft }]}>{label}</Text>
@@ -126,7 +121,6 @@ function Row({ label, value, theme }: { label: string; value: string; theme: any
 
 const styles = StyleSheet.create({
   profileCard: { padding: 22, borderRadius: 16, alignItems: 'center', marginBottom: 20 },
-  avatar:      { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   profileName: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 4 },
   profileEmail:{ color: 'rgba(255,255,255,0.85)', fontSize: 13, marginBottom: 10 },
   roleBadge:   { backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },

@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl,
-  Pressable, Image,
+  Pressable,
   Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -9,40 +9,19 @@ import { StatusBar } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
 import {
-  Megaphone, Users, GraduationCap, BarChart3,
+  MessageSquare, Users, GraduationCap,
   CheckCircle2, CalendarX, BookOpen, Send, Clock,
 } from 'lucide-react-native'
 import { collection, getDocs, query, where } from 'firebase/firestore'
-import { useTheme } from '../../contexts/ThemeContext'
+import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
 import { getTodayJour, type JourScolaire } from '../../services/calendarService'
-import { QuickActions, SectionHeader, Card, EmptyState, AnnouncementCard } from '../../components/dashboard'
-import type { QuickAction, Announcement } from '../../utils/mockData'
-
-function greetingKey(date = new Date()): string {
-  const h = date.getHours()
-  if (h < 12) return 'greeting.morning'
-  if (h < 18) return 'greeting.afternoon'
-  return 'greeting.evening'
-}
+import { SectionHeader, Card } from '../../components/dashboard'
+import { greetingKey } from '../../utils/format'
 
 function todayISO(): string {
   return new Date().toISOString().split('T')[0]
-}
-
-const ADMIN_QUICK_ACTIONS: QuickAction[] = [
-  { id: 'aq1', label: 'Annonces',      labelKey: 'tabs.announcements',  icon: 'send',           tint: 'primary' },
-  { id: 'aq2', label: 'Utilisateurs',  labelKey: 'admin.users',         icon: 'graduation-cap', tint: 'info'    },
-  { id: 'aq3', label: 'Calendrier',    labelKey: 'calendar.title',      icon: 'calendar-x',     tint: 'success' },
-  { id: 'aq4', label: 'Statistiques',  labelKey: 'admin.statsTitle',    icon: 'check-circle',   tint: 'accent'  },
-]
-
-const ACTION_ROUTES: Record<string, string> = {
-  aq1: 'AdminBroadcast',
-  aq2: 'AdminUsers',
-  aq3: 'AdminCalendar',
-  aq4: 'AdminStats',
 }
 
 interface SchoolState {
@@ -68,7 +47,6 @@ export default function AdminDashboardScreen() {
 
   const [state, setState] = useState<SchoolState | null>(null)
   const [todayJour, setTodayJour] = useState<JourScolaire | null>(null)
-  const [messages, setMessages] = useState<Announcement[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -141,22 +119,6 @@ export default function AdminDashboardScreen() {
         return ca.toDate().toISOString().split('T')[0] === today
       })
 
-      const recentMsgs: Announcement[] = msgsSnap.docs
-        .map(d => {
-          const data = d.data() as any
-          return {
-            id: d.id,
-            title: data.subject || '',
-            body: data.body || '',
-            author: data.fromNom || '',
-            date: data.createdAt?.toDate?.()?.toISOString() || '',
-            priority: data.priority || 'normal',
-            category: data.category || 'admin',
-          }
-        })
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .slice(0, 3)
-
       setState({
         totalEleves,
         totalProfs,
@@ -169,7 +131,6 @@ export default function AdminDashboardScreen() {
         devoirsToday,
         messagesToday: todayMessages.length,
       })
-      setMessages(recentMsgs)
     } catch (e: any) {
       console.warn('[admin dashboard]', e?.message)
     } finally {
@@ -182,7 +143,7 @@ export default function AdminDashboardScreen() {
 
   const onRefresh = () => { setRefreshing(true); load() }
 
-  const handleAvatarPress = () => {
+  const handleAccountPress = () => {
     Alert.alert(
       fullName,
       profile?.email ?? t('admin.accountAdmin'),
@@ -191,11 +152,6 @@ export default function AdminDashboardScreen() {
         { text: t('common.logout'), style: 'destructive', onPress: () => logout().catch(() => {}) },
       ],
     )
-  }
-
-  const handleAction = (action: QuickAction) => {
-    const route = ACTION_ROUTES[action.id]
-    if (route) goTo(route)
   }
 
   return (
@@ -214,17 +170,8 @@ export default function AdminDashboardScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         {/* ── Header strip ──────────────────────────────── */}
-        <View style={styles.headerStrip}>
-          <Pressable onPress={handleAvatarPress} hitSlop={8}>
-            <View style={[styles.avatarCircle, { borderColor: theme.accent }]}>
-              <Image
-                source={require('../../../assets/favicon.png')}
-                style={styles.avatarImg}
-                resizeMode="contain"
-              />
-            </View>
-          </Pressable>
-          <View style={{ flex: 1, marginStart: 12 }}>
+        <View style={[styles.headerStrip, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>
+          <Pressable onPress={handleAccountPress} hitSlop={8} style={styles.accountBlock}>
             <Text numberOfLines={1} style={{
               color: theme.text,
               fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
@@ -246,9 +193,9 @@ export default function AdminDashboardScreen() {
             }}>
               {t('roles.admin')}
             </Text>
-          </View>
+          </Pressable>
           <Pressable onPress={() => goTo('AdminMessages')} hitSlop={8} style={[styles.bellBtn, { backgroundColor: theme.surface }]}>
-            <Megaphone size={18} color={theme.text} strokeWidth={1.75} />
+            <MessageSquare size={18} color={theme.text} strokeWidth={1.75} />
           </Pressable>
         </View>
 
@@ -277,7 +224,8 @@ export default function AdminDashboardScreen() {
                     <View style={[styles.statSep, { backgroundColor: theme.border }]} />
                     <StatBlock value={String(state.retardsToday)} label={t('parent.lateArrivals')} color={state.retardsToday > 0 ? theme.warning : theme.success} theme={theme} isAr={isAr} />
                     <View style={[styles.statSep, { backgroundColor: theme.border }]} />
-                    <StatBlock value={`${state.presenceRate}%`} label={t('admin.attendanceRate')} color={state.presenceRate >= 95 ? theme.success : state.presenceRate >= 85 ? theme.warning : theme.danger} theme={theme} isAr={isAr} />
+                    <StatBlock value={String(state.presenceRate)} suffix="%" label={t('admin.attendanceRate')} color={state.presenceRate >= 95 ? theme.success : state.presenceRate >= 85 ? theme.warning : theme.danger} theme={theme} isAr={isAr} />
+
                   </View>
                 </View>
               </Pressable>
@@ -286,14 +234,14 @@ export default function AdminDashboardScreen() {
             {/* ── Résumé école ───────────────────────────── */}
             <View style={styles.section}>
               <View style={styles.summaryRow}>
-                <Pressable style={{ flex: 1 }} onPress={() => goTo('AdminUsers')}>
+                <View style={{ flex: 1 }}>
                   <SummaryChip icon={<Users size={14} color="#457B9D" strokeWidth={2} />} value={state.totalProfs} label={t('admin.profs')} bg="#E4F0F6" theme={theme} />
-                </Pressable>
+                </View>
                 <Pressable style={{ flex: 1 }} onPress={() => goTo('AdminClasses')}>
                   <SummaryChip icon={<GraduationCap size={14} color="#1D3557" strokeWidth={2} />} value={state.totalClasses} label={t('tabs.classes')} bg="#E8EEF4" theme={theme} />
                 </Pressable>
                 <Pressable style={{ flex: 1 }} onPress={() => goTo('AdminDevoirs')}>
-                  <SummaryChip icon={<BookOpen size={14} color="#D95B00" strokeWidth={2} />} value={state.devoirsToday} label={t('tabs.homework')} bg="#FFF3E0" theme={theme} />
+                  <SummaryChip icon={<BookOpen size={14} color="#d96614af" strokeWidth={2} />} value={state.devoirsToday} label={t('tabs.homework')} bg="#FFF3E0" theme={theme} />
                 </Pressable>
               </View>
             </View>
@@ -336,33 +284,6 @@ export default function AdminDashboardScreen() {
               </Card>
             </View>
 
-            {/* ── Quick actions ──────────────────────────── */}
-            <View style={styles.section}>
-              <SectionHeader title={t('teacher.quickActions')} />
-              <QuickActions actions={ADMIN_QUICK_ACTIONS} onPress={handleAction} />
-            </View>
-
-            {/* ── Messages récents ───────────────────────── */}
-            <View style={styles.section}>
-              <SectionHeader
-                title={t('teacher.recentAnnouncements')}
-                actionLabel={t('common.seeMore')}
-                onAction={() => goTo('AdminMessages')}
-              />
-              {messages.length === 0 ? (
-                <Card>
-                  <EmptyState
-                    icon={Megaphone}
-                    title={t('parent.noAnnouncements')}
-                  />
-                </Card>
-              ) : (
-                messages.map(m => (
-                  <AnnouncementCard key={m.id} item={m} onPress={() => goTo('AdminMessages')} />
-                ))
-              )}
-            </View>
-
             <View style={styles.footer}>
               <Text style={{ color: theme.textMuted, fontFamily: theme.fonts.medium, fontSize: 11, letterSpacing: 0.4, textTransform: 'uppercase' }}>
                 Mojammaa Al Maarifa · {t('roles.admin')}
@@ -375,8 +296,8 @@ export default function AdminDashboardScreen() {
   )
 }
 
-function StatBlock({ value, label, color, theme, isAr }: {
-  value: string; label: string; color: string; theme: any; isAr: boolean
+function StatBlock({ value, suffix, label, color, theme, isAr }: {
+  value: string; suffix?: string; label: string; color: string; theme: Theme; isAr: boolean
 }) {
   return (
     <View style={styles.statBlock}>
@@ -386,7 +307,7 @@ function StatBlock({ value, label, color, theme, isAr }: {
         fontSize: 24,
         letterSpacing: -0.5,
       }}>
-        {value}
+        {value}{suffix ? <Text style={{ fontSize: 9, fontWeight: '600' }}>{suffix}</Text> : null}
       </Text>
       <Text style={{
         color: theme.textSoft,
@@ -403,7 +324,7 @@ function StatBlock({ value, label, color, theme, isAr }: {
 }
 
 function SummaryChip({ icon, value, label, bg, theme }: {
-  icon: React.ReactNode; value: number; label: string; bg: string; theme: any
+  icon: React.ReactNode; value: number; label: string; bg: string; theme: Theme
 }) {
   return (
     <View style={[styles.summaryChip, { backgroundColor: bg }]}>
@@ -415,7 +336,7 @@ function SummaryChip({ icon, value, label, bg, theme }: {
 }
 
 function ActivityRow({ icon, text, onPress, theme, isAr, last }: {
-  icon: React.ReactNode; text: string; onPress?: () => void; theme: any; isAr: boolean; last?: boolean
+  icon: React.ReactNode; text: string; onPress?: () => void; theme: Theme; isAr: boolean; last?: boolean
 }) {
   return (
     <Pressable onPress={onPress} style={[styles.activityRow, !last && { borderBottomWidth: 1, borderBottomColor: theme.border }]}>
@@ -447,16 +368,17 @@ const styles = StyleSheet.create({
   headerStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    marginHorizontal: 20,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  avatarCircle: {
-    width: 44, height: 44, borderRadius: 22,
-    borderWidth: 2,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+  accountBlock: {
+    flex: 1,
+    paddingVertical: 2,
   },
-  avatarImg: { width: 28, height: 28 },
   bellBtn: {
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',

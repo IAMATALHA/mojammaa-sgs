@@ -26,7 +26,7 @@ export default function Card({
   const base: ViewStyle = {
     backgroundColor: variant === 'flat' ? theme.surface : theme.card,
     borderRadius:    theme.radius.lg,
-    padding:         padding ?? theme.spacing.xl,
+    padding:         padding ?? theme.spacing.lg,
     borderWidth:     StyleSheet.hairlineWidth,
     borderColor:     variant === 'outline' ? theme.borderStrong : theme.border,
   }

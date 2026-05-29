@@ -7,7 +7,7 @@ import {
   type LucideIcon,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import { useTheme } from '../../contexts/ThemeContext'
+import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import type { QuickAction } from '../../utils/mockData'
 
 const ICONS: Record<string, LucideIcon> = {
@@ -21,12 +21,14 @@ const ICONS: Record<string, LucideIcon> = {
   bell: Bell,
 }
 
-const SOLID_COLORS: Record<string, { bg: string; fg: string }> = {
-  primary: { bg: '#E63946', fg: '#FFFFFF' },  // rouge corail (M logo)
-  accent:  { bg: '#D95B00', fg: '#FFFFFF' },  // ambre foncé (fleur logo)
-  info:    { bg: '#1D3557', fg: '#FFFFFF' },  // navy (brand)
-  success: { bg: '#D4A017', fg: '#FFFFFF' },  // jaune doré (M logo)
-  warning: { bg: '#F77F00', fg: '#FFFFFF' },  // orange
+function actionTone(theme: Theme): Record<string, { bg: string; fg: string; border: string }> {
+  return {
+    primary: { bg: theme.primarySurface, fg: theme.primary, border: theme.primaryBorder },
+    accent:  { bg: theme.accentSurface,  fg: theme.accent,  border: theme.accentSurface },
+    info:    { bg: theme.infoSurface,    fg: theme.info,    border: theme.infoSurface },
+    success: { bg: theme.successSurface, fg: theme.success, border: theme.successSurface },
+    warning: { bg: theme.warningSurface, fg: theme.warning, border: theme.warningSurface },
+  }
 }
 
 interface QuickActionsProps {
@@ -38,11 +40,12 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
   const theme = useTheme()
   const { t, i18n } = useTranslation()
   const isAr = i18n.language === 'ar'
+  const tones = actionTone(theme)
   return (
     <View style={styles.grid}>
       {actions.map(action => {
         const Icon = ICONS[action.icon] ?? Bell
-        const tint = SOLID_COLORS[action.tint] || SOLID_COLORS.primary
+        const tint = tones[action.tint] || tones.primary
         return (
           <Pressable
             key={action.id}
@@ -55,28 +58,35 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
                 from={{ opacity: 0 }}
                 animate={{ scale: pressed ? 0.97 : 1, opacity: pressed ? 0.92 : 1 }}
                 transition={{ type: 'timing', duration: 200 }}
-                style={[styles.tile, { backgroundColor: tint.bg }]}
+                style={[
+                  styles.tile,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: tint.border,
+                  },
+                  theme.shadows.xs,
+                ]}
               >
+                <View style={[styles.accentLine, { backgroundColor: tint.fg }]} />
                 {action.badge != null && action.badge !== 0 ? (
-                  <View style={styles.badge}>
+                  <View style={[styles.badge, { backgroundColor: tint.fg }]}>
                     <Text style={styles.badgeText}>
                       {typeof action.badge === 'number' && action.badge > 99 ? '99+' : String(action.badge)}
                     </Text>
                   </View>
                 ) : null}
-                <View style={styles.iconCircle}>
-                  <Icon size={22} color={tint.fg} strokeWidth={1.75} />
+                <View style={[styles.iconCircle, { backgroundColor: tint.bg }]}>
+                  <Icon size={21} color={tint.fg} strokeWidth={1.9} />
                 </View>
                 <Text
                   numberOfLines={2}
                   style={{
-                    color: tint.fg,
+                    color: theme.text,
                     fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
                     fontSize: isAr ? 14 : 13,
-                    marginTop: 10,
-                    textAlign: 'center',
+                    marginTop: 12,
+                    textAlign: isAr ? 'right' : 'left',
                     lineHeight: isAr ? 20 : 17,
-                    letterSpacing: -0.1,
                     writingDirection: isAr ? 'rtl' : 'ltr',
                   }}
                 >
@@ -103,19 +113,27 @@ const styles = StyleSheet.create({
   },
   tile: {
     flex: 1,
-    minHeight: 112,
+    minHeight: 104,
     borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  accentLine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
   },
   iconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   badge: {
     position: 'absolute',
@@ -124,13 +142,12 @@ const styles = StyleSheet.create({
     minWidth: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 5,
   },
   badgeText: {
-    color: '#1D3557',
+    color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '800',
   },

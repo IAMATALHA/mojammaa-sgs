@@ -8,6 +8,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
 import { Megaphone, AlertCircle, Calendar, School, ShieldCheck } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
+import { formatRelative } from '../../utils/format'
 import type { Announcement } from '../../utils/mockData'
 
 const CATEGORY_ICON = {
@@ -15,19 +16,6 @@ const CATEGORY_ICON = {
   staff:  ShieldCheck,
   event:  Calendar,
   admin:  Megaphone,
-}
-
-function formatRelative(iso: string): string {
-  const d = new Date(iso)
-  const diff = Date.now() - d.getTime()
-  const mins  = Math.floor(diff / 60000)
-  const hours = Math.floor(mins / 60)
-  const days  = Math.floor(hours / 24)
-  if (mins < 1)  return 'À l\'instant'
-  if (mins < 60) return `Il y a ${mins} min`
-  if (hours < 24)return `Il y a ${hours}h`
-  if (days < 7)  return `Il y a ${days}j`
-  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
 }
 
 export default function AnnouncementCard({

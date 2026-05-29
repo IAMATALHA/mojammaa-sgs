@@ -17,21 +17,12 @@ interface DashboardHeaderProps {
   roleLabel: string
   notifications?: number
   onPressBell?: () => void
-  onPressAvatar?: () => void
-}
-
-function initialsOf(name: string): string {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(w => w[0]?.toUpperCase() ?? '')
-    .join('')
+  onPressAccount?: () => void
 }
 
 export default function DashboardHeader({
   greeting, fullName, roleLabel,
-  notifications = 0, onPressBell, onPressAvatar,
+  notifications = 0, onPressBell, onPressAccount,
 }: DashboardHeaderProps) {
   const theme = useTheme()
 
@@ -117,33 +108,7 @@ export default function DashboardHeader({
         </View>
 
         <View style={styles.bottomRow}>
-          <Pressable onPress={onPressAvatar} hitSlop={8}>
-            {({ pressed }) => (
-              <MotiView
-                animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.94 : 1 }}
-                transition={{ type: 'timing', duration: 200 }}
-                style={[
-                  styles.avatarShell,
-                  {
-                    backgroundColor: theme.roseSurface,
-                    borderColor: theme.rose,
-                  },
-                ]}
-              >
-                <View style={[styles.avatar, { backgroundColor: theme.white }]}> 
-                  <Text style={{
-                    color: theme.primary,
-                    fontFamily: theme.fonts.bold,
-                    fontSize: 18,
-                  }}>
-                    {initialsOf(fullName)}
-                  </Text>
-                </View>
-              </MotiView>
-            )}
-          </Pressable>
-
-          <View style={styles.textBlock}>
+          <Pressable onPress={onPressAccount} hitSlop={8} style={styles.textBlock}>
             <Text
               numberOfLines={1}
               style={{
@@ -176,7 +141,7 @@ export default function DashboardHeader({
                 <Text style={[styles.tagText, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>{roleLabel}</Text>
               </View>
             </View>
-          </View>
+          </Pressable>
         </View>
       </LinearGradient>
     </View>
@@ -270,24 +235,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 18,
   },
-  avatarShell: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  avatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   textBlock: {
     flex: 1,
-    marginStart: 16,
   },
   tagsRow: {
     flexDirection: 'row',

@@ -7,7 +7,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import { useTranslation } from 'react-i18next'
 import { CalendarX, Clock, CheckCircle2, AlertTriangle } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
-import { useTheme } from '../../contexts/ThemeContext'
+import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 
 interface AbsenceRow {
@@ -183,7 +183,7 @@ export default function AdminAbsencesScreen() {
 }
 
 function ClassGroup({ classe, items, color, theme }: {
-  classe: string; items: AbsenceRow[]; color: string; theme: any
+  classe: string; items: AbsenceRow[]; color: string; theme: Theme
 }) {
   return (
     <View style={{ marginBottom: 14 }}>
@@ -199,7 +199,7 @@ function ClassGroup({ classe, items, color, theme }: {
   )
 }
 
-function EmptyBlock({ icon, text, theme }: { icon: React.ReactNode; text: string; theme: any }) {
+function EmptyBlock({ icon, text, theme }: { icon: React.ReactNode; text: string; theme: Theme }) {
   return (
     <View style={styles.empty}>
       {icon}

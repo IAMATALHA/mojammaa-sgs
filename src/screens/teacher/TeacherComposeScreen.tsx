@@ -115,7 +115,7 @@ export default function TeacherComposeScreen() {
           <>
             {/* Free message option */}
             <Pressable
-              onPress={() => { setSelected({ id: 'free', categorie: '', icon: '✏️', color: theme.primary, title_fr: '', title_ar: '', title_en: '', template_fr: '', template_ar: '', template_en: '', variables: [] }); setStep('variables') }}
+              onPress={() => { setSelected({ id: 'free', categorie: '', icon: '✏️', color: theme.primary, target: 'parents', title_fr: '', title_ar: '', title_en: '', template_fr: '', template_ar: '', template_en: '', variables: [] }); setStep('variables') }}
               style={[styles.templateCard, { borderColor: theme.primary, backgroundColor: theme.primarySurface }]}
             >
               <Text style={{ fontSize: 22 }}>✏️</Text>
@@ -129,7 +129,7 @@ export default function TeacherComposeScreen() {
               </View>
             </Pressable>
 
-            {MESSAGE_TEMPLATES.map(tmpl => (
+            {MESSAGE_TEMPLATES.filter(tmpl => tmpl.target === 'parents' || tmpl.target === 'all').map(tmpl => (
               <Pressable
                 key={tmpl.id}
                 onPress={() => { setSelected(tmpl); setVars({}); setStep('variables') }}

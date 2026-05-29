@@ -1,319 +1,243 @@
-/**
- * ParentMessagesScreen — feed des annonces / communications école → parents.
- *
- * - Onglets : Tout / Urgent / École / Événements
- * - Liste avec recherche basique
- * - Tap → modale plein détail
- */
-
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
-  View, Text, ScrollView, Pressable, Modal, TextInput, StyleSheet,
+  View, Text, StyleSheet, FlatList, Pressable, Modal, ScrollView,
+  ActivityIndicator, TextInput, TouchableOpacity, Alert,
+  KeyboardAvoidingView, Platform,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { StatusBar } from 'expo-status-bar'
-import {
-  X, Search, Megaphone, Calendar, School, ShieldCheck, AlertCircle,
-} from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
+import { X, Search, Inbox, Send } from 'lucide-react-native'
+import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useAuth } from '../../contexts/AuthContext'
 import {
-  Card, AnnouncementCard, EmptyState, SectionHeader,
-} from '../../components/dashboard'
-import { useParentMessages } from '../../hooks/useParentMessages'
-import { type Announcement } from '../../utils/mockData'
+  subscribeMessages, markAsRead, deleteMessage, sendMessage,
+  type MessageDoc,
+} from '../../services/messagesService'
+import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
+import { formatTimestamp } from '../../utils/format'
 
-const CATEGORY_ICON = {
-  school: School,
-  staff:  ShieldCheck,
-  event:  Calendar,
-  admin:  Megaphone,
-} as const
+type Filter = 'all' | 'urgent' | 'school' | 'event'
 
 export default function ParentMessagesScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-
-  const TAB_DEFS: { id: string; label: string; filter: (a: Announcement) => boolean }[] = [
-    { id: 'all',    label: t('parent.all'),    filter: ()  => true },
-    { id: 'urgent', label: t('parent.urgent'), filter: a   => a.priority === 'urgent' },
-    { id: 'school', label: t('parent.school'), filter: a   => a.category === 'school' || a.category === 'admin' },
-    { id: 'event',  label: t('parent.events'), filter: a   => a.category === 'event' },
-  ]
-  const { messages: liveMessages } = useParentMessages()
-  const [activeTab, setActiveTab] = useState('all')
+  const { profile } = useAuth()
+  const [messages, setMessages] = useState<MessageDoc[]>([])
+  const [loading, setLoading] = useState(true)
+  const [detail, setDetail] = useState<MessageDoc | null>(null)
+  const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
-  const [detail, setDetail] = useState<Announcement | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const [replying, setReplying] = useState(false)
 
-  // Already sorted desc by createdAt in the hook subscription
-  const allMessages = liveMessages
+  useEffect(() => {
+    if (!profile?.uid) return
+    setLoading(true)
+    const unsub = subscribeMessages(
+      profile.uid, profile.role || 'parent',
+      list => { setMessages(list); setLoading(false) },
+    )
+    return unsub
+  }, [profile?.uid])
+
+  const unreadCount = useMemo(
+    () => messages.filter(m => !(m.readBy || []).includes(profile?.uid || '')).length,
+    [messages, profile?.uid],
+  )
+
+  const FILTERS: { id: Filter; label: string }[] = [
+    { id: 'all', label: t('parent.all') },
+    { id: 'urgent', label: t('parent.urgent') },
+    { id: 'school', label: t('parent.school') },
+    { id: 'event', label: t('parent.events') },
+  ]
 
   const filtered = useMemo(() => {
-    const tab = TAB_DEFS.find(t => t.id === activeTab) ?? TAB_DEFS[0]
-    const byTab = allMessages.filter(tab.filter)
+    let list = messages
+    if (filter === 'urgent') list = list.filter(m => m.priority === 'urgent')
+    else if (filter === 'school') list = list.filter(m => m.category === 'attendance' || m.category === 'homework' || m.category === 'grade' || m.category === 'admin' || m.category === 'announcement')
+    else if (filter === 'event') list = list.filter(m => m.category === 'event')
     const q = query.trim().toLowerCase()
-    if (!q) return byTab
-    return byTab.filter(m =>
-      m.title.toLowerCase().includes(q) ||
-      m.body.toLowerCase().includes(q)  ||
-      m.author.toLowerCase().includes(q),
+    if (q) list = list.filter(m =>
+      (m.subject || '').toLowerCase().includes(q) ||
+      (m.body || '').toLowerCase().includes(q) ||
+      (m.fromNom || '').toLowerCase().includes(q),
     )
-  }, [allMessages, activeTab, query])
+    return list
+  }, [messages, filter, query])
+
+  const openMessage = async (msg: MessageDoc) => {
+    setDetail(msg)
+    setReplyText('')
+    if (profile?.uid && msg.id) {
+      try { await markAsRead(msg.id, profile.uid) } catch {}
+    }
+  }
+
+  const handleDeleteMessage = (msg: MessageDoc) => {
+    if (!profile?.uid || !msg.id) return
+    const messageId = msg.id
+    confirmMessageDelete({
+      title: t('common.delete'),
+      message: t('common.deleteConfirm'),
+      cancelText: t('common.cancel'),
+      deleteText: t('common.delete'),
+      onDelete: async () => {
+        try {
+          await deleteMessage(messageId, profile.uid)
+          setMessages(prev => prev.filter(item => item.id !== messageId))
+          setDetail(current => current?.id === messageId ? null : current)
+        } catch (e: any) {
+          Alert.alert(t('common.error'), e?.message)
+        }
+      },
+    })
+  }
+
+  const handleReply = async () => {
+    if (!profile || !detail || !replyText.trim()) return
+    setReplying(true)
+    try {
+      const fromNom = `${profile.prenom} ${profile.nom}`.trim()
+      await sendMessage({
+        type: 'direct',
+        subject: `RE: ${detail.subject}`,
+        body: replyText.trim(),
+        fromId: profile.uid,
+        fromNom,
+        fromRole: 'parent',
+        toType: 'user',
+        toIds: [detail.fromId],
+        toLabel: detail.fromNom || '',
+        priority: 'normal',
+        category: 'admin',
+      })
+      Alert.alert(t('teacher.messageSent'))
+      setReplyText('')
+      setDetail(null)
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.message)
+    } finally { setReplying(false) }
+  }
+
+  const renderItem = ({ item }: { item: MessageDoc }) => {
+    const isUnread = !(item.readBy || []).includes(profile?.uid || '')
+    const isUrgent = item.priority === 'urgent'
+    return (
+      <Pressable onPress={() => openMessage(item)} onLongPress={() => handleDeleteMessage(item)} delayLongPress={350}
+        style={[styles.card, { backgroundColor: isUnread ? theme.white : theme.surface, borderColor: isUrgent ? theme.danger : isUnread ? theme.primary : theme.border }]}>
+        <View style={styles.cardRow}>
+          <View style={{ flex: 1 }}>
+            <View style={styles.nameRow}>
+              <Text numberOfLines={1} style={{ color: theme.text, fontWeight: isUnread ? '800' : '600', fontSize: 14, flex: 1 }}>
+                {item.fromNom || t('parent.school')}
+              </Text>
+              <Text style={{ color: theme.textSoft, fontSize: 11 }}>{formatTimestamp(item.createdAt)}</Text>
+            </View>
+            <Text numberOfLines={1} style={{ color: theme.text, fontWeight: isUnread ? '700' : '500', fontSize: 13, marginTop: 2 }}>
+              {isUrgent ? '🚨 ' : ''}{item.subject}
+            </Text>
+            <Text numberOfLines={1} style={{ color: theme.textSoft, fontSize: 12, marginTop: 2 }}>{item.body}</Text>
+          </View>
+        </View>
+      </Pressable>
+    )
+  }
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
-      <StatusBar style="dark" />
-
-      <View style={styles.header}>
-        <Text style={{
-          color: theme.text,
-          fontFamily: theme.fonts.black,
-          fontSize: theme.fontSize.h2,
-          letterSpacing: -0.5,
-        }}>
-          {t('tabs.messages')}
-        </Text>
-        <Text style={{
-          color: theme.textSoft,
-          fontFamily: theme.fonts.regular,
-          fontSize: theme.fontSize.small,
-          marginTop: 2,
-        }}>
-          {t('parent.messagesReceived', { count: allMessages.length })}
-        </Text>
-      </View>
-
-      {/* Search */}
+    <ScreenLayout title={`${t('tabs.messages')}${unreadCount > 0 ? ` (${unreadCount})` : ''}`} showBack={false}>
       <View style={[styles.searchWrap, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Search size={16} color={theme.textSoft} strokeWidth={2} />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t('parent.searchMessages')}
-          placeholderTextColor={theme.textMuted}
-          style={{
-            flex: 1,
-            color: theme.text,
-            fontFamily: theme.fonts.regular,
-            fontSize: 13,
-            marginStart: 8,
-            paddingVertical: 0,
-          }}
-        />
-        {query ? (
-          <Pressable onPress={() => setQuery('')} hitSlop={8}>
-            <X size={16} color={theme.textSoft} strokeWidth={2} />
-          </Pressable>
-        ) : null}
+        <TextInput value={query} onChangeText={setQuery}
+          placeholder={t('parent.searchMessages')} placeholderTextColor={theme.textMuted}
+          style={{ flex: 1, color: theme.text, fontSize: 13, marginStart: 8, paddingVertical: 0 }} />
+        {query ? <Pressable onPress={() => setQuery('')} hitSlop={8}><X size={16} color={theme.textSoft} strokeWidth={2} /></Pressable> : null}
       </View>
 
-      {/* Tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ flexGrow: 0 }}
-        contentContainerStyle={styles.tabs}
-      >
-        {TAB_DEFS.map(t => (
-          <Pressable
-            key={t.id}
-            onPress={() => setActiveTab(t.id)}
-            android_ripple={{ color: theme.border }}
-            style={({ pressed }) => [
-              styles.tab,
-              {
-                backgroundColor: activeTab === t.id ? theme.primary : theme.surface,
-                borderColor:     activeTab === t.id ? theme.primary : theme.border,
-              },
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Text style={{
-              color: activeTab === t.id ? '#fff' : theme.text,
-              fontFamily: theme.fonts.semibold,
-              fontSize: 12.5,
-            }}>
-              {t.label}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.section}>
-          <SectionHeader
-            title={t('parent.inbox')}
-            subtitle={t('parent.results', { count: filtered.length })}
-          />
-          {filtered.length === 0 ? (
-            <Card>
-              <EmptyState
-                icon={Megaphone}
-                title={t('parent.noMessage')}
-                message={query ? t('parent.tryKeyword') : t('parent.emptyCategory')}
-              />
-            </Card>
-          ) : (
-            filtered.map(m => (
-              <AnnouncementCard key={m.id} item={m} onPress={() => setDetail(m)} />
-            ))
-          )}
-        </View>
-      </ScrollView>
-
-      <AnnouncementDetailModal
-        item={detail}
-        onClose={() => setDetail(null)}
-        theme={theme}
-      />
-    </SafeAreaView>
-  )
-}
-
-function AnnouncementDetailModal({
-  item, onClose, theme,
-}: { item: Announcement | null; onClose: () => void; theme: any }) {
-  const { t } = useTranslation()
-  if (!item) return null
-  const Icon = CATEGORY_ICON[item.category] ?? Megaphone
-  const isUrgent = item.priority === 'urgent'
-  const date = new Date(item.date).toLocaleDateString('fr-FR', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  })
-
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={[styles.sheet, { backgroundColor: theme.card }]}>
-          <View style={styles.sheetHeader}>
-            <View style={[
-              styles.iconBig,
-              { backgroundColor: isUrgent ? theme.primary : theme.primarySurface },
-            ]}>
-              <Icon size={20} color={isUrgent ? '#fff' : theme.primary} strokeWidth={2.2} />
-            </View>
-            <Pressable onPress={onClose} hitSlop={8} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
-              <X size={18} color={theme.text} strokeWidth={2} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.filterRow}>
+        {FILTERS.map(f => {
+          const active = filter === f.id
+          return (
+            <Pressable key={f.id} onPress={() => setFilter(f.id)}
+              style={[styles.filterChip, { borderColor: active ? theme.primary : theme.border, backgroundColor: active ? theme.primary : 'transparent' }]}>
+              <Text style={{ color: active ? '#fff' : theme.text, fontWeight: '600', fontSize: 12 }}>{f.label}</Text>
             </Pressable>
-          </View>
+          )
+        })}
+      </ScrollView>
 
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 12 }}
-          >
-            {isUrgent ? (
-              <View style={[styles.urgentBadge, { backgroundColor: theme.primary }]}>
-                <AlertCircle size={11} color="#fff" strokeWidth={2.5} />
-                <Text style={{
-                  color: '#fff',
-                  fontFamily: theme.fonts.bold,
-                  fontSize: 10,
-                  letterSpacing: 0.6,
-                  marginStart: 4,
-                }}>
-                  URGENT
-                </Text>
-              </View>
-            ) : null}
+      {loading ? (
+        <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.center}>
+          <Inbox size={32} color={theme.textMuted} strokeWidth={1.5} />
+          <Text style={{ color: theme.textSoft, fontSize: 14, marginTop: 12 }}>{t('parent.noMessage')}</Text>
+        </View>
+      ) : (
+        <FlatList data={filtered} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 24 }} />
+      )}
 
-            <Text style={{
-              color: theme.text,
-              fontFamily: theme.fonts.bold,
-              fontSize: theme.fontSize.h3,
-              marginTop: 12,
-              letterSpacing: -0.3,
-            }}>
-              {item.title}
-            </Text>
+      {/* Detail + Reply modal */}
+      {detail && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setDetail(null)}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <Pressable style={styles.backdrop} onPress={() => setDetail(null)}>
+              <Pressable style={[styles.sheet, { backgroundColor: theme.card }]}>
+                <View style={styles.sheetHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>
+                      {detail.fromNom || t('parent.school')}
+                    </Text>
+                    <Text style={{ color: theme.textSoft, fontSize: 11 }}>{formatTimestamp(detail.createdAt)}</Text>
+                  </View>
+                  <Pressable onPress={() => setDetail(null)} hitSlop={8}><X size={20} color={theme.text} strokeWidth={2} /></Pressable>
+                </View>
+                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 300 }}>
+                  {detail.priority === 'urgent' && (
+                    <View style={[styles.urgentBadge, { backgroundColor: theme.dangerSurface }]}>
+                      <Text style={{ color: theme.danger, fontWeight: '800', fontSize: 11 }}>🚨 {t('compose.urgent')}</Text>
+                    </View>
+                  )}
+                  <Text style={{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }}>{detail.subject}</Text>
+                  <Text style={{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }}>{detail.body}</Text>
+                </ScrollView>
 
-            <View style={styles.metaRow}>
-              <Text style={{
-                color: theme.textSoft,
-                fontFamily: theme.fonts.semibold,
-                fontSize: 12,
-              }}>
-                {item.author}
-              </Text>
-              <View style={[styles.dot, { backgroundColor: theme.textMuted }]} />
-              <Text style={{
-                color: theme.textSoft,
-                fontFamily: theme.fonts.regular,
-                fontSize: 12,
-              }}>
-                {date}
-              </Text>
-            </View>
-
-            <Text style={{
-              color: theme.text,
-              fontFamily: theme.fonts.regular,
-              fontSize: 14,
-              lineHeight: 21,
-              marginTop: 14,
-            }}>
-              {item.body}
-            </Text>
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+                {/* Reply bar */}
+                {detail.fromId && detail.type !== 'announcement' && (
+                  <View style={[styles.replyBar, { borderTopColor: theme.border }]}>
+                    <TextInput value={replyText} onChangeText={setReplyText}
+                      placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
+                      style={[styles.replyInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
+                      multiline maxLength={500} />
+                    <TouchableOpacity onPress={handleReply} disabled={!replyText.trim() || replying}
+                      style={[styles.replyBtn, { backgroundColor: replyText.trim() ? theme.primary : theme.surfaceAlt }]}>
+                      {replying ? <ActivityIndicator color="#fff" size="small" /> :
+                        <Send size={18} color={replyText.trim() ? '#fff' : theme.textMuted} strokeWidth={2} />}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </Pressable>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Modal>
+      )}
+    </ScreenLayout>
   )
 }
 
 const styles = StyleSheet.create({
-  safe:   { flex: 1 },
-  header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8 },
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    marginHorizontal: 20,
-    marginTop:    8,
-    paddingHorizontal: 12,
-    paddingVertical:   10,
-    borderRadius: 14,
-    borderWidth:  1,
-  },
-  tabs: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4, gap: 8 },
-  tab: {
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 999, borderWidth: 1,
-    marginEnd: 6,
-  },
-  scroll:  { paddingBottom: 32 },
-  section: { paddingHorizontal: 20, marginTop: 16 },
-
-  // Modal
-  backdrop: {
-    flex: 1, backgroundColor: 'rgba(15,23,42,0.45)',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  sheet: {
-    padding: 20,
-    borderRadius: 22,
-    maxHeight: '85%',
-  },
-  sheetHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  iconBig: {
-    width: 44, height: 44, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  closeBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  urgentBadge: {
-    flexDirection: 'row', alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8, paddingVertical: 4,
-    borderRadius: 999, marginTop: 12,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    marginTop:     8, gap: 8,
-  },
-  dot: { width: 3, height: 3, borderRadius: 2 },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
+  filterRow: { gap: 6, paddingBottom: 12 },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5 },
+  card: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 8 },
+  cardRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  nameRow: { flexDirection: 'row', alignItems: 'center' },
+  center: { paddingVertical: 60, alignItems: 'center' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', paddingHorizontal: 20 },
+  sheet: { padding: 20, borderRadius: 22, maxHeight: '90%' },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  urgentBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, marginTop: 8 },
+  replyBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 14, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth },
+  replyInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, maxHeight: 80 },
+  replyBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
 })

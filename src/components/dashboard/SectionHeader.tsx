@@ -26,11 +26,11 @@ export default function SectionHeader({
     <View style={[styles.container, isAr && { flexDirection: 'row-reverse' }]}>
       <View style={[styles.titleBlock, isAr && { alignItems: 'flex-end' }]}>
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           style={[styles.title, {
-            color: theme.primary,
-            fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.serif,
-            fontSize: theme.fontSize.h3,
+            color: theme.text,
+            fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
+            fontSize: theme.fontSize.title,
             writingDirection: isAr ? 'rtl' : 'ltr',
           }]}
         >
@@ -57,11 +57,12 @@ export default function SectionHeader({
             <MotiView
               animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.78 : 1 }}
               transition={{ type: 'timing', duration: 200 }}
+              style={[styles.actionPill, { backgroundColor: theme.accentSurface }]}
             >
               <Text style={{
                 color: theme.accent,
                 fontFamily: theme.fonts.semibold,
-                fontSize: theme.fontSize.small,
+                fontSize: 11,
               }}>
                 {actionLabel}
               </Text>
@@ -76,10 +77,17 @@ export default function SectionHeader({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    alignItems:    'flex-end',
+    alignItems:    'center',
     justifyContent:'space-between',
-    marginBottom:  16,
+    marginBottom:  12,
   },
   titleBlock: { flex: 1, marginEnd: 16 },
-  title:      { letterSpacing: -0.45 },
+  title:      { lineHeight: 23 },
+  actionPill: {
+    minHeight: 30,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 })

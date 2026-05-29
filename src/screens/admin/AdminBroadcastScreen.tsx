@@ -295,10 +295,7 @@ export default function AdminBroadcastScreen() {
                       backgroundColor: selectedPerson?.uid === r.uid ? theme.primarySurface : theme.surface,
                       borderColor: selectedPerson?.uid === r.uid ? theme.primary : theme.border,
                     }]}>
-                    <View style={[styles.personAvatar, { backgroundColor: r.role === 'parent' ? '#52B788' : '#D95B00' }]}>
-                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>{(r.prenom[0] || '').toUpperCase()}{(r.nom[0] || '').toUpperCase()}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginStart: 10 }}>
+                    <View style={{ flex: 1 }}>
                       <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>{r.prenom} {r.nom}</Text>
                       {r.detail ? <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>{r.detail}</Text> : null}
                     </View>
@@ -326,12 +323,21 @@ export default function AdminBroadcastScreen() {
               )}
 
               {/* Template selection */}
-              {useTemplate && !selectedTemplate && (
+              {useTemplate && !selectedTemplate && (() => {
+                const relevantTemplates = MESSAGE_TEMPLATES.filter(tmpl => {
+                  if (targetMode === 'teachers') return tmpl.target === 'teachers' || tmpl.target === 'all'
+                  if (targetMode === 'parents' || targetMode === 'class' || targetMode === 'person') {
+                    if (selectedPerson?.role === 'professeur') return tmpl.target === 'teachers' || tmpl.target === 'all'
+                    return tmpl.target === 'parents' || tmpl.target === 'all'
+                  }
+                  return true
+                })
+                return (
                 <>
                   <TouchableOpacity onPress={() => setUseTemplate(false)} style={{ marginBottom: 10 }}>
                     <Text style={{ color: theme.textSoft, fontSize: 13 }}>← {lang === 'ar' ? 'رسالة حرة' : lang === 'en' ? 'Free message' : 'Message libre'}</Text>
                   </TouchableOpacity>
-                  {MESSAGE_TEMPLATES.map(tmpl => (
+                  {relevantTemplates.map(tmpl => (
                     <Pressable key={tmpl.id}
                       onPress={() => {
                         setSelectedTemplate(tmpl)
@@ -352,7 +358,8 @@ export default function AdminBroadcastScreen() {
                     </Pressable>
                   ))}
                 </>
-              )}
+                )
+              })()}
 
               {/* Template variables */}
               {selectedTemplate && (
@@ -511,7 +518,6 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5 },
   searchBox: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12 },
   personRow: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 6 },
-  personAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   input: { borderWidth: 1.5, borderRadius: 12, padding: 14, fontSize: 15 },
   textarea: { minHeight: 120 },

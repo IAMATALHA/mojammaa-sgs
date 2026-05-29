@@ -2,7 +2,6 @@ import React from 'react'
 import { View, StyleSheet, Text, Pressable } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation } from '@react-navigation/native'
 import { ChevronLeft } from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext'
@@ -27,31 +26,31 @@ export default function ScreenLayout({ children, title, showBack }: ScreenLayout
         <View style={[styles.blob, styles.blobC, { backgroundColor: theme.violetSurface }]} />
 
         {title ? (
-          <LinearGradient
-            colors={[theme.surface, theme.bg]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.header, { borderColor: theme.border }, theme.shadows.xs]}
-          >
+          <View style={styles.header}>
             <View style={styles.headerTopRow}>
               {canGoBack ? (
                 <Pressable
                   onPress={() => navigation.goBack()}
                   hitSlop={10}
-                  style={[styles.backBtn, { backgroundColor: theme.surface }]}
+                  style={[styles.backBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
                 >
                   <ChevronLeft size={20} color={theme.primary} strokeWidth={2} />
                 </Pressable>
               ) : null}
               <View style={{ flex: 1 }}>
-                <Text style={[styles.headerTitle, { color: theme.primary, fontFamily: theme.fonts.serif }]}>{title}</Text>
+                <Text
+                  numberOfLines={2}
+                  style={[styles.headerTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}
+                >
+                  {title}
+                </Text>
               </View>
             </View>
             <View style={styles.headerAccentRow}>
               <View style={[styles.decorativeLine, { backgroundColor: theme.accent }]} />
               <View style={[styles.decorativeDot, { backgroundColor: theme.success }]} />
             </View>
-          </LinearGradient>
+          </View>
         ) : null}
 
         <View style={styles.container}>{children}</View>
@@ -92,12 +91,8 @@ const styles = StyleSheet.create({
   },
   header: {
     marginHorizontal: 20,
-    marginTop: 18,
-    paddingTop: 16,
-    paddingBottom: 14,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
+    marginTop: 16,
+    paddingBottom: 12,
   },
   headerTopRow: {
     flexDirection: 'row',
@@ -107,20 +102,20 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 24,
-    lineHeight: 30,
-    letterSpacing: -0.5,
+    fontSize: 22,
+    lineHeight: 27,
   },
   headerAccentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 10,
+    marginTop: 9,
   },
   decorativeLine: {
     height: 3,

@@ -301,12 +301,8 @@ export default function TeacherAttendanceScreen() {
             },
           ]}
         >
-          <View style={[styles.initials, { backgroundColor: isAbsent ? theme.danger : theme.success }]}>
-            <Text style={{ color: '#fff', fontSize: 15, fontFamily: theme.fonts.black }}>
-              {(item.prenom[0] || '?').toUpperCase()}{(item.nom[0] || '').toUpperCase()}
-            </Text>
-          </View>
-          <View style={{ flex: 1, marginStart: 14 }}>
+          <View style={[styles.statusStripe, { backgroundColor: isAbsent ? theme.danger : theme.success }]} />
+          <View style={{ flex: 1 }}>
             <Text style={[styles.eleveName, { color: theme.text, fontFamily: theme.fonts.bold }]}>
               {item.prenom} {item.nom}
             </Text>
@@ -392,8 +388,8 @@ const styles = StyleSheet.create({
   chipRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   chip:         { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, minWidth: 50, alignItems: 'center' },
   summary:      { padding: 10, borderRadius: 10, marginBottom: 12 },
-  card:         { flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 10, borderRadius: 14, borderWidth: 2 },
-  initials:     { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  card:         { flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 10, borderRadius: 14, borderWidth: 2, overflow: 'hidden' },
+  statusStripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   eleveName:    { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   eleveStatus:  { fontSize: 12, fontWeight: '600' },
   loading:      { paddingVertical: 40, alignItems: 'center' },

@@ -74,12 +74,7 @@ export default function AdminUsersScreen() {
     const classInfo = item.classes?.join(', ') || item.classe || ''
     return (
       <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <View style={[styles.avatar, { backgroundColor: rc.bg }]}>
-          <Text style={{ color: rc.fg, fontWeight: '800', fontSize: 14 }}>
-            {(item.prenom[0] || '?').toUpperCase()}{(item.nom[0] || '').toUpperCase()}
-          </Text>
-        </View>
-        <View style={{ flex: 1, marginStart: 12 }}>
+        <View style={{ flex: 1 }}>
           <Text style={[styles.name, { color: theme.text }]}>
             {item.prenom} {item.nom}
           </Text>
@@ -157,7 +152,6 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1.5 },
 
   card: { padding: 14, marginBottom: 10, borderRadius: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center' },
-  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   name: { fontSize: 15, fontWeight: '700' },
   tagsRow: { flexDirection: 'row', gap: 6, marginTop: 6 },
   tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },

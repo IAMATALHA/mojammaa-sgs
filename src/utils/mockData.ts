@@ -120,25 +120,7 @@ export const PARENT_CHILDREN: Child[] = [
   },
 ]
 
-export const PARENT_RECENT_HOMEWORK: HomeworkItem[] = [
-  { id: 'h1', subject: 'Mathématiques',  title: 'Exercices ch. 4',     dueDate: inDays(1),  childId: 'c1', status: 'pending'   },
-  { id: 'h2', subject: 'Sciences',       title: 'Projet écosystème',   dueDate: inDays(3),  childId: 'c1', status: 'pending'   },
-  { id: 'h3', subject: 'Arabe',          title: 'Lecture & résumé',    dueDate: inDays(-1), childId: 'c2', status: 'submitted' },
-  { id: 'h4', subject: 'Histoire',       title: 'Frise chronologique', dueDate: inDays(2),  childId: 'c2', status: 'pending'   },
-]
-
-export const PARENT_ANNOUNCEMENTS: Announcement[] = [
-  { id: 'pa1', title: 'Réunion parents-profs',   body: 'Jeudi 18h — salle polyvalente. Inscription requise.',     author: 'Direction', date: today(),    priority: 'urgent', category: 'event'  },
-  { id: 'pa2', title: 'Bulletins disponibles',   body: 'Le bulletin du 2ème trimestre est consultable dans l\'app.', author: 'Admin',   date: inDays(-1), priority: 'normal', category: 'school' },
-  { id: 'pa3', title: 'Vacances de printemps',   body: 'Du 8 au 22 avril inclus. Bon repos !',                     author: 'Direction', date: inDays(-3), priority: 'normal', category: 'admin'  },
-]
-
-export const PARENT_UPCOMING_EVENTS: UpcomingEvent[] = [
-  { id: 'e1', title: 'Réunion parents',       date: inDays(2),  time: '18:00', location: 'Salle polyvalente', type: 'meeting' },
-  { id: 'e2', title: 'Examen blanc',          date: inDays(5),  time: '08:30', location: '6ème A',            type: 'exam'    },
-  { id: 'e3', title: 'Sortie Musée',          date: inDays(8),  time: '09:00', location: 'Centre ville',      type: 'event'   },
-  { id: 'e4', title: 'Vacances de printemps', date: inDays(14),                                                type: 'holiday' },
-]
+// Mock data constants removed — parent screens now use real Firestore data
 
 export const PARENT_QUICK_ACTIONS: QuickAction[] = [
   { id: 'pqa1', label: 'Voir bulletin',   labelKey: 'actions.viewBulletin',    icon: 'graduation-cap', tint: 'primary' },
@@ -166,40 +148,7 @@ export interface ChildReport {
   subjects:    SubjectGrade[]
 }
 
-export const PARENT_REPORTS: ChildReport[] = [
-  {
-    childId:    'c1',
-    term:       '2ème trimestre',
-    generalAvg: 15.4,
-    rank:       '5 / 28',
-    honor:      'encouragements',
-    subjects: [
-      { subject: 'Mathématiques', teacher: 'M. Tazi',     average: 16.5, classAvg: 13.2, trend: 'up',   comment: 'Excellent travail, continue ainsi.' },
-      { subject: 'Français',      teacher: 'Mme Bennani', average: 14.0, classAvg: 12.8, trend: 'flat' },
-      { subject: 'Arabe',         teacher: 'M. Idrissi',  average: 17.0, classAvg: 14.4, trend: 'up',   comment: 'Très bon niveau à l\'oral.' },
-      { subject: 'Anglais',       teacher: 'Ms. Carter',  average: 15.2, classAvg: 13.5, trend: 'up' },
-      { subject: 'Sciences',      teacher: 'M. Alami',    average: 14.5, classAvg: 13.0, trend: 'down', comment: 'Quelques notions à revoir.' },
-      { subject: 'Histoire-Géo',  teacher: 'Mme Sefrioui',average: 15.0, classAvg: 13.4, trend: 'flat' },
-      { subject: 'EPS',           teacher: 'M. Lahlou',   average: 16.0, classAvg: 14.5, trend: 'up' },
-    ],
-  },
-  {
-    childId:    'c2',
-    term:       '2ème trimestre',
-    generalAvg: 16.8,
-    rank:       '2 / 30',
-    honor:      'felicitations',
-    subjects: [
-      { subject: 'Mathématiques', teacher: 'Mme Rachidi', average: 17.5, classAvg: 13.8, trend: 'up',   comment: 'Élève brillante.' },
-      { subject: 'Français',      teacher: 'M. Bensaïd',  average: 16.2, classAvg: 13.0, trend: 'up' },
-      { subject: 'Arabe',         teacher: 'Mme Fassi',   average: 18.0, classAvg: 15.0, trend: 'up',   comment: 'Niveau remarquable.' },
-      { subject: 'Anglais',       teacher: 'Mr. Brown',   average: 16.8, classAvg: 14.0, trend: 'flat' },
-      { subject: 'Sciences',      teacher: 'Mme Naciri',  average: 16.5, classAvg: 13.6, trend: 'up' },
-      { subject: 'Histoire-Géo',  teacher: 'M. Tahiri',   average: 16.0, classAvg: 13.2, trend: 'flat' },
-      { subject: 'EPS',           teacher: 'Mme Saidi',   average: 17.0, classAvg: 14.8, trend: 'up' },
-    ],
-  },
-]
+// PARENT_REPORTS removed — ParentNotesScreen now uses real Firestore notes
 
 // ── Absences ─────────────────────────────────────────────────────────────
 export interface AbsenceEntry {
