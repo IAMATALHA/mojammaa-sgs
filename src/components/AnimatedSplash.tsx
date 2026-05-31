@@ -45,7 +45,7 @@ export default function AnimatedSplash() {
         animate={{ opacity: 1, translateY: 0 }}
         transition={{ type: 'timing', duration: 550, delay: 450 }}
       >
-        <Text style={styles.title}>Mojammaa SGS</Text>
+        <Text style={styles.title}>Mojammaa Connect</Text>
       </MotiView>
     </MotiView>
   )
