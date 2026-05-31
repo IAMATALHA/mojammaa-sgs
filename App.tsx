@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { View, ActivityIndicator } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { AnimatePresence } from 'moti'
 import {
   useFonts,
   Inter_400Regular,
@@ -28,12 +28,20 @@ import { AuthProvider } from './src/contexts/AuthContext'
 import { ThemeProvider } from './src/contexts/ThemeContext'
 import NavigationRoot from './src/navigation/NavigationRoot'
 import { initI18n } from './src/i18n'
+import AnimatedSplash from './src/components/AnimatedSplash'
 
 export default function App() {
   const [i18nReady, setI18nReady] = useState(false)
+  const [minElapsed, setMinElapsed] = useState(false)
 
   useEffect(() => {
     initI18n().then(() => setI18nReady(true))
+  }, [])
+
+  // Keep the splash up at least this long so the animation is always seen.
+  useEffect(() => {
+    const t = setTimeout(() => setMinElapsed(true), 1900)
+    return () => clearTimeout(t)
   }, [])
 
   const [fontsLoaded] = useFonts({
@@ -53,23 +61,23 @@ export default function App() {
     Cairo_700Bold,
   })
 
-  if (!fontsLoaded || !i18nReady) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F7F4ED' }}>
-        <ActivityIndicator color="#7BA67B" />
-      </View>
-    )
-  }
+  const ready = fontsLoaded && i18nReady
+  const showSplash = !ready || !minElapsed
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <ThemeProvider>
-            <StatusBar style="auto" />
-            <NavigationRoot />
-          </ThemeProvider>
-        </AuthProvider>
+        {ready && (
+          <AuthProvider>
+            <ThemeProvider>
+              <StatusBar style="auto" />
+              <NavigationRoot />
+            </ThemeProvider>
+          </AuthProvider>
+        )}
+        <AnimatePresence>
+          {showSplash && <AnimatedSplash key="splash" />}
+        </AnimatePresence>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   )

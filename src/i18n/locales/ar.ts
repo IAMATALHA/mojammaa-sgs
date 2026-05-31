@@ -33,8 +33,17 @@ const ar = {
 
   roles: {
     parent: 'ولي الأمر',
-    teacher: 'أستاذ',
+    teacher: 'أستاذ(ة)',
     admin: 'الإدارة',
+  },
+
+  days: {
+    saturday: 'السبت', sunday: 'الأحد', monday: 'الإثنين', tuesday: 'الثلاثاء',
+    wednesday: 'الأربعاء', thursday: 'الخميس', friday: 'الجمعة',
+  },
+  daysShort: {
+    saturday: 'السبت', sunday: 'الأحد', monday: 'الإثنين', tuesday: 'الثلاثاء',
+    wednesday: 'الأربعاء', thursday: 'الخميس', friday: 'الجمعة',
   },
 
   login: {
@@ -194,6 +203,7 @@ const ar = {
     noClassYet: 'لا أقسام مسندة حالياً.',
     adminMustAdd: 'يجب على الإدارة إضافة حصصك في الجدول.',
     mySchedule: 'جدولي الزمني',
+    coursesCount: '{{count}} حصة',
     noCourseFound: 'لا حصص لك.',
     todayLabel: 'اليوم',
     myHomework: 'واجباتي',

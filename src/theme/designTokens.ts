@@ -14,8 +14,8 @@ export const colors = {
   light: {
     text: {
       primary: '#1D3557',
-      secondary: 'rgba(29, 53, 87, 0.74)',
-      tertiary: 'rgba(29, 53, 87, 0.48)',
+      secondary: 'rgba(29, 53, 87, 0.92)',
+      tertiary: 'rgba(127, 115, 39, 0.48)',
       inverse: '#FFFFFF',
     },
     surface: {
@@ -38,7 +38,7 @@ export const colors = {
       primary: '#FF8C42',
       pressed: '#F07B2F',
       surface: 'rgba(255, 140, 66, 0.12)',
-      surfaceStrong: 'rgba(255, 140, 66, 0.20)',
+      surfaceStrong: 'rgba(250, 112, 27, 0.2)',
       border: 'rgba(255, 140, 66, 0.22)',
     },
     status: {

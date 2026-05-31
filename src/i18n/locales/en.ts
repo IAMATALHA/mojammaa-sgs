@@ -37,6 +37,15 @@ const en = {
     admin: 'ADMIN',
   },
 
+  days: {
+    saturday: 'Saturday', sunday: 'Sunday', monday: 'Monday', tuesday: 'Tuesday',
+    wednesday: 'Wednesday', thursday: 'Thursday', friday: 'Friday',
+  },
+  daysShort: {
+    saturday: 'Sat', sunday: 'Sun', monday: 'Mon', tuesday: 'Tue',
+    wednesday: 'Wed', thursday: 'Thu', friday: 'Fri',
+  },
+
   login: {
     email: 'Email',
     password: 'Password',
@@ -194,6 +203,7 @@ const en = {
     noClassYet: 'No class assigned yet.',
     adminMustAdd: 'Admin must add your courses to the schedule.',
     mySchedule: 'My schedule',
+    coursesCount: '{{count}} courses',
     noCourseFound: 'No courses found for you.',
     todayLabel: 'today',
     myHomework: 'My homework',

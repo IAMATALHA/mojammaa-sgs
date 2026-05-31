@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, StyleSheet, Text, Pressable } from 'react-native'
+import { View, StyleSheet, Text, Pressable, Image } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
@@ -24,6 +24,13 @@ export default function ScreenLayout({ children, title, showBack }: ScreenLayout
         <View style={[styles.blob, styles.blobA, { backgroundColor: theme.watercolorA }]} />
         <View style={[styles.blob, styles.blobB, { backgroundColor: theme.roseSurface }]} />
         <View style={[styles.blob, styles.blobC, { backgroundColor: theme.violetSurface }]} />
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.watermarkWrap]}>
+          <Image
+            source={require('../../assets/logo.png')}
+            resizeMode="contain"
+            style={styles.watermark}
+          />
+        </View>
 
         {title ? (
           <View style={styles.header}>
@@ -66,6 +73,15 @@ const styles = StyleSheet.create({
   canvas: {
     flex: 1,
     position: 'relative',
+  },
+  watermarkWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  watermark: {
+    width: 240,
+    height: 240,
+    opacity: 0.05,
   },
   blob: {
     position: 'absolute',

@@ -7,7 +7,7 @@
 
 import React, { useCallback, useMemo, useState } from 'react'
 import {
-  View, ScrollView, RefreshControl, StyleSheet, Text, Pressable,
+  View, ScrollView, RefreshControl, StyleSheet, Text, Pressable, Image,
   Alert, Modal,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -130,10 +130,11 @@ export default function TeacherDashboardScreen() {
       <StatusBar style="dark" />
 
       {/* Watercolor blobs background (same as ScreenLayout) */}
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
         <View style={[styles.blob, styles.blobA, { backgroundColor: theme.watercolorA }]} />
         <View style={[styles.blob, styles.blobB, { backgroundColor: theme.roseSurface }]} />
         <View style={[styles.blob, styles.blobC, { backgroundColor: theme.violetSurface }]} />
+        <Image source={require('../../../assets/logo.png')} resizeMode="contain" style={{ width: 240, height: 240, opacity: 0.08 }} />
       </View>
 
       <ScrollView

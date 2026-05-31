@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Globe } from 'lucide-react-native';
@@ -10,9 +10,8 @@ import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 
 const APP_VERSION = '1.0.2'
-const ADMIN_WEB_URL = 'https://mojammaa-admin.vercel.app'
 
-export default function AdminSettingsScreen() {
+export default function ParentSettingsScreen() {
   const theme = useTheme()
   const { t, i18n } = useTranslation()
   const { profile, logout } = useAuth()
@@ -20,15 +19,10 @@ export default function AdminSettingsScreen() {
 
   const langLabel = i18n.language === 'ar' ? 'العربية' : i18n.language === 'en' ? 'English' : 'Français'
 
-  const openWebAdmin = () => {
-    Linking.openURL(ADMIN_WEB_URL).catch(() =>
-      Alert.alert(t('common.error'), "Impossible d'ouvrir le navigateur."))
-  }
-
   const handleLogout = () => {
     Alert.alert(t('common.logoutTitle'), t('common.logoutConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.logout'), style: 'destructive', onPress: () => logout() },
+      { text: t('common.logout'), style: 'destructive', onPress: () => logout().catch(() => {}) },
     ])
   }
 
@@ -42,7 +36,7 @@ export default function AdminSettingsScreen() {
           </Text>
           <Text style={styles.profileEmail}>{profile?.email || ''}</Text>
           <View style={styles.roleBadge}>
-            <Text style={styles.roleBadgeText}>{t('admin.administrator')}</Text>
+            <Text style={styles.roleBadgeText}>{t('roles.parent')}</Text>
           </View>
         </View>
 
@@ -63,38 +57,8 @@ export default function AdminSettingsScreen() {
         <Text style={[styles.sectionTitle, { color: theme.textSoft }]}>{t('admin.appSection')}</Text>
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Row label={t('admin.version')} value={APP_VERSION} theme={theme} />
-          <Row label={t('admin.firebaseProject')} value="mojammaa-sgs" theme={theme} />
           <Row label={t('admin.platform')} value="React Native (Expo)" theme={theme} />
         </View>
-
-        {/* Section: Actions */}
-        <Text style={[styles.sectionTitle, { color: theme.textSoft }]}>{t('admin.actionsSection')}</Text>
-
-        <TouchableOpacity
-          style={[styles.actionRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
-          onPress={openWebAdmin}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.actionTitle, { color: theme.text }]}>{t('admin.openWebAdmin')}</Text>
-            <Text style={[styles.actionSub,   { color: theme.textSoft }]}>
-              mojammaa-admin.vercel.app
-            </Text>
-          </View>
-          <Text style={{ color: theme.primary, fontSize: 18 }}>→</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
-          onPress={() => Alert.alert(t('admin.impersonation'), t('admin.impersonationMsg'))}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.actionTitle, { color: theme.text }]}>{t('admin.impersonation')}</Text>
-            <Text style={[styles.actionSub, { color: theme.textSoft }]}>
-              {t('admin.impersonationMsg')}
-            </Text>
-          </View>
-          <Text style={{ color: theme.textSoft, fontSize: 18 }}>→</Text>
-        </TouchableOpacity>
 
         {/* Logout */}
         <TouchableOpacity

@@ -8,7 +8,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  LayoutDashboard, CalendarDays, Users, BookOpenCheck, MessageSquare,
+  LayoutDashboard, CalendarDays, Users, BookOpenCheck, MessageSquare, Settings,
   type LucideIcon,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -24,6 +24,7 @@ import TeacherClasseElevesScreen from '../screens/teacher/TeacherClasseElevesScr
 import TeacherNotesScreen from '../screens/teacher/TeacherNotesScreen'
 import TeacherComposeScreen from '../screens/teacher/TeacherComposeScreen'
 import TeacherStatsScreen from '../screens/teacher/TeacherStatsScreen'
+import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen'
 
 const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
@@ -123,6 +124,14 @@ function TeacherTabs() {
         options={{
           title: t('tabs.messages'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={MessageSquare} color={color} focused={focused} theme={theme} />,
+        }}
+      />
+      <Tab.Screen
+        name="TeacherSettings"
+        component={TeacherSettingsScreen}
+        options={{
+          title: t('tabs.settings'),
+          tabBarIcon: ({ color, focused }) => <TabIcon Icon={Settings} color={color} focused={focused} theme={theme} />,
         }}
       />
     </Tab.Navigator>

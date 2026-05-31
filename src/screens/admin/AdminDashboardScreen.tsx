@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Image,
   Pressable,
   Alert,
 } from 'react-native'
@@ -158,10 +158,11 @@ export default function AdminDashboardScreen() {
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
       <StatusBar style="dark" />
 
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
         <View style={[styles.blob, styles.blobA, { backgroundColor: theme.watercolorA }]} />
         <View style={[styles.blob, styles.blobB, { backgroundColor: theme.roseSurface }]} />
         <View style={[styles.blob, styles.blobC, { backgroundColor: theme.violetSurface }]} />
+        <Image source={require('../../../assets/logo.png')} resizeMode="contain" style={{ width: 240, height: 240, opacity: 0.08 }} />
       </View>
 
       <ScrollView

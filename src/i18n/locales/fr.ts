@@ -37,6 +37,15 @@ const fr = {
     admin: 'DIRECTION',
   },
 
+  days: {
+    saturday: 'Samedi', sunday: 'Dimanche', monday: 'Lundi', tuesday: 'Mardi',
+    wednesday: 'Mercredi', thursday: 'Jeudi', friday: 'Vendredi',
+  },
+  daysShort: {
+    saturday: 'Sam', sunday: 'Dim', monday: 'Lun', tuesday: 'Mar',
+    wednesday: 'Mer', thursday: 'Jeu', friday: 'Ven',
+  },
+
   login: {
     email: 'Email',
     password: 'Mot de passe',
@@ -194,6 +203,7 @@ const fr = {
     noClassYet: 'Aucune classe assignée pour l\'instant.',
     adminMustAdd: 'L\'administration doit ajouter vos cours dans l\'emploi du temps.',
     mySchedule: 'Mon emploi du temps',
+    coursesCount: '{{count}} cours',
     noCourseFound: 'Aucun cours trouvé pour vous.',
     todayLabel: 'aujourd\'hui',
     myHomework: 'Mes devoirs',

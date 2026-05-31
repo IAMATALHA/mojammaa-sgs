@@ -6,7 +6,7 @@ import { StyleSheet, View } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  LayoutDashboard, BookOpen, FileText, CalendarX, MessageSquare,
+  LayoutDashboard, BookOpen, FileText, CalendarX, MessageSquare, Settings,
   type LucideIcon,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -16,6 +16,7 @@ import ParentDevoirsScreen from '../screens/student/ParentDevoirsScreen'
 import ParentNotesScreen from '../screens/student/ParentNotesScreen'
 import ParentAbsencesScreen from '../screens/student/ParentAbsencesScreen'
 import ParentMessagesScreen from '../screens/student/ParentMessagesScreen'
+import ParentSettingsScreen from '../screens/student/ParentSettingsScreen'
 
 const Tab = createBottomTabNavigator()
 
@@ -116,6 +117,14 @@ export default function StudentStack() {
         options={{
           title: t('tabs.messages'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={MessageSquare} color={color} focused={focused} theme={theme} />,
+        }}
+      />
+      <Tab.Screen
+        name="StudentSettings"
+        component={ParentSettingsScreen}
+        options={{
+          title: t('tabs.settings'),
+          tabBarIcon: ({ color, focused }) => <TabIcon Icon={Settings} color={color} focused={focused} theme={theme} />,
         }}
       />
     </Tab.Navigator>
