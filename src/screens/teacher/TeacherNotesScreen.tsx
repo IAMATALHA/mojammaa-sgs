@@ -30,9 +30,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 import { parseNotesFile, matchToEleve, type ParsedNoteRow } from '../../services/NotesImport';
 
+// Noms officiels de l'école (collège + primaire). Utilisé seulement comme
+// liste de secours : la matière du prof est verrouillée via profile.matiere.
 const MATIERES = [
-  'Mathématiques', 'Français', 'Langue Arabe', 'Anglais', 'SVT',
-  'Physique-Chimie', 'Histoire-Géo', 'Éducation Islamique', 'EPS', 'Informatique',
+  'Mathématiques', 'Physique et Chimie', 'Sciences de la Vie et de la Terre',
+  'Informatique', 'Arabe', 'Français', 'Anglais', 'Histoire Géographie',
+  'Éducation Islamique', 'Activité scientifique', 'Éducation artistique',
 ]
 const SEMESTRES = ['S1', 'S2']
 
