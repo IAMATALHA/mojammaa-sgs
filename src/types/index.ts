@@ -20,6 +20,8 @@ export interface UserProfile {
   role:    RoleRaw
   classe?:  string                // legacy : classe unique (1 prof = 1 classe)
   classes?: string[]              // nouveau : tableau de classes attribuées
+  matiere?: string                // prof : sa matière (verrouillée pour la saisie de notes)
+  cycle?:   string                // prof : 'primaire' | 'college'
   expoPushToken?: string
 }
 

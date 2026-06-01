@@ -31,12 +31,16 @@ function randomPassword() {
 async function main() {
   const args = process.argv.slice(2)
   const passwordArg = args.find(a => a.startsWith('--password='))
+  const matiereArg  = args.find(a => a.startsWith('--matiere='))
+  const cycleArg    = args.find(a => a.startsWith('--cycle='))
   const positional  = args.filter(a => !a.startsWith('--'))
   const [email, nom, prenom, classesArg] = positional
   const explicitPwd = passwordArg ? passwordArg.replace('--password=', '') : null
+  const matiere     = matiereArg ? matiereArg.replace('--matiere=', '').trim() : null
+  const cycle       = cycleArg   ? cycleArg.replace('--cycle=', '').trim()     : null
 
   if (!email) {
-    console.error('Usage : node scripts/setupTeacher.js <email> [nom] [prenom] [classes,séparées,virgule] [--password=...]')
+    console.error('Usage : node scripts/setupTeacher.js <email> [nom] [prenom] [classes,virgule] [--matiere=...] [--cycle=primaire|college] [--password=...]')
     process.exit(1)
   }
 
@@ -98,6 +102,8 @@ async function main() {
     classes,
     nom:     nom    ?? existing.nom    ?? '',
     prenom:  prenom ?? existing.prenom ?? '',
+    matiere: matiere ?? existing.matiere ?? '',
+    cycle:   cycle   ?? existing.cycle   ?? 'college',
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }
 
@@ -108,6 +114,8 @@ async function main() {
   console.log(`\n✅ Profil mis à jour dans users/${user.uid}`)
   console.log(`   Role    : professeur`)
   console.log(`   Classes : ${classes.join(', ')}`)
+  console.log(`   Matière : ${profile.matiere || '(non définie)'}`)
+  console.log(`   Cycle   : ${profile.cycle}`)
 
   if (createdNow) {
     console.log('\n🔑 IDENTIFIANTS DE CONNEXION (à noter — ne sera plus affiché)')

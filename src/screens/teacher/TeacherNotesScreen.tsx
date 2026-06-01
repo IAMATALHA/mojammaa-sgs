@@ -61,11 +61,17 @@ export default function TeacherNotesScreen() {
   const routeClasse = (route.params as { classe?: string } | undefined)?.classe
   const classe = (routeClasse || profile?.classe || '').trim()
 
+  // Matière VERROUILLÉE sur celle du prof. S'il n'en a pas (ancien compte),
+  // on retombe sur le sélecteur libre (compat).
+  const teacherMatiere = (profile?.matiere || '').trim()
+  const matiereLocked  = teacherMatiere.length > 0
+
   const [eleves,    setEleves]    = useState<EleveLite[]>([])
   const [notes,     setNotes]     = useState<Map<string, NoteEntry>>(new Map())
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState<string | null>(null)
-  const [matiere,   setMatiere]   = useState(MATIERES[0])
+  const [pickedMatiere, setPickedMatiere] = useState(MATIERES[0])
+  const matiere = matiereLocked ? teacherMatiere : pickedMatiere
   const [semestre,  setSemestre]  = useState(SEMESTRES[0])
   const [editEleve, setEditEleve] = useState<EleveLite | null>(null)
 
@@ -256,9 +262,16 @@ export default function TeacherNotesScreen() {
       ) : null}
 
       <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.subject')}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
-        {MATIERES.map(m => <Chip key={m} value={m} active={matiere === m} onPress={() => setMatiere(m)} />)}
-      </ScrollView>
+      {matiereLocked ? (
+        <View style={[styles.lockedSubject, { backgroundColor: theme.primarySurface, borderColor: theme.primary }]}>
+          <Ionicons name="lock-closed" size={13} color={theme.primary} />
+          <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{teacherMatiere}</Text>
+        </View>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
+          {MATIERES.map(m => <Chip key={m} value={m} active={matiere === m} onPress={() => setPickedMatiere(m)} />)}
+        </ScrollView>
+      )}
 
       <Text style={[styles.label, { color: theme.textSoft, marginTop: 10 }]}>{t('teacher.semester')}</Text>
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
@@ -426,6 +439,7 @@ function EditNoteModal({
 const styles = StyleSheet.create({
   label:    { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   chip:     { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5 },
+  lockedSubject: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, marginBottom: 4 },
   context:  { padding: 10, borderRadius: 10, marginBottom: 10 },
   importBtn:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 10, borderRadius: 10, borderWidth: 1.5, borderStyle: 'dashed' as const, marginBottom: 12 },
   eleveRow: { flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 8, borderRadius: 10, borderWidth: 1 },
