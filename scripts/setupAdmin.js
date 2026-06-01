@@ -1,25 +1,22 @@
 /**
- * Configure le profil "professeur" d'un user existant.
+ * Configure le profil "admin" (direction) d'un utilisateur.
  *
  * Trouve l'utilisateur dans Firebase Auth via son email, puis écrit
  * son document `users/<uid>` avec :
- *   - role: 'professeur'
- *   - classes: tableau des classes assignées
+ *   - role: 'admin'   (valeur exacte attendue par l'app — cf. rawToLogic)
  *   - nom / prenom : récupérés des arguments
  *
- * Si l'utilisateur n'existe pas encore dans Firebase Auth, le script
- * le crée avec un mot de passe fourni (ou généré aléatoirement et imprimé).
+ * Si l'utilisateur n'existe pas, il est créé (mot de passe fourni ou aléatoire).
  *
  * Usage :
- *   node scripts/setupTeacher.js <email> [nom] [prenom] [classes,virgule] [--password=...]
+ *   node scripts/setupAdmin.js <email> [nom] [prenom] [--password=...]
  *
  * Exemple :
- *   node scripts/setupTeacher.js youssef@mojammaa.com Atalha Youssef 1APIC-3,1APIC-4,2APIC-4
- *   node scripts/setupTeacher.js youssef@mojammaa.com Atalha Youssef "" --password=Maths2026!
+ *   node scripts/setupAdmin.js dir@mojammaa.com Dahmani "Nasr ed-din"
  */
 
-const path  = require('path')
-const fs    = require('fs')
+const path = require('path')
+const fs   = require('fs')
 
 function randomPassword() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
@@ -32,11 +29,11 @@ async function main() {
   const args = process.argv.slice(2)
   const passwordArg = args.find(a => a.startsWith('--password='))
   const positional  = args.filter(a => !a.startsWith('--'))
-  const [email, nom, prenom, classesArg] = positional
+  const [email, nom, prenom] = positional
   const explicitPwd = passwordArg ? passwordArg.replace('--password=', '') : null
 
   if (!email) {
-    console.error('Usage : node scripts/setupTeacher.js <email> [nom] [prenom] [classes,séparées,virgule] [--password=...]')
+    console.error('Usage : node scripts/setupAdmin.js <email> [nom] [prenom] [--password=...]')
     process.exit(1)
   }
 
@@ -53,11 +50,6 @@ async function main() {
   const auth = admin.auth()
   const db   = admin.firestore()
 
-  // Default classes if not provided
-  const classes = classesArg
-    ? classesArg.split(',').map(s => s.trim()).filter(Boolean)
-    : ['1APIC-3', '1APIC-4', '2APIC-4']
-
   console.log(`🔍 Recherche du user "${email}" dans Firebase Auth...`)
   let user
   let createdNow = false
@@ -68,7 +60,7 @@ async function main() {
   } catch (err) {
     if (err.code === 'auth/user-not-found') {
       usedPassword = explicitPwd || (email + '1234')
-      console.log(`   (user inexistant — création avec un nouveau mot de passe)`)
+      console.log('   (user inexistant — création avec un nouveau mot de passe)')
       user = await auth.createUser({
         email,
         password: usedPassword,
@@ -82,38 +74,25 @@ async function main() {
     }
   }
 
-  console.log(`✅ User trouvé : ${user.uid}`)
-  console.log(`   Email      : ${user.email}`)
-  console.log(`   Créé le    : ${new Date(user.metadata.creationTime).toLocaleString('fr-FR')}`)
+  console.log(`✅ User : ${user.uid} (${user.email})`)
 
-  // Read existing profile to merge
   const ref  = db.collection('users').doc(user.uid)
-  const snap = await ref.get()
-  const existing = snap.exists ? snap.data() : {}
-
+  const existing = (await ref.get()).data() || {}
   const profile = {
-    uid:     user.uid,
-    email:   user.email,
-    role:    'professeur',
-    classes,
-    nom:     nom    ?? existing.nom    ?? '',
-    prenom:  prenom ?? existing.prenom ?? '',
+    uid:    user.uid,
+    email:  user.email,
+    role:   'admin',
+    nom:    nom    ?? existing.nom    ?? '',
+    prenom: prenom ?? existing.prenom ?? '',
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }
-
-  console.log('\n📝 Écriture du profil :')
-  console.log(JSON.stringify({ ...profile, updatedAt: '<serverTs>' }, null, 2))
-
   await ref.set(profile, { merge: true })
-  console.log(`\n✅ Profil mis à jour dans users/${user.uid}`)
-  console.log(`   Role    : professeur`)
-  console.log(`   Classes : ${classes.join(', ')}`)
+  console.log(`\n✅ Profil mis à jour dans users/${user.uid} (role='admin')`)
 
   if (createdNow) {
     console.log('\n🔑 IDENTIFIANTS DE CONNEXION (à noter — ne sera plus affiché)')
     console.log(`   Email    : ${email}`)
     console.log(`   Password : ${usedPassword}`)
-    console.log('   → Ouvre l\'app, écran de connexion, et utilise ces identifiants.')
   }
   process.exit(0)
 }

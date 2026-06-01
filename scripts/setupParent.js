@@ -77,7 +77,7 @@ async function main() {
     console.log(`   (existe déjà : ${user.uid})`)
   } catch (err) {
     if (err.code === 'auth/user-not-found') {
-      usedPwd = randomPassword()
+      usedPwd = email + '1234'
       user = await auth.createUser({
         email,
         password: usedPwd,
