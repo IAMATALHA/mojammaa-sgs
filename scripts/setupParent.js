@@ -3,7 +3,8 @@
  *
  *   - Crée le compte Firebase Auth si email inconnu (avec mdp aléatoire imprimé)
  *   - Écrit users/<uid> avec role='parent'
- *   - Met `parentUid = uid` sur chaque doc eleves/<codeMassar> fourni
+ *   - Met `parentUid`, `parentEmail`, `parentNom` sur chaque doc eleves/<codeMassar>
+ *     (parentUid sert à l'app mobile ; parentEmail/parentNom à l'app web admin)
  *
  * Usage :
  *   node scripts/setupParent.js <email> "<nom>" "<prenom>" <codeMassar1,codeMassar2,...>
@@ -106,15 +107,18 @@ async function main() {
   await ref.set(profile, { merge: true })
   console.log(`\n✅ users/${user.uid} mis à jour (role='parent')`)
 
-  // ── 4. Mettre parentUid sur chaque enfant ────────────────
+  // ── 4. Mettre parentUid + parentEmail + parentNom sur chaque enfant ──
   console.log(`\n🔗 Liaison ${childMassarCodes.length} enfant(s) → parent ${user.uid}`)
+  const parentNom = [prenom, nom].filter(Boolean).join(' ')
   const batch = db.batch()
   childMassarCodes.forEach(code => {
-    batch.set(
-      db.collection('eleves').doc(code),
-      { parentUid: user.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
-      { merge: true },
-    )
+    const eleveUpdate = {
+      parentUid:   user.uid,
+      parentEmail: user.email || email,
+      updatedAt:   admin.firestore.FieldValue.serverTimestamp(),
+    }
+    if (parentNom) eleveUpdate.parentNom = parentNom
+    batch.set(db.collection('eleves').doc(code), eleveUpdate, { merge: true })
   })
   await batch.commit()
   console.log(`   ✓ ${childMassarCodes.length} doc(s) eleves mis à jour`)
