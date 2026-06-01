@@ -44,7 +44,8 @@ yarn-error.*
 .secrets/
 
 # Real student data — never commit (RGPD / vie privée mineurs)
-data/
+# Anchored to root so it does NOT match src/data/ (app source).
+/data/
 
 # Firebase local cache
 .firebase/
