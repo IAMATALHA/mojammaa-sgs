@@ -111,7 +111,7 @@ export default function LoginScreen() {
 
           {/* ── Ornate calligraphy ─────────────────────────────── */}
           <Animated.View entering={FadeInUp.duration(700).delay(200)} style={styles.calligraphySection}>
-            <Text style={styles.calligraphyMain}>
+            <Text style={styles.calligraphyMain} numberOfLines={2} adjustsFontSizeToFit>
               Mojammaa{'\n'}Al Maarifa
             </Text>
             <MotiView
@@ -309,6 +309,8 @@ const styles = StyleSheet.create({
     color: '#1D3557',
     textAlign: 'center',
     letterSpacing: 1,
+    alignSelf: 'stretch',   // borne la largeur → permet à adjustsFontSizeToFit d'agir
+    paddingHorizontal: 12,
   },
   calligraphySub: {
     fontFamily: 'GreatVibes_400Regular',
