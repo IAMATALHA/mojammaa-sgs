@@ -8,13 +8,14 @@
  * Schéma Firestore (cohérent avec mojammaa-admin) :
  *   notes/{docId}  où docId = `${eleveId}_${semestre}_${matiere}`
  *   fields: eleveId, eleveNom, elevePrenom, codeMassar, classe, cycle,
- *           semestre, matiere, matiereLabel, note, importedAt, importedBy
+ *           semestre, matiere, matiereLabel, note, controles, importedAt,
+ *           importedBy
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Modal,
   TextInput, ScrollView, Alert, ActivityIndicator, RefreshControl,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, StatusBar,
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import {
@@ -28,7 +29,14 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
-import { parseNotesFile, matchToEleve, type ParsedNoteRow } from '../../services/NotesImport';
+import { parseNotesFile, matchToEleve, type ParsedNoteRow } from '../../services/NotesImport'
+import {
+  averageControlNotes,
+  formatGrade,
+  getExpectedControlsForSubject,
+  makeControlNotes,
+  type ControlNote,
+} from '../../services/notesRules';
 
 // Noms officiels de l'école (collège + primaire). Utilisé seulement comme
 // liste de secours : la matière du prof est verrouillée via profile.matiere.
@@ -52,6 +60,47 @@ interface NoteEntry {
   note:      number | string
   matiere:   string
   semestre:  string
+  controles: ControlNote[]
+  controlesCount: number
+  controlesExpected: number | null
+  controlesIgnored: number
+}
+
+function asNumber(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (typeof v === 'string' && v.trim()) {
+    const n = Number(v.replace(',', '.'))
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+
+function readControlNotes(data: any): ControlNote[] {
+  const raw = Array.isArray(data?.controles) ? data.controles : Array.isArray(data?.controls) ? data.controls : []
+  if (raw.length === 0) return []
+  if (typeof raw[0] === 'number') {
+    const values = raw.map((n: unknown) => asNumber(n)).filter((n: number | null): n is number => n != null)
+    return makeControlNotes(values)
+  }
+  return raw
+    .map((item: any, index: number) => {
+      const note = asNumber(item?.note)
+      if (note == null || note < 0 || note > 20) return null
+      const numero = asNumber(item?.numero) ?? index + 1
+      return {
+        numero,
+        label: String(item?.label || `Contrôle ${numero}`),
+        note,
+      }
+    })
+    .filter((item: ControlNote | null): item is ControlNote => item != null)
+}
+
+function parseGradeInput(value: string): number | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const n = Number(trimmed.replace(',', '.'))
+  return Number.isFinite(n) && n >= 0 && n <= 20 ? n : null
 }
 
 export default function TeacherNotesScreen() {
@@ -77,6 +126,10 @@ export default function TeacherNotesScreen() {
   const matiere = matiereLocked ? teacherMatiere : pickedMatiere
   const [semestre,  setSemestre]  = useState(SEMESTRES[0])
   const [editEleve, setEditEleve] = useState<EleveLite | null>(null)
+  const expectedControls = useMemo(
+    () => getExpectedControlsForSubject(matiere, classe),
+    [matiere, classe],
+  )
 
   const load = useCallback(async () => {
     if (!classe) { setLoading(false); return }
@@ -108,12 +161,18 @@ export default function TeacherNotesScreen() {
       const map = new Map<string, NoteEntry>()
       notesSnap.forEach(d => {
         const data = d.data() as any
+        const controles = readControlNotes(data)
+        const note = asNumber(data.note) ?? (controles.length > 0 ? averageControlNotes(controles.map(item => item.note)) : '')
         map.set(data.eleveId, {
           id:       d.id,
           eleveId:  data.eleveId,
-          note:     data.note ?? '',
+          note,
           matiere:  data.matiere,
           semestre: data.semestre,
+          controles,
+          controlesCount: asNumber(data.controlesCount) ?? controles.length,
+          controlesExpected: asNumber(data.controlesExpected),
+          controlesIgnored: asNumber(data.controlesIgnored) ?? 0,
         })
       })
       setNotes(map)
@@ -128,6 +187,10 @@ export default function TeacherNotesScreen() {
 
   const handleImportExcel = useCallback(async () => {
     if (!profile || !classe) return
+    if (expectedControls === 0) {
+      Alert.alert(t('common.noData'), t('teacher.noControlsAllowed'))
+      return
+    }
     try {
       const res = await DocumentPicker.getDocumentAsync({
         type: [
@@ -141,7 +204,9 @@ export default function TeacherNotesScreen() {
       })
       if (res.canceled || !res.assets?.[0]) return
       const a = res.assets[0]
-      const parsed: ParsedNoteRow[] = await parseNotesFile(a.uri, a.mimeType || '')
+      const parsed: ParsedNoteRow[] = await parseNotesFile(a.uri, a.mimeType || '', {
+        maxControls: expectedControls,
+      })
 
       if (parsed.length === 0) {
         Alert.alert(t('common.noData'), t('teacher.noNotes'))
@@ -163,12 +228,22 @@ export default function TeacherNotesScreen() {
         else unmatched.push(row)
       })
 
+      if (matched.length === 0) {
+        Alert.alert(t('common.noData'), t('teacher.linesIgnored', { count: unmatched.length }))
+        return
+      }
+
+      const controlsCount = matched.reduce((sum, item) => sum + item.row.controles.length, 0)
+      const ignoredControlsCount = matched.reduce((sum, item) => sum + item.row.ignoredControls.length, 0)
+
       Alert.alert(
         t('teacher.confirmImport'),
-        t('teacher.notesReady', { count: matched.length, subject: matiere, semester: semestre }) +
-        (unmatched.length > 0
-          ? '\n' + t('teacher.linesIgnored', { count: unmatched.length })
-          : ''),
+        [
+          t('teacher.controlsReady', { students: matched.length, controls: controlsCount, subject: matiere, semester: semestre }),
+          expectedControls != null ? t('teacher.controlsLimit', { count: expectedControls }) : '',
+          ignoredControlsCount > 0 ? t('teacher.extraControlsIgnored', { count: ignoredControlsCount }) : '',
+          unmatched.length > 0 ? t('teacher.linesIgnored', { count: unmatched.length }) : '',
+        ].filter(Boolean).join('\n'),
         [
           { text: t('common.cancel'), style: 'cancel' },
           {
@@ -188,6 +263,10 @@ export default function TeacherNotesScreen() {
                     matiere,
                     matiereLabel: matiere,
                     note:         row.note,
+                    controles:    row.controles,
+                    controlesCount: row.controles.length,
+                    controlesExpected: expectedControls ?? row.detectedControlsCount,
+                    controlesIgnored: row.ignoredControls.length,
                     importedAt:   serverTimestamp(),
                     importedBy:   profile.uid,
                   }, { merge: true })
@@ -205,7 +284,7 @@ export default function TeacherNotesScreen() {
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || t('teacher.readFailed'))
     }
-  }, [profile, classe, matiere, semestre, load])
+  }, [profile, classe, matiere, semestre, expectedControls, t, load])
 
   const Chip = ({ value, active, onPress }: { value: string; active: boolean; onPress: () => void }) => (
     <TouchableOpacity onPress={onPress}
@@ -216,7 +295,13 @@ export default function TeacherNotesScreen() {
 
   const renderEleve = ({ item }: { item: EleveLite }) => {
     const noteEntry = notes.get(item.id)
-    const hasNote = noteEntry != null && noteEntry.note !== '' && noteEntry.note !== null && noteEntry.note !== undefined
+    const noteValue = asNumber(noteEntry?.note)
+    const hasNote = noteValue != null
+    const controlCount = noteEntry?.controlesCount || noteEntry?.controles.length || (hasNote ? 1 : 0)
+    const expected = noteEntry?.controlesExpected ?? expectedControls
+    const controlsLabel = expected != null
+      ? t('teacher.controlsCountExpected', { count: controlCount, expected })
+      : t('teacher.controlsCount', { count: controlCount })
     return (
       <TouchableOpacity
         onPress={() => setEditEleve(item)}
@@ -229,11 +314,14 @@ export default function TeacherNotesScreen() {
           {item.codeMassar ? (
             <Text style={[styles.eleveSub, { color: theme.textSoft }]}>{item.codeMassar}</Text>
           ) : null}
+          {hasNote && controlCount > 0 ? (
+            <Text style={[styles.eleveSub, { color: theme.textSoft }]}>{controlsLabel}</Text>
+          ) : null}
         </View>
         {hasNote ? (
           <View style={[styles.noteBox, { backgroundColor: theme.primarySurface }]}>
             <Text style={[styles.noteValue, { color: theme.primary }]}>
-              {String(noteEntry!.note)}<Text style={{ fontSize: 11, fontWeight: '600' }}>/20</Text>
+              {formatGrade(noteValue)}<Text style={{ fontSize: 11, fontWeight: '600' }}>/20</Text>
             </Text>
           </View>
         ) : (
@@ -284,6 +372,7 @@ export default function TeacherNotesScreen() {
       <View style={[styles.context, { backgroundColor: theme.primarySurface }]}>
         <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700' }}>
           Classe {classe} · {matiere} · {semestre}
+          {expectedControls != null ? ` · ${t('teacher.controlsCount', { count: expectedControls })}` : ''}
         </Text>
       </View>
 
@@ -324,6 +413,7 @@ export default function TeacherNotesScreen() {
         semestre={semestre}
         classe={classe}
         teacherUid={profile?.uid || ''}
+        expectedControls={expectedControls}
         onClose={() => setEditEleve(null)}
         onSaved={() => { setEditEleve(null); load() }}
       />
@@ -342,6 +432,7 @@ function EditNoteModal({
   semestre:   string
   classe:     string
   teacherUid: string
+  expectedControls?: number | null
   onClose:    () => void
   onSaved:    () => void
 }) {
@@ -377,6 +468,7 @@ function EditNoteModal({
         matiere,
         matiereLabel: matiere,
         note: num,
+        controls: [num],
         importedAt: serverTimestamp(),
         importedBy: teacherUid,
       }, { merge: true })
@@ -392,7 +484,7 @@ function EditNoteModal({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: theme.bg }}>
-        <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+        <View style={[styles.modalHeader, { borderBottomColor: theme.border, paddingTop: (Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0) + 16 }]}>
           <TouchableOpacity onPress={onClose}>
             <Text style={{ color: theme.text, fontSize: 16 }}>{t('common.cancel')}</Text>
           </TouchableOpacity>

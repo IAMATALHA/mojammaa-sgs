@@ -3,6 +3,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { averageControlNotes, type ControlNote } from './notesRules'
 
 export interface NoteDoc {
   id: string
@@ -13,6 +14,10 @@ export interface NoteDoc {
   matiere: string
   matiereLabel: string
   note: number
+  controles: ControlNote[]
+  controlesCount: number
+  controlesExpected: number | null
+  controlesIgnored: number
 }
 
 function asString(v: unknown): string {
@@ -25,8 +30,26 @@ function asNumber(v: unknown): number | null {
   return null
 }
 
+function asControlNotes(v: unknown): ControlNote[] {
+  if (!Array.isArray(v)) return []
+  return v
+    .map((item, index) => {
+      const row = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+      const note = asNumber(row.note)
+      if (note == null || note < 0 || note > 20) return null
+      const numero = asNumber(row.numero) ?? index + 1
+      return {
+        numero,
+        label: asString(row.label) || `Contrôle ${numero}`,
+        note,
+      }
+    })
+    .filter((item): item is ControlNote => item != null)
+}
+
 function docToNote(id: string, data: Record<string, unknown>): NoteDoc | null {
-  const note = asNumber(data.note)
+  const controles = asControlNotes(data.controles)
+  const note = asNumber(data.note) ?? (controles.length > 0 ? averageControlNotes(controles.map(item => item.note)) : null)
   if (note == null || note < 0 || note > 20) return null
   return {
     id,
@@ -37,6 +60,10 @@ function docToNote(id: string, data: Record<string, unknown>): NoteDoc | null {
     matiere: asString(data.matiereLabel) || asString(data.matiere),
     matiereLabel: asString(data.matiereLabel) || asString(data.matiere),
     note,
+    controles,
+    controlesCount: asNumber(data.controlesCount) ?? controles.length,
+    controlesExpected: asNumber(data.controlesExpected),
+    controlesIgnored: asNumber(data.controlesIgnored) ?? 0,
   }
 }
 

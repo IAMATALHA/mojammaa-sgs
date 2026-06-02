@@ -264,6 +264,12 @@ const fr = {
     linesIgnored: '{{count}} ligne(s) ignorée(s) (élève non trouvé).',
     import: 'Importer',
     noNotes: 'Le fichier ne contient aucune ligne avec une note entre 0 et 20.',
+    controlsCount: '{{count}} contrôle(s)',
+    controlsCountExpected: '{{count}}/{{expected}} contrôles',
+    controlsLimit: 'Maximum {{count}} contrôle(s) par semestre.',
+    controlsReady: '{{students}} élève(s) · {{controls}} note(s) prête(s) — {{subject}} · {{semester}}.',
+    extraControlsIgnored: '{{count}} note(s) en trop ignorée(s) (au-delà du maximum).',
+    noControlsAllowed: 'Cette matière n\'a pas de contrôles à ce niveau.',
   },
 
   admin: {

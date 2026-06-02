@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Modal,
   TextInput, ScrollView, Alert, ActivityIndicator, RefreshControl,
-  KeyboardAvoidingView, Platform, Image,
+  KeyboardAvoidingView, Platform, Image, StatusBar,
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import {
@@ -331,7 +331,7 @@ function CreateDevoirModal({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: theme.bg }}>
-        <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+        <View style={[styles.modalHeader, { borderBottomColor: theme.border, paddingTop: (Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0) + 16 }]}>
           <TouchableOpacity onPress={onClose}>
             <Text style={{ color: theme.text, fontSize: 16 }}>{t('common.cancel')}</Text>
           </TouchableOpacity>

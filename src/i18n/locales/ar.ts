@@ -264,6 +264,12 @@ const ar = {
     linesIgnored: '{{count}} سطر تم تجاهله (تلميذ غير موجود).',
     import: 'استيراد',
     noNotes: 'الملف لا يحتوي على نقط بين 0 و 20.',
+    controlsCount: '{{count}} فرض',
+    controlsCountExpected: '{{count}}/{{expected}} فروض',
+    controlsLimit: 'الحد الأقصى {{count}} فرض في الدورة.',
+    controlsReady: '{{students}} تلميذ · {{controls}} نقطة جاهزة — {{subject}} · {{semester}}.',
+    extraControlsIgnored: 'تم تجاهل {{count}} نقطة زائدة (تتجاوز الحد المسموح).',
+    noControlsAllowed: 'هذه المادة لا تتوفر على فروض في هذا المستوى.',
   },
 
   admin: {

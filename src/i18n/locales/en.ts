@@ -264,6 +264,12 @@ const en = {
     linesIgnored: '{{count}} line(s) ignored (student not found).',
     import: 'Import',
     noNotes: 'The file contains no grades between 0 and 20.',
+    controlsCount: '{{count}} control(s)',
+    controlsCountExpected: '{{count}}/{{expected}} controls',
+    controlsLimit: 'Maximum {{count}} control(s) per semester.',
+    controlsReady: '{{students}} student(s) · {{controls}} grade(s) ready — {{subject}} · {{semester}}.',
+    extraControlsIgnored: '{{count}} extra grade(s) ignored (above the maximum).',
+    noControlsAllowed: 'This subject has no controls at this level.',
   },
 
   admin: {
