@@ -210,6 +210,8 @@ const fr = {
     noHomeworkYet: 'Aucun devoir pour l\'instant.',
     touchPlus: 'Touche le bouton + pour en créer un.',
     dueDate: 'À rendre : {{date}}',
+    newHomeworkNotifTitle: '📚 Nouveau devoir · {{subject}}',
+    newHomeworkNotifBody: '{{title}} — à rendre le {{date}}',
     reuse: 'Réutiliser',
     newHomework: 'Nouveau devoir',
     reuseHomework: 'Réutiliser un devoir',

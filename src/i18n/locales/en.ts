@@ -210,6 +210,8 @@ const en = {
     noHomeworkYet: 'No homework yet.',
     touchPlus: 'Tap + to create one.',
     dueDate: 'Due: {{date}}',
+    newHomeworkNotifTitle: '📚 New homework · {{subject}}',
+    newHomeworkNotifBody: '{{title}} — due {{date}}',
     reuse: 'Reuse',
     newHomework: 'New homework',
     reuseHomework: 'Reuse homework',

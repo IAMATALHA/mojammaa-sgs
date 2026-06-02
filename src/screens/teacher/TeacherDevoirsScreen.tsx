@@ -28,6 +28,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 import { uploadAttachment, type Attachment } from '../../services/StorageService';
+import { broadcastToClasses } from '../../services/messagesService';
 
 interface Devoir {
   id:           string
@@ -305,6 +306,19 @@ function CreateDevoirModal({
         attachments,
         createdAt:   serverTimestamp(),
       })
+
+      // Notifier les parents de la classe : push + message dans l'inbox.
+      // Best-effort : on n'échoue pas la création du devoir si l'envoi rate.
+      try {
+        await broadcastToClasses({
+          classes:  [classeId.trim()],
+          subject:  t('teacher.newHomeworkNotifTitle', { subject: profile.matiere || '' }).trim(),
+          body:     t('teacher.newHomeworkNotifBody', { title: titre.trim(), date: dateLimite }),
+          category: 'homework',
+          teacher:  { uid: profile.uid, nom: profile.nom, prenom: profile.prenom },
+        })
+      } catch {}
+
       onCreated()
     } catch (e: any) {
       setErr(e?.message || t('teacher.createFailed'))
