@@ -1,117 +1,147 @@
 rules_version = '2';
 
+// ============================================================================
+//  RÈGLES DURCIES — PROPOSITION (à RELIRE + TESTER avant déploiement)
+//
+//  Objectif : un compte ne lit QUE ses données.
+//    - parent  → son/ses enfant(s) (eleves.parentUid == uid) et leurs notes/absences
+//    - prof    → uniquement SES classes (teacherTeaches) + SA matière pour les notes
+//    - admin   → tout
+//
+//  ⚠️ AVANT DE DÉPLOYER :
+//   1) Tester avec l'émulateur Firestore / un projet de staging, car des
+//      règles plus strictes peuvent REJETER des requêtes existantes de l'app
+//      (Firestore ne filtre pas : une requête qui POURRAIT toucher un doc
+//       interdit est refusée en entier). Points à vérifier :
+//        • Le dashboard PARENT doit interroger notes/absences par enfant
+//          (eleveId / parentUid), PAS par classe seule.
+//        • Le prof lit eleves/notes/absences de SES classes uniquement.
+//   2) Déployer depuis UN SEUL endroit (ce fichier = la source unique).
+//   3) Renommer en firestore.rules une fois validé.
+// ============================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Helpers ────────────────────────────────────────────────
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    function myUid() {
-      return request.auth.uid;
-    }
-    function myDoc() {
-      return get(/databases/$(database)/documents/users/$(myUid())).data;
-    }
-    function isAdmin() {
-      return isSignedIn() && myDoc().role == 'admin';
-    }
-    function isTeacher() {
-      return isSignedIn() && myDoc().role == 'professeur';
-    }
-    function isParent() {
-      return isSignedIn() && myDoc().role == 'parent';
-    }
+    // ── Helpers ──────────────────────────────────────────────
+    function isSignedIn() { return request.auth != null; }
+    function myUid()      { return request.auth.uid; }
+    function myDoc()      { return get(/databases/$(database)/documents/users/$(myUid())).data; }
+    function myRole()     { return isSignedIn() ? myDoc().role : ''; }
+    function isAdmin()    { return myRole() == 'admin'; }
+    function isTeacher()  { return myRole() == 'professeur'; }
+    function isParent()   { return myRole() == 'parent'; }
+    function myClasses()  { return myDoc().classes != null ? myDoc().classes : []; }
+
+    // Le prof enseigne-t-il cette classe ? (tableau `classes` ou legacy `classe`)
     function teacherTeaches(classe) {
-      return isTeacher() && (
-        classe in (myDoc().classes != null ? myDoc().classes : []) ||
-        classe == myDoc().classe
+      return isTeacher() && (classe in myClasses() || classe == myDoc().classe);
+    }
+    // parentUid de l'élève ciblé (pour vérifier qu'un parent lit bien SON enfant)
+    function eleveParentUid(eleveId) {
+      return get(/databases/$(database)/documents/eleves/$(eleveId)).data.parentUid;
+    }
+
+    // ── users ────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read:          if isSignedIn() && (uid == myUid() || isAdmin());
+      allow create, delete: if isAdmin();
+      // Soi-même : modifie son profil SAUF les champs sensibles (anti auto-élévation).
+      allow update: if isAdmin() || (
+        isSignedIn() && uid == myUid() &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+           .hasAny(['role', 'classes', 'classe', 'matiere', 'cycle', 'uid'])
       );
     }
 
-    // ── users ─────────────────────────────────────────────────
-    match /users/{uid} {
-      allow read:   if isSignedIn() && (uid == myUid() || isAdmin());
-      allow update: if isSignedIn() && uid == myUid()
-                    && !(request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
-                    || isAdmin();
-      allow create, delete: if isAdmin();
-    }
-
-    // ── eleves ────────────────────────────────────────────────
+    // ── eleves ───────────────────────────────────────────────
     match /eleves/{eleveId} {
-      allow read:   if isSignedIn();
-      allow write:  if isAdmin() || isTeacher();
+      allow read: if isAdmin()
+                  || (isParent()  && resource.data.parentUid == myUid())
+                  || teacherTeaches(resource.data.classe);
+      allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classe);
+      allow delete: if isAdmin();
     }
 
-    // ── schedules (EDT des profs) ────────────────────────────
-    match /schedules/{teacherUid} {
-      allow read:  if isSignedIn() && (teacherUid == myUid() || isAdmin());
-      allow write: if isAdmin();
-    }
-
-    // ── emploiDuTemps (legacy EDT global) ────────────────────
-    match /emploiDuTemps/{docId} {
-      allow read:  if isSignedIn();
-      allow write: if isAdmin();
-    }
-
-    // ── evenements ───────────────────────────────────────────
-    match /evenements/{eventId} {
-      allow read:   if isSignedIn();
-      allow write:  if isAdmin() || isTeacher();
-    }
-
-    // ── messages ─────────────────────────────────────────────
-    match /messages/{messageId} {
-      allow read:   if isSignedIn();
-      allow create: if isSignedIn();
-      // Sender / admin may edit freely. Any recipient may mark a message read
-      // or soft-delete it for themselves — but only by touching readBy /
-      // deletedBy, never the content.
-      allow update: if isSignedIn() && (
-        resource.data.fromId == myUid() || isAdmin() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy'])
+    // ── notes ────────────────────────────────────────────────
+    match /notes/{noteId} {
+      allow read: if isAdmin()
+                  || teacherTeaches(resource.data.classe)
+                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
+      // Prof : uniquement SA classe ET SA matière. Admin : tout.
+      allow create, update: if isAdmin() || (
+        teacherTeaches(request.resource.data.classe) &&
+        request.resource.data.matiere == myDoc().matiere
       );
       allow delete: if isAdmin();
     }
 
     // ── absences ─────────────────────────────────────────────
     match /absences/{absenceId} {
-      allow read:   if isSignedIn();
-      allow create, update: if isAdmin() || isTeacher();
-      allow delete: if isAdmin();
-    }
-
-    // ── notes ────────────────────────────────────────────────
-    match /notes/{noteId} {
-      allow read:   if isSignedIn();
-      allow create, update: if isAdmin() || isTeacher();
-      allow delete: if isAdmin();
-    }
-
-    // ── devoirs ──────────────────────────────────────────────
-    match /devoirs/{devoirId} {
-      allow read:   if isSignedIn();
-      allow create, update: if isAdmin() || isTeacher();
+      allow read: if isAdmin()
+                  || teacherTeaches(resource.data.classe)
+                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
+      allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classe);
       allow delete: if isAdmin();
     }
 
     // ── bulletins ────────────────────────────────────────────
     match /bulletins/{bulletinId} {
-      allow read:  if isSignedIn();
+      allow read: if isAdmin()
+                  || teacherTeaches(resource.data.classe)
+                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
       allow write: if isAdmin();
     }
 
-    // ── joursScolaires (calendrier scolaire) ─────────────────
-    match /joursScolaires/{dateId} {
-      allow read:  if isSignedIn();
+    // ── devoirs (contenu pédagogique, non nominatif) ─────────
+    match /devoirs/{devoirId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classeId);
+      allow delete: if isAdmin() || (isTeacher() && resource.data.teacherId == myUid());
+    }
+
+    // ── messages ─────────────────────────────────────────────
+    match /messages/{messageId} {
+      // Lecture : expéditeur, destinataire (uid dans toIds), diffusions ciblant
+      // mon rôle, ou admin.
+      allow read: if isSignedIn() && (
+        resource.data.fromId == myUid()
+        || (resource.data.toIds is list && myUid() in resource.data.toIds)
+        || resource.data.toType == 'all'
+        || (resource.data.toType == 'parents'  && isParent())
+        || (resource.data.toType == 'teachers' && isTeacher())
+        // Compat ancien format (champ `toId` string) — cf. messagesService legacy.
+        || resource.data.toId == myUid()
+        || resource.data.toId == 'all'
+        || (resource.data.toId == 'teachers' && isTeacher())
+        || (resource.data.toId == 'admin'    && isAdmin())
+        || isAdmin()
+      );
+      // Création : seulement en SON nom (anti-usurpation) ; les diffusions
+      // larges (all/parents/teachers/class) réservées prof/admin.
+      allow create: if isSignedIn()
+        && request.resource.data.fromId == myUid()
+        && (request.resource.data.toType == 'user' || isTeacher() || isAdmin());
+      // MAJ : un destinataire ne touche QUE readBy/deletedBy ; sinon expéditeur/admin.
+      allow update: if isSignedIn() && (
+        resource.data.fromId == myUid() || isAdmin()
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ── schedules (EDT prof) ─────────────────────────────────
+    match /schedules/{teacherUid} {
+      allow read:  if isSignedIn() && (teacherUid == myUid() || isAdmin());
       allow write: if isAdmin();
     }
+
+    // ── infos scolaires non nominatives (lisibles par tous les connectés) ──
+    match /emploiDuTemps/{docId}  { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /evenements/{eventId}   { allow read: if isSignedIn(); allow write: if isAdmin() || isTeacher(); }
+    match /joursScolaires/{dateId}{ allow read: if isSignedIn(); allow write: if isAdmin(); }
 
     // ── Default deny ─────────────────────────────────────────
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    match /{document=**} { allow read, write: if false; }
   }
 }
