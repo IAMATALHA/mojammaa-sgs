@@ -305,7 +305,7 @@ export default function TeacherNotesScreen() {
     return (
       <TouchableOpacity
         onPress={() => setEditEleve(item)}
-        style={[styles.eleveRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        style={[styles.eleveRow, { backgroundColor: theme.white, borderColor: theme.border }]}
       >
         <View style={{ flex: 1 }}>
           <Text style={[styles.eleveName, { color: theme.text }]}>
@@ -319,7 +319,7 @@ export default function TeacherNotesScreen() {
           ) : null}
         </View>
         {hasNote ? (
-          <View style={[styles.noteBox, { backgroundColor: theme.primarySurface }]}>
+          <View style={[styles.noteBox, { backgroundColor: theme.primarySurface, borderColor: theme.primaryBorder }]}>
             <Text style={[styles.noteValue, { color: theme.primary }]}>
               {formatGrade(noteValue)}<Text style={{ fontSize: 11, fontWeight: '600' }}>/20</Text>
             </Text>
@@ -352,40 +352,42 @@ export default function TeacherNotesScreen() {
         </View>
       ) : null}
 
-      <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.subject')}</Text>
-      {matiereLocked ? (
-        <View style={[styles.lockedSubject, { backgroundColor: theme.primarySurface, borderColor: theme.primary }]}>
-          <Ionicons name="lock-closed" size={13} color={theme.primary} />
-          <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{teacherMatiere}</Text>
+      <View style={[styles.controlsPanel, { backgroundColor: theme.white, borderColor: theme.border }]}>
+        <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.subject')}</Text>
+        {matiereLocked ? (
+          <View style={[styles.lockedSubject, { backgroundColor: theme.primarySurface, borderColor: theme.primaryBorder }]}>
+            <Ionicons name="lock-closed" size={13} color={theme.primary} />
+            <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{teacherMatiere}</Text>
+          </View>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
+            {MATIERES.map(m => <Chip key={m} value={m} active={matiere === m} onPress={() => setPickedMatiere(m)} />)}
+          </ScrollView>
+        )}
+
+        <Text style={[styles.label, { color: theme.textSoft, marginTop: 10 }]}>{t('teacher.semester')}</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+          {SEMESTRES.map(s => <Chip key={s} value={s} active={semestre === s} onPress={() => setSemestre(s)} />)}
         </View>
-      ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
-          {MATIERES.map(m => <Chip key={m} value={m} active={matiere === m} onPress={() => setPickedMatiere(m)} />)}
-        </ScrollView>
-      )}
 
-      <Text style={[styles.label, { color: theme.textSoft, marginTop: 10 }]}>{t('teacher.semester')}</Text>
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-        {SEMESTRES.map(s => <Chip key={s} value={s} active={semestre === s} onPress={() => setSemestre(s)} />)}
+        <View style={[styles.context, { backgroundColor: theme.surfaceAlt }]}>
+          <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700' }}>
+            Classe {classe} · {matiere} · {semestre}
+            {expectedControls != null ? ` · ${t('teacher.controlsCount', { count: expectedControls })}` : ''}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={handleImportExcel}
+          style={[styles.importBtn, { backgroundColor: theme.primary }]}
+          activeOpacity={0.9}
+        >
+          <Ionicons name="cloud-upload-outline" size={18} color={theme.white} />
+          <Text style={{ color: theme.white, fontWeight: '800', marginStart: 8, fontSize: 13 }}>
+            {t('teacher.importExcel')}
+          </Text>
+        </TouchableOpacity>
       </View>
-
-      <View style={[styles.context, { backgroundColor: theme.primarySurface }]}>
-        <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700' }}>
-          Classe {classe} · {matiere} · {semestre}
-          {expectedControls != null ? ` · ${t('teacher.controlsCount', { count: expectedControls })}` : ''}
-        </Text>
-      </View>
-
-      <TouchableOpacity
-        onPress={handleImportExcel}
-        style={[styles.importBtn, { borderColor: theme.primary, backgroundColor: theme.white }]}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="cloud-upload-outline" size={18} color={theme.primary} />
-        <Text style={{ color: theme.primary, fontWeight: '700', marginStart: 8, fontSize: 13 }}>
-          {t('teacher.importExcel')}
-        </Text>
-      </TouchableOpacity>
 
       {loading && eleves.length === 0 ? (
         <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
@@ -532,15 +534,16 @@ function EditNoteModal({
 }
 
 const styles = StyleSheet.create({
-  label:    { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
-  chip:     { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5 },
-  lockedSubject: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, marginBottom: 4 },
-  context:  { padding: 10, borderRadius: 10, marginBottom: 10 },
-  importBtn:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 10, borderRadius: 10, borderWidth: 1.5, borderStyle: 'dashed' as const, marginBottom: 12 },
-  eleveRow: { flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 8, borderRadius: 10, borderWidth: 1 },
+  controlsPanel: { borderRadius: 10, borderWidth: 1, padding: 12, marginBottom: 12 },
+  label:    { fontSize: 10.5, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 },
+  chip:     { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
+  lockedSubject: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, marginBottom: 4 },
+  context:  { paddingHorizontal: 10, paddingVertical: 9, borderRadius: 8, marginBottom: 10 },
+  importBtn:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 44, paddingHorizontal: 14, borderRadius: 8 },
+  eleveRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 12, marginBottom: 7, borderRadius: 8, borderWidth: 1 },
   eleveName:{ fontSize: 14, fontWeight: '700' },
   eleveSub: { fontSize: 11, marginTop: 2 },
-  noteBox:  { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, minWidth: 56, alignItems: 'center' },
+  noteBox:  { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, minWidth: 58, alignItems: 'center' },
   noteValue:{ fontSize: 16, fontWeight: '800' },
   notePlaceholder: { fontSize: 14 },
   loading:  { paddingVertical: 40, alignItems: 'center' },
@@ -551,7 +554,7 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1 },
   modalTitle:  { fontSize: 16, fontWeight: '700' },
   modalBody:   { padding: 20 },
-  eleveCard:   { padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
+  eleveCard:   { padding: 14, borderRadius: 10, borderWidth: 1, marginBottom: 16 },
   eleveTitle:  { fontSize: 16, fontWeight: '800', marginBottom: 4 },
-  input:       { borderWidth: 1.5, borderRadius: 12, padding: 16 },
+  input:       { borderWidth: 1, borderRadius: 10, padding: 16 },
 });

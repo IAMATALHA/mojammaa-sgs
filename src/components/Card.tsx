@@ -21,17 +21,17 @@ export default function Card({ children, elevated, primary, style }: Props) {
       style={[
         {
           backgroundColor: primary ? theme.primary : theme.surface,
-          borderRadius:    16,
-          padding:         16,
+          borderRadius:    10,
+          padding:         14,
           borderWidth:     primary ? 0 : 1,
           borderColor:     theme.border,
           ...(elevated || primary
             ? {
                 shadowColor:   primary ? theme.primary : '#000',
-                shadowOpacity: primary ? 0.25 : 0.06,
-                shadowRadius:  primary ? 14 : 8,
-                shadowOffset:  { width: 0, height: primary ? 6 : 3 },
-                elevation:     primary ? 4 : 2,
+                shadowOpacity: primary ? 0.20 : 0.04,
+                shadowRadius:  primary ? 12 : 6,
+                shadowOffset:  { width: 0, height: primary ? 5 : 2 },
+                elevation:     primary ? 3 : 1,
               }
             : null),
         },

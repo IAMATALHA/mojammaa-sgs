@@ -64,7 +64,6 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
                     backgroundColor: theme.card,
                     borderColor: tint.border,
                   },
-                  theme.shadows.xs,
                 ]}
               >
                 <View style={[styles.accentLine, { backgroundColor: tint.fg }]} />
@@ -113,10 +112,10 @@ const styles = StyleSheet.create({
   },
   tile: {
     flex: 1,
-    minHeight: 104,
-    borderRadius: 16,
+    minHeight: 96,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
+    padding: 13,
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     overflow: 'hidden',
@@ -129,9 +128,9 @@ const styles = StyleSheet.create({
     height: 3,
   },
   iconCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -296,8 +296,8 @@ export default function TeacherAttendanceScreen() {
           style={[
             styles.card,
             {
-              backgroundColor: isAbsent ? theme.danger + '15' : theme.success + '15',
-              borderColor:     isAbsent ? theme.danger        : theme.success,
+              backgroundColor: theme.white,
+              borderColor:     isAbsent ? theme.danger : theme.border,
             },
           ]}
         >
@@ -328,8 +328,8 @@ export default function TeacherAttendanceScreen() {
         {SEANCES.map(s => <SeanceChip key={s} value={s} />)}
       </View>
 
-      <View style={[styles.summary, { backgroundColor: theme.primarySurface }]}>
-        <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700' }}>
+      <View style={[styles.summary, { backgroundColor: theme.white, borderColor: theme.border }]}>
+        <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800' }}>
           {date} · {seance} · {t('teacher.studentsCount', { count: eleves.length })} · {t('teacher.absentCount', { count: absent.size })}
         </Text>
         <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>
@@ -362,11 +362,6 @@ export default function TeacherAttendanceScreen() {
           style={[styles.saveBtn, {
             backgroundColor: theme.primary,
             opacity:         saving ? 0.7 : 1,
-            shadowColor:     theme.primary,
-            shadowOpacity:   0.30,
-            shadowRadius:    14,
-            shadowOffset:    { width: 0, height: 6 },
-            elevation:       4,
           }]}
         >
           {saving
@@ -384,11 +379,11 @@ export default function TeacherAttendanceScreen() {
 }
 
 const styles = StyleSheet.create({
-  label:        { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+  label:        { fontSize: 10.5, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 },
   chipRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
-  chip:         { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, minWidth: 50, alignItems: 'center' },
-  summary:      { padding: 10, borderRadius: 10, marginBottom: 12 },
-  card:         { flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 10, borderRadius: 14, borderWidth: 2, overflow: 'hidden' },
+  chip:         { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, minWidth: 50, alignItems: 'center' },
+  summary:      { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, marginBottom: 12 },
+  card:         { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8, borderRadius: 8, borderWidth: 1, overflow: 'hidden' },
   statusStripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   eleveName:    { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   eleveStatus:  { fontSize: 12, fontWeight: '600' },
@@ -396,6 +391,6 @@ const styles = StyleSheet.create({
   empty:        { paddingVertical: 60, alignItems: 'center' },
   errorBox:     { padding: 12, borderRadius: 10, marginBottom: 12 },
   footer:       { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 14, borderTopWidth: 1 },
-  saveBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, borderRadius: 14 },
+  saveBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48, paddingHorizontal: 16, borderRadius: 10 },
   saveBtnText:  { color: '#fff', fontSize: 16, fontWeight: '800' },
 })

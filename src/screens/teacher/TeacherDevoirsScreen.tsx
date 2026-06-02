@@ -86,7 +86,7 @@ export default function TeacherDevoirsScreen() {
   const openWithReuse = (d: Devoir) => { setPrefill(d); setModalOpen(true) }
 
   const renderItem = ({ item }: { item: Devoir }) => (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+    <View style={[styles.card, { backgroundColor: theme.white, borderColor: theme.border }]}>
       <View style={styles.cardHeader}>
         <Text style={[styles.title, { color: theme.primary }]} numberOfLines={1}>{item.titre}</Text>
         <View style={[styles.typeTag, { backgroundColor: theme.primarySurface }]}>
@@ -502,7 +502,7 @@ function CreateDevoirModal({
 
 const styles = StyleSheet.create({
   listContainer: { paddingBottom: 100 },
-  card:          { padding: 14, marginBottom: 10, borderRadius: 12, borderWidth: 1 },
+  card:          { padding: 12, marginBottom: 8, borderRadius: 8, borderWidth: 1 },
   cardHeader:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   title:         { fontSize: 15, fontWeight: '800', flex: 1, marginEnd: 8 },
   typeTag:       { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
@@ -517,10 +517,10 @@ const styles = StyleSheet.create({
   errorBox:      { padding: 12, borderRadius: 10, marginBottom: 12 },
   fab: {
     position: 'absolute', bottom: 24, end: 24,
-    width: 56, height: 56, borderRadius: 28,
+    width: 54, height: 54, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    elevation: 6, shadowColor: '#000', shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 3 }, shadowRadius: 6,
+    elevation: 3, shadowColor: '#000', shadowOpacity: 0.16,
+    shadowOffset: { width: 0, height: 2 }, shadowRadius: 5,
   },
   fabText: { fontSize: 32, fontWeight: '700', lineHeight: 36, marginTop: -2 },
 
@@ -528,19 +528,19 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1 },
   modalTitle:  { fontSize: 16, fontWeight: '700' },
   modalBody:   { padding: 16, paddingBottom: 60 },
-  label:       { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
-  input:       { borderWidth: 1.5, borderRadius: 10, padding: 12, fontSize: 15 },
+  label:       { fontSize: 10.5, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 },
+  input:       { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 15 },
   chipRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip:        { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5 },
-  dateChip:    { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, minWidth: 60, alignItems: 'center' as const },
+  chip:        { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
+  dateChip:    { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, borderWidth: 1, minWidth: 60, alignItems: 'center' as const },
 
   prefillBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginBottom: 12 },
 
   attachBtnRow:  { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  attachBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, flexGrow: 1 },
+  attachBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, flexGrow: 1 },
   attachBtnText: { fontSize: 13, fontWeight: '600' },
 
-  attachItem:    { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, borderWidth: 1, marginBottom: 8 },
+  attachItem:    { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 8 },
   attachThumb:   { width: 44, height: 44, borderRadius: 8 },
   attachName:    { fontSize: 13, fontWeight: '600' },
   attachMeta:    { fontSize: 11, marginTop: 2 },

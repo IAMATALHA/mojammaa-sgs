@@ -30,7 +30,7 @@ export default function SectionHeader({
           style={[styles.title, {
             color: theme.text,
             fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
-            fontSize: theme.fontSize.title,
+            fontSize: 17,
             writingDirection: isAr ? 'rtl' : 'ltr',
           }]}
         >
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     marginBottom:  12,
   },
   titleBlock: { flex: 1, marginEnd: 16 },
-  title:      { lineHeight: 23 },
+  title:      { lineHeight: 22 },
   actionPill: {
     minHeight: 30,
     borderRadius: 999,

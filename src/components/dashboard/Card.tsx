@@ -25,14 +25,14 @@ export default function Card({
   const theme = useTheme()
   const base: ViewStyle = {
     backgroundColor: variant === 'flat' ? theme.surface : theme.card,
-    borderRadius:    theme.radius.lg,
+    borderRadius:    theme.radius.md,
     padding:         padding ?? theme.spacing.lg,
     borderWidth:     StyleSheet.hairlineWidth,
     borderColor:     variant === 'outline' ? theme.borderStrong : theme.border,
   }
   const elevation = variant === 'flat' || variant === 'outline'
     ? null
-    : theme.shadows.xs
+    : theme.shadows.none
 
   if (onPress) {
     return (

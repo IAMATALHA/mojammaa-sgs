@@ -79,29 +79,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   watermark: {
-    width: 240,
-    height: 240,
-    opacity: 0.05,
+    width: 220,
+    height: 220,
+    opacity: 0.025,
   },
   blob: {
     position: 'absolute',
     borderRadius: 999,
   },
   blobA: {
-    width: 148,
-    height: 148,
+    width: 112,
+    height: 112,
     top: -30,
     right: -24,
   },
   blobB: {
-    width: 88,
-    height: 88,
+    width: 64,
+    height: 64,
     top: 120,
     left: -24,
   },
   blobC: {
-    width: 128,
-    height: 128,
+    width: 88,
+    height: 88,
     bottom: 36,
     right: -40,
   },
@@ -118,14 +118,14 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 36,
     height: 36,
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 22,
-    lineHeight: 27,
+    fontSize: 21,
+    lineHeight: 26,
   },
   headerAccentRow: {
     flexDirection: 'row',
@@ -146,6 +146,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop: 8,
   },
 })
