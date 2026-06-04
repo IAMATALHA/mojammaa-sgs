@@ -33,6 +33,18 @@ service cloud.firestore {
     function isParent()   { return myRole() == 'parent'; }
     function myClasses()  { return myDoc().classes != null ? myDoc().classes : []; }
 
+    // ── Super-admin ──────────────────────────────────────────
+    // Liste blanche dans config/superadmins (modifiable UNIQUEMENT via
+    // scripts/setSuperadmin.js — admin SDK). Aucun client ne peut s'y ajouter.
+    // Les superadmins gardent role:'admin' ; ce niveau ne fait qu'AJOUTER des
+    // pouvoirs réservés (gestion des comptes/rôles, suppressions, audit).
+    function superadminUids() {
+      return get(/databases/$(database)/documents/config/superadmins).data.uids;
+    }
+    function isSuperAdmin() {
+      return isSignedIn() && (myUid() in superadminUids());
+    }
+
     // Le prof enseigne-t-il cette classe ? (tableau `classes` ou legacy `classe`)
     function teacherTeaches(classe) {
       return isTeacher() && (classe in myClasses() || classe == myDoc().classe);
@@ -44,14 +56,17 @@ service cloud.firestore {
 
     // ── users ────────────────────────────────────────────────
     match /users/{uid} {
-      allow read:          if isSignedIn() && (uid == myUid() || isAdmin());
-      allow create, delete: if isAdmin();
-      // Soi-même : modifie son profil SAUF les champs sensibles (anti auto-élévation).
-      allow update: if isAdmin() || (
-        isSignedIn() && uid == myUid() &&
-        !request.resource.data.diff(resource.data).affectedKeys()
-           .hasAny(['role', 'classes', 'classe', 'matiere', 'cycle', 'uid'])
-      );
+      allow read:           if isSignedIn() && (uid == myUid() || isAdmin());
+      // Créer/supprimer un compte : SUPERADMIN uniquement.
+      allow create, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin()
+        // Admin : gère les profils (nom, classes, matière…) mais PAS le rôle.
+        || (isAdmin() &&
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+        // Soi-même : son profil SAUF champs sensibles (anti auto-élévation).
+        || (isSignedIn() && uid == myUid() &&
+            !request.resource.data.diff(resource.data).affectedKeys()
+               .hasAny(['role', 'classes', 'classe', 'matiere', 'cycle', 'uid']));
     }
 
     // ── eleves ───────────────────────────────────────────────
@@ -60,7 +75,7 @@ service cloud.firestore {
                   || (isParent()  && resource.data.parentUid == myUid())
                   || teacherTeaches(resource.data.classe);
       allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classe);
-      allow delete: if isAdmin();
+      allow delete: if isSuperAdmin();
     }
 
     // ── notes ────────────────────────────────────────────────
@@ -73,7 +88,7 @@ service cloud.firestore {
         teacherTeaches(request.resource.data.classe) &&
         request.resource.data.matiere == myDoc().matiere
       );
-      allow delete: if isAdmin();
+      allow delete: if isSuperAdmin();
     }
 
     // ── absences ─────────────────────────────────────────────
@@ -82,7 +97,7 @@ service cloud.firestore {
                   || teacherTeaches(resource.data.classe)
                   || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
       allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classe);
-      allow delete: if isAdmin();
+      allow delete: if isSuperAdmin();
     }
 
     // ── bulletins ────────────────────────────────────────────
@@ -90,7 +105,8 @@ service cloud.firestore {
       allow read: if isAdmin()
                   || teacherTeaches(resource.data.classe)
                   || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
-      allow write: if isAdmin();
+      allow create, update: if isAdmin();
+      allow delete:         if isSuperAdmin();
     }
 
     // ── devoirs (contenu pédagogique, non nominatif) ─────────
@@ -140,6 +156,24 @@ service cloud.firestore {
     match /emploiDuTemps/{docId}  { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /evenements/{eventId}   { allow read: if isSignedIn(); allow write: if isAdmin() || isTeacher(); }
     match /joursScolaires/{dateId}{ allow read: if isSignedIn(); allow write: if isAdmin(); }
+
+    // ── config (liste des superadmins, etc.) ────────────────
+    // Lisible par tout connecté (l'app peut vérifier si l'user est superadmin
+    // pour afficher des écrans réservés). Écriture INTERDITE depuis toute app :
+    // modifiable seulement via admin SDK (scripts/setSuperadmin.js).
+    match /config/{docId} {
+      allow read:  if isSignedIn();
+      allow write: if false;
+    }
+
+    // ── auditLog (journal d'audit — Phase 2) ─────────────────
+    // Append-only & inviolable : chaque connecté peut écrire une entrée EN SON
+    // NOM ; seul un superadmin peut lire ; aucune modification/suppression.
+    match /auditLog/{logId} {
+      allow read:   if isSuperAdmin();
+      allow create: if isSignedIn() && request.resource.data.actorUid == myUid();
+      allow update, delete: if false;
+    }
 
     // ── Default deny ─────────────────────────────────────────
     match /{document=**} { allow read, write: if false; }
