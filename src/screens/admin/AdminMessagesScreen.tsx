@@ -296,7 +296,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
         toType, toIds, toLabel: targetLabel,
         priority: urgent ? 'urgent' : 'normal', category: 'announcement',
       })
-      Alert.alert(t('admin.sent'), `${targetLabel}\n${result.pushSent > 0 ? `${result.pushSent} push` : ''}`, [{ text: 'OK', onPress: onClose }])
+      Alert.alert(t('admin.sent'), targetLabel, [{ text: 'OK', onPress: onClose }])
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message)
     } finally { setSending(false) }

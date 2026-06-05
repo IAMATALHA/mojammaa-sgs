@@ -26,11 +26,10 @@
 
 import {
   collection, query, where, orderBy, addDoc, onSnapshot, updateDoc, doc,
-  serverTimestamp, getDocs, documentId, arrayUnion,
+  serverTimestamp, getDocs, arrayUnion,
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
-import { sendPush } from './pushService'
 
 export type MessageType = 'announcement' | 'direct' | 'attendance'
 export type MessageToType = 'all' | 'parents' | 'teachers' | 'class' | 'user'
@@ -179,38 +178,11 @@ async function getParentUidsForClasses(classes: string[]): Promise<string[]> {
   return [...parentUids]
 }
 
-async function getPushTokensForUsers(uids: string[]): Promise<string[]> {
-  const tokens: string[] = []
-  for (let i = 0; i < uids.length; i += 10) {
-    const chunk = uids.slice(i, i + 10)
-    if (chunk.length === 0) continue
-    const snap = await getDocs(query(collection(db, 'users'), where(documentId(), 'in', chunk)))
-    snap.forEach(d => {
-      const token = (d.data() as any).expoPushToken
-      if (token) tokens.push(token)
-    })
-  }
-  return tokens
-}
-
-async function sendMessagePushes(p: {
-  uids: string[]
-  subject: string
-  body: string
-  priority?: 'urgent' | 'normal'
-  category?: MessageCategory
-  messageId: string
-}): Promise<number> {
-  const tokens = await getPushTokensForUsers(p.uids)
-  if (tokens.length === 0) return 0
-  await sendPush(tokens.map(token => ({
-    to: token,
-    title: p.priority === 'urgent' ? '🚨 ' + p.subject : p.subject,
-    body: p.body,
-    data: { type: p.category, messageId: p.messageId },
-  })))
-  return tokens.length
-}
+// NOTE: Push notifications are sent SERVER-SIDE by the Cloud Function
+// `onMessageCreated` (functions/index.js). Clients only write the message doc;
+// the function reads recipients' push tokens with the Admin SDK (bypassing
+// security rules) and calls the Expo Push API. The `pushSent` fields returned
+// below stay 0 — push delivery is async and reported per-recipient server-side.
 
 // ── Broadcast helpers ────────────────────────────────────────────────────
 
@@ -249,22 +221,7 @@ export async function broadcast(p: BroadcastParams): Promise<{ messageId: string
     classe:   p.classe ?? (classTarget ? p.toIds.join(', ') : undefined),
   })
 
-  let pushSent = 0
-  const pushTargetIds = resolvedToType === 'user' ? resolvedToIds : p.toIds
-  if (pushTargetIds.length > 0) {
-    try {
-      pushSent = await sendMessagePushes({
-        uids: pushTargetIds,
-        subject: p.subject,
-        body: p.body,
-        priority: p.priority,
-        category: p.category,
-        messageId,
-      })
-    } catch {}
-  }
-
-  return { messageId, pushSent }
+  return { messageId, pushSent: 0 }
 }
 
 // Fan-out broadcast to parents of specific classes
@@ -303,18 +260,6 @@ export async function broadcastToClasses(p: {
     status:    'sent',
   })
   result.messagesWritten = 1
-
-  try {
-    result.pushSent = await sendMessagePushes({
-      uids: parentUids,
-      subject,
-      body,
-      priority: urgent ? 'urgent' : 'normal',
-      category: category || 'announcement',
-      messageId,
-    })
-  } catch {}
-
   return result
 }
 
@@ -333,7 +278,7 @@ export async function broadcastToParents(p: {
   if (p.parentUids.length === 0) return result
 
   const fromNom = `${p.teacher.prenom} ${p.teacher.nom}`.trim()
-  const messageId = await sendMessage({
+  await sendMessage({
     type:     'announcement',
     subject:  p.subject,
     body:     p.body,
@@ -350,18 +295,46 @@ export async function broadcastToParents(p: {
     status:   'sent',
   })
   result.messagesWritten = 1
+  return result
+}
 
-  try {
-    result.pushSent = await sendMessagePushes({
-      uids:     p.parentUids,
+// Personalised fan-out: one message per student → their own parent, so the
+// body can include the child's name and each parent only sees their own doc.
+export async function broadcastPersonalized(p: {
+  recipients: { parentUid: string; body: string; label: string; eleveId?: string }[]
+  subject:    string
+  classe?:    string
+  urgent?:    boolean
+  category?:  MessageCategory
+  teacher:    { uid: string; nom: string; prenom: string }
+}): Promise<{ messagesWritten: number; pushSent: number; parentsTargeted: number }> {
+  const result = { messagesWritten: 0, pushSent: 0, parentsTargeted: 0 }
+  if (p.recipients.length === 0) return result
+
+  const fromNom = `${p.teacher.prenom} ${p.teacher.nom}`.trim()
+
+  // One message doc per (student → parent). Push is sent server-side per doc.
+  for (const r of p.recipients) {
+    await sendMessage({
+      type:     'announcement',
       subject:  p.subject,
-      body:     p.body,
-      priority: p.urgent ? 'urgent' : 'normal',
+      body:     r.body,
+      fromId:   p.teacher.uid,
+      fromNom,
+      fromRole: 'professeur',
+      toType:   'user',
+      toIds:    [r.parentUid],
+      toLabel:  r.label,
       category: p.category || 'announcement',
-      messageId,
+      priority: p.urgent ? 'urgent' : 'normal',
+      classe:   p.classe,
+      eleveId:  r.eleveId,
+      readBy:   [],
+      status:   'sent',
     })
-  } catch {}
-
+  }
+  result.messagesWritten = p.recipients.length
+  result.parentsTargeted = new Set(p.recipients.map(r => r.parentUid)).size
   return result
 }
 

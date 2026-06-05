@@ -156,7 +156,7 @@ export default function AdminBroadcastScreen() {
 
       Alert.alert(
         t('admin.sent'),
-        `${targetLabel}\n${result.pushSent > 0 ? `${result.pushSent} push` : ''}`,
+        targetLabel,
         [{ text: 'OK', onPress: () => {
           setStep('type')
           setSubject(''); setBody(''); setPriority('normal')

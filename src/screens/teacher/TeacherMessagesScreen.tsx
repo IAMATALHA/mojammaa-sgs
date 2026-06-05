@@ -5,21 +5,31 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { X, Send, Inbox, PenSquare, AlertCircle, Users } from 'lucide-react-native'
+import { X, Send, Inbox, PenSquare, AlertCircle, Users, CalendarDays, Check, Lock } from 'lucide-react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import {
-  subscribeMessages, subscribeSentMessages, markAsRead, deleteMessage, broadcastToClasses,
+  subscribeMessages, subscribeSentMessages, markAsRead, deleteMessage,
+  broadcastToParents, broadcastPersonalized,
   type MessageDoc,
 } from '../../services/messagesService'
+import { listEleves, type EleveDoc } from '../../services/elevesService'
+import DatePickerSheet from '../../components/DatePickerSheet'
 import * as Haptics from 'expo-haptics'
 import { MESSAGE_TEMPLATES, fillTemplate, type MessageTemplate } from '../../data/messageTemplates'
 import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
-import { formatTimestamp } from '../../utils/format'
+import { formatTimestamp, formatLongDate } from '../../utils/format'
 
 type Tab = 'inbox' | 'sent'
+
+// Placeholder injected for {elevePrenom}; replaced per-student at send time.
+const ELEVE_PLACEHOLDER = '{élève}'
+const eleveKey    = (e: EleveDoc) => e.codeMassar
+const eleveName   = (e: EleveDoc) =>
+  `${e.prenomLatin || e.prenom || ''} ${e.nomLatin || e.nom || ''}`.trim() || e.nomComplet || '—'
+const elevePrenom = (e: EleveDoc) => e.prenomLatin || e.prenom || eleveName(e).split(' ')[0]
 
 export default function TeacherMessagesScreen() {
   const theme = useTheme()
@@ -204,7 +214,16 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
     return []
   }, [profile])
 
-  const [selectedClasses, setSelectedClasses] = useState<string[]>(availableClasses)
+  // A subject teacher (collège/lycée) teaches one matière → auto-fill it and
+  // hide the picker. Primaire teachers cover several subjects, so they choose.
+  const teacherMatiere = profile?.matiere as string | undefined
+  const isPrimaire = profile?.cycle === 'primaire'
+  const lockMatiere = !isPrimaire && !!teacherMatiere
+
+  // Smart default: 1 class → preselect it; several → none (teacher chooses).
+  const [selectedClasses, setSelectedClasses] = useState<string[]>(
+    availableClasses.length === 1 ? availableClasses : [],
+  )
   const [selectedTmpl, setSelectedTmpl] = useState<MessageTemplate | null>(null)
   const [tmplOpen, setTmplOpen] = useState(false)
   const [vars, setVars] = useState<Record<string, string>>({})
@@ -213,15 +232,71 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
   const [urgent, setUrgent] = useState(false)
   const [sending, setSending] = useState(false)
 
+  // Student selection
+  const [eleves, setEleves] = useState<EleveDoc[]>([])
+  const [selectedEleveIds, setSelectedEleveIds] = useState<Set<string>>(new Set())
+  const [loadingEleves, setLoadingEleves] = useState(false)
+
+  // Date picker (template variables of type 'date')
+  const [datePickerKey, setDatePickerKey] = useState<string | null>(null)
+  const [dateValues, setDateValues] = useState<Record<string, Date>>({})
+
+  // Load students whenever the class set changes; default = all selected.
+  useEffect(() => {
+    let cancelled = false
+    if (selectedClasses.length === 0) { setEleves([]); setSelectedEleveIds(new Set()); return }
+    setLoadingEleves(true)
+    listEleves({ classes: selectedClasses })
+      .then(list => {
+        if (cancelled) return
+        setEleves(list)
+        setSelectedEleveIds(new Set())   // start empty — teacher picks who to send to
+      })
+      .catch(() => { if (!cancelled) setEleves([]) })
+      .finally(() => { if (!cancelled) setLoadingEleves(false) })
+    return () => { cancelled = true }
+  }, [selectedClasses])
+
+  const elevesByClasse = useMemo(() => {
+    const map: Record<string, EleveDoc[]> = {}
+    eleves.forEach(e => { (map[e.classe] ||= []).push(e) })
+    Object.values(map).forEach(l => l.sort((a, b) => eleveName(a).localeCompare(eleveName(b), 'fr')))
+    return map
+  }, [eleves])
+
+  const selectedEleves = useMemo(() => eleves.filter(e => selectedEleveIds.has(eleveKey(e))), [eleves, selectedEleveIds])
+  const parentUids = useMemo(
+    () => [...new Set(selectedEleves.map(e => (e as any).parentUid as string | undefined).filter(Boolean) as string[])],
+    [selectedEleves],
+  )
+
+  const toggleEleve = (id: string) => setSelectedEleveIds(prev => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next
+  })
+  const allSelected = eleves.length > 0 && eleves.every(e => selectedEleveIds.has(eleveKey(e)))
+  const selectAll = (on: boolean) => setSelectedEleveIds(on ? new Set(eleves.map(eleveKey)) : new Set())
+
   const toggleClass = (c: string) => setSelectedClasses(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])
+
+  // Variables shown to the teacher (locked matière is injected, not asked).
+  const visibleVariables = (tmpl: MessageTemplate) =>
+    tmpl.variables.filter(v => !(v.key === 'matiere' && lockMatiere))
+
+  // Merge the locked matière into the variable map used to fill templates.
+  const fillVars = (nv: Record<string, string>) => ({
+    ...nv,
+    ...(lockMatiere && teacherMatiere ? { matiere: teacherMatiere } : {}),
+    elevePrenom: ELEVE_PLACEHOLDER,
+  })
 
   const pickTemplate = (tmpl: MessageTemplate) => {
     setSelectedTmpl(tmpl)
     setVars({})
+    setDateValues({})
     const titleKey = lang === 'ar' ? tmpl.title_ar : lang === 'en' ? tmpl.title_en : tmpl.title_fr
     setSubject(titleKey)
     const tplText = lang === 'ar' ? tmpl.template_ar : lang === 'en' ? tmpl.template_en : tmpl.template_fr
-    setBody(fillTemplate(tplText, { elevePrenom: '{élève}' }))
+    setBody(fillTemplate(tplText, fillVars({})))
   }
 
   const updateVar = (key: string, val: string) => {
@@ -229,30 +304,57 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
     setVars(nv)
     if (selectedTmpl) {
       const tpl = lang === 'ar' ? selectedTmpl.template_ar : lang === 'en' ? selectedTmpl.template_en : selectedTmpl.template_fr
-      setBody(fillTemplate(tpl, { ...nv, elevePrenom: '{élève}' }))
+      setBody(fillTemplate(tpl, fillVars(nv)))
     }
+  }
+
+  const onPickDate = (key: string, d: Date) => {
+    setDateValues(prev => ({ ...prev, [key]: d }))
+    updateVar(key, formatLongDate(d, lang, true))
   }
 
   const varLabel = (v: any) => lang === 'ar' ? v.label_ar : lang === 'en' ? v.label_en : v.label_fr
   const tmplTitle = (tmpl: MessageTemplate) => lang === 'ar' ? tmpl.title_ar : lang === 'en' ? tmpl.title_en : tmpl.title_fr
 
-  const canSend = selectedClasses.length > 0 && subject.trim().length > 0 && body.trim().length > 0
+  const recipientLabel =
+    `${selectedEleves.length} ${lang === 'ar' ? 'تلميذ' : lang === 'en' ? 'student(s)' : 'élève(s)'} · ${selectedClasses.join(', ')}`
+
+  const canSend = parentUids.length > 0 && subject.trim().length > 0 && body.trim().length > 0
 
   const handleSend = async () => {
     if (!profile || !canSend) return
     setSending(true)
+    const teacher = { uid: profile.uid, nom: profile.nom, prenom: profile.prenom }
     try {
-      const result = await broadcastToClasses({
-        classes: selectedClasses,
-        subject: subject.trim(),
-        body: body.trim(),
-        urgent,
-        category: 'announcement',
-        teacher: { uid: profile.uid, nom: profile.nom, prenom: profile.prenom },
-      })
+      let parentsTargeted = 0
+
+      if (body.includes(ELEVE_PLACEHOLDER)) {
+        // Personalised: one message per student with their first name filled in.
+        const recipients = selectedEleves
+          .filter(e => (e as any).parentUid)
+          .map(e => ({
+            parentUid: (e as any).parentUid as string,
+            body:      body.split(ELEVE_PLACEHOLDER).join(elevePrenom(e)).trim(),
+            label:     `${eleveName(e)} · ${e.classe}`,
+            eleveId:   e.codeMassar,
+          }))
+        const r = await broadcastPersonalized({
+          recipients, subject: subject.trim(), classe: selectedClasses.join(', '),
+          urgent, category: 'announcement', teacher,
+        })
+        parentsTargeted = r.parentsTargeted
+      } else {
+        // Generic: a single message to all selected parents.
+        const r = await broadcastToParents({
+          parentUids, label: recipientLabel, classe: selectedClasses.join(', '),
+          subject: subject.trim(), body: body.trim(), urgent, category: 'announcement', teacher,
+        })
+        parentsTargeted = r.parentsTargeted
+      }
+
       Alert.alert(
         t('teacher.messageSent'),
-        result.parentsTargeted === 0 ? t('teacher.noParents') : `${result.parentsTargeted} parent(s) · ${result.pushSent} push`,
+        parentsTargeted === 0 ? t('teacher.noParents') : `${parentsTargeted} parent(s)`,
         [{ text: 'OK', onPress: onClose }],
       )
     } catch (e: any) {
@@ -286,6 +388,69 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
               })}
             </View>
 
+            {/* Students of the selected classes — pick one or more */}
+            <View style={cs.studentsHeader}>
+              <Text style={[cs.label, { color: theme.textSoft, marginBottom: 0 }]}>
+                {lang === 'ar' ? 'التلاميذ' : lang === 'en' ? 'Students' : 'Élèves'}
+              </Text>
+              {selectedEleves.length > 0 && (
+                <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 12 }}>
+                  {selectedEleves.length} · {parentUids.length} {lang === 'ar' ? 'ولي' : 'parent(s)'}
+                </Text>
+              )}
+            </View>
+
+            {loadingEleves ? (
+              <ActivityIndicator color={theme.primary} style={{ alignSelf: 'flex-start', marginVertical: 10 }} />
+            ) : selectedClasses.length === 0 ? (
+              <Text style={{ color: theme.textSoft, fontSize: 12 }}>
+                {lang === 'ar' ? 'اختر قسماً أولاً' : lang === 'en' ? 'Select a class first' : 'Choisis d’abord une classe'}
+              </Text>
+            ) : eleves.length === 0 ? (
+              <Text style={{ color: theme.textSoft, fontSize: 12 }}>
+                {lang === 'ar' ? 'لا يوجد تلاميذ' : lang === 'en' ? 'No students found' : 'Aucun élève trouvé'}
+              </Text>
+            ) : (
+              <>
+                {/* Whole-class shortcut at the top */}
+                <TouchableOpacity onPress={() => selectAll(!allSelected)}
+                  style={[cs.wholeClassBtn, { borderColor: allSelected ? theme.primary : theme.border, backgroundColor: allSelected ? theme.primary : theme.surface }]}>
+                  <Users size={15} color={allSelected ? '#fff' : theme.textSoft} strokeWidth={2} />
+                  <Text style={{ flex: 1, marginStart: 8, color: allSelected ? '#fff' : theme.text, fontWeight: '800', fontSize: 13 }}>
+                    {lang === 'ar' ? 'كل القسم' : lang === 'en' ? 'Whole class' : 'Toute la classe'}
+                  </Text>
+                  {allSelected && <Check size={16} color="#fff" strokeWidth={3} />}
+                </TouchableOpacity>
+
+                {Object.keys(elevesByClasse).sort().map(classe => (
+                  <View key={classe} style={{ marginTop: 8 }}>
+                    {selectedClasses.length > 1 && (
+                      <Text style={{ color: theme.textMuted, fontWeight: '800', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginVertical: 6 }}>{classe}</Text>
+                    )}
+                    {elevesByClasse[classe].map(e => {
+                      const id = eleveKey(e)
+                      const on = selectedEleveIds.has(id)
+                      const hasParent = !!(e as any).parentUid
+                      return (
+                        <TouchableOpacity key={id} onPress={() => toggleEleve(id)}
+                          style={[cs.eleveRow, { borderColor: on ? theme.primary : theme.border, backgroundColor: on ? theme.primarySurface : theme.white }]}>
+                          <View style={[cs.checkbox, { borderColor: on ? theme.primary : theme.borderStrong, backgroundColor: on ? theme.primary : 'transparent' }]}>
+                            {on && <Check size={12} color="#fff" strokeWidth={3} />}
+                          </View>
+                          <Text numberOfLines={1} style={{ flex: 1, marginStart: 10, color: theme.text, fontSize: 13, fontWeight: '600' }}>{eleveName(e)}</Text>
+                          {!hasParent && (
+                            <Text style={{ color: theme.warning, fontSize: 10, fontWeight: '700' }}>
+                              {lang === 'ar' ? 'بدون ولي' : lang === 'en' ? 'no parent' : 'sans parent'}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
+                ))}
+              </>
+            )}
+
             {/* Templates — dropdown */}
             <Text style={[cs.label, { color: theme.textSoft, marginTop: 16 }]}>
               {lang === 'ar' ? 'نموذج' : lang === 'en' ? 'Template' : 'Modèle'}
@@ -313,9 +478,20 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
             })}
 
             {/* Template variables */}
-            {selectedTmpl && selectedTmpl.variables.length > 0 && (
+            {selectedTmpl && (
               <View style={{ marginTop: 12 }}>
-                {selectedTmpl.variables.map(v => (
+                {/* Locked subject for single-subject teachers */}
+                {lockMatiere && selectedTmpl.variables.some(v => v.key === 'matiere') && (
+                  <View style={[cs.lockedRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <Lock size={13} color={theme.textSoft} strokeWidth={2} />
+                    <Text style={{ flex: 1, marginStart: 8, color: theme.textSoft, fontSize: 12, fontWeight: '600' }}>
+                      {lang === 'ar' ? 'المادة' : lang === 'en' ? 'Subject' : 'Matière'}
+                    </Text>
+                    <Text style={{ color: theme.text, fontWeight: '800', fontSize: 13 }}>{teacherMatiere}</Text>
+                  </View>
+                )}
+
+                {visibleVariables(selectedTmpl).map(v => (
                   <View key={v.key} style={{ marginBottom: 10 }}>
                     <Text style={[cs.label, { color: theme.textSoft }]}>{varLabel(v)}</Text>
                     {v.type === 'select' && v.options ? (
@@ -330,6 +506,16 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
                           )
                         })}
                       </ScrollView>
+                    ) : v.type === 'date' ? (
+                      <TouchableOpacity onPress={() => setDatePickerKey(v.key)}
+                        style={[cs.input, cs.dateBtn, { borderColor: theme.border, backgroundColor: theme.white }]}>
+                        <CalendarDays size={17} color={dateValues[v.key] ? theme.primary : theme.textMuted} strokeWidth={2} />
+                        <Text style={{ flex: 1, marginStart: 10, fontSize: 14, color: dateValues[v.key] ? theme.text : theme.textMuted }}>
+                          {dateValues[v.key]
+                            ? formatLongDate(dateValues[v.key], lang, true)
+                            : (lang === 'ar' ? 'اختر التاريخ' : lang === 'en' ? 'Choose a date' : 'Choisir une date')}
+                        </Text>
+                      </TouchableOpacity>
                     ) : (
                       <TextInput
                         value={vars[v.key] || ''} onChangeText={val => updateVar(v.key, val)}
@@ -355,6 +541,15 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
               placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
               multiline textAlignVertical="top" maxLength={1500}
               style={[cs.input, cs.textarea, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]} />
+            {body.includes(ELEVE_PLACEHOLDER) && (
+              <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 6, fontStyle: 'italic' }}>
+                {lang === 'ar'
+                  ? 'سيُستبدل {élève} باسم كل تلميذ.'
+                  : lang === 'en'
+                    ? '"{élève}" is replaced by each student’s first name.'
+                    : '« {élève} » sera remplacé par le prénom de chaque élève.'}
+              </Text>
+            )}
 
             {/* Urgent */}
             <Pressable onPress={() => setUrgent(u => !u)}
@@ -375,6 +570,13 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
               </>
             )}
           </TouchableOpacity>
+
+          <DatePickerSheet
+            visible={datePickerKey != null}
+            value={datePickerKey ? dateValues[datePickerKey] ?? null : null}
+            onSelect={d => { if (datePickerKey) onPickDate(datePickerKey, d) }}
+            onClose={() => setDatePickerKey(null)}
+          />
         </SafeAreaView>
       </KeyboardAvoidingView>
     </Modal>
@@ -395,6 +597,13 @@ const cs = StyleSheet.create({
   urgentRow: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1, marginTop: 14 },
   dot: { width: 18, height: 18, borderRadius: 9 },
   sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 20, marginBottom: 36, paddingVertical: 14, borderRadius: 12 },
+
+  studentsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, marginBottom: 8 },
+  wholeClassBtn: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1.5, marginBottom: 4 },
+  eleveRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 10, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, marginBottom: 5 },
+  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  lockedRow: { flexDirection: 'row', alignItems: 'center', padding: 11, borderRadius: 12, borderWidth: 1, marginBottom: 12 },
+  dateBtn: { flexDirection: 'row', alignItems: 'center' },
 })
 
 const styles = StyleSheet.create({
