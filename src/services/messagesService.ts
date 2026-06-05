@@ -318,6 +318,53 @@ export async function broadcastToClasses(p: {
   return result
 }
 
+// Send to an explicit set of parent UIDs (e.g. selected students of a class).
+export async function broadcastToParents(p: {
+  parentUids: string[]
+  label:      string            // human label e.g. "3 élève(s) · 1APIC-3"
+  classe?:    string
+  subject:    string
+  body:       string
+  urgent?:    boolean
+  category?:  MessageCategory
+  teacher:    { uid: string; nom: string; prenom: string }
+}): Promise<{ parentsTargeted: number; messagesWritten: number; pushSent: number }> {
+  const result = { parentsTargeted: p.parentUids.length, messagesWritten: 0, pushSent: 0 }
+  if (p.parentUids.length === 0) return result
+
+  const fromNom = `${p.teacher.prenom} ${p.teacher.nom}`.trim()
+  const messageId = await sendMessage({
+    type:     'announcement',
+    subject:  p.subject,
+    body:     p.body,
+    fromId:   p.teacher.uid,
+    fromNom,
+    fromRole: 'professeur',
+    toType:   'user',
+    toIds:    p.parentUids,
+    toLabel:  p.label,
+    category: p.category || 'announcement',
+    priority: p.urgent ? 'urgent' : 'normal',
+    classe:   p.classe,
+    readBy:   [],
+    status:   'sent',
+  })
+  result.messagesWritten = 1
+
+  try {
+    result.pushSent = await sendMessagePushes({
+      uids:     p.parentUids,
+      subject:  p.subject,
+      body:     p.body,
+      priority: p.urgent ? 'urgent' : 'normal',
+      category: p.category || 'announcement',
+      messageId,
+    })
+  } catch {}
+
+  return result
+}
+
 // Get all users for recipient picker
 export async function getRecipientsList(): Promise<{
   parents: { uid: string; nom: string; prenom: string; email: string; children: string[] }[]

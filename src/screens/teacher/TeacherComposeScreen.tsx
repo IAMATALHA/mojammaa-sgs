@@ -9,13 +9,22 @@ import { useNavigation } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
 import {
   ChevronLeft, Send, AlertCircle, Users,
+  CalendarDays, Check, Lock,
 } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
-import { broadcastToClasses } from '../../services/messagesService'
+import { broadcastToParents } from '../../services/messagesService'
+import { listEleves, type EleveDoc } from '../../services/elevesService'
 import { MESSAGE_TEMPLATES, fillTemplate, type MessageTemplate } from '../../data/messageTemplates'
+import DatePickerSheet from '../../components/DatePickerSheet'
+import { formatLongDate } from '../../utils/format'
 
-type Step = 'template' | 'variables' | 'classes' | 'preview'
+type Step = 'template' | 'variables' | 'classes' | 'students' | 'preview'
+
+const STEP_ORDER: Step[] = ['template', 'variables', 'classes', 'students', 'preview']
+const eleveId = (e: EleveDoc) => e.codeMassar
+const eleveName = (e: EleveDoc) =>
+  `${e.prenomLatin || e.prenom || ''} ${e.nomLatin || e.nom || ''}`.trim() || e.nomComplet || '—'
 
 export default function TeacherComposeScreen() {
   const theme = useTheme()
@@ -31,6 +40,13 @@ export default function TeacherComposeScreen() {
     return []
   }, [profile])
 
+  // A subject teacher (collège/lycée) teaches one matière → auto-fill it and
+  // hide the picker. Primary-school teachers cover several subjects, so they
+  // still choose. `cycle` and `matiere` come from the teacher's profile.
+  const teacherMatiere = (profile as any)?.matiere as string | undefined
+  const isPrimaire = (profile as any)?.cycle === 'primaire'
+  const lockMatiere = !isPrimaire && !!teacherMatiere
+
   const [step, setStep] = useState<Step>('template')
   const [selected, setSelected] = useState<MessageTemplate | null>(null)
   const [vars, setVars] = useState<Record<string, string>>({})
@@ -40,7 +56,28 @@ export default function TeacherComposeScreen() {
   const [freeSubject, setFreeSubject] = useState('')
   const [freeBody, setFreeBody] = useState('')
 
+  // Student selection (after class step)
+  const [eleves, setEleves] = useState<EleveDoc[]>([])
+  const [selectedEleveIds, setSelectedEleveIds] = useState<Set<string>>(new Set())
+  const [loadingEleves, setLoadingEleves] = useState(false)
+
+  // Date picker (for template variables of type 'date')
+  const [datePickerKey, setDatePickerKey] = useState<string | null>(null)
+  const [dateValues, setDateValues] = useState<Record<string, Date>>({})
+
   const isFreeMode = selected?.id === 'free'
+
+  // Variables actually shown to the teacher (locked matière is injected, not asked).
+  const visibleVariables = useMemo(
+    () => (selected?.variables ?? []).filter(v => !(v.key === 'matiere' && lockMatiere)),
+    [selected, lockMatiere],
+  )
+
+  // Effective variable map used to fill the template (adds the locked matière).
+  const effectiveVars = useMemo(
+    () => (lockMatiere && teacherMatiere ? { ...vars, matiere: teacherMatiere } : vars),
+    [vars, lockMatiere, teacherMatiere],
+  )
 
   const title = (tmpl: MessageTemplate) =>
     lang === 'ar' ? tmpl.title_ar : lang === 'en' ? tmpl.title_en : tmpl.title_fr
@@ -48,8 +85,8 @@ export default function TeacherComposeScreen() {
   const templateText = useMemo(() => {
     if (!selected || isFreeMode) return freeBody
     const tmpl = lang === 'ar' ? selected.template_ar : lang === 'en' ? selected.template_en : selected.template_fr
-    return fillTemplate(tmpl, { ...vars, elevePrenom: '{élève}' })
-  }, [selected, vars, lang, freeBody, isFreeMode])
+    return fillTemplate(tmpl, { ...effectiveVars, elevePrenom: '{élève}' })
+  }, [selected, effectiveVars, lang, freeBody, isFreeMode])
 
   const subjectText = isFreeMode ? freeSubject : selected ? title(selected) : ''
 
@@ -57,19 +94,95 @@ export default function TeacherComposeScreen() {
     setSelectedClasses(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])
   }
 
-  const canSend = selectedClasses.length > 0 && (isFreeMode ? freeSubject.trim() && freeBody.trim() : selected != null)
+  // ── Students ───────────────────────────────────────────────────────────
+  const elevesByClasse = useMemo(() => {
+    const map: Record<string, EleveDoc[]> = {}
+    eleves.forEach(e => { (map[e.classe] ||= []).push(e) })
+    Object.values(map).forEach(list => list.sort((a, b) => eleveName(a).localeCompare(eleveName(b), 'fr')))
+    return map
+  }, [eleves])
+
+  const selectedEleves = useMemo(
+    () => eleves.filter(e => selectedEleveIds.has(eleveId(e))),
+    [eleves, selectedEleveIds],
+  )
+
+  const parentUids = useMemo(
+    () => [...new Set(selectedEleves.map(e => (e as any).parentUid as string | undefined).filter(Boolean) as string[])],
+    [selectedEleves],
+  )
+
+  const loadEleves = async () => {
+    setLoadingEleves(true)
+    try {
+      const list = await listEleves({ classes: selectedClasses })
+      setEleves(list)
+      setSelectedEleveIds(new Set(list.map(eleveId)))
+    } catch (e: any) {
+      Alert.alert(t('teacher.sendFailed'), e?.message)
+    } finally {
+      setLoadingEleves(false)
+    }
+  }
+
+  const toggleEleve = (id: string) =>
+    setSelectedEleveIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+
+  const setClasseSelection = (classe: string, on: boolean) =>
+    setSelectedEleveIds(prev => {
+      const next = new Set(prev)
+      ;(elevesByClasse[classe] || []).forEach(e => { on ? next.add(eleveId(e)) : next.delete(eleveId(e)) })
+      return next
+    })
+
+  const onPickDate = (key: string, d: Date) => {
+    setDateValues(prev => ({ ...prev, [key]: d }))
+    setVars(prev => ({ ...prev, [key]: formatLongDate(d, lang, true) }))
+  }
+
+  // ── Navigation between steps ───────────────────────────────────────────
+  const contentValid = isFreeMode
+    ? !!(freeSubject.trim() && freeBody.trim())
+    : selected != null
+
+  const canSend = contentValid && parentUids.length > 0
+
+  const goNext = async () => {
+    if (step === 'variables') setStep('classes')
+    else if (step === 'classes') {
+      if (selectedClasses.length === 0) return
+      await loadEleves()
+      setStep('students')
+    } else if (step === 'students') setStep('preview')
+    else if (step === 'preview') handleSend()
+  }
+
+  const goBack = () => {
+    const i = STEP_ORDER.indexOf(step)
+    if (i <= 0) nav.goBack()
+    else setStep(STEP_ORDER[i - 1])
+  }
+
+  const recipientLabel =
+    `${selectedEleves.length} ${lang === 'ar' ? 'تلميذ' : lang === 'en' ? 'student(s)' : 'élève(s)'} · ${selectedClasses.join(', ')}`
 
   const handleSend = async () => {
     if (!profile || !canSend) return
     setSending(true)
     try {
-      const result = await broadcastToClasses({
-        classes: selectedClasses,
-        subject: subjectText,
-        body: templateText,
+      const result = await broadcastToParents({
+        parentUids,
+        label:    recipientLabel,
+        classe:   selectedClasses.join(', '),
+        subject:  subjectText,
+        body:     templateText,
         urgent,
         category: 'announcement',
-        teacher: { uid: profile.uid, nom: profile.nom, prenom: profile.prenom },
+        teacher:  { uid: profile.uid, nom: profile.nom, prenom: profile.prenom },
       })
       Alert.alert(
         t('teacher.messageSent'),
@@ -94,7 +207,7 @@ export default function TeacherComposeScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => step === 'template' ? nav.goBack() : setStep(step === 'preview' ? 'classes' : step === 'classes' ? 'variables' : 'template')} hitSlop={10}
+        <Pressable onPress={goBack} hitSlop={10}
           style={[styles.iconBtn, { backgroundColor: theme.surface }]}>
           <ChevronLeft size={20} color={theme.text} strokeWidth={2} />
         </Pressable>
@@ -103,7 +216,7 @@ export default function TeacherComposeScreen() {
             {t('teacher.newMessage')}
           </Text>
           <Text style={{ color: theme.textSoft, fontSize: 12, marginTop: 2 }}>
-            {step === 'template' ? '1/4' : step === 'variables' ? '2/4' : step === 'classes' ? '3/4' : '4/4'}
+            {STEP_ORDER.indexOf(step) + 1}/{STEP_ORDER.length}
           </Text>
         </View>
       </View>
@@ -177,7 +290,18 @@ export default function TeacherComposeScreen() {
                   <Text style={{ color: theme.text, fontWeight: '800', fontSize: 16, marginStart: 10 }}>{title(selected)}</Text>
                 </View>
 
-                {selected.variables.map(v => (
+                {/* Locked subject for single-subject teachers */}
+                {lockMatiere && selected.variables.some(v => v.key === 'matiere') && (
+                  <View style={[styles.lockedRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <Lock size={14} color={theme.textSoft} strokeWidth={2} />
+                    <Text style={{ flex: 1, marginStart: 8, color: theme.textSoft, fontSize: 12, fontWeight: '600' }}>
+                      {lang === 'ar' ? 'المادة' : lang === 'en' ? 'Subject' : 'Matière'}
+                    </Text>
+                    <Text style={{ color: theme.text, fontWeight: '800', fontSize: 13 }}>{teacherMatiere}</Text>
+                  </View>
+                )}
+
+                {visibleVariables.map(v => (
                   <View key={v.key} style={{ marginBottom: 14 }}>
                     <Text style={[styles.label, { color: theme.textSoft }]}>{varLabel(v)}</Text>
                     {v.type === 'select' && v.options ? (
@@ -192,6 +316,18 @@ export default function TeacherComposeScreen() {
                           )
                         })}
                       </ScrollView>
+                    ) : v.type === 'date' ? (
+                      <TouchableOpacity
+                        onPress={() => setDatePickerKey(v.key)}
+                        style={[styles.input, styles.dateBtn, { borderColor: theme.border, backgroundColor: theme.white }]}
+                      >
+                        <CalendarDays size={18} color={dateValues[v.key] ? theme.primary : theme.textMuted} strokeWidth={2} />
+                        <Text style={{ flex: 1, marginStart: 10, fontSize: 15, color: dateValues[v.key] ? theme.text : theme.textMuted }}>
+                          {dateValues[v.key]
+                            ? formatLongDate(dateValues[v.key], lang, true)
+                            : (lang === 'ar' ? 'اختر التاريخ' : lang === 'en' ? 'Choose a date' : 'Choisir une date')}
+                        </Text>
+                      </TouchableOpacity>
                     ) : (
                       <TextInput
                         value={vars[v.key] || ''}
@@ -246,7 +382,73 @@ export default function TeacherComposeScreen() {
           </>
         )}
 
-        {/* ── Step 4: Preview & Send ──────────────────── */}
+        {/* ── Step 4: Student selection ───────────────── */}
+        {step === 'students' && (
+          <>
+            <Text style={[styles.label, { color: theme.textSoft }]}>
+              {lang === 'ar' ? 'التلاميذ المعنيون' : lang === 'en' ? 'Concerned students' : 'Élèves concernés'}
+            </Text>
+            <Text style={{ color: theme.textSoft, fontSize: 12, marginBottom: 12 }}>
+              {selectedEleves.length}/{eleves.length} · {parentUids.length} {lang === 'ar' ? 'ولي' : lang === 'en' ? 'parent(s)' : 'parent(s)'}
+            </Text>
+
+            {loadingEleves ? (
+              <ActivityIndicator color={theme.primary} style={{ marginTop: 24 }} />
+            ) : eleves.length === 0 ? (
+              <View style={[styles.lockedRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Users size={16} color={theme.textSoft} strokeWidth={1.75} />
+                <Text style={{ flex: 1, marginStart: 10, color: theme.textSoft, fontSize: 13 }}>
+                  {lang === 'ar' ? 'لا يوجد تلاميذ' : lang === 'en' ? 'No students found' : 'Aucun élève trouvé'}
+                </Text>
+              </View>
+            ) : (
+              Object.keys(elevesByClasse).sort().map(classe => {
+                const list = elevesByClasse[classe]
+                const allOn = list.every(e => selectedEleveIds.has(eleveId(e)))
+                return (
+                  <View key={classe} style={{ marginBottom: 16 }}>
+                    <View style={styles.classHeaderRow}>
+                      <Text style={{ color: theme.text, fontWeight: '800', fontSize: 14 }}>{classe}</Text>
+                      <TouchableOpacity onPress={() => setClasseSelection(classe, !allOn)} hitSlop={8}>
+                        <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 12 }}>
+                          {allOn
+                            ? (lang === 'ar' ? 'إلغاء الكل' : lang === 'en' ? 'Deselect all' : 'Tout désélectionner')
+                            : (lang === 'ar' ? 'تحديد الكل' : lang === 'en' ? 'Select all' : 'Tout sélectionner')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    {list.map(e => {
+                      const id = eleveId(e)
+                      const on = selectedEleveIds.has(id)
+                      const hasParent = !!(e as any).parentUid
+                      return (
+                        <TouchableOpacity
+                          key={id}
+                          onPress={() => toggleEleve(id)}
+                          style={[styles.eleveRow, { borderColor: theme.border, backgroundColor: on ? theme.primarySurface : 'transparent' }]}
+                        >
+                          <View style={[styles.checkbox, { borderColor: on ? theme.primary : theme.borderStrong, backgroundColor: on ? theme.primary : 'transparent' }]}>
+                            {on && <Check size={13} color="#fff" strokeWidth={3} />}
+                          </View>
+                          <Text style={{ flex: 1, marginStart: 12, color: theme.text, fontSize: 14, fontWeight: '600' }} numberOfLines={1}>
+                            {eleveName(e)}
+                          </Text>
+                          {!hasParent && (
+                            <Text style={{ color: theme.warning, fontSize: 10, fontWeight: '700' }}>
+                              {lang === 'ar' ? 'بدون ولي' : lang === 'en' ? 'no parent' : 'sans parent'}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
+                )
+              })
+            )}
+          </>
+        )}
+
+        {/* ── Step 5: Preview & Send ──────────────────── */}
         {step === 'preview' && (
           <>
             <View style={[styles.confirmCard, { backgroundColor: theme.primarySurface, borderColor: theme.primaryBorder }]}>
@@ -254,7 +456,7 @@ export default function TeacherComposeScreen() {
               <Text style={{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10, writingDirection: lang === 'ar' ? 'rtl' : 'ltr' }}>{templateText}</Text>
               <View style={[styles.divider, { backgroundColor: theme.primaryBorder }]} />
               <Text style={{ color: theme.primary, fontWeight: '600', fontSize: 13 }}>
-                → {selectedClasses.join(', ')}
+                → {recipientLabel}
               </Text>
               {urgent && <Text style={{ color: theme.danger, fontWeight: '700', fontSize: 12, marginTop: 4 }}>🚨 {t('compose.urgent')}</Text>}
             </View>
@@ -265,31 +467,43 @@ export default function TeacherComposeScreen() {
       {/* Bottom bar */}
       <View style={[styles.bottomBar, { borderTopColor: theme.border }]}>
         {step !== 'template' && (
-          <TouchableOpacity onPress={() => setStep(step === 'preview' ? 'classes' : step === 'classes' ? 'variables' : 'template')}
+          <TouchableOpacity onPress={goBack}
             style={[styles.backBtn, { borderColor: theme.border }]}>
             <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>{t('common.back')}</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity
-          onPress={() => {
-            if (step === 'template') return
-            if (step === 'variables') setStep('classes')
-            else if (step === 'classes') setStep('preview')
-            else if (step === 'preview') handleSend()
-          }}
-          disabled={step === 'template' || (step === 'preview' && !canSend) || sending}
-          style={[styles.nextBtn, {
-            backgroundColor: (step === 'template' || (step === 'preview' && !canSend)) ? theme.surfaceAlt : theme.primary,
-            flex: step === 'template' ? 0 : 2,
-          }]}
-        >
-          {sending ? <ActivityIndicator color="#fff" /> : (
-            <Text style={{ color: step === 'template' ? theme.textMuted : '#fff', fontWeight: '800', fontSize: 15 }}>
-              {step === 'preview' ? t('compose.send') : t('common.confirm')}
-            </Text>
-          )}
-        </TouchableOpacity>
+        {(() => {
+          const nextDisabled =
+            step === 'template' ||
+            (step === 'classes' && selectedClasses.length === 0) ||
+            (step === 'students' && parentUids.length === 0) ||
+            (step === 'preview' && !canSend) ||
+            sending || loadingEleves
+          return (
+            <TouchableOpacity
+              onPress={goNext}
+              disabled={nextDisabled}
+              style={[styles.nextBtn, {
+                backgroundColor: nextDisabled ? theme.surfaceAlt : theme.primary,
+                flex: step === 'template' ? 0 : 2,
+              }]}
+            >
+              {sending || loadingEleves ? <ActivityIndicator color={theme.primary} /> : (
+                <Text style={{ color: nextDisabled ? theme.textMuted : '#fff', fontWeight: '800', fontSize: 15 }}>
+                  {step === 'preview' ? t('compose.send') : t('common.confirm')}
+                </Text>
+              )}
+            </TouchableOpacity>
+          )
+        })()}
       </View>
+
+      <DatePickerSheet
+        visible={datePickerKey != null}
+        value={datePickerKey ? dateValues[datePickerKey] ?? null : null}
+        onSelect={d => { if (datePickerKey) onPickDate(datePickerKey, d) }}
+        onClose={() => setDatePickerKey(null)}
+      />
     </SafeAreaView>
   )
 }
@@ -322,5 +536,12 @@ const styles = StyleSheet.create({
 
   bottomBar: { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: StyleSheet.hairlineWidth },
   backBtn: { paddingHorizontal: 20, paddingVertical: 14, borderRadius: 12, borderWidth: 1.5 },
-  nextBtn: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  nextBtn: { paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+
+  lockedRow: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
+  dateBtn: { flexDirection: 'row', alignItems: 'center' },
+
+  classHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  eleveRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 12, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, marginBottom: 6 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
 })
