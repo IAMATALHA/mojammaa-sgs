@@ -15,7 +15,10 @@ export const colors = {
     text: {
       primary: '#1D3557',
       secondary: 'rgba(29, 53, 87, 0.92)',
-      tertiary: 'rgba(127, 115, 39, 0.48)',
+      // Muted/caption text. The old olive at 48% sat around 1.8:1 on cream
+      // (failed even 3:1). Navy at 55% keeps the de-emphasised feel while
+      // clearing ~3.2:1, and stays in the same hue family as primary text.
+      tertiary: 'rgba(29, 53, 87, 0.55)',
       inverse: '#FFFFFF',
     },
     surface: {
@@ -42,14 +45,21 @@ export const colors = {
       border: 'rgba(255, 140, 66, 0.22)',
     },
     status: {
-      success: '#FFD23F',
-      successSurface: 'rgba(255, 210, 63, 0.18)',
+      // `success` must read as "good" and stay legible as text/icon on light
+      // surfaces. Yellow (#FFD23F) failed both: it reads as caution and only
+      // reached ~1.4:1 contrast. This green clears 4.5:1 on cream/white.
+      success: '#15803D',
+      successSurface: 'rgba(21, 128, 61, 0.12)',
       warning: '#FF8C42',
       warningSurface: 'rgba(255, 140, 66, 0.14)',
       danger: '#E76F51',
       dangerSurface: 'rgba(231, 111, 81, 0.14)',
       info: '#52B788',
       infoSurface: 'rgba(82, 183, 136, 0.16)',
+      // The original warm gold — kept for charts and achievement moments,
+      // never for semantic "success" text/icons.
+      gold: '#FFD23F',
+      goldSurface: 'rgba(255, 210, 63, 0.18)',
     },
     pastel: {
       green: '#52B788',
@@ -80,8 +90,8 @@ export const palette = {
 
   orange: light.status.warning,
   orangeSoft: light.status.warningSurface,
-  yellow: light.status.success,
-  yellowSoft: light.status.successSurface,
+  yellow: light.status.gold,
+  yellowSoft: light.status.goldSurface,
   green: light.pastel.green,
   greenSoft: light.pastel.greenSoft,
   rose: light.pastel.rose,
