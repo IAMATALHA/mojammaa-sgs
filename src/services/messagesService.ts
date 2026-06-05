@@ -107,12 +107,13 @@ export function subscribeMessages(
     onChange(arr)
   }
 
-  const handleErr = (err: any) => {
-    console.warn('[messages]', err?.code || err?.message)
+  const handleErr = (label: string) => (err: any) => {
+    // `label` identifie LAQUELLE des 3 requêtes échoue (diagnostic terrain).
+    console.warn(`[messages] listener=${label} code=${err?.code || err?.message}`)
     onError?.(err)
   }
 
-  const listen = (q: any) => {
+  const listen = (q: any, label: string) => {
     const bucketId = nextBucketId++
     buckets.set(bucketId, new Map())
     return onSnapshot(q, (snap: any) => {
@@ -120,12 +121,13 @@ export function subscribeMessages(
       snap.docs.forEach((d: any) => next.set(d.id, { id: d.id, ...(d.data() as MessageDoc) }))
       buckets.set(bucketId, next)
       apply()
-    }, handleErr)
+    }, handleErr(label))
   }
 
   // 1. Direct messages (new format: toIds array)
   unsubs.push(listen(
     query(collection(db, COL), where('toIds', 'array-contains', uid)),
+    'direct(toIds)',
   ))
 
   // 2. Broadcasts by toType (new format)
@@ -135,6 +137,7 @@ export function subscribeMessages(
   else if (role === 'admin') toTypes.push('teachers', 'parents')
   unsubs.push(listen(
     query(collection(db, COL), where('toType', 'in', toTypes)),
+    'broadcasts(toType)',
   ))
 
   // 3. Old format compatibility (toId string field)
@@ -143,6 +146,7 @@ export function subscribeMessages(
   else if (role === 'admin') oldToIds.push('admin', 'teachers')
   unsubs.push(listen(
     query(collection(db, COL), where('toId', 'in', oldToIds)),
+    'legacy(toId)',
   ))
 
   return () => unsubs.forEach(u => u())

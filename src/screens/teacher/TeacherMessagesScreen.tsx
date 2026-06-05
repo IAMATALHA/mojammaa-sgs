@@ -139,7 +139,7 @@ export default function TeacherMessagesScreen() {
         </Pressable>
       </View>
 
-      {loadError && <MessagesErrorBanner />}
+      {loadError && displayed.length === 0 && <MessagesErrorBanner />}
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>

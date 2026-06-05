@@ -171,7 +171,7 @@ export default function ParentMessagesScreen() {
         })}
       </ScrollView>
 
-      {loadError && <MessagesErrorBanner />}
+      {loadError && filtered.length === 0 && <MessagesErrorBanner />}
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
