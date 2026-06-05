@@ -25,7 +25,7 @@
  */
 
 import {
-  collection, query, where, orderBy, addDoc, onSnapshot, updateDoc, doc,
+  collection, query, where, addDoc, onSnapshot, updateDoc, doc,
   serverTimestamp, getDocs, arrayUnion,
   type Unsubscribe,
 } from 'firebase/firestore'
@@ -154,12 +154,16 @@ export function subscribeSentMessages(
   onChange: (messages: MessageDoc[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
+  // NB : pas de `orderBy` ici — `where(fromId) + orderBy(createdAt)` exigerait un
+  // index composite (fromId, createdAt) non déclaré → la requête échouait. On
+  // trie côté client (comme subscribeMessages), donc aucun index requis.
   return onSnapshot(
-    query(collection(db, COL), where('fromId', '==', uid), orderBy('createdAt', 'desc')),
+    query(collection(db, COL), where('fromId', '==', uid)),
     snap => onChange(
       snap.docs
         .map(d => ({ id: d.id, ...(d.data() as MessageDoc) }))
-        .filter(message => !(message.deletedBy || []).includes(uid)),
+        .filter(message => !(message.deletedBy || []).includes(uid))
+        .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)),
     ),
     err => onError?.(err),
   )
@@ -264,6 +268,8 @@ export async function broadcastToClasses(p: {
 }
 
 // Send to an explicit set of parent UIDs (e.g. selected students of a class).
+// `fromRole` defaults to 'professeur' so existing teacher callers are unchanged;
+// the admin compose passes 'admin'.
 export async function broadcastToParents(p: {
   parentUids: string[]
   label:      string            // human label e.g. "3 élève(s) · 1APIC-3"
@@ -273,6 +279,7 @@ export async function broadcastToParents(p: {
   urgent?:    boolean
   category?:  MessageCategory
   teacher:    { uid: string; nom: string; prenom: string }
+  fromRole?:  string
 }): Promise<{ parentsTargeted: number; messagesWritten: number; pushSent: number }> {
   const result = { parentsTargeted: p.parentUids.length, messagesWritten: 0, pushSent: 0 }
   if (p.parentUids.length === 0) return result
@@ -284,7 +291,7 @@ export async function broadcastToParents(p: {
     body:     p.body,
     fromId:   p.teacher.uid,
     fromNom,
-    fromRole: 'professeur',
+    fromRole: p.fromRole || 'professeur',
     toType:   'user',
     toIds:    p.parentUids,
     toLabel:  p.label,
@@ -307,6 +314,7 @@ export async function broadcastPersonalized(p: {
   urgent?:    boolean
   category?:  MessageCategory
   teacher:    { uid: string; nom: string; prenom: string }
+  fromRole?:  string
 }): Promise<{ messagesWritten: number; pushSent: number; parentsTargeted: number }> {
   const result = { messagesWritten: 0, pushSent: 0, parentsTargeted: 0 }
   if (p.recipients.length === 0) return result
@@ -321,7 +329,7 @@ export async function broadcastPersonalized(p: {
       body:     r.body,
       fromId:   p.teacher.uid,
       fromNom,
-      fromRole: 'professeur',
+      fromRole: p.fromRole || 'professeur',
       toType:   'user',
       toIds:    [r.parentUid],
       toLabel:  r.label,

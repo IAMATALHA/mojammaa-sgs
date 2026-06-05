@@ -9,9 +9,9 @@ import {
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../contexts/ThemeContext'
+import AnimatedTabIcon from '../components/AnimatedTabIcon'
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen'
 // AdminClassesScreen merged into AdminStatsScreen
-import AdminBroadcastScreen from '../screens/admin/AdminBroadcastScreen'
 import AdminMessagesScreen from '../screens/admin/AdminMessagesScreen'
 import AdminSettingsScreen from '../screens/admin/AdminSettingsScreen'
 import AdminStatsScreen from '../screens/admin/AdminStatsScreen'
@@ -23,21 +23,8 @@ import AdminDevoirsScreen from '../screens/admin/AdminDevoirsScreen'
 const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
 
-function TabIcon({
-  Icon, color, focused, theme,
-}: { Icon: LucideIcon; color: string; focused: boolean; theme: Theme }) {
-  if (focused) {
-    return (
-      <View style={[styles.iconActive, { backgroundColor: theme.primary }]}>
-        <Icon color="#FFFFFF" size={19} strokeWidth={1.9} />
-      </View>
-    )
-  }
-  return (
-    <View style={styles.iconInactive}>
-      <Icon color={color} size={19} strokeWidth={1.8} />
-    </View>
-  )
+function TabIcon(props: { Icon: LucideIcon; color: string; focused: boolean; theme: Theme }) {
+  return <AnimatedTabIcon {...props} />
 }
 
 function AdminTabs() {
@@ -105,7 +92,6 @@ export default function AdminStack() {
       <Stack.Screen name="AdminStats" component={AdminStatsScreen} />
       <Stack.Screen name="AdminEdt" component={AdminEdtScreen} />
       <Stack.Screen name="AdminCalendar" component={AdminCalendarScreen} />
-      <Stack.Screen name="AdminBroadcast" component={AdminBroadcastScreen} />
       <Stack.Screen name="AdminAbsences" component={AdminAbsencesScreen} />
       <Stack.Screen name="AdminDevoirs" component={AdminDevoirsScreen} />
     </Stack.Navigator>

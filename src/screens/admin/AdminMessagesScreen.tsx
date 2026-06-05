@@ -7,7 +7,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import {
   X, Send, Inbox, PenSquare, AlertCircle, Users,
-  GraduationCap, Search,
+  GraduationCap, Search, CalendarDays, Check,
 } from 'lucide-react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ScreenLayout from '../../components/ScreenLayout'
@@ -15,16 +15,23 @@ import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   subscribeMessages, subscribeSentMessages, markAsRead, deleteMessage,
-  broadcast, getRecipientsList,
+  broadcast, broadcastToParents, broadcastPersonalized, getRecipientsList,
   type MessageDoc, type MessageToType,
 } from '../../services/messagesService'
+import { listEleves, type EleveDoc } from '../../services/elevesService'
+import DatePickerSheet from '../../components/DatePickerSheet'
 import * as Haptics from 'expo-haptics'
 import { MESSAGE_TEMPLATES, fillTemplate, type MessageTemplate } from '../../data/messageTemplates'
 import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
-import { formatTimestamp } from '../../utils/format'
+import { formatTimestamp, formatLongDate } from '../../utils/format'
+import { ELEVE_PLACEHOLDER, eleveKey, eleveName, elevePrenom } from '../../utils/eleveLabels'
+import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 
 type Tab = 'inbox' | 'sent'
-type TargetMode = 'all' | 'parents' | 'teachers' | 'class' | 'person'
+// Audiences entières (all/parents/teachers) → un seul doc broadcast.
+// 'class'  → picker élève + perso {élève} (parité prof, sur n'importe quelle classe).
+// 'people' → multi-sélection de personnes nommées (profs et/ou parents).
+type TargetMode = 'all' | 'parents' | 'teachers' | 'class' | 'people'
 
 interface Recipient { uid: string; nom: string; prenom: string; email: string; role: string; detail: string }
 
@@ -37,13 +44,21 @@ export default function AdminMessagesScreen() {
   const [inboxMsgs, setInboxMsgs] = useState<MessageDoc[]>([])
   const [sentMsgs, setSentMsgs] = useState<MessageDoc[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [detail, setDetail] = useState<MessageDoc | null>(null)
   const [showCompose, setShowCompose] = useState(false)
 
   useEffect(() => {
     if (!profile?.uid) return
     setLoading(true)
-    const u1 = subscribeMessages(profile.uid, profile.role || 'admin', list => { setInboxMsgs(list); setLoading(false) })
+    setLoadError(false)
+    const u1 = subscribeMessages(
+      profile.uid, profile.role || 'admin',
+      list => { setInboxMsgs(list); setLoadError(false); setLoading(false) },
+      () => { setLoadError(true); setLoading(false) },
+    )
+    // L'échec de la requête « envoyés » ne doit pas alarmer toute la messagerie
+    // (seul l'inbox pilote la bannière).
     const u2 = subscribeSentMessages(profile.uid, list => setSentMsgs(list))
     return () => { u1(); u2() }
   }, [profile?.uid])
@@ -133,6 +148,8 @@ export default function AdminMessagesScreen() {
         </Pressable>
       </View>
 
+      {loadError && <MessagesErrorBanner />}
+
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
       ) : displayed.length === 0 ? (
@@ -194,7 +211,8 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
 }) {
   const [targetMode, setTargetMode] = useState<TargetMode>('all')
   const [selectedClasses, setSelectedClasses] = useState<string[]>([])
-  const [selectedPerson, setSelectedPerson] = useState<Recipient | null>(null)
+  const [selectedPeople, setSelectedPeople] = useState<Recipient[]>([])
+  const [roleFilter, setRoleFilter] = useState<'all' | 'parents' | 'teachers'>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTmpl, setSelectedTmpl] = useState<MessageTemplate | null>(null)
   const [tmplOpen, setTmplOpen] = useState(false)
@@ -209,6 +227,15 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
   const [allTeachers, setAllTeachers] = useState<Recipient[]>([])
   const [loadingR, setLoadingR] = useState(true)
 
+  // Class mode → student picker (parité prof, mais sur n'importe quelle classe).
+  const [eleves, setEleves] = useState<EleveDoc[]>([])
+  const [selectedEleveIds, setSelectedEleveIds] = useState<Set<string>>(new Set())
+  const [loadingEleves, setLoadingEleves] = useState(false)
+
+  // Date picker (variables de template de type 'date').
+  const [datePickerKey, setDatePickerKey] = useState<string | null>(null)
+  const [dateValues, setDateValues] = useState<Record<string, Date>>({})
+
   const loadRecipients = useCallback(async () => {
     setLoadingR(true)
     try {
@@ -221,33 +248,86 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
 
   useEffect(() => { loadRecipients() }, [])
 
+  // Charge les élèves quand le set de classes change ; sélection démarre vide.
+  useEffect(() => {
+    let cancelled = false
+    if (targetMode !== 'class' || selectedClasses.length === 0) {
+      setEleves([]); setSelectedEleveIds(new Set()); return
+    }
+    setLoadingEleves(true)
+    listEleves({ classes: selectedClasses })
+      .then(list => {
+        if (cancelled) return
+        setEleves(list)
+        setSelectedEleveIds(new Set())
+      })
+      .catch(() => { if (!cancelled) setEleves([]) })
+      .finally(() => { if (!cancelled) setLoadingEleves(false) })
+    return () => { cancelled = true }
+  }, [selectedClasses, targetMode])
+
+  const elevesByClasse = useMemo(() => {
+    const map: Record<string, EleveDoc[]> = {}
+    eleves.forEach(e => { (map[e.classe] ||= []).push(e) })
+    Object.values(map).forEach(l => l.sort((a, b) => eleveName(a).localeCompare(eleveName(b), 'fr')))
+    return map
+  }, [eleves])
+
+  const selectedEleves = useMemo(() => eleves.filter(e => selectedEleveIds.has(eleveKey(e))), [eleves, selectedEleveIds])
+  const parentUids = useMemo(
+    () => [...new Set(selectedEleves.map(e => (e as any).parentUid as string | undefined).filter(Boolean) as string[])],
+    [selectedEleves],
+  )
+  const toggleEleve = (id: string) => setSelectedEleveIds(prev => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next
+  })
+  const allSelected = eleves.length > 0 && eleves.every(e => selectedEleveIds.has(eleveKey(e)))
+  const selectAll = (on: boolean) => setSelectedEleveIds(on ? new Set(eleves.map(eleveKey)) : new Set())
+
+  const toggleClass = (c: string) => setSelectedClasses(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])
+
+  const togglePerson = (r: Recipient) => setSelectedPeople(prev =>
+    prev.some(p => p.uid === r.uid) ? prev.filter(p => p.uid !== r.uid) : [...prev, r])
+
   const relevantTemplates = useMemo(() => {
     return MESSAGE_TEMPLATES.filter(tmpl => {
       if (targetMode === 'teachers') return tmpl.target === 'teachers' || tmpl.target === 'all'
-      if (targetMode === 'person' && selectedPerson?.role === 'professeur') return tmpl.target === 'teachers' || tmpl.target === 'all'
       if (targetMode === 'parents' || targetMode === 'class') return tmpl.target === 'parents' || tmpl.target === 'all'
-      if (targetMode === 'person' && selectedPerson?.role === 'parent') return tmpl.target === 'parents' || tmpl.target === 'all'
+      if (targetMode === 'people') {
+        const roles = new Set(selectedPeople.map(p => p.role))
+        if (roles.size === 1 && roles.has('professeur')) return tmpl.target === 'teachers' || tmpl.target === 'all'
+        if (roles.size === 1 && roles.has('parent')) return tmpl.target === 'parents' || tmpl.target === 'all'
+        return true
+      }
       return true
     })
-  }, [targetMode, selectedPerson])
+  }, [targetMode, selectedPeople])
 
-  const searchResults = useMemo(() => {
+  // Liste des personnes pour la multi-sélection (filtrée par rôle + recherche).
+  const peopleList = useMemo(() => {
+    const base = roleFilter === 'parents' ? allParents : roleFilter === 'teachers' ? allTeachers : [...allParents, ...allTeachers]
     const q = searchQuery.toLowerCase().trim()
-    if (!q) return targetMode === 'person' ? [...allParents, ...allTeachers].slice(0, 15) : []
-    const list = [...allParents, ...allTeachers]
-    return list.filter(r =>
-      `${r.prenom} ${r.nom}`.toLowerCase().includes(q) || r.email.toLowerCase().includes(q) || r.detail.toLowerCase().includes(q)
-    ).slice(0, 20)
-  }, [searchQuery, allParents, allTeachers, targetMode])
+    const filtered = q
+      ? base.filter(r => `${r.prenom} ${r.nom}`.toLowerCase().includes(q) || r.email.toLowerCase().includes(q) || r.detail.toLowerCase().includes(q))
+      : base
+    return filtered.slice(0, 40)
+  }, [roleFilter, searchQuery, allParents, allTeachers])
 
-  const toggleClass = (c: string) => setSelectedClasses(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])
+  // {élève} n'a de sens qu'en mode classe (1 élève par destinataire). Ailleurs,
+  // on injecte un terme générique pour éviter de laisser un placeholder brut.
+  const genericChild = lang === 'ar' ? 'ابنكم' : lang === 'en' ? 'your child' : 'votre enfant'
+  const fillVars = (nv: Record<string, string>) => ({
+    ...nv,
+    elevePrenom: targetMode === 'class' ? ELEVE_PLACEHOLDER : genericChild,
+  })
 
   const pickTemplate = (tmpl: MessageTemplate) => {
     setSelectedTmpl(tmpl)
     setVars({})
+    setDateValues({})
     setSubject(lang === 'ar' ? tmpl.title_ar : lang === 'en' ? tmpl.title_en : tmpl.title_fr)
     const tplText = lang === 'ar' ? tmpl.template_ar : lang === 'en' ? tmpl.template_en : tmpl.template_fr
-    setBody(fillTemplate(tplText, { elevePrenom: selectedPerson?.prenom || '{élève}' }))
+    setBody(fillTemplate(tplText, fillVars({})))
   }
 
   const updateVar = (key: string, val: string) => {
@@ -255,58 +335,117 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
     setVars(nv)
     if (selectedTmpl) {
       const tpl = lang === 'ar' ? selectedTmpl.template_ar : lang === 'en' ? selectedTmpl.template_en : selectedTmpl.template_fr
-      setBody(fillTemplate(tpl, { ...nv, elevePrenom: selectedPerson?.prenom || '{élève}' }))
+      setBody(fillTemplate(tpl, fillVars(nv)))
     }
+  }
+
+  const onPickDate = (key: string, d: Date) => {
+    setDateValues(prev => ({ ...prev, [key]: d }))
+    updateVar(key, formatLongDate(d, lang, true))
   }
 
   const varLabel = (v: any) => lang === 'ar' ? v.label_ar : lang === 'en' ? v.label_en : v.label_fr
   const tmplTitle = (tmpl: MessageTemplate) => lang === 'ar' ? tmpl.title_ar : lang === 'en' ? tmpl.title_en : tmpl.title_fr
 
+  const classRecipientLabel =
+    `${selectedEleves.length} ${lang === 'ar' ? 'تلميذ' : lang === 'en' ? 'student(s)' : 'élève(s)'} · ${selectedClasses.join(', ')}`
+
   const targetLabel = useMemo(() => {
     if (targetMode === 'all') return t('admin.everyone')
     if (targetMode === 'parents') return t('admin.parentsBroadcast')
     if (targetMode === 'teachers') return t('admin.teachers')
-    if (targetMode === 'class') return selectedClasses.join(', ') || t('tabs.classes')
-    if (targetMode === 'person' && selectedPerson) return `${selectedPerson.prenom} ${selectedPerson.nom}`
+    if (targetMode === 'class') return classRecipientLabel
+    if (targetMode === 'people') {
+      if (selectedPeople.length === 1) return `${selectedPeople[0].prenom} ${selectedPeople[0].nom}`
+      return `${selectedPeople.length} ${lang === 'ar' ? 'مستلم' : lang === 'en' ? 'recipient(s)' : 'destinataire(s)'}`
+    }
     return ''
-  }, [targetMode, selectedClasses, selectedPerson, t])
+  }, [targetMode, selectedClasses, selectedPeople, classRecipientLabel, lang, t])
 
   const canSend = subject.trim().length > 0 && body.trim().length > 0 && (
     targetMode === 'all' || targetMode === 'parents' || targetMode === 'teachers' ||
-    (targetMode === 'class' && selectedClasses.length > 0) ||
-    (targetMode === 'person' && selectedPerson != null)
+    (targetMode === 'class' && parentUids.length > 0) ||
+    (targetMode === 'people' && selectedPeople.length > 0)
   )
 
   const handleSend = async () => {
     if (!profile || !canSend) return
     setSending(true)
+    const fromNom = `${profile.prenom} ${profile.nom}`.trim()
+    const fromRole = profile.role || 'admin'
+    const sender = { uid: profile.uid, nom: profile.nom, prenom: profile.prenom }
     try {
-      const fromNom = `${profile.prenom} ${profile.nom}`.trim()
-      let toType: MessageToType = 'all'
-      let toIds: string[] = []
-      if (targetMode === 'parents') { toType = 'parents'; toIds = allParents.map(p => p.uid) }
-      else if (targetMode === 'teachers') { toType = 'teachers'; toIds = allTeachers.map(p => p.uid) }
-      else if (targetMode === 'class') { toType = 'class'; toIds = selectedClasses }
-      else if (targetMode === 'person' && selectedPerson) { toType = 'user'; toIds = [selectedPerson.uid] }
+      let reach = 0
 
-      const result = await broadcast({
-        type: targetMode === 'person' ? 'direct' : 'announcement',
-        subject: subject.trim(), body: body.trim(),
-        fromId: profile.uid, fromNom, fromRole: profile.role || 'admin',
-        toType, toIds, toLabel: targetLabel,
-        priority: urgent ? 'urgent' : 'normal', category: 'announcement',
-      })
-      Alert.alert(t('admin.sent'), targetLabel, [{ text: 'OK', onPress: onClose }])
+      if (targetMode === 'class') {
+        if (body.includes(ELEVE_PLACEHOLDER)) {
+          // Personnalisé : un message par élève → son propre parent.
+          const recipients = selectedEleves
+            .filter(e => (e as any).parentUid)
+            .map(e => ({
+              parentUid: (e as any).parentUid as string,
+              body:      body.split(ELEVE_PLACEHOLDER).join(elevePrenom(e)).trim(),
+              label:     `${eleveName(e)} · ${e.classe}`,
+              eleveId:   e.codeMassar,
+            }))
+          const r = await broadcastPersonalized({
+            recipients, subject: subject.trim(), classe: selectedClasses.join(', '),
+            urgent, category: 'announcement', teacher: sender, fromRole,
+          })
+          reach = r.parentsTargeted
+        } else {
+          // Générique : un seul message aux parents des élèves sélectionnés.
+          const r = await broadcastToParents({
+            parentUids, label: classRecipientLabel, classe: selectedClasses.join(', '),
+            subject: subject.trim(), body: body.trim(), urgent, category: 'announcement',
+            teacher: sender, fromRole,
+          })
+          reach = r.parentsTargeted
+        }
+      } else if (targetMode === 'people') {
+        await broadcast({
+          type: selectedPeople.length === 1 ? 'direct' : 'announcement',
+          subject: subject.trim(), body: body.trim(),
+          fromId: profile.uid, fromNom, fromRole,
+          toType: 'user', toIds: selectedPeople.map(p => p.uid), toLabel: targetLabel,
+          priority: urgent ? 'urgent' : 'normal', category: 'announcement',
+        })
+        reach = selectedPeople.length
+      } else {
+        // Audiences entières : all / parents / teachers.
+        let toType: MessageToType = 'all'
+        let toIds: string[] = []
+        if (targetMode === 'parents') { toType = 'parents'; toIds = allParents.map(p => p.uid) }
+        else if (targetMode === 'teachers') { toType = 'teachers'; toIds = allTeachers.map(p => p.uid) }
+        await broadcast({
+          type: 'announcement', subject: subject.trim(), body: body.trim(),
+          fromId: profile.uid, fromNom, fromRole,
+          toType, toIds, toLabel: targetLabel,
+          priority: urgent ? 'urgent' : 'normal', category: 'announcement',
+        })
+        reach = toIds.length || allParents.length + allTeachers.length
+      }
+
+      Alert.alert(
+        t('admin.sent'),
+        `${targetLabel}${reach ? ` · ${reach}` : ''}`,
+        [{ text: 'OK', onPress: onClose }],
+      )
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message)
     } finally { setSending(false) }
   }
 
+  const switchMode = (mode: TargetMode) => {
+    setTargetMode(mode)
+    setSelectedTmpl(null); setSubject(''); setBody(''); setVars({}); setDateValues({})
+  }
+
   const TARGET_OPTS: { mode: TargetMode; label: string; icon: any }[] = [
-    { mode: 'person', label: lang === 'ar' ? 'شخص' : lang === 'en' ? 'Person' : 'Personne', icon: Search },
+    { mode: 'people', label: lang === 'ar' ? 'أشخاص' : lang === 'en' ? 'People' : 'Personnes', icon: Search },
+    { mode: 'class', label: t('tabs.classes'), icon: GraduationCap },
     { mode: 'parents', label: 'Parents', icon: Users },
     { mode: 'teachers', label: t('admin.teachers'), icon: GraduationCap },
-    { mode: 'class', label: t('tabs.classes'), icon: GraduationCap },
     { mode: 'all', label: t('admin.everyone'), icon: Users },
   ]
 
@@ -326,7 +465,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
               {TARGET_OPTS.map(opt => {
                 const sel = targetMode === opt.mode
                 return (
-                  <TouchableOpacity key={opt.mode} onPress={() => { setTargetMode(opt.mode); setSelectedTmpl(null); setSubject(''); setBody(''); setVars({}) }}
+                  <TouchableOpacity key={opt.mode} onPress={() => switchMode(opt.mode)}
                     style={[cs.chip, { borderColor: sel ? theme.primary : theme.border, backgroundColor: sel ? theme.primary : 'transparent' }]}>
                     <opt.icon size={12} color={sel ? '#fff' : theme.textSoft} strokeWidth={2} />
                     <Text style={{ color: sel ? '#fff' : theme.text, fontWeight: '700', fontSize: 12, marginStart: 4 }}>{opt.label}</Text>
@@ -335,24 +474,103 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
               })}
             </ScrollView>
 
-            {/* Class chips */}
+            {/* Class chips + student picker */}
             {targetMode === 'class' && (
-              <View style={[cs.chipRow, { marginTop: 10 }]}>
-                {loadingR ? <ActivityIndicator color={theme.primary} /> : availableClasses.map(c => {
-                  const sel = selectedClasses.includes(c)
-                  return (
-                    <TouchableOpacity key={c} onPress={() => toggleClass(c)}
-                      style={[cs.chip, { borderColor: sel ? theme.primary : theme.border, backgroundColor: sel ? theme.primary : 'transparent' }]}>
-                      <Text style={{ color: sel ? '#fff' : theme.text, fontWeight: '700', fontSize: 12 }}>{c}</Text>
+              <>
+                <View style={[cs.chipRow, { marginTop: 10 }]}>
+                  {loadingR ? <ActivityIndicator color={theme.primary} /> : availableClasses.map(c => {
+                    const sel = selectedClasses.includes(c)
+                    return (
+                      <TouchableOpacity key={c} onPress={() => toggleClass(c)}
+                        style={[cs.chip, { borderColor: sel ? theme.primary : theme.border, backgroundColor: sel ? theme.primary : 'transparent' }]}>
+                        <Text style={{ color: sel ? '#fff' : theme.text, fontWeight: '700', fontSize: 12 }}>{c}</Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+
+                <View style={cs.studentsHeader}>
+                  <Text style={[cs.label, { color: theme.textSoft, marginBottom: 0 }]}>
+                    {lang === 'ar' ? 'التلاميذ' : lang === 'en' ? 'Students' : 'Élèves'}
+                  </Text>
+                  {selectedEleves.length > 0 && (
+                    <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 12 }}>
+                      {selectedEleves.length} · {parentUids.length} {lang === 'ar' ? 'ولي' : 'parent(s)'}
+                    </Text>
+                  )}
+                </View>
+
+                {loadingEleves ? (
+                  <ActivityIndicator color={theme.primary} style={{ alignSelf: 'flex-start', marginVertical: 10 }} />
+                ) : selectedClasses.length === 0 ? (
+                  <Text style={{ color: theme.textSoft, fontSize: 12 }}>
+                    {lang === 'ar' ? 'اختر قسماً أولاً' : lang === 'en' ? 'Select a class first' : 'Choisis d’abord une classe'}
+                  </Text>
+                ) : eleves.length === 0 ? (
+                  <Text style={{ color: theme.textSoft, fontSize: 12 }}>
+                    {lang === 'ar' ? 'لا يوجد تلاميذ' : lang === 'en' ? 'No students found' : 'Aucun élève trouvé'}
+                  </Text>
+                ) : (
+                  <>
+                    <TouchableOpacity onPress={() => selectAll(!allSelected)}
+                      style={[cs.wholeClassBtn, { borderColor: allSelected ? theme.primary : theme.border, backgroundColor: allSelected ? theme.primary : theme.surface }]}>
+                      <Users size={15} color={allSelected ? '#fff' : theme.textSoft} strokeWidth={2} />
+                      <Text style={{ flex: 1, marginStart: 8, color: allSelected ? '#fff' : theme.text, fontWeight: '800', fontSize: 13 }}>
+                        {lang === 'ar' ? 'كل القسم' : lang === 'en' ? 'Whole class' : 'Toute la classe'}
+                      </Text>
+                      {allSelected && <Check size={16} color="#fff" strokeWidth={3} />}
                     </TouchableOpacity>
-                  )
-                })}
-              </View>
+
+                    {Object.keys(elevesByClasse).sort().map(classe => (
+                      <View key={classe} style={{ marginTop: 8 }}>
+                        {selectedClasses.length > 1 && (
+                          <Text style={{ color: theme.textMuted, fontWeight: '800', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginVertical: 6 }}>{classe}</Text>
+                        )}
+                        {elevesByClasse[classe].map(e => {
+                          const id = eleveKey(e)
+                          const on = selectedEleveIds.has(id)
+                          const hasParent = !!(e as any).parentUid
+                          return (
+                            <TouchableOpacity key={id} onPress={() => toggleEleve(id)}
+                              style={[cs.eleveRow, { borderColor: on ? theme.primary : theme.border, backgroundColor: on ? theme.primarySurface : theme.white }]}>
+                              <View style={[cs.checkbox, { borderColor: on ? theme.primary : theme.borderStrong, backgroundColor: on ? theme.primary : 'transparent' }]}>
+                                {on && <Check size={12} color="#fff" strokeWidth={3} />}
+                              </View>
+                              <Text numberOfLines={1} style={{ flex: 1, marginStart: 10, color: theme.text, fontSize: 13, fontWeight: '600' }}>{eleveName(e)}</Text>
+                              {!hasParent && (
+                                <Text style={{ color: theme.warning, fontSize: 10, fontWeight: '700' }}>
+                                  {lang === 'ar' ? 'بدون ولي' : lang === 'en' ? 'no parent' : 'sans parent'}
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                          )
+                        })}
+                      </View>
+                    ))}
+                  </>
+                )}
+              </>
             )}
 
-            {/* Person search */}
-            {targetMode === 'person' && (
+            {/* People — multi-select search */}
+            {targetMode === 'people' && (
               <View style={{ marginTop: 10 }}>
+                <View style={[cs.chipRow, { marginBottom: 8 }]}>
+                  {([
+                    { key: 'all' as const, label: lang === 'ar' ? 'الكل' : lang === 'en' ? 'All' : 'Tous' },
+                    { key: 'parents' as const, label: 'Parents' },
+                    { key: 'teachers' as const, label: t('admin.teachers') },
+                  ]).map(f => {
+                    const sel = roleFilter === f.key
+                    return (
+                      <TouchableOpacity key={f.key} onPress={() => setRoleFilter(f.key)}
+                        style={[cs.chip, { borderColor: sel ? theme.primary : theme.border, backgroundColor: sel ? theme.primary : 'transparent' }]}>
+                        <Text style={{ color: sel ? '#fff' : theme.text, fontWeight: '700', fontSize: 12 }}>{f.label}</Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+
                 <View style={[cs.searchBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <Search size={16} color={theme.textSoft} strokeWidth={2} />
                   <TextInput value={searchQuery} onChangeText={setSearchQuery}
@@ -360,29 +578,39 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
                     style={{ flex: 1, color: theme.text, fontSize: 13, marginStart: 8, paddingVertical: 0 }} />
                   {searchQuery ? <Pressable onPress={() => setSearchQuery('')}><X size={16} color={theme.textSoft} /></Pressable> : null}
                 </View>
-                {selectedPerson && (
-                  <View style={[cs.selectedPerson, { backgroundColor: theme.primarySurface, borderColor: theme.primary }]}>
-                    <View style={[cs.personAv, { backgroundColor: selectedPerson.role === 'parent' ? '#52B788' : '#D95B00' }]}>
-                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 11 }}>{(selectedPerson.prenom[0] || '').toUpperCase()}{(selectedPerson.nom[0] || '').toUpperCase()}</Text>
-                    </View>
-                    <Text style={{ flex: 1, color: theme.text, fontWeight: '700', fontSize: 13, marginStart: 8 }}>{selectedPerson.prenom} {selectedPerson.nom}</Text>
-                    <Pressable onPress={() => setSelectedPerson(null)}><X size={16} color={theme.textSoft} /></Pressable>
+
+                {selectedPeople.length > 0 && (
+                  <View style={[cs.chipRow, { marginBottom: 6 }]}>
+                    {selectedPeople.map(p => (
+                      <TouchableOpacity key={p.uid} onPress={() => togglePerson(p)}
+                        style={[cs.chip, { borderColor: theme.primary, backgroundColor: theme.primarySurface }]}>
+                        <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 12 }}>{p.prenom} {p.nom}</Text>
+                        <X size={12} color={theme.primary} strokeWidth={2} style={{ marginStart: 4 }} />
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 )}
-                {!selectedPerson && (loadingR ? <ActivityIndicator color={theme.primary} style={{ marginTop: 12 }} /> :
-                  searchResults.map(r => (
-                    <Pressable key={r.uid} onPress={() => { setSelectedPerson(r); setSelectedTmpl(null); setSubject(''); setBody(''); setVars({}) }}
-                      style={[cs.personRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                      <View style={[cs.personAv, { backgroundColor: r.role === 'parent' ? '#52B788' : '#D95B00' }]}>
-                        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 10 }}>{(r.prenom[0] || '').toUpperCase()}{(r.nom[0] || '').toUpperCase()}</Text>
-                      </View>
-                      <View style={{ flex: 1, marginStart: 8 }}>
-                        <Text style={{ color: theme.text, fontWeight: '700', fontSize: 13 }}>{r.prenom} {r.nom}</Text>
-                        {r.detail ? <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 1 }}>{r.detail}</Text> : null}
-                      </View>
-                    </Pressable>
-                  ))
-                )}
+
+                {loadingR ? <ActivityIndicator color={theme.primary} style={{ marginTop: 12 }} /> :
+                  peopleList.map(r => {
+                    const on = selectedPeople.some(p => p.uid === r.uid)
+                    return (
+                      <Pressable key={r.uid} onPress={() => togglePerson(r)}
+                        style={[cs.personRow, { backgroundColor: on ? theme.primarySurface : theme.surface, borderColor: on ? theme.primary : theme.border }]}>
+                        <View style={[cs.checkbox, { borderColor: on ? theme.primary : theme.borderStrong, backgroundColor: on ? theme.primary : 'transparent' }]}>
+                          {on && <Check size={12} color="#fff" strokeWidth={3} />}
+                        </View>
+                        <View style={[cs.personAv, { backgroundColor: r.role === 'parent' ? '#52B788' : '#D95B00', marginStart: 8 }]}>
+                          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 10 }}>{(r.prenom[0] || '').toUpperCase()}{(r.nom[0] || '').toUpperCase()}</Text>
+                        </View>
+                        <View style={{ flex: 1, marginStart: 8 }}>
+                          <Text style={{ color: theme.text, fontWeight: '700', fontSize: 13 }}>{r.prenom} {r.nom}</Text>
+                          {r.detail ? <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 1 }}>{r.detail}</Text> : null}
+                        </View>
+                      </Pressable>
+                    )
+                  })
+                }
               </View>
             )}
 
@@ -434,6 +662,16 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
                           )
                         })}
                       </ScrollView>
+                    ) : v.type === 'date' ? (
+                      <TouchableOpacity onPress={() => setDatePickerKey(v.key)}
+                        style={[cs.input, cs.dateBtn, { borderColor: theme.border, backgroundColor: theme.white }]}>
+                        <CalendarDays size={17} color={dateValues[v.key] ? theme.primary : theme.textMuted} strokeWidth={2} />
+                        <Text style={{ flex: 1, marginStart: 10, fontSize: 14, color: dateValues[v.key] ? theme.text : theme.textMuted }}>
+                          {dateValues[v.key]
+                            ? formatLongDate(dateValues[v.key], lang, true)
+                            : (lang === 'ar' ? 'اختر التاريخ' : lang === 'en' ? 'Choose a date' : 'Choisir une date')}
+                        </Text>
+                      </TouchableOpacity>
                     ) : (
                       <TextInput value={vars[v.key] || ''} onChangeText={val => updateVar(v.key, val)}
                         placeholder={v.placeholder} placeholderTextColor={theme.textMuted}
@@ -456,6 +694,15 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
               placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
               multiline textAlignVertical="top" maxLength={2000}
               style={[cs.input, cs.textarea, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]} />
+            {targetMode === 'class' && body.includes(ELEVE_PLACEHOLDER) && (
+              <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 6, fontStyle: 'italic' }}>
+                {lang === 'ar'
+                  ? 'سيُستبدل {élève} باسم كل تلميذ.'
+                  : lang === 'en'
+                    ? '"{élève}" is replaced by each student’s first name.'
+                    : '« {élève} » sera remplacé par le prénom de chaque élève.'}
+              </Text>
+            )}
 
             {/* Urgent */}
             <Pressable onPress={() => setUrgent(u => !u)}
@@ -475,6 +722,13 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
               </>
             )}
           </TouchableOpacity>
+
+          <DatePickerSheet
+            visible={datePickerKey != null}
+            value={datePickerKey ? dateValues[datePickerKey] ?? null : null}
+            onSelect={d => { if (datePickerKey) onPickDate(datePickerKey, d) }}
+            onClose={() => setDatePickerKey(null)}
+          />
         </SafeAreaView>
       </KeyboardAvoidingView>
     </Modal>
@@ -499,6 +753,11 @@ const cs = StyleSheet.create({
   urgentRow: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1, marginTop: 14 },
   dot: { width: 18, height: 18, borderRadius: 9 },
   sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 20, marginBottom: 36, paddingVertical: 14, borderRadius: 12 },
+  studentsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, marginBottom: 8 },
+  wholeClassBtn: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1.5, marginBottom: 4 },
+  eleveRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 10, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, marginBottom: 5 },
+  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  dateBtn: { flexDirection: 'row', alignItems: 'center' },
 })
 
 const styles = StyleSheet.create({

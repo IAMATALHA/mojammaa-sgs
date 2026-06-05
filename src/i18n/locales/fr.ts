@@ -12,6 +12,7 @@ const fr = {
     loading: 'Chargement…',
     error: 'Erreur',
     noData: 'Aucune donnée',
+    messagesLoadError: 'Impossible de charger les messages. Vérifie ta connexion ou mets l’app à jour.',
     logout: 'Se déconnecter',
     logoutConfirm: 'Confirmer la déconnexion ?',
     logoutTitle: 'Déconnexion',

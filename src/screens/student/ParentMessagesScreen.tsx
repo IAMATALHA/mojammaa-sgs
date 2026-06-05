@@ -15,6 +15,8 @@ import {
 } from '../../services/messagesService'
 import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
 import { formatTimestamp } from '../../utils/format'
+import MessagesErrorBanner from '../../components/MessagesErrorBanner'
+import BottomSheet from '../../components/BottomSheet'
 
 type Filter = 'all' | 'urgent' | 'school' | 'event'
 
@@ -24,6 +26,7 @@ export default function ParentMessagesScreen() {
   const { profile } = useAuth()
   const [messages, setMessages] = useState<MessageDoc[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [detail, setDetail] = useState<MessageDoc | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
@@ -33,9 +36,11 @@ export default function ParentMessagesScreen() {
   useEffect(() => {
     if (!profile?.uid) return
     setLoading(true)
+    setLoadError(false)
     const unsub = subscribeMessages(
       profile.uid, profile.role || 'parent',
-      list => { setMessages(list); setLoading(false) },
+      list => { setMessages(list); setLoadError(false); setLoading(false) },
+      () => { setLoadError(true); setLoading(false) },
     )
     return unsub
   }, [profile?.uid])
@@ -166,6 +171,8 @@ export default function ParentMessagesScreen() {
         })}
       </ScrollView>
 
+      {loadError && <MessagesErrorBanner />}
+
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
       ) : filtered.length === 0 ? (
@@ -177,50 +184,46 @@ export default function ParentMessagesScreen() {
         <FlatList data={filtered} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 24 }} />
       )}
 
-      {/* Detail + Reply modal */}
-      {detail && (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setDetail(null)}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-            <Pressable style={styles.backdrop} onPress={() => setDetail(null)}>
-              <Pressable style={[styles.sheet, { backgroundColor: theme.card }]}>
-                <View style={styles.sheetHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>
-                      {detail.fromNom || t('parent.school')}
-                    </Text>
-                    <Text style={{ color: theme.textSoft, fontSize: 11 }}>{formatTimestamp(detail.createdAt)}</Text>
-                  </View>
-                  <Pressable onPress={() => setDetail(null)} hitSlop={8}><X size={20} color={theme.text} strokeWidth={2} /></Pressable>
+      {/* Detail + Reply — bottom sheet à ressort */}
+      <BottomSheet visible={!!detail} onClose={() => setDetail(null)}>
+        {detail && (
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={styles.sheetHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>
+                  {detail.fromNom || t('parent.school')}
+                </Text>
+                <Text style={{ color: theme.textSoft, fontSize: 11 }}>{formatTimestamp(detail.createdAt)}</Text>
+              </View>
+              <Pressable onPress={() => setDetail(null)} hitSlop={8}><X size={20} color={theme.text} strokeWidth={2} /></Pressable>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 300 }}>
+              {detail.priority === 'urgent' && (
+                <View style={[styles.urgentBadge, { backgroundColor: theme.dangerSurface }]}>
+                  <Text style={{ color: theme.danger, fontWeight: '800', fontSize: 11 }}>🚨 {t('compose.urgent')}</Text>
                 </View>
-                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 300 }}>
-                  {detail.priority === 'urgent' && (
-                    <View style={[styles.urgentBadge, { backgroundColor: theme.dangerSurface }]}>
-                      <Text style={{ color: theme.danger, fontWeight: '800', fontSize: 11 }}>🚨 {t('compose.urgent')}</Text>
-                    </View>
-                  )}
-                  <Text style={{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }}>{detail.subject}</Text>
-                  <Text style={{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }}>{detail.body}</Text>
-                </ScrollView>
+              )}
+              <Text style={{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }}>{detail.subject}</Text>
+              <Text style={{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }}>{detail.body}</Text>
+            </ScrollView>
 
-                {/* Reply bar */}
-                {detail.fromId && detail.type !== 'announcement' && (
-                  <View style={[styles.replyBar, { borderTopColor: theme.border }]}>
-                    <TextInput value={replyText} onChangeText={setReplyText}
-                      placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
-                      style={[styles.replyInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
-                      multiline maxLength={500} />
-                    <TouchableOpacity onPress={handleReply} disabled={!replyText.trim() || replying}
-                      style={[styles.replyBtn, { backgroundColor: replyText.trim() ? theme.primary : theme.surfaceAlt }]}>
-                      {replying ? <ActivityIndicator color="#fff" size="small" /> :
-                        <Send size={18} color={replyText.trim() ? '#fff' : theme.textMuted} strokeWidth={2} />}
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </Pressable>
-            </Pressable>
+            {/* Reply bar */}
+            {detail.fromId && detail.type !== 'announcement' && (
+              <View style={[styles.replyBar, { borderTopColor: theme.border }]}>
+                <TextInput value={replyText} onChangeText={setReplyText}
+                  placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
+                  style={[styles.replyInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
+                  multiline maxLength={500} />
+                <TouchableOpacity onPress={handleReply} disabled={!replyText.trim() || replying}
+                  style={[styles.replyBtn, { backgroundColor: replyText.trim() ? theme.primary : theme.surfaceAlt }]}>
+                  {replying ? <ActivityIndicator color="#fff" size="small" /> :
+                    <Send size={18} color={replyText.trim() ? '#fff' : theme.textMuted} strokeWidth={2} />}
+                </TouchableOpacity>
+              </View>
+            )}
           </KeyboardAvoidingView>
-        </Modal>
-      )}
+        )}
+      </BottomSheet>
     </ScreenLayout>
   )
 }

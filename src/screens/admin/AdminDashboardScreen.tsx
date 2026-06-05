@@ -18,6 +18,8 @@ import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
 import { getTodayJour, type JourScolaire } from '../../services/calendarService'
 import { SectionHeader, Card } from '../../components/dashboard'
+import AnimatedCounter from '../../components/AnimatedCounter'
+import ProgressRing from '../../components/ProgressRing'
 import { greetingKey } from '../../utils/format'
 
 function todayISO(): string {
@@ -225,7 +227,26 @@ export default function AdminDashboardScreen() {
                     <View style={[styles.statSep, { backgroundColor: theme.border }]} />
                     <StatBlock value={String(state.retardsToday)} label={t('parent.lateArrivals')} color={state.retardsToday > 0 ? theme.warning : theme.success} theme={theme} isAr={isAr} />
                     <View style={[styles.statSep, { backgroundColor: theme.border }]} />
-                    <StatBlock value={String(state.presenceRate)} suffix="%" label={t('admin.attendanceRate')} color={state.presenceRate >= 95 ? theme.success : state.presenceRate >= 85 ? theme.warning : theme.danger} theme={theme} isAr={isAr} />
+                    <View style={styles.statBlock}>
+                      {(() => {
+                        const rateColor = state.presenceRate >= 95 ? theme.success : state.presenceRate >= 85 ? theme.warning : theme.danger
+                        return (
+                          <ProgressRing
+                            progress={state.presenceRate / 100}
+                            size={58} strokeWidth={6}
+                            color={rateColor} trackColor={theme.border} textColor={rateColor}
+                          />
+                        )
+                      })()}
+                      <Text style={{
+                        color: theme.textSoft,
+                        fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium,
+                        fontSize: 10, textTransform: 'uppercase',
+                        letterSpacing: isAr ? 0 : 0.3, marginTop: 4, textAlign: 'center',
+                      }}>
+                        {t('admin.attendanceRate')}
+                      </Text>
+                    </View>
 
                   </View>
                 </View>
@@ -308,7 +329,7 @@ function StatBlock({ value, suffix, label, color, theme, isAr }: {
         fontSize: 24,
         letterSpacing: -0.5,
       }}>
-        {value}{suffix ? <Text style={{ fontSize: 9, fontWeight: '600' }}>{suffix}</Text> : null}
+        <AnimatedCounter value={Number(value) || 0} />{suffix ? <Text style={{ fontSize: 9, fontWeight: '600' }}>{suffix}</Text> : null}
       </Text>
       <Text style={{
         color: theme.textSoft,
@@ -330,7 +351,7 @@ function SummaryChip({ icon, value, label, bg, theme }: {
   return (
     <View style={[styles.summaryChip, { backgroundColor: bg }]}>
       {icon}
-      <Text style={{ color: theme.text, fontWeight: '800', fontSize: 16, marginTop: 4 }}>{value}</Text>
+      <Text style={{ color: theme.text, fontWeight: '800', fontSize: 16, marginTop: 4 }}><AnimatedCounter value={value} /></Text>
       <Text style={{ color: theme.textSoft, fontSize: 9, fontWeight: '600', textTransform: 'uppercase', marginTop: 1 }}>{label}</Text>
     </View>
   )

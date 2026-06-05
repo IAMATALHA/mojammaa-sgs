@@ -21,15 +21,10 @@ import * as Haptics from 'expo-haptics'
 import { MESSAGE_TEMPLATES, fillTemplate, type MessageTemplate } from '../../data/messageTemplates'
 import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
 import { formatTimestamp, formatLongDate } from '../../utils/format'
+import { ELEVE_PLACEHOLDER, eleveKey, eleveName, elevePrenom } from '../../utils/eleveLabels'
+import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 
 type Tab = 'inbox' | 'sent'
-
-// Placeholder injected for {elevePrenom}; replaced per-student at send time.
-const ELEVE_PLACEHOLDER = '{élève}'
-const eleveKey    = (e: EleveDoc) => e.codeMassar
-const eleveName   = (e: EleveDoc) =>
-  `${e.prenomLatin || e.prenom || ''} ${e.nomLatin || e.nom || ''}`.trim() || e.nomComplet || '—'
-const elevePrenom = (e: EleveDoc) => e.prenomLatin || e.prenom || eleveName(e).split(' ')[0]
 
 export default function TeacherMessagesScreen() {
   const theme = useTheme()
@@ -40,16 +35,21 @@ export default function TeacherMessagesScreen() {
   const [inboxMsgs, setInboxMsgs] = useState<MessageDoc[]>([])
   const [sentMsgs, setSentMsgs] = useState<MessageDoc[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [detail, setDetail] = useState<MessageDoc | null>(null)
   const [showCompose, setShowCompose] = useState(false)
 
   useEffect(() => {
     if (!profile?.uid) return
     setLoading(true)
+    setLoadError(false)
     const u1 = subscribeMessages(
       profile.uid, profile.role || 'professeur',
-      list => { setInboxMsgs(list); setLoading(false) },
+      list => { setInboxMsgs(list); setLoadError(false); setLoading(false) },
+      () => { setLoadError(true); setLoading(false) },
     )
+    // L'échec de la requête « envoyés » ne doit pas alarmer toute la messagerie
+    // (seul l'inbox pilote la bannière).
     const u2 = subscribeSentMessages(profile.uid, list => setSentMsgs(list))
     return () => { u1(); u2() }
   }, [profile?.uid])
@@ -138,6 +138,8 @@ export default function TeacherMessagesScreen() {
           </View>
         </Pressable>
       </View>
+
+      {loadError && <MessagesErrorBanner />}
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>

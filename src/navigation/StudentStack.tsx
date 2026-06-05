@@ -11,6 +11,7 @@ import {
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../contexts/ThemeContext'
+import AnimatedTabIcon from '../components/AnimatedTabIcon'
 import ParentDashboardScreen from '../screens/student/ParentDashboardScreen'
 import ParentDevoirsScreen from '../screens/student/ParentDevoirsScreen'
 import ParentNotesScreen from '../screens/student/ParentNotesScreen'
@@ -20,26 +21,8 @@ import ParentSettingsScreen from '../screens/student/ParentSettingsScreen'
 
 const Tab = createBottomTabNavigator()
 
-function TabIcon({
-  Icon, color, focused, theme,
-}: {
-  Icon: LucideIcon
-  color: string
-  focused: boolean
-  theme: Theme
-}) {
-  if (focused) {
-    return (
-      <View style={[styles.iconActive, { backgroundColor: theme.primary }]}>
-        <Icon color="#FFFFFF" size={20} strokeWidth={1.9} />
-      </View>
-    )
-  }
-  return (
-    <View style={styles.iconInactive}>
-      <Icon color={color} size={20} strokeWidth={1.8} />
-    </View>
-  )
+function TabIcon(props: { Icon: LucideIcon; color: string; focused: boolean; theme: Theme }) {
+  return <AnimatedTabIcon {...props} />
 }
 
 export default function StudentStack() {

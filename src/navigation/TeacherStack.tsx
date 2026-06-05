@@ -13,6 +13,7 @@ import {
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../contexts/ThemeContext'
+import AnimatedTabIcon from '../components/AnimatedTabIcon'
 import TeacherDashboardScreen from '../screens/teacher/TeacherDashboardScreen'
 import TeacherEdtScreen from '../screens/teacher/TeacherEdtScreen'
 import TeacherClassesScreen from '../screens/teacher/TeacherClassesScreen'
@@ -22,33 +23,14 @@ import TeacherAttendanceScreen from '../screens/teacher/TeacherAttendanceScreen'
 import TeacherClasseFolderScreen from '../screens/teacher/TeacherClasseFolderScreen'
 import TeacherClasseElevesScreen from '../screens/teacher/TeacherClasseElevesScreen'
 import TeacherNotesScreen from '../screens/teacher/TeacherNotesScreen'
-import TeacherComposeScreen from '../screens/teacher/TeacherComposeScreen'
 import TeacherStatsScreen from '../screens/teacher/TeacherStatsScreen'
 import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen'
 
 const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
 
-function TabIcon({
-  Icon, color, focused, theme,
-}: {
-  Icon: LucideIcon
-  color: string
-  focused: boolean
-  theme: Theme
-}) {
-  if (focused) {
-    return (
-      <View style={[styles.iconActive, { backgroundColor: theme.primary }]}>
-        <Icon color="#FFFFFF" size={20} strokeWidth={1.9} />
-      </View>
-    )
-  }
-  return (
-    <View style={styles.iconInactive}>
-      <Icon color={color} size={20} strokeWidth={1.8} />
-    </View>
-  )
+function TabIcon(props: { Icon: LucideIcon; color: string; focused: boolean; theme: Theme }) {
+  return <AnimatedTabIcon {...props} />
 }
 
 function TeacherTabs() {
@@ -147,7 +129,6 @@ export default function TeacherStack() {
       <Stack.Screen name="TeacherClasseEleves" component={TeacherClasseElevesScreen} />
       <Stack.Screen name="TeacherNotes" component={TeacherNotesScreen} />
       <Stack.Screen name="TeacherDevoirsDetail" component={TeacherDevoirsScreen} />
-      <Stack.Screen name="TeacherCompose" component={TeacherComposeScreen} />
       <Stack.Screen name="TeacherStats" component={TeacherStatsScreen} />
     </Stack.Navigator>
   )

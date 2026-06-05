@@ -12,6 +12,7 @@ const ar = {
     loading: 'جارٍ التحميل…',
     error: 'خطأ',
     noData: 'لا توجد بيانات',
+    messagesLoadError: 'تعذّر تحميل الرسائل. تحقّق من اتصالك أو حدّث التطبيق.',
     logout: 'تسجيل الخروج',
     logoutConfirm: 'هل تريد تسجيل الخروج؟',
     logoutTitle: 'تسجيل الخروج',
