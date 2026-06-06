@@ -80,9 +80,14 @@ service cloud.firestore {
 
     // ── notes ────────────────────────────────────────────────
     match /notes/{noteId} {
+      // DETTE DE CONFIDENTIALITÉ (à durcir — cf. Option B) : le parent lit TOUTES
+      // les notes, pas seulement celles de son enfant. Nécessaire tant que l'écran
+      // Notes parent calcule la moyenne/le rang de classe via getClassNotes()
+      // (lecture classe entière). À remplacer par un agrégat serveur, puis revenir à
+      //   || (isParent() && eleveParentUid(resource.data.eleveId) == myUid())
       allow read: if isAdmin()
                   || teacherTeaches(resource.data.classe)
-                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
+                  || isParent();
       // Prof : uniquement SA classe ET SA matière. Admin : tout.
       allow create, update: if isAdmin() || (
         teacherTeaches(request.resource.data.classe) &&
@@ -93,9 +98,13 @@ service cloud.firestore {
 
     // ── absences ─────────────────────────────────────────────
     match /absences/{absenceId} {
+      // DETTE DE CONFIDENTIALITÉ (à durcir — cf. Option B) : le parent lit toutes
+      // les absences. La règle stricte eleveParentUid() suppose que l'ID du doc
+      // eleves == eleveId stocké dans absences (= codeMassar), ce qui n'est pas
+      // garanti → on relâche pour ne pas casser l'écran Absences parent.
       allow read: if isAdmin()
                   || teacherTeaches(resource.data.classe)
-                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
+                  || isParent();
       allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classe);
       allow delete: if isSuperAdmin();
     }
