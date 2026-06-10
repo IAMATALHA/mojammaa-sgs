@@ -381,6 +381,42 @@ const ar = {
     selectClasses: 'اختيار الأقسام',
   },
 
+  receipts: {
+    title: 'القراءات',
+    readOf: 'قرأه {{read}} / {{total}}',
+    readCount: 'قرأه {{count}}',
+    allRead: 'قرأه جميع المستلمين ✓',
+    unread: '{{count}} لم يقرأ بعد',
+    resend: 'تذكير من لم يقرأ',
+    resendConfirm: 'إرسال تذكير إلى {{count}} من المستلمين الذين لم يقرؤوا الرسالة؟',
+    resent: 'تم إرسال التذكير ✓',
+    reminderPrefix: 'تذكير: ',
+  },
+
+  parentCompose: {
+    title: 'رسالة جديدة',
+    recipient: 'المُرسَل إليه',
+    school: 'إدارة المدرسة',
+    teachers: 'الأساتذة',
+    empty: 'الدليل غير متوفر حالياً. حاول لاحقاً.',
+  },
+
+  absenceRequest: {
+    declare: 'الإبلاغ عن غياب',
+    child: 'الابن/الابنة',
+    date: 'التاريخ',
+    reason: 'السبب',
+    reasonPlaceholder: 'مرض، موعد طبي…',
+    submit: 'إرسال التصريح',
+    submitted: 'تم إرسال التصريح ✓',
+    myDeclarations: 'تصريحاتي',
+    pending: 'قيد الانتظار',
+    approved: 'مقبول',
+    declined: 'مرفوض',
+    declaredByParents: 'غيابات أبلغ عنها الأولياء',
+    declaredBadge: 'أبلغ عنه الولي',
+  },
+
   actions: {
     takeAttendance: 'تسجيل الحضور',
     newHomework: 'واجب جديد',

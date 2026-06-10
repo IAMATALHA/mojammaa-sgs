@@ -381,6 +381,42 @@ const en = {
     selectClasses: 'Select classes',
   },
 
+  receipts: {
+    title: 'Read receipts',
+    readOf: 'Read by {{read}} / {{total}}',
+    readCount: 'Read by {{count}}',
+    allRead: 'All recipients have read it ✓',
+    unread: '{{count}} unread',
+    resend: 'Re-notify unread',
+    resendConfirm: 'Send a reminder to the {{count}} recipient(s) who haven’t read it?',
+    resent: 'Reminder sent ✓',
+    reminderPrefix: 'Reminder: ',
+  },
+
+  parentCompose: {
+    title: 'New message',
+    recipient: 'Recipient',
+    school: 'School administration',
+    teachers: 'Teachers',
+    empty: 'Directory unavailable. Try again later.',
+  },
+
+  absenceRequest: {
+    declare: 'Report an absence',
+    child: 'Child',
+    date: 'Date',
+    reason: 'Reason',
+    reasonPlaceholder: 'Illness, medical appointment…',
+    submit: 'Send declaration',
+    submitted: 'Declaration sent ✓',
+    myDeclarations: 'My declarations',
+    pending: 'Pending',
+    approved: 'Approved',
+    declined: 'Declined',
+    declaredByParents: 'Absences reported by parents',
+    declaredBadge: 'Reported by parent',
+  },
+
   actions: {
     takeAttendance: 'Take attendance',
     newHomework: 'New homework',

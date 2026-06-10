@@ -131,6 +131,25 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── absenceRequests (absences déclarées par les parents) ──
+    match /absenceRequests/{reqId} {
+      // Parent : déclare pour SON enfant, en SON nom, statut 'pending' imposé.
+      allow create: if isParent()
+        && request.resource.data.parentUid == myUid()
+        && eleveParentUid(request.resource.data.eleveId) == myUid()
+        && request.resource.data.status == 'pending';
+      allow read: if isAdmin()
+        || (isParent() && resource.data.parentUid == myUid())
+        || teacherTeaches(resource.data.classe);
+      // Décision : prof de la classe / admin — champs de décision uniquement.
+      allow update: if (isAdmin() || teacherTeaches(resource.data.classe))
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'decidedBy', 'decidedAt']);
+      // Le parent peut retirer une déclaration tant qu'elle est en attente.
+      allow delete: if isAdmin()
+        || (isParent() && resource.data.parentUid == myUid() && resource.data.status == 'pending');
+    }
+
     // ── bulletins ────────────────────────────────────────────
     match /bulletins/{bulletinId} {
       allow read: if isAdmin()
@@ -195,6 +214,15 @@ service cloud.firestore {
     match /emploiDuTemps/{docId}  { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /evenements/{eventId}   { allow read: if isSignedIn(); allow write: if isAdmin() || isTeacher(); }
     match /joursScolaires/{dateId}{ allow read: if isSignedIn(); allow write: if isAdmin(); }
+
+    // ── directory (annuaire du personnel, maintenu par CF) ──
+    // Pour le compose parent : uid + nom + matière/classes des profs/admins
+    // (AUCUNE donnée sensible — pas d'email ni de token). Écrit uniquement
+    // par la CF onUserWritten (Admin SDK).
+    match /directory/{docId} {
+      allow read:  if isSignedIn();
+      allow write: if false;
+    }
 
     // ── config (liste des superadmins, etc.) ────────────────
     // Lecture ADMIN uniquement (l'app mobile ne lit jamais config/ — vérifié

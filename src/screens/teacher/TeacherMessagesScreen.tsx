@@ -24,6 +24,7 @@ import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
 import { formatTimestamp, formatLongDate } from '../../utils/format'
 import { ELEVE_PLACEHOLDER, eleveKey, eleveName, elevePrenom } from '../../utils/eleveLabels'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
+import ReadReceipts from '../../components/ReadReceipts'
 
 type Tab = 'inbox' | 'sent'
 
@@ -127,8 +128,15 @@ export default function TeacherMessagesScreen() {
             <Text numberOfLines={1} style={{ color: theme.textSoft, fontSize: 12, marginTop: 2 }}>{item.body}</Text>
           </View>
         </View>
-        {tab === 'sent' && item.readBy && item.readBy.length > 0 ? (
-          <Text style={{ color: theme.success, fontSize: 10, fontWeight: '600', marginTop: 6 }}>✓ {item.readBy.length} lu(s)</Text>
+        {tab === 'sent' && item.toType === 'user' && Array.isArray(item.toIds) && item.toIds.length > 0 ? (
+          <Text style={{
+            color: item.toIds.every(uid => (item.readBy || []).includes(uid)) ? theme.success : theme.textSoft,
+            fontSize: 10, fontWeight: '700', marginTop: 6,
+          }}>
+            ✓ {t('receipts.readOf', { read: item.toIds.filter(uid => (item.readBy || []).includes(uid)).length, total: item.toIds.length })}
+          </Text>
+        ) : tab === 'sent' && item.readBy && item.readBy.length > 0 ? (
+          <Text style={{ color: theme.success, fontSize: 10, fontWeight: '600', marginTop: 6 }}>✓ {t('receipts.readCount', { count: item.readBy.length })}</Text>
         ) : null}
       </Pressable>
     )
@@ -197,8 +205,12 @@ export default function TeacherMessagesScreen() {
                 )}
                 <Text style={{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }}>{detail.subject}</Text>
                 <Text style={{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }}>{detail.body}</Text>
-                {tab === 'sent' && detail.readBy && detail.readBy.length > 0 ? (
-                  <Text style={{ color: theme.success, fontSize: 12, fontWeight: '600', marginTop: 14 }}>✓ {detail.readBy.length} personne(s) ont lu</Text>
+                {tab === 'sent' && profile?.uid ? (
+                  <ReadReceipts
+                    message={sentMsgs.find(m => m.id === detail.id) || detail}
+                    theme={theme}
+                    sender={{ uid: profile.uid, nom: profile.nom, prenom: profile.prenom, role: profile.role }}
+                  />
                 ) : null}
               </ScrollView>
             </Pressable>

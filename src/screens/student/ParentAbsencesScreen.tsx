@@ -6,13 +6,13 @@
  * - Liste chronologique avec type + justification
  */
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, ScrollView, Pressable, StyleSheet,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { CalendarCheck } from 'lucide-react-native'
+import { CalendarCheck, CalendarPlus } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import {
@@ -24,6 +24,9 @@ import {
   type AbsenceEntry,
 } from '../../utils/dashboardTypes'
 import ScreenBackground from '../../components/ScreenBackground'
+import DeclareAbsenceSheet from '../../components/DeclareAbsenceSheet'
+import { useAuth } from '../../contexts/AuthContext'
+import { subscribeAbsenceRequestsForParent, type AbsenceRequestDoc } from '../../services/absenceRequestsService'
 import { localeFor } from '../../utils/format'
 
 export default function ParentAbsencesScreen() {
@@ -38,6 +41,14 @@ export default function ParentAbsencesScreen() {
   const parent = useParentData()
   const { absences: live } = useParentAbsences()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
+  const { profile } = useAuth()
+  const [showDeclare, setShowDeclare] = useState(false)
+  const [declarations, setDeclarations] = useState<AbsenceRequestDoc[]>([])
+
+  useEffect(() => {
+    if (!profile?.uid) return
+    return subscribeAbsenceRequestsForParent(profile.uid, setDeclarations, () => {})
+  }, [profile?.uid])
 
   const filtered = useMemo(() => {
     const base = selectedChildId === 'all'
@@ -92,6 +103,49 @@ export default function ParentAbsencesScreen() {
           <KpiChip value={stats.retards} label={t('parent.lateArrivals')} color={theme.warning} theme={theme} />
         </View>
 
+        {/* Signaler une absence (déclaration parent) */}
+        <Pressable
+          onPress={() => setShowDeclare(true)}
+          style={({ pressed }) => [styles.declareBtn, { backgroundColor: theme.primary }, pressed && { opacity: 0.88 }]}>
+          <CalendarPlus size={17} color="#fff" strokeWidth={2.2} />
+          <Text style={{ color: '#fff', fontFamily: theme.fonts.bold, fontSize: 13.5 }}>
+            {t('absenceRequest.declare')}
+          </Text>
+        </Pressable>
+
+        {declarations.length > 0 && (
+          <View style={styles.section}>
+            <SectionHeader title={t('absenceRequest.myDeclarations')} />
+            <Card padding={4}>
+              {declarations.slice(0, 5).map((d, idx) => {
+                const meta = d.status === 'approved'
+                  ? { color: theme.success, bg: theme.successSurface, label: t('absenceRequest.approved') }
+                  : d.status === 'declined'
+                    ? { color: theme.danger, bg: theme.dangerSurface, label: t('absenceRequest.declined') }
+                    : { color: theme.warning, bg: theme.warning + '20', label: t('absenceRequest.pending') }
+                return (
+                  <View key={d.id} style={[styles.row, idx !== Math.min(declarations.length, 5) - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border }]}>
+                    <View style={[styles.rowDot, { backgroundColor: meta.color }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.text, fontFamily: theme.fonts.semibold, fontSize: 13.5 }}>
+                        {d.elevePrenom} · {new Date(d.date).toLocaleDateString(localeFor(), { day: '2-digit', month: 'short' })}
+                      </Text>
+                      <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: theme.fonts.regular, fontSize: 11.5, marginTop: 2 }}>
+                        {d.reason}
+                      </Text>
+                    </View>
+                    <View style={[styles.pill, { backgroundColor: meta.bg }]}>
+                      <Text style={{ color: meta.color, fontFamily: theme.fonts.semibold, fontSize: 10, letterSpacing: 0.4 }}>
+                        {meta.label}
+                      </Text>
+                    </View>
+                  </View>
+                )
+              })}
+            </Card>
+          </View>
+        )}
+
         {/* Child filter */}
         <ScrollView
           horizontal
@@ -142,6 +196,13 @@ export default function ParentAbsencesScreen() {
           </Card>
         </View>
       </ScrollView>
+
+      <DeclareAbsenceSheet
+        visible={showDeclare}
+        onClose={() => setShowDeclare(false)}
+        profile={profile}
+        children={parent.children}
+      />
     </SafeAreaView>
   )
 }
@@ -256,6 +317,11 @@ const styles = StyleSheet.create({
     marginEnd: 6,
   },
   section: { paddingHorizontal: 20, marginTop: 18 },
+  declareBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginHorizontal: 20, marginTop: 16, paddingVertical: 13, borderRadius: 14,
+    shadowColor: '#1D3557', shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4,
+  },
   kpiChip: {
     flex: 1,
     alignItems: 'center',

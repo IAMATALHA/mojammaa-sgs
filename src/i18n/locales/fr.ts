@@ -381,6 +381,42 @@ const fr = {
     selectClasses: 'Sélectionner les classes',
   },
 
+  receipts: {
+    title: 'Lectures',
+    readOf: 'Lu par {{read}} / {{total}}',
+    readCount: 'Lu par {{count}}',
+    allRead: 'Tous les destinataires ont lu ✓',
+    unread: '{{count}} non lu(s)',
+    resend: 'Relancer les non-lus',
+    resendConfirm: 'Renvoyer un rappel aux {{count}} destinataire(s) qui n’ont pas lu ?',
+    resent: 'Rappel envoyé ✓',
+    reminderPrefix: 'Rappel : ',
+  },
+
+  parentCompose: {
+    title: 'Nouveau message',
+    recipient: 'Destinataire',
+    school: 'Administration de l’école',
+    teachers: 'Professeurs',
+    empty: 'Annuaire indisponible. Réessayez plus tard.',
+  },
+
+  absenceRequest: {
+    declare: 'Signaler une absence',
+    child: 'Enfant',
+    date: 'Date',
+    reason: 'Motif',
+    reasonPlaceholder: 'Maladie, rendez-vous médical…',
+    submit: 'Envoyer la déclaration',
+    submitted: 'Déclaration envoyée ✓',
+    myDeclarations: 'Mes déclarations',
+    pending: 'En attente',
+    approved: 'Acceptée',
+    declined: 'Refusée',
+    declaredByParents: 'Absences signalées par les parents',
+    declaredBadge: 'Signalée par le parent',
+  },
+
   actions: {
     takeAttendance: 'Faire l\'appel',
     newHomework: 'Nouveau devoir',

@@ -6,7 +6,7 @@ import {
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useNavigation, useRoute } from '@react-navigation/native'
-import { X, Search, Inbox, Send } from 'lucide-react-native'
+import { X, Search, Inbox, Send, PenSquare } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -18,6 +18,7 @@ import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
 import { formatTimestamp } from '../../utils/format'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import BottomSheet from '../../components/BottomSheet'
+import ParentComposeSheet from '../../components/ParentComposeSheet'
 
 type Filter = 'all' | 'urgent' | 'school' | 'event'
 
@@ -35,6 +36,7 @@ export default function ParentMessagesScreen() {
   const [query, setQuery] = useState('')
   const [replyText, setReplyText] = useState('')
   const [replying, setReplying] = useState(false)
+  const [showCompose, setShowCompose] = useState(false)
 
   useEffect(() => {
     if (!profile?.uid) return
@@ -197,8 +199,15 @@ export default function ParentMessagesScreen() {
           <Text style={{ color: theme.textSoft, fontSize: 14, marginTop: 12 }}>{t('parent.noMessage')}</Text>
         </View>
       ) : (
-        <FlatList data={filtered} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 24 }} />
+        <FlatList data={filtered} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 80 }} />
       )}
+
+      {/* ── Compose : contacter un prof / l'école ── */}
+      <TouchableOpacity onPress={() => setShowCompose(true)} style={[styles.fab, { backgroundColor: theme.primary }]} activeOpacity={0.85}>
+        <PenSquare size={22} color="#fff" strokeWidth={2} />
+      </TouchableOpacity>
+      <ParentComposeSheet visible={showCompose} onClose={() => setShowCompose(false)} profile={profile} />
+
 
       {/* Detail + Reply — bottom sheet à ressort */}
       <BottomSheet visible={!!detail} onClose={() => setDetail(null)}>
@@ -259,4 +268,5 @@ const styles = StyleSheet.create({
   replyBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 14, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth },
   replyInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, maxHeight: 80 },
   replyBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  fab: { position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
 })

@@ -24,6 +24,7 @@ import {
   documentId,
 } from 'firebase/firestore'
 import { sendMessage } from '../../services/messagesService'
+import { getAbsenceRequestsForClassDate, decideAbsenceRequest, type AbsenceRequestDoc } from '../../services/absenceRequestsService'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTranslation } from 'react-i18next'
@@ -137,6 +138,7 @@ export default function TeacherAttendanceScreen() {
   const [seance,  setSeance]  = useState<string>(initialSeance || 'S1')
   const [loading, setLoading] = useState(true)
   const [saving,  setSaving]  = useState(false)
+  const [requests, setRequests] = useState<AbsenceRequestDoc[]>([])  // déclarations parents (classe+date)
   const [error,   setError]   = useState<string | null>(null)
 
   const date = todayISO()
@@ -162,6 +164,10 @@ export default function TeacherAttendanceScreen() {
       const set = new Set<string>()
       absentsSnap.forEach(d => set.add((d.data() as any).eleveId))
       setAbsent(set)
+      // Déclarations d'absence des parents pour cette date (best-effort)
+      getAbsenceRequestsForClassDate(classe, date)
+        .then(setRequests)
+        .catch(() => setRequests([]))
     } catch (e: any) {
       setError(e?.message || 'Impossible de charger.')
     } finally {
@@ -203,9 +209,20 @@ export default function TeacherAttendanceScreen() {
           statut:      absent.has(e.id) ? 'absent' : 'present',
           professorId: profile.uid,
           createdAt:   Timestamp.now(),
+          // Absence déclarée par le parent → justifiée d'office avec son motif.
+          ...(absent.has(e.id) && declaredFor(e.id)
+            ? { justified: true, raison: declaredFor(e.id)!.reason }
+            : {}),
         }, { merge: true })
       })
       await batch.commit()
+
+      // Les déclarations couvertes par cet appel passent à 'approved'.
+      await Promise.all(
+        requests
+          .filter(r => r.id && r.status === 'pending' && absent.has(r.eleveId))
+          .map(r => decideAbsenceRequest(r.id!, 'approved', profile.uid).catch(() => {})),
+      )
 
       // ── Notifier les parents des absents ──────────────────────────────
       let notifSent = 0
@@ -237,6 +254,9 @@ export default function TeacherAttendanceScreen() {
       setSaving(false)
     }
   }
+
+  const declaredFor = (eleveId: string): AbsenceRequestDoc | undefined =>
+    requests.find(r => r.eleveId === eleveId && r.status !== 'declined')
 
   const SeanceChip = ({ value }: { value: string }) => {
     const active = seance === value
@@ -283,6 +303,11 @@ export default function TeacherAttendanceScreen() {
             <Text style={[styles.eleveStatus, { color: isAbsent ? theme.danger : theme.success, fontFamily: theme.fonts.semibold }]}>
               {isAbsent ? t('teacher.absentTapCancel') : t('teacher.presentLabel')}
             </Text>
+            {declaredFor(item.id) ? (
+              <Text style={{ color: theme.warning, fontFamily: theme.fonts.semibold, fontSize: 10.5, marginTop: 2 }}>
+                ⚑ {t('absenceRequest.declaredBadge')} · {declaredFor(item.id)!.reason}
+              </Text>
+            ) : null}
           </View>
         </PressableScale>
       </Animated.View>
@@ -310,6 +335,19 @@ export default function TeacherAttendanceScreen() {
           {t('teacher.tapAbsent')}
         </Text>
       </View>
+
+      {requests.filter(r => r.status !== 'declined').length > 0 && (
+        <View style={[styles.summary, { backgroundColor: theme.warning + '14', borderColor: theme.warning }]}>
+          <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800' }}>
+            ⚑ {t('absenceRequest.declaredByParents')}
+          </Text>
+          {requests.filter(r => r.status !== 'declined').map(r => (
+            <Text key={r.id} style={{ color: theme.textSoft, fontSize: 11.5, marginTop: 3 }}>
+              • {r.elevePrenom} {r.eleveNom} — {r.reason}
+            </Text>
+          ))}
+        </View>
+      )}
 
       {loading && eleves.length === 0 ? (
         <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>

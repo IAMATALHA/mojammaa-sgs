@@ -156,6 +156,48 @@ async function refreshClassStats(classe, semestre) {
   await ref.set({ classe, semestre, ...stats, updatedAt: new Date() })
 }
 
+// ── directory/staff : annuaire du personnel pour les clients parents ───────
+//
+// Pourquoi : les rules interdisent à un parent de lire users/ (données
+// sensibles : emails, push tokens). Pour que le parent puisse ÉCRIRE à un
+// prof ou à l'administration (compose), on publie un annuaire minimal
+// (uid + nom + matière/classes — rien de sensible) maintenu par ce trigger.
+
+async function refreshDirectory() {
+  const snap = await db.collection('users').get()
+  const teachers = []
+  const admins = []
+  snap.forEach((d) => {
+    const u = d.data() || {}
+    if (u.role === 'professeur') {
+      teachers.push({
+        uid: d.id,
+        nom: u.nom || '',
+        prenom: u.prenom || '',
+        matiere: u.matiere || '',
+        classes: Array.isArray(u.classes) ? u.classes : (u.classe ? [u.classe] : []),
+      })
+    } else if (u.role === 'admin') {
+      admins.push({ uid: d.id, nom: u.nom || '', prenom: u.prenom || '' })
+    }
+  })
+  const byName = (a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr')
+  teachers.sort(byName)
+  admins.sort(byName)
+  await db.collection('directory').doc('staff').set({ teachers, admins, updatedAt: new Date() })
+}
+
+exports.onUserWritten = onDocumentWritten('users/{uid}', async (event) => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null
+  const after = event.data?.after?.exists ? event.data.after.data() : null
+  // users/{uid} est réécrit à CHAQUE login (expoPushToken) : ne recalculer
+  // que si un champ visible dans l'annuaire a réellement changé.
+  const pick = (u) => (u ? JSON.stringify([u.role, u.nom, u.prenom, u.matiere, u.classes, u.classe]) : '')
+  if (pick(before) === pick(after)) return
+  await refreshDirectory()
+  logger.info('directory/staff refreshed')
+})
+
 exports.onNoteWritten = onDocumentWritten('notes/{noteId}', async (event) => {
   const before = event.data?.before?.exists ? event.data.before.data() : null
   const after = event.data?.after?.exists ? event.data.after.data() : null
