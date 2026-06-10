@@ -13,6 +13,7 @@ const en = {
     error: 'Error',
     noData: 'No data',
     messagesLoadError: 'Couldn’t load messages. Check your connection or update the app.',
+    dataLoadError: 'Could not load data. Check your connection and try again.',
     logout: 'Log out',
     logoutConfirm: 'Are you sure you want to log out?',
     logoutTitle: 'Log out',

@@ -9,13 +9,13 @@ import { useTheme } from '../contexts/ThemeContext'
  * (ex: requête refusée par les règles Firestore sur une build dépassée).
  * Évite le faux « aucun message » silencieux.
  */
-export default function MessagesErrorBanner() {
+export default function MessagesErrorBanner({ messageKey = 'common.messagesLoadError' }: { messageKey?: string }) {
   const theme = useTheme()
   const { t } = useTranslation()
   return (
     <View style={[styles.banner, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}>
       <AlertTriangle size={16} color={theme.danger} strokeWidth={2} />
-      <Text style={[styles.text, { color: theme.danger }]}>{t('common.messagesLoadError')}</Text>
+      <Text style={[styles.text, { color: theme.danger }]}>{t(messageKey)}</Text>
     </View>
   )
 }

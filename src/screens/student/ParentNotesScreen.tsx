@@ -13,6 +13,7 @@ import { Card, EmptyState, SectionHeader } from '../../components/dashboard'
 import { useParentData } from '../../hooks/useParentData'
 import { useParentNotes, type SubjectGradeReal } from '../../hooks/useParentNotes'
 import ScreenBackground from '../../components/ScreenBackground'
+import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 
 export default function ParentNotesScreen() {
   const theme = useTheme()
@@ -41,7 +42,7 @@ export default function ParentNotesScreen() {
     [parent.eleves, selectedChildId],
   )
 
-  const { loading, report } = useParentNotes(selectedChildId, selectedEleve?.classe)
+  const { loading, error, report } = useParentNotes(selectedChildId, selectedEleve?.classe)
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
@@ -94,6 +95,11 @@ export default function ParentNotesScreen() {
       </ScrollView>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {(error || parent.error) && !report ? (
+          <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
+            <MessagesErrorBanner messageKey="common.dataLoadError" />
+          </View>
+        ) : null}
         {loading ? (
           <View style={{ paddingVertical: 40, alignItems: 'center' }}>
             <ActivityIndicator color={theme.primary} />

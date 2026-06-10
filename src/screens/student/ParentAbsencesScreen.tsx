@@ -24,6 +24,7 @@ import {
   type AbsenceEntry,
 } from '../../utils/dashboardTypes'
 import ScreenBackground from '../../components/ScreenBackground'
+import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import DeclareAbsenceSheet from '../../components/DeclareAbsenceSheet'
 import { useAuth } from '../../contexts/AuthContext'
 import { subscribeAbsenceRequestsForParent, type AbsenceRequestDoc } from '../../services/absenceRequestsService'
@@ -39,7 +40,7 @@ export default function ParentAbsencesScreen() {
     depart:  { color: theme.info,    label: t('parent.earlyLeave') },
   }
   const parent = useParentData()
-  const { absences: live } = useParentAbsences()
+  const { absences: live, error: absError } = useParentAbsences()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
   const { profile } = useAuth()
   const [showDeclare, setShowDeclare] = useState(false)
@@ -96,6 +97,12 @@ export default function ParentAbsencesScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {(absError || parent.error) && live.length === 0 ? (
+          <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
+            <MessagesErrorBanner messageKey="common.dataLoadError" />
+          </View>
+        ) : null}
+
         {/* Stat strip */}
         <View style={styles.kpiRow}>
           <KpiChip value={stats.justified} label={t('parent.justified')} color={theme.success} theme={theme} />

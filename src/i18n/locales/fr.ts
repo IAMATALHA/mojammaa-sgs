@@ -13,6 +13,7 @@ const fr = {
     error: 'Erreur',
     noData: 'Aucune donnée',
     messagesLoadError: 'Impossible de charger les messages. Vérifie ta connexion ou mets l’app à jour.',
+    dataLoadError: 'Impossible de charger les données. Vérifiez votre connexion et réessayez.',
     logout: 'Se déconnecter',
     logoutConfirm: 'Confirmer la déconnexion ?',
     logoutTitle: 'Déconnexion',

@@ -29,11 +29,17 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
   const [notes, setNotes] = useState<NoteDoc[]>([])
   const [classStats, setClassStats] = useState<ClassStatsDoc | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!eleveId) { setNotes([]); setLoading(false); return }
     setLoading(true)
-    const unsub = subscribeNotesForEleve(eleveId, list => { setNotes(list); setLoading(false) })
+    setError(null)
+    const unsub = subscribeNotesForEleve(
+      eleveId,
+      list => { setNotes(list); setError(null); setLoading(false) },
+      err => { setError(err.message); setLoading(false) },
+    )
     return unsub
   }, [eleveId])
 
@@ -112,5 +118,5 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
     }
   }, [notes, classStats, latestSemestre, prevSemestre])
 
-  return { loading, notes, semestres, report }
+  return { loading, error, notes, semestres, report }
 }

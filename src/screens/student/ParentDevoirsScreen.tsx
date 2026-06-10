@@ -11,12 +11,13 @@ import { Card, EmptyState, SectionHeader } from '../../components/dashboard'
 import { useParentData } from '../../hooks/useParentData'
 import { useParentDevoirs, type ParentDevoir } from '../../hooks/useParentDevoirs'
 import ScreenBackground from '../../components/ScreenBackground'
+import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 
 export default function ParentDevoirsScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
   const parent = useParentData()
-  const { loading, devoirs } = useParentDevoirs()
+  const { loading, error, devoirs } = useParentDevoirs()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
   const [detail, setDetail] = useState<ParentDevoir | null>(null)
 
@@ -55,6 +56,11 @@ export default function ParentDevoirsScreen() {
       </ScrollView>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {(error || parent.error) && devoirs.length === 0 ? (
+          <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
+            <MessagesErrorBanner messageKey="common.dataLoadError" />
+          </View>
+        ) : null}
         {loading ? (
           <View style={{ paddingVertical: 40, alignItems: 'center' }}><ActivityIndicator color={theme.primary} /></View>
         ) : (

@@ -28,6 +28,7 @@ import {
 import { useParentDevoirs } from '../../hooks/useParentDevoirs'
 import { useParentMessages } from '../../hooks/useParentMessages'
 import { greetingKey, hexWithAlpha, formatLongDate } from '../../utils/format'
+import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 
 const { width: SCREEN_W } = Dimensions.get('window')
 const CAROUSEL_CARD_W = SCREEN_W - 42
@@ -259,6 +260,11 @@ export default function ParentDashboardScreen() {
           />
         }
       >
+        {parent.error && parent.children.length === 0 ? (
+          <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
+            <MessagesErrorBanner messageKey="common.dataLoadError" />
+          </View>
+        ) : null}
         {/* ── Header strip ──────────────────────────────── */}
         <View style={styles.headerStrip}>
           <Pressable onPress={handleAccountPress} hitSlop={8}>

@@ -22,6 +22,7 @@ export function useParentDevoirs() {
   const { eleves, children } = useParentData()
   const [devoirs, setDevoirs] = useState<ParentDevoir[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const classes = useMemo(() => {
     const set = new Set<string>()
@@ -31,6 +32,7 @@ export function useParentDevoirs() {
 
   useEffect(() => {
     if (classes.length === 0) { setDevoirs([]); setLoading(false); return }
+    setError(null)
 
     const today = new Date().toISOString().split('T')[0]
     const unsubs: Unsubscribe[] = []
@@ -75,7 +77,7 @@ export function useParentDevoirs() {
           apply()
           if (readyBuckets.size >= chunkCount) setLoading(false)
         },
-        () => { setLoading(false) },
+        err => { setError(err?.message || 'load failed'); setLoading(false) },
       ))
     }
 
@@ -95,5 +97,5 @@ export function useParentDevoirs() {
     }))
   }, [devoirs, childClassMap])
 
-  return { loading, devoirs: devoirsByChild }
+  return { loading, error, devoirs: devoirsByChild }
 }

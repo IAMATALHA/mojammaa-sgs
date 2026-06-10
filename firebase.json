@@ -22,15 +22,24 @@
       "**/node_modules/**"
     ],
     "rewrites": [
-      { "source": "/privacy", "destination": "/privacy.html" }
+      {
+        "source": "/privacy",
+        "destination": "/privacy.html"
+      }
     ],
     "headers": [
       {
         "source": "/privacy.html",
         "headers": [
-          { "key": "Cache-Control", "value": "public, max-age=300" }
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=300"
+          }
         ]
       }
     ]
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }
