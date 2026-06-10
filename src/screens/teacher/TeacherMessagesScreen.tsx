@@ -24,6 +24,7 @@ import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
 import { formatTimestamp, formatLongDate } from '../../utils/format'
 import { ELEVE_PLACEHOLDER, eleveKey, eleveName, elevePrenom } from '../../utils/eleveLabels'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
+import { dirStyle, localizedSubject, localizedBody } from '../../utils/arabicText'
 import ReadReceipts from '../../components/ReadReceipts'
 
 type Tab = 'inbox' | 'sent'
@@ -122,10 +123,10 @@ export default function TeacherMessagesScreen() {
               </Text>
               <Text style={{ color: theme.textSoft, fontSize: 11 }}>{formatTimestamp(item.createdAt)}</Text>
             </View>
-            <Text numberOfLines={1} style={{ color: theme.text, fontWeight: isUnread ? '700' : '500', fontSize: 13, marginTop: 2 }}>
-              {isUrgent ? '🚨 ' : ''}{item.subject}
+            <Text numberOfLines={1} style={[{ color: theme.text, fontWeight: isUnread ? '700' : '500', fontSize: 13, marginTop: 2 }, dirStyle(localizedSubject(item, lang))]}>
+              {isUrgent ? '🚨 ' : ''}{localizedSubject(item, lang)}
             </Text>
-            <Text numberOfLines={1} style={{ color: theme.textSoft, fontSize: 12, marginTop: 2 }}>{item.body}</Text>
+            <Text numberOfLines={1} style={[{ color: theme.textSoft, fontSize: 12, marginTop: 2 }, dirStyle(localizedBody(item, lang))]}>{localizedBody(item, lang)}</Text>
           </View>
         </View>
         {tab === 'sent' && item.toType === 'user' && Array.isArray(item.toIds) && item.toIds.length > 0 ? (
@@ -203,8 +204,8 @@ export default function TeacherMessagesScreen() {
                     <Text style={{ color: theme.danger, fontWeight: '800', fontSize: 11 }}>🚨 {t('compose.urgent')}</Text>
                   </View>
                 )}
-                <Text style={{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }}>{detail.subject}</Text>
-                <Text style={{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }}>{detail.body}</Text>
+                <Text style={[{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }, dirStyle(localizedSubject(detail, lang))]}>{localizedSubject(detail, lang)}</Text>
+                <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
                 {tab === 'sent' && profile?.uid ? (
                   <ReadReceipts
                     message={sentMsgs.find(m => m.id === detail.id) || detail}

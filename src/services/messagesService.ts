@@ -40,6 +40,8 @@ export interface MessageDoc {
   type:       MessageType
   subject:    string
   body:       string
+  subjectAr?: string   // version arabe (affichée si l'app est en arabe)
+  bodyAr?:    string
   fromId:     string
   fromNom?:   string
   fromRole?:  string
@@ -197,6 +199,8 @@ async function getParentUidsForClasses(classes: string[]): Promise<string[]> {
 interface BroadcastParams {
   subject:    string
   body:       string
+  subjectAr?: string
+  bodyAr?:    string
   fromId:     string
   fromNom:    string
   fromRole:   string
@@ -218,6 +222,8 @@ export async function broadcast(p: BroadcastParams): Promise<{ messageId: string
     type:     p.type,
     subject:  p.subject,
     body:     p.body,
+    subjectAr: p.subjectAr,
+    bodyAr:    p.bodyAr,
     fromId:   p.fromId,
     fromNom:  p.fromNom,
     fromRole: p.fromRole,
@@ -280,6 +286,8 @@ export async function broadcastToParents(p: {
   classe?:    string
   subject:    string
   body:       string
+  subjectAr?: string
+  bodyAr?:    string
   urgent?:    boolean
   category?:  MessageCategory
   teacher:    { uid: string; nom: string; prenom: string }
@@ -293,6 +301,8 @@ export async function broadcastToParents(p: {
     type:     'announcement',
     subject:  p.subject,
     body:     p.body,
+    subjectAr: p.subjectAr,
+    bodyAr:    p.bodyAr,
     fromId:   p.teacher.uid,
     fromNom,
     fromRole: p.fromRole || 'professeur',
@@ -312,8 +322,9 @@ export async function broadcastToParents(p: {
 // Personalised fan-out: one message per student → their own parent, so the
 // body can include the child's name and each parent only sees their own doc.
 export async function broadcastPersonalized(p: {
-  recipients: { parentUid: string; body: string; label: string; eleveId?: string }[]
+  recipients: { parentUid: string; body: string; bodyAr?: string; label: string; eleveId?: string }[]
   subject:    string
+  subjectAr?: string
   classe?:    string
   urgent?:    boolean
   category?:  MessageCategory
@@ -331,6 +342,8 @@ export async function broadcastPersonalized(p: {
       type:     'announcement',
       subject:  p.subject,
       body:     r.body,
+      subjectAr: p.subjectAr,
+      bodyAr:    r.bodyAr,
       fromId:   p.teacher.uid,
       fromNom,
       fromRole: p.fromRole || 'professeur',

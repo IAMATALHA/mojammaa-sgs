@@ -10,6 +10,7 @@ import { Megaphone, AlertCircle, Calendar, School, ShieldCheck } from 'lucide-re
 import { useTheme } from '../../contexts/ThemeContext'
 import { formatRelative } from '../../utils/format'
 import type { Announcement } from '../../utils/dashboardTypes'
+import { dirStyle } from '../../utils/arabicText'
 
 const CATEGORY_ICON = {
   school: School,
@@ -43,12 +44,12 @@ export default function AnnouncementCard({
         <View style={styles.titleRow}>
           <Text
             numberOfLines={1}
-            style={{
+            style={[{
               flex: 1,
               color: theme.text,
               fontFamily: theme.fonts.semibold,
               fontSize: 14,
-            }}
+            }, dirStyle(item.title)]}
           >
             {item.title}
           </Text>
@@ -61,13 +62,13 @@ export default function AnnouncementCard({
         </View>
         <Text
           numberOfLines={2}
-          style={{
+          style={[{
             color: theme.textSoft,
             fontFamily: theme.fonts.regular,
             fontSize: 12,
             lineHeight: 17,
             marginTop: 3,
-          }}
+          }, dirStyle(item.body)]}
         >
           {item.body}
         </Text>

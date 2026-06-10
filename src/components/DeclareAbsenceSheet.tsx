@@ -17,6 +17,7 @@ import DatePickerSheet from './DatePickerSheet'
 import { createAbsenceRequest } from '../services/absenceRequestsService'
 import type { Child } from '../utils/dashboardTypes'
 import { localeFor } from '../utils/format'
+import { dirStyle } from '../utils/arabicText'
 
 interface Props {
   visible:  boolean
@@ -111,7 +112,7 @@ export default function DeclareAbsenceSheet({ visible, onClose, profile, childre
           <TextInput
             value={reason} onChangeText={setReason} multiline maxLength={300}
             placeholder={t('absenceRequest.reasonPlaceholder')} placeholderTextColor={theme.textMuted}
-            style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]} />
+            style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(reason)]} />
 
           <TouchableOpacity onPress={submit} disabled={!canSubmit} activeOpacity={0.85}
             style={[styles.submitBtn, { backgroundColor: canSubmit ? theme.primary : theme.surfaceAlt }]}>

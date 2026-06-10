@@ -21,6 +21,7 @@ import BottomSheet from './BottomSheet'
 import { getStaffDirectory, type StaffDirectory, type StaffTeacher } from '../services/directoryService'
 import { subscribeChildrenOfParent } from '../services/elevesService'
 import { sendMessage } from '../services/messagesService'
+import { dirStyle } from '../utils/arabicText'
 
 type Recipient = { kind: 'school' } | { kind: 'teacher'; teacher: StaffTeacher }
 
@@ -163,11 +164,11 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
         <TextInput
           value={subject} onChangeText={setSubject} maxLength={120}
           placeholder={t('compose.subject')} placeholderTextColor={theme.textMuted}
-          style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]} />
+          style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(subject)]} />
         <TextInput
           value={body} onChangeText={setBody} multiline maxLength={1000}
           placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
-          style={[styles.input, styles.bodyInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]} />
+          style={[styles.input, styles.bodyInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(body)]} />
 
         <TouchableOpacity
           onPress={send} disabled={!canSend} activeOpacity={0.85}

@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import {
   X, Send, Inbox, PenSquare, AlertCircle, Users,
-  GraduationCap, Search, CalendarDays, Check,
+  GraduationCap, Search, CalendarDays, Check, Languages,
 } from 'lucide-react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ScreenLayout from '../../components/ScreenLayout'
@@ -27,6 +27,7 @@ import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
 import { formatTimestamp, formatLongDate } from '../../utils/format'
 import { ELEVE_PLACEHOLDER, eleveKey, eleveName, elevePrenom } from '../../utils/eleveLabels'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
+import { dirStyle, localizedSubject, localizedBody } from '../../utils/arabicText'
 import ReadReceipts from '../../components/ReadReceipts'
 
 type Tab = 'inbox' | 'sent'
@@ -131,10 +132,10 @@ export default function AdminMessagesScreen() {
               </Text>
               <Text style={{ color: theme.textSoft, fontSize: 11 }}>{formatTimestamp(item.createdAt)}</Text>
             </View>
-            <Text numberOfLines={1} style={{ color: theme.text, fontWeight: isUnread ? '700' : '500', fontSize: 13, marginTop: 2 }}>
-              {isUrgent ? '🚨 ' : ''}{item.subject}
+            <Text numberOfLines={1} style={[{ color: theme.text, fontWeight: isUnread ? '700' : '500', fontSize: 13, marginTop: 2 }, dirStyle(localizedSubject(item, lang))]}>
+              {isUrgent ? '🚨 ' : ''}{localizedSubject(item, lang)}
             </Text>
-            <Text numberOfLines={1} style={{ color: theme.textSoft, fontSize: 12, marginTop: 2 }}>{item.body}</Text>
+            <Text numberOfLines={1} style={[{ color: theme.textSoft, fontSize: 12, marginTop: 2 }, dirStyle(localizedBody(item, lang))]}>{localizedBody(item, lang)}</Text>
           </View>
         </View>
         {tab === 'sent' && item.toType === 'user' && Array.isArray(item.toIds) && item.toIds.length > 0 ? (
@@ -211,8 +212,8 @@ export default function AdminMessagesScreen() {
                     <Text style={{ color: theme.danger, fontWeight: '800', fontSize: 11 }}>🚨 {t('compose.urgent')}</Text>
                   </View>
                 )}
-                <Text style={{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }}>{detail.subject}</Text>
-                <Text style={{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }}>{detail.body}</Text>
+                <Text style={[{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }, dirStyle(localizedSubject(detail, lang))]}>{localizedSubject(detail, lang)}</Text>
+                <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
                 {tab === 'sent' && profile?.uid ? (
                   <ReadReceipts
                     message={sentMsgs.find(m => m.id === detail.id) || detail}
@@ -250,6 +251,9 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
   const [vars, setVars] = useState<Record<string, string>>({})
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
+  const [withArabic, setWithArabic] = useState(false)   // version arabe (optionnelle)
+  const [subjectAr, setSubjectAr] = useState('')
+  const [bodyAr, setBodyAr] = useState('')
   const [urgent, setUrgent] = useState(false)
   const [sending, setSending] = useState(false)
 
@@ -405,6 +409,8 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
     const fromNom = `${profile.prenom} ${profile.nom}`.trim()
     const fromRole = profile.role || 'admin'
     const sender = { uid: profile.uid, nom: profile.nom, prenom: profile.prenom }
+    const arSubject = withArabic && subjectAr.trim() ? subjectAr.trim() : undefined
+    const arBody    = withArabic && bodyAr.trim()    ? bodyAr.trim()    : undefined
     try {
       let reach = 0
 
@@ -416,11 +422,12 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
             .map(e => ({
               parentUid: (e as any).parentUid as string,
               body:      body.split(ELEVE_PLACEHOLDER).join(elevePrenom(e)).trim(),
+              bodyAr:    arBody ? arBody.split(ELEVE_PLACEHOLDER).join(elevePrenom(e)).trim() : undefined,
               label:     `${eleveName(e)} · ${e.classe}`,
               eleveId:   e.codeMassar,
             }))
           const r = await broadcastPersonalized({
-            recipients, subject: subject.trim(), classe: selectedClasses.join(', '),
+            recipients, subject: subject.trim(), subjectAr: arSubject, classe: selectedClasses.join(', '),
             urgent, category: 'announcement', teacher: sender, fromRole,
           })
           reach = r.parentsTargeted
@@ -428,7 +435,8 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
           // Générique : un seul message aux parents des élèves sélectionnés.
           const r = await broadcastToParents({
             parentUids, label: classRecipientLabel, classe: selectedClasses.join(', '),
-            subject: subject.trim(), body: body.trim(), urgent, category: 'announcement',
+            subject: subject.trim(), body: body.trim(),
+            subjectAr: arSubject, bodyAr: arBody, urgent, category: 'announcement',
             teacher: sender, fromRole,
           })
           reach = r.parentsTargeted
@@ -437,6 +445,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
         await broadcast({
           type: selectedPeople.length === 1 ? 'direct' : 'announcement',
           subject: subject.trim(), body: body.trim(),
+          subjectAr: arSubject, bodyAr: arBody,
           fromId: profile.uid, fromNom, fromRole,
           toType: 'user', toIds: selectedPeople.map(p => p.uid), toLabel: targetLabel,
           priority: urgent ? 'urgent' : 'normal', category: 'announcement',
@@ -450,6 +459,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
         else if (targetMode === 'teachers') { toType = 'teachers'; toIds = allTeachers.map(p => p.uid) }
         await broadcast({
           type: 'announcement', subject: subject.trim(), body: body.trim(),
+          subjectAr: arSubject, bodyAr: arBody,
           fromId: profile.uid, fromNom, fromRole,
           toType, toIds, toLabel: targetLabel,
           priority: urgent ? 'urgent' : 'normal', category: 'announcement',
@@ -470,6 +480,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
   const switchMode = (mode: TargetMode) => {
     setTargetMode(mode)
     setSelectedTmpl(null); setSubject(''); setBody(''); setVars({}); setDateValues({})
+    setSubjectAr(''); setBodyAr('')
   }
 
   const TARGET_OPTS: { mode: TargetMode; label: string; icon: any }[] = [
@@ -718,13 +729,13 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
             <Text style={[cs.label, { color: theme.textSoft, marginTop: 14 }]}>{t('compose.subject')}</Text>
             <TextInput value={subject} onChangeText={setSubject}
               placeholder="Ex: Réunion parents-profs" placeholderTextColor={theme.textMuted} maxLength={120}
-              style={[cs.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]} />
+              style={[cs.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }, dirStyle(subject)]} />
 
             <Text style={[cs.label, { color: theme.textSoft, marginTop: 14 }]}>{t('compose.body')}</Text>
             <TextInput value={body} onChangeText={setBody}
               placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
               multiline textAlignVertical="top" maxLength={2000}
-              style={[cs.input, cs.textarea, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]} />
+              style={[cs.input, cs.textarea, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }, dirStyle(body)]} />
             {targetMode === 'class' && body.includes(ELEVE_PLACEHOLDER) && (
               <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 6, fontStyle: 'italic' }}>
                 {lang === 'ar'
@@ -733,6 +744,30 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
                     ? '"{élève}" is replaced by each student’s first name.'
                     : '« {élève} » sera remplacé par le prénom de chaque élève.'}
               </Text>
+            )}
+
+            {/* Version arabe (optionnelle) — affichée aux familles dont
+                l'app est en arabe ; sinon la version principale est montrée. */}
+            <Pressable onPress={() => setWithArabic(v => !v)}
+              style={[cs.urgentRow, { backgroundColor: withArabic ? theme.primarySurface : theme.surface, borderColor: withArabic ? theme.primary : theme.border }]}>
+              <Languages size={16} color={withArabic ? theme.primary : theme.textSoft} strokeWidth={2} />
+              <Text style={{ flex: 1, marginStart: 10, color: theme.text, fontWeight: '700', fontSize: 13 }}>
+                {lang === 'ar' ? 'نسخة عربية (اختياري)' : lang === 'en' ? 'Arabic version (optional)' : 'Version arabe (optionnel)'}
+              </Text>
+              <View style={[cs.dot, { backgroundColor: withArabic ? theme.primary : theme.borderStrong }]} />
+            </Pressable>
+            {withArabic && (
+              <>
+                <Text style={[cs.label, { color: theme.textSoft, marginTop: 14 }]}>الموضوع</Text>
+                <TextInput value={subjectAr} onChangeText={setSubjectAr}
+                  placeholder="مثال: اجتماع الأولياء" placeholderTextColor={theme.textMuted} maxLength={120}
+                  style={[cs.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white, writingDirection: 'rtl', textAlign: 'right' }]} />
+                <Text style={[cs.label, { color: theme.textSoft, marginTop: 14 }]}>الرسالة</Text>
+                <TextInput value={bodyAr} onChangeText={setBodyAr}
+                  placeholder="نص الرسالة بالعربية…" placeholderTextColor={theme.textMuted}
+                  multiline textAlignVertical="top" maxLength={2000}
+                  style={[cs.input, cs.textarea, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white, writingDirection: 'rtl', textAlign: 'right' }]} />
+              </>
             )}
 
             {/* Urgent */}

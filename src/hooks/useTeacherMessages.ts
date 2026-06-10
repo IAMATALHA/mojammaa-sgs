@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { subscribeMessages, subscribeSentMessages, type MessageDoc } from '../services/messagesService'
+import i18n from '../i18n'
+import { localizedSubject, localizedBody } from '../utils/arabicText'
 import type { Announcement } from '../utils/dashboardTypes'
 
 function timestampToISO(ts: any): string {
@@ -13,8 +15,8 @@ function timestampToISO(ts: any): string {
 function toAnnouncement(m: MessageDoc): Announcement {
   return {
     id:       m.id || '',
-    title:    m.subject,
-    body:     m.body,
+    title:    localizedSubject(m, i18n.language),
+    body:     localizedBody(m, i18n.language),
     author:   m.fromNom || 'École',
     date:     timestampToISO(m.createdAt),
     priority: m.priority === 'urgent' ? 'urgent' : 'normal',

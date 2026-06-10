@@ -19,12 +19,14 @@ import { formatTimestamp } from '../../utils/format'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import BottomSheet from '../../components/BottomSheet'
 import ParentComposeSheet from '../../components/ParentComposeSheet'
+import { dirStyle, localizedSubject, localizedBody } from '../../utils/arabicText'
 
 type Filter = 'all' | 'urgent' | 'school' | 'event'
 
 export default function ParentMessagesScreen() {
   const theme = useTheme()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const lang = i18n.language
   const { profile } = useAuth()
   const navigation = useNavigation<any>()
   const route = useRoute<any>()
@@ -84,6 +86,8 @@ export default function ParentMessagesScreen() {
     if (q) list = list.filter(m =>
       (m.subject || '').toLowerCase().includes(q) ||
       (m.body || '').toLowerCase().includes(q) ||
+      (m.subjectAr || '').toLowerCase().includes(q) ||
+      (m.bodyAr || '').toLowerCase().includes(q) ||
       (m.fromNom || '').toLowerCase().includes(q),
     )
     return list
@@ -157,10 +161,10 @@ export default function ParentMessagesScreen() {
               </Text>
               <Text style={{ color: theme.textSoft, fontSize: 11 }}>{formatTimestamp(item.createdAt)}</Text>
             </View>
-            <Text numberOfLines={1} style={{ color: theme.text, fontWeight: isUnread ? '700' : '500', fontSize: 13, marginTop: 2 }}>
-              {isUrgent ? '🚨 ' : ''}{item.subject}
+            <Text numberOfLines={1} style={[{ color: theme.text, fontWeight: isUnread ? '700' : '500', fontSize: 13, marginTop: 2 }, dirStyle(localizedSubject(item, lang))]}>
+              {isUrgent ? '🚨 ' : ''}{localizedSubject(item, lang)}
             </Text>
-            <Text numberOfLines={1} style={{ color: theme.textSoft, fontSize: 12, marginTop: 2 }}>{item.body}</Text>
+            <Text numberOfLines={1} style={[{ color: theme.textSoft, fontSize: 12, marginTop: 2 }, dirStyle(localizedBody(item, lang))]}>{localizedBody(item, lang)}</Text>
           </View>
         </View>
       </Pressable>
@@ -228,8 +232,8 @@ export default function ParentMessagesScreen() {
                   <Text style={{ color: theme.danger, fontWeight: '800', fontSize: 11 }}>🚨 {t('compose.urgent')}</Text>
                 </View>
               )}
-              <Text style={{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }}>{detail.subject}</Text>
-              <Text style={{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }}>{detail.body}</Text>
+              <Text style={[{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }, dirStyle(localizedSubject(detail, lang))]}>{localizedSubject(detail, lang)}</Text>
+              <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
             </ScrollView>
 
             {/* Reply bar */}
@@ -237,7 +241,7 @@ export default function ParentMessagesScreen() {
               <View style={[styles.replyBar, { borderTopColor: theme.border }]}>
                 <TextInput value={replyText} onChangeText={setReplyText}
                   placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
-                  style={[styles.replyInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
+                  style={[styles.replyInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(replyText)]}
                   multiline maxLength={500} />
                 <TouchableOpacity onPress={handleReply} disabled={!replyText.trim() || replying}
                   style={[styles.replyBtn, { backgroundColor: replyText.trim() ? theme.primary : theme.surfaceAlt }]}>
