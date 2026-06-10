@@ -170,6 +170,18 @@ service cloud.firestore {
     match /messages/{messageId} {
       // Lecture : expéditeur, destinataire (uid dans toIds), diffusions ciblant
       // mon rôle, ou admin.
+      //
+      // DEUX statements `allow read` SÉPARÉS, c'est voulu (bug corrigé 2026-06-10) :
+      // l'analyseur de requêtes de PROD ne sait pas prouver le disjoint
+      // `toIds is list && uid in toIds` à l'intérieur du grand OR → la requête
+      // where('toIds','array-contains',uid) était REFUSÉE pour tout le monde
+      // (l'émulateur, lui, l'acceptait — ne pas s'y fier pour ça). Statement 1 :
+      // grant minimal prouvable pour ce listener. Statement 2 : expression
+      // complète inchangée (la garde `is list` y reste nécessaire car un doc
+      // SANS toIds fait ERREUR sur `in`, et les erreurs ne sont PAS absorbées
+      // par ||). Les statements étant évalués indépendamment, chacun couvre
+      // l'angle mort de l'autre.
+      allow read: if isSignedIn() && myUid() in resource.data.toIds;
       allow read: if isSignedIn() && (
         resource.data.fromId == myUid()
         || (resource.data.toIds is list && myUid() in resource.data.toIds)
