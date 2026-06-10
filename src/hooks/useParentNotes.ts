@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { subscribeNotesForEleve, getClassNotes, type NoteDoc } from '../services/notesService'
+import { subscribeNotesForEleve, getClassStats, type NoteDoc, type ClassStatsDoc } from '../services/notesService'
 
 export interface SubjectGradeReal {
   subject: string
@@ -27,7 +27,7 @@ function computeHonor(avg: number): ChildReportReal['honor'] {
 
 export function useParentNotes(eleveId: string | undefined, classe: string | undefined) {
   const [notes, setNotes] = useState<NoteDoc[]>([])
-  const [classNotes, setClassNotes] = useState<NoteDoc[]>([])
+  const [classStats, setClassStats] = useState<ClassStatsDoc | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -46,9 +46,11 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
   const latestSemestre = semestres[semestres.length - 1] || ''
   const prevSemestre = semestres.length >= 2 ? semestres[semestres.length - 2] : ''
 
+  // Moyenne/rang de classe : agrégat serveur ANONYME (classStats) — plus
+  // jamais les notes brutes des autres élèves (confidentialité).
   useEffect(() => {
-    if (!classe || !latestSemestre) { setClassNotes([]); return }
-    getClassNotes(classe, latestSemestre).then(setClassNotes).catch(() => setClassNotes([]))
+    if (!classe || !latestSemestre) { setClassStats(null); return }
+    getClassStats(classe, latestSemestre).then(setClassStats).catch(() => setClassStats(null))
   }, [classe, latestSemestre])
 
   const report: ChildReportReal | null = useMemo(() => {
@@ -72,27 +74,12 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
       prevBySubject.set(n.matiere, list)
     })
 
-    const classAvgBySubject = new Map<string, number>()
-    const classStudentAvgs: number[] = []
-
-    if (classNotes.length > 0) {
-      const bySubjectClass = new Map<string, number[]>()
-      const byStudentClass = new Map<string, number[]>()
-      classNotes.forEach(n => {
-        const slist = bySubjectClass.get(n.matiere) || []
-        slist.push(n.note)
-        bySubjectClass.set(n.matiere, slist)
-        const stlist = byStudentClass.get(n.eleveId) || []
-        stlist.push(n.note)
-        byStudentClass.set(n.eleveId, stlist)
-      })
-      bySubjectClass.forEach((vals, subj) => {
-        classAvgBySubject.set(subj, round1(vals.reduce((s, v) => s + v, 0) / vals.length))
-      })
-      byStudentClass.forEach(vals => {
-        classStudentAvgs.push(round1(vals.reduce((s, v) => s + v, 0) / vals.length))
-      })
-    }
+    // Agrégat serveur (mêmes formules round1 que l'ancien calcul local —
+    // voir functions/classStats.js).
+    const classAvgBySubject = new Map<string, number>(
+      classStats ? Object.entries(classStats.subjectAvgs) : [],
+    )
+    const classStudentAvgs: number[] = classStats ? classStats.studentAvgs : []
 
     const subjects: SubjectGradeReal[] = [...bySubject.entries()].map(([subj, vals]) => {
       const avg = round1(vals.reduce((s, v) => s + v, 0) / vals.length)
@@ -123,7 +110,7 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
       honor: computeHonor(generalAvg),
       subjects,
     }
-  }, [notes, classNotes, latestSemestre, prevSemestre])
+  }, [notes, classStats, latestSemestre, prevSemestre])
 
   return { loading, notes, semestres, report }
 }

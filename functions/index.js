@@ -9,11 +9,12 @@
  * write the message; in-app delivery still happens via the Firestore listener.
  */
 
-const { onDocumentCreated } = require('firebase-functions/v2/firestore')
+const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/firestore')
 const { setGlobalOptions } = require('firebase-functions/v2')
 const { initializeApp } = require('firebase-admin/app')
 const { getFirestore, FieldPath } = require('firebase-admin/firestore')
 const logger = require('firebase-functions/logger')
+const { computeClassStats, statsDocId } = require('./classStats')
 
 initializeApp()
 const db = getFirestore()
@@ -128,4 +129,44 @@ exports.onMessageCreated = onDocumentCreated('messages/{messageId}', async (even
 
   // Record outcome for observability (does not re-trigger onCreate).
   await snap.ref.set({ push: { sent, recipients: uids.length, tokens: tokens.length, at: new Date() } }, { merge: true })
+})
+
+// ── classStats : agrégats anonymes par (classe, semestre) ──────────────────
+//
+// Pourquoi : l'écran Notes parent affiche moyenne de classe + rang. Avant, il
+// lisait TOUTES les notes brutes de la classe (trou de confidentialité — un
+// parent voyait les notes des autres enfants). Ce trigger maintient un agrégat
+// anonyme dans classStats/{classe}_{semestre} ; le client ne lit plus que ça,
+// ce qui permettra de durcir la règle de lecture sur `notes`.
+
+/** Recalcule (full recompute, idempotent) l'agrégat d'une (classe, semestre). */
+async function refreshClassStats(classe, semestre) {
+  if (!classe || !semestre) return
+  const snap = await db
+    .collection('notes')
+    .where('classe', '==', classe)
+    .where('semestre', '==', semestre)
+    .get()
+  const stats = computeClassStats(snap.docs.map((d) => d.data()))
+  const ref = db.collection('classStats').doc(statsDocId(classe, semestre))
+  if (stats.notesCount === 0) {
+    await ref.delete()
+    return
+  }
+  await ref.set({ classe, semestre, ...stats, updatedAt: new Date() })
+}
+
+exports.onNoteWritten = onDocumentWritten('notes/{noteId}', async (event) => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null
+  const after = event.data?.after?.exists ? event.data.after.data() : null
+
+  // Une note déplacée de classe/semestre impacte DEUX agrégats (ancien + nouveau).
+  const pairs = new Map()
+  for (const d of [before, after]) {
+    if (d && d.classe && d.semestre) pairs.set(`${d.classe}|${d.semestre}`, [d.classe, d.semestre])
+  }
+  for (const [classe, semestre] of pairs.values()) {
+    await refreshClassStats(classe, semestre)
+    logger.info('classStats refreshed', { classe, semestre })
+  }
 })

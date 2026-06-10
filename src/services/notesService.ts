@@ -1,5 +1,5 @@
 import {
-  collection, query, where, onSnapshot, getDocs,
+  collection, query, where, onSnapshot, doc, getDoc,
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
@@ -86,14 +86,34 @@ export function subscribeNotesForEleve(
   )
 }
 
-export async function getClassNotes(classe: string, semestre: string): Promise<NoteDoc[]> {
-  const snap = await getDocs(
-    query(collection(db, 'notes'), where('classe', '==', classe), where('semestre', '==', semestre)),
-  )
-  const list: NoteDoc[] = []
-  snap.docs.forEach(d => {
-    const n = docToNote(d.id, d.data() as Record<string, unknown>)
-    if (n) list.push(n)
-  })
-  return list
+/**
+ * Agrégat ANONYME d'une (classe, semestre), maintenu côté serveur par la CF
+ * `onNoteWritten` (functions/classStats.js). Remplace l'ancien getClassNotes()
+ * qui téléchargeait les notes brutes de TOUTE la classe (confidentialité) —
+ * ne pas réintroduire de lecture classe entière côté parent.
+ */
+export interface ClassStatsDoc {
+  classe:      string
+  semestre:    string
+  subjectAvgs: Record<string, number>  // moyenne de classe par matiereLabel
+  studentAvgs: number[]                // moyennes d'élèves, triées desc, anonymes
+  students:    number
+  notesCount:  number
+}
+
+export async function getClassStats(classe: string, semestre: string): Promise<ClassStatsDoc | null> {
+  const id = `${classe}_${semestre}`.replace(/\//g, '_')
+  const snap = await getDoc(doc(db, 'classStats', id))
+  if (!snap.exists()) return null
+  const data = snap.data() as Record<string, unknown>
+  return {
+    classe:      asString(data.classe) || classe,
+    semestre:    asString(data.semestre) || semestre,
+    subjectAvgs: data.subjectAvgs && typeof data.subjectAvgs === 'object'
+      ? data.subjectAvgs as Record<string, number> : {},
+    studentAvgs: Array.isArray(data.studentAvgs)
+      ? data.studentAvgs.filter((v): v is number => typeof v === 'number') : [],
+    students:    asNumber(data.students) ?? 0,
+    notesCount:  asNumber(data.notesCount) ?? 0,
+  }
 }

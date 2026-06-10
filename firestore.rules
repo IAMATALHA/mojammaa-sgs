@@ -89,11 +89,14 @@ service cloud.firestore {
 
     // ── notes ────────────────────────────────────────────────
     match /notes/{noteId} {
-      // DETTE DE CONFIDENTIALITÉ (à durcir — cf. Option B) : le parent lit TOUTES
-      // les notes, pas seulement celles de son enfant. Nécessaire tant que l'écran
-      // Notes parent calcule la moyenne/le rang de classe via getClassNotes()
-      // (lecture classe entière). À remplacer par un agrégat serveur, puis revenir à
-      //   || (isParent() && eleveParentUid(resource.data.eleveId) == myUid())
+      // DETTE DE CONFIDENTIALITÉ — dernier trou parent. L'agrégat serveur
+      // (classStats, CF onNoteWritten) existe depuis Batch 1 et le client
+      // useParentNotes ne lit plus la classe entière. MAIS l'ancien build
+      // installé chez les parents appelle encore getClassNotes() → NE FLIPPER
+      // qu'après adoption du build EAS Batch 1+. Règle cible :
+      //   allow read: if isAdmin()
+      //               || teacherTeaches(resource.data.classe)
+      //               || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
       allow read: if isAdmin()
                   || teacherTeaches(resource.data.classe)
                   || isParent();
@@ -116,6 +119,16 @@ service cloud.firestore {
                   || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
       allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classe);
       allow delete: if isSuperAdmin();
+    }
+
+    // ── classStats (agrégats ANONYMES par classe/semestre) ──
+    // Maintenus par la CF onNoteWritten (Admin SDK) : moyennes de classe par
+    // matière + tableau TRIÉ de moyennes d'élèves sans identifiants. C'est ce
+    // que lit l'écran Notes parent pour moyenne/rang (au lieu des notes brutes
+    // de toute la classe). Non nominatif → lisible par tout connecté.
+    match /classStats/{statId} {
+      allow read:  if isSignedIn();
+      allow write: if false;
     }
 
     // ── bulletins ────────────────────────────────────────────
