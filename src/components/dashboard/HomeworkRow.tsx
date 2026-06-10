@@ -7,7 +7,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
 import { BookOpen, Check, FileText } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
-import type { HomeworkItem } from '../../utils/mockData'
+import type { HomeworkItem } from '../../utils/dashboardTypes'
 
 function dueLabel(iso: string): { text: string; danger: boolean } {
   const d = new Date(iso); d.setHours(0, 0, 0, 0)

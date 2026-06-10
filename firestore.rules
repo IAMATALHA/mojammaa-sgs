@@ -53,6 +53,15 @@ service cloud.firestore {
     function eleveParentUid(eleveId) {
       return get(/databases/$(database)/documents/eleves/$(eleveId)).data.parentUid;
     }
+    // Un champ tableau ne peut évoluer qu'en AJOUTANT son propre uid
+    // (ou rester inchangé). Utilisé pour readBy/deletedBy des messages :
+    // pas de retrait, pas d'ajout d'un autre uid, pas de réécriture.
+    function selfAppendOnly(field) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([field])
+        || (request.resource.data[field] is list
+            && request.resource.data[field].hasAll(resource.data.get(field, []))
+            && request.resource.data[field].hasOnly(resource.data.get(field, []).concat([myUid()])));
+    }
 
     // ── users ────────────────────────────────────────────────
     match /users/{uid} {
@@ -98,13 +107,13 @@ service cloud.firestore {
 
     // ── absences ─────────────────────────────────────────────
     match /absences/{absenceId} {
-      // DETTE DE CONFIDENTIALITÉ (à durcir — cf. Option B) : le parent lit toutes
-      // les absences. La règle stricte eleveParentUid() suppose que l'ID du doc
-      // eleves == eleveId stocké dans absences (= codeMassar), ce qui n'est pas
-      // garanti → on relâche pour ne pas casser l'écran Absences parent.
+      // Parent : uniquement les absences de SES enfants. Vérifié sur données
+      // live (2026-06-10) : absences.eleveId == ID du doc eleves (codeMassar)
+      // pour 100% des docs — TeacherAttendanceScreen écrit eleveId = eleve.id.
+      // La requête parent (where eleveId in [enfants]) reste donc autorisée.
       allow read: if isAdmin()
                   || teacherTeaches(resource.data.classe)
-                  || isParent();
+                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
       allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classe);
       allow delete: if isSuperAdmin();
     }
@@ -147,11 +156,19 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.fromId == myUid()
         && (request.resource.data.toType == 'user' || isTeacher() || isAdmin());
-      // MAJ : un destinataire ne touche QUE readBy/deletedBy ; sinon expéditeur/admin.
-      allow update: if isSignedIn() && (
-        resource.data.fromId == myUid() || isAdmin()
-        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy'])
-      );
+      // MAJ : un destinataire ne touche QUE readBy/deletedBy, et seulement en
+      // s'AJOUTANT lui-même (append-only). Intégrité requise : readBy devient
+      // un accusé de lecture sur lequel l'école s'appuie — personne ne doit
+      // pouvoir effacer/falsifier les lectures des autres (le client utilise
+      // arrayUnion(uid), donc cette contrainte ne casse rien).
+      // L'expéditeur/admin peut éditer les AUTRES champs, mais pas readBy.
+      allow update: if isSignedIn()
+        && (
+          resource.data.fromId == myUid() || isAdmin()
+          || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy'])
+        )
+        && selfAppendOnly('readBy')
+        && selfAppendOnly('deletedBy');
       allow delete: if isAdmin();
     }
 
@@ -167,11 +184,12 @@ service cloud.firestore {
     match /joursScolaires/{dateId}{ allow read: if isSignedIn(); allow write: if isAdmin(); }
 
     // ── config (liste des superadmins, etc.) ────────────────
-    // Lisible par tout connecté (l'app peut vérifier si l'user est superadmin
-    // pour afficher des écrans réservés). Écriture INTERDITE depuis toute app :
-    // modifiable seulement via admin SDK (scripts/setSuperadmin.js).
+    // Lecture ADMIN uniquement (l'app mobile ne lit jamais config/ — vérifié
+    // 2026-06-10 ; inutile d'exposer la liste des superadmins aux parents).
+    // Écriture INTERDITE depuis toute app : modifiable seulement via admin
+    // SDK (scripts/setSuperadmin.js).
     match /config/{docId} {
-      allow read:  if isSignedIn();
+      allow read:  if isAdmin();
       allow write: if false;
     }
 

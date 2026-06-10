@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import { X, Search, Inbox, Send } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -24,6 +25,8 @@ export default function ParentMessagesScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
   const { profile } = useAuth()
+  const navigation = useNavigation<any>()
+  const route = useRoute<any>()
   const [messages, setMessages] = useState<MessageDoc[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -44,6 +47,19 @@ export default function ParentMessagesScreen() {
     )
     return unsub
   }, [profile?.uid])
+
+  // Arrivée via tap sur une notification push : ouvrir le message ciblé
+  // dès qu'il est présent dans la liste, puis consommer le param.
+  useEffect(() => {
+    const mid = route.params?.messageId
+    if (!mid || messages.length === 0) return
+    const msg = messages.find(m => m.id === mid)
+    if (msg) {
+      openMessage(msg)
+      navigation.setParams({ messageId: undefined })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.messageId, messages])
 
   const unreadCount = useMemo(
     () => messages.filter(m => !(m.readBy || []).includes(profile?.uid || '')).length,

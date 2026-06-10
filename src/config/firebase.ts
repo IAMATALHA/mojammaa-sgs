@@ -2,7 +2,8 @@
  * Firebase config — partagé avec mojammaa-admin (web) et mojammaa-parent.
  * Tous les rôles (élève/parent, prof, admin) pointent sur le même projet
  * Firestore. La séparation des données se fait par les Firestore rules,
- * dont la source de vérité vit dans /mojammaa-admin/firestore.rules.
+ * dont la source de vérité est ICI : firestore.rules de CE repo
+ * (déployer UNIQUEMENT depuis ce repo — jamais depuis mojammaa-admin).
  *
  * Auth persistence : sans setup explicite, Firebase Web SDK en React Native
  * perd la session à chaque cold start. On câble AsyncStorage via

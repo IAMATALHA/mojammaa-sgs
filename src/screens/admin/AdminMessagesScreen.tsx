@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import {
   X, Send, Inbox, PenSquare, AlertCircle, Users,
   GraduationCap, Search, CalendarDays, Check,
@@ -40,6 +41,8 @@ export default function AdminMessagesScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language as 'fr' | 'ar' | 'en'
   const { profile } = useAuth()
+  const navigation = useNavigation<any>()
+  const route = useRoute<any>()
   const [tab, setTab] = useState<Tab>('inbox')
   const [inboxMsgs, setInboxMsgs] = useState<MessageDoc[]>([])
   const [sentMsgs, setSentMsgs] = useState<MessageDoc[]>([])
@@ -62,6 +65,22 @@ export default function AdminMessagesScreen() {
     const u2 = subscribeSentMessages(profile.uid, list => setSentMsgs(list))
     return () => { u1(); u2() }
   }, [profile?.uid])
+
+
+  // Arrivée via tap sur une notification push : basculer sur l'inbox et
+  // ouvrir le message ciblé dès qu'il est chargé, puis consommer le param.
+  useEffect(() => {
+    const mid = route.params?.messageId
+    if (!mid || inboxMsgs.length === 0) return
+    const msg = inboxMsgs.find(m => m.id === mid)
+    if (msg) {
+      setTab('inbox')
+      setDetail(msg)
+      if (profile?.uid && msg.id) { markAsRead(msg.id, profile.uid).catch(() => {}) }
+      navigation.setParams({ messageId: undefined })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.messageId, inboxMsgs])
 
   const displayed = tab === 'inbox' ? inboxMsgs : sentMsgs
   const unreadCount = useMemo(

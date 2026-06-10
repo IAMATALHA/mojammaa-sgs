@@ -8,7 +8,7 @@ import {
 } from '../services/absencesService'
 import { subscribeNotesForEleve, type NoteDoc } from '../services/notesService'
 import { db } from '../config/firebase'
-import type { Child } from '../utils/mockData'
+import type { Child } from '../utils/dashboardTypes'
 
 export interface ParentData {
   loading:  boolean

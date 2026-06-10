@@ -24,7 +24,7 @@ import {
   PARENT_QUICK_ACTIONS,
   type Announcement, type HomeworkItem, type QuickAction,
   type Child,
-} from '../../utils/mockData'
+} from '../../utils/dashboardTypes'
 import { useParentDevoirs } from '../../hooks/useParentDevoirs'
 import { useParentMessages } from '../../hooks/useParentMessages'
 import { greetingKey, hexWithAlpha, formatLongDate } from '../../utils/format'

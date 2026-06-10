@@ -7,7 +7,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
 import { ChevronRight, BookOpen, TrendingUp } from 'lucide-react-native'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
-import type { Child } from '../../utils/mockData'
+import type { Child } from '../../utils/dashboardTypes'
 
 interface ChildCardProps {
   child: Child

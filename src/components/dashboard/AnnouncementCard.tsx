@@ -9,7 +9,7 @@ import { MotiView } from 'moti'
 import { Megaphone, AlertCircle, Calendar, School, ShieldCheck } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import { formatRelative } from '../../utils/format'
-import type { Announcement } from '../../utils/mockData'
+import type { Announcement } from '../../utils/dashboardTypes'
 
 const CATEGORY_ICON = {
   school: School,

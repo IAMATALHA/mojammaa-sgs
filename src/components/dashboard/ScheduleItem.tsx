@@ -12,7 +12,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
 import { Clock, MapPin } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
-import type { ScheduleEntry } from '../../utils/mockData'
+import type { ScheduleEntry } from '../../utils/dashboardTypes'
 
 export default function ScheduleItem({
   item, onPress,

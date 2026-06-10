@@ -8,7 +8,7 @@ import {
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
-import type { QuickAction } from '../../utils/mockData'
+import type { QuickAction } from '../../utils/dashboardTypes'
 
 const ICONS: Record<string, LucideIcon> = {
   'check-circle': CheckCircle,

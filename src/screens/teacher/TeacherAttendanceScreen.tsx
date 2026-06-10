@@ -23,7 +23,6 @@ import {
   collection, getDocs, query, where, writeBatch, doc, Timestamp,
   documentId,
 } from 'firebase/firestore'
-import { sendPush } from '../../services/pushService'
 import { sendMessage } from '../../services/messagesService'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
@@ -56,11 +55,13 @@ interface TeacherInfo {
 }
 
 /**
- * Pour chaque élève absent ayant un parent enregistré :
- *   1. Écrit un doc dans `messages` (historique permanent côté parent)
- *   2. Envoie un push instantané (si parent a un expoPushToken)
+ * Pour chaque élève absent ayant un parent enregistré, écrit un doc dans
+ * `messages` (historique permanent côté parent). Le push est envoyé
+ * SERVEUR par la Cloud Function `onMessageCreated` — surtout ne pas le
+ * faire ici : un prof n'a pas le droit de lire users/{parent} (rules),
+ * et un push client doublerait celui de la CF.
  *
- * Retourne le nombre de parents notifiés (au moins par message Firestore).
+ * Retourne le nombre de parents notifiés.
  */
 async function notifyParentsOfAbsents(
   absents: EleveLite[],
@@ -90,22 +91,10 @@ async function notifyParentsOfAbsents(
 
   if (eleveToParent.size === 0) return 0
 
-  // 2. Lit les parents pour récupérer leurs expoPushTokens.
-  const parentUids = [...new Set([...eleveToParent.values()].map(v => v.parentUid))]
-  const usersSnap = await getDocs(
-    query(collection(db, 'users'), where(documentId(), 'in', parentUids.slice(0, 10))),
-  )
-  const parentToToken = new Map<string, string>()
-  usersSnap.forEach(d => {
-    const data = d.data() as any
-    if (data?.expoPushToken) parentToToken.set(d.id, data.expoPushToken)
-  })
-
   const fromNom = `${teacher.prenom} ${teacher.nom}`.trim()
 
-  // 3. Pour chaque absent : écrire un message + push (en parallèle)
+  // 2. Pour chaque absent : écrire un message (la CF fait le push)
   const writes: Promise<any>[] = []
-  const pushes: any[] = []
   let notified = 0
 
   for (const eleve of absents) {
@@ -129,24 +118,9 @@ async function notifyParentsOfAbsents(
       classe,
     }))
     notified++
-
-    // 3.b — push instantané (best-effort, seulement si on a le token)
-    const token = parentToToken.get(link.parentUid)
-    if (token) {
-      pushes.push({
-        to:    token,
-        title: 'Absence signalée',
-        body,
-        data:  { type: 'absence', eleveId: eleve.id, classe, date, seance },
-      })
-    }
   }
 
-  // 4. Exécuter en parallèle
-  await Promise.all([
-    Promise.all(writes),
-    pushes.length > 0 ? sendPush(pushes) : Promise.resolve(),
-  ])
+  await Promise.all(writes)
   return notified
 }
 

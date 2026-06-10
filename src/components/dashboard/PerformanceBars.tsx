@@ -10,7 +10,7 @@ import React from 'react'
 import { View, Text, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
 import { useTheme } from '../../contexts/ThemeContext'
-import type { ClassPerformance } from '../../utils/mockData'
+import type { ClassPerformance } from '../../utils/dashboardTypes'
 
 interface Props {
   data: ClassPerformance[]

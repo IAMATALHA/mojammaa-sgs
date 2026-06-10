@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { subscribeMessages, type MessageDoc } from '../services/messagesService'
-import type { Announcement } from '../utils/mockData'
+import type { Announcement } from '../utils/dashboardTypes'
 
 function timestampToISO(ts: any): string {
   if (!ts) return new Date().toISOString()

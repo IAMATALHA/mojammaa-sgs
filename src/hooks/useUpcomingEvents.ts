@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   subscribeUpcomingEvents, type EventDoc,
 } from '../services/eventsService'
-import type { UpcomingEvent } from '../utils/mockData'
+import type { UpcomingEvent } from '../utils/dashboardTypes'
 
 // Mapping types FR Firestore → types UpcomingEvent
 const TYPE_MAP: Record<string, UpcomingEvent['type']> = {

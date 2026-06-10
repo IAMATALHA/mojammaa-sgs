@@ -19,7 +19,7 @@ import {
 } from '../services/scheduleService'
 import { computeTeacherPresenceRate } from '../services/absencesService'
 import { db } from '../config/firebase'
-import type { ScheduleEntry, ScheduleStatus, ClassPerformance } from '../utils/mockData'
+import type { ScheduleEntry, ScheduleStatus, ClassPerformance } from '../utils/dashboardTypes'
 
 export interface TeacherKpis {
   classes:    number

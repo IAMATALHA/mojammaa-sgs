@@ -13,6 +13,7 @@ import {
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../contexts/ThemeContext'
+import { useUnreadMessagesCount } from '../hooks/useUnreadMessagesCount'
 import AnimatedTabIcon from '../components/AnimatedTabIcon'
 import TeacherDashboardScreen from '../screens/teacher/TeacherDashboardScreen'
 import TeacherEdtScreen from '../screens/teacher/TeacherEdtScreen'
@@ -37,6 +38,7 @@ function TeacherTabs() {
   const theme = useTheme()
   const { t } = useTranslation()
   const insets = useSafeAreaInsets()
+  const unread = useUnreadMessagesCount()
 
   return (
     <Tab.Navigator
@@ -106,6 +108,8 @@ function TeacherTabs() {
         options={{
           title: t('tabs.messages'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={MessageSquare} color={color} focused={focused} theme={theme} />,
+          tabBarBadge: unread > 0 ? (unread > 99 ? '99+' : unread) : undefined,
+          tabBarBadgeStyle: { backgroundColor: theme.danger, color: '#fff', fontSize: 10, fontFamily: theme.fonts.semibold },
         }}
       />
       <Tab.Screen

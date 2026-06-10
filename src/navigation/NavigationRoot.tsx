@@ -2,11 +2,13 @@
  * Routeur de plus haut niveau. Bascule entre AuthStack et le stack du
  * rôle détecté. Affiche un splash (spinner) pendant l'auth check initial.
  */
-import React from 'react'
+import React, { useState } from 'react'
 import { View, ActivityIndicator, Text, StyleSheet } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
+import { navigationRef } from './navigationRef'
+import { usePushTapNavigation } from '../hooks/usePushTapNavigation'
 import AuthStack    from './AuthStack'
 import StudentStack from './StudentStack'
 import TeacherStack from './TeacherStack'
@@ -24,11 +26,15 @@ function Splash() {
 
 export default function NavigationRoot() {
   const { user, isLoading, role } = useAuth()
+  const [navReady, setNavReady] = useState(false)
+
+  // Tap sur une notification push → écran Messages du rôle (+ détail).
+  usePushTapNavigation(user ? role : null, navReady && !!user)
 
   if (isLoading) return <Splash />
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef} onReady={() => setNavReady(true)}>
       {!user ? (
         <AuthStack />
       ) : role === 'admin' ? (

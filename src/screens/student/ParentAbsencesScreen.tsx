@@ -22,7 +22,7 @@ import { useParentData } from '../../hooks/useParentData'
 import { useParentAbsences } from '../../hooks/useParentAbsences'
 import {
   type AbsenceEntry,
-} from '../../utils/mockData'
+} from '../../utils/dashboardTypes'
 import ScreenBackground from '../../components/ScreenBackground'
 import { localeFor } from '../../utils/format'
 

@@ -29,7 +29,7 @@ import {
 } from '../../components/dashboard'
 import {
   type ScheduleEntry, type Announcement, type QuickAction,
-} from '../../utils/mockData'
+} from '../../utils/dashboardTypes'
 import { greetingKey, formatLongDate } from '../../utils/format'
 
 const TEACHER_QUICK_ACTIONS: QuickAction[] = [

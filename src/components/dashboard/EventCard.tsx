@@ -8,7 +8,7 @@ import { MotiView } from 'moti'
 import { MapPin, Clock } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import { formatDateChip } from '../../utils/format'
-import type { UpcomingEvent } from '../../utils/mockData'
+import type { UpcomingEvent } from '../../utils/dashboardTypes'
 
 const TYPE_LABEL: Record<UpcomingEvent['type'], string> = {
   meeting: 'Réunion',

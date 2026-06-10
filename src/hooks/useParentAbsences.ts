@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { subscribeChildrenOfParent, type EleveDoc } from '../services/elevesService'
 import { subscribeAbsencesForEleves, type AbsenceDoc } from '../services/absencesService'
-import type { AbsenceEntry } from '../utils/mockData'
+import type { AbsenceEntry } from '../utils/dashboardTypes'
 
 const SEANCE_TO_DURATION: Record<string, string> = {
   S1: '08:30-09:30',
