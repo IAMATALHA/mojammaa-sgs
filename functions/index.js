@@ -10,6 +10,7 @@
  */
 
 const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/firestore')
+const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { setGlobalOptions } = require('firebase-functions/v2')
 const { initializeApp } = require('firebase-admin/app')
 const { getFirestore, FieldPath } = require('firebase-admin/firestore')
@@ -212,3 +213,20 @@ exports.onNoteWritten = onDocumentWritten('notes/{noteId}', async (event) => {
     logger.info('classStats refreshed', { classe, semestre })
   }
 })
+
+// ── weeklyDigest : récapitulatif hebdo par parent ───────────────────────────
+//
+// Vendredi 16h (heure de Casablanca) : un message bilingue par parent avec
+// les nouvelles notes / absences / devoirs à venir de SES enfants. Les
+// parents sans activité ne reçoivent rien. Le push part via onMessageCreated.
+// Test manuel : node scripts/runWeeklyDigest.js (dry-run par défaut).
+const { buildWeeklyDigests, sendWeeklyDigests } = require('./digest')
+
+exports.weeklyDigest = onSchedule(
+  { schedule: 'every friday 16:00', timeZone: 'Africa/Casablanca' },
+  async () => {
+    const digests = await buildWeeklyDigests(db)
+    const sent = await sendWeeklyDigests(db, digests)
+    logger.info('weeklyDigest done', { parents: digests.length, sent })
+  },
+)
