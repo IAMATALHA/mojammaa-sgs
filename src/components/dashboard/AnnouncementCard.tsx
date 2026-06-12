@@ -4,8 +4,9 @@
  */
 
 import React from 'react'
-import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { View, Text, Pressable, StyleSheet, Image } from 'react-native'
 import { MotiView } from 'moti'
+import { useTranslation } from 'react-i18next'
 import { Megaphone, AlertCircle, Calendar, School, ShieldCheck } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import { formatRelative } from '../../utils/format'
@@ -23,6 +24,7 @@ export default function AnnouncementCard({
   item, onPress,
 }: { item: Announcement; onPress?: () => void }) {
   const theme = useTheme()
+  const { t } = useTranslation()
   const isUrgent = item.priority === 'urgent'
   const Icon = CATEGORY_ICON[item.category] ?? Megaphone
 
@@ -56,7 +58,7 @@ export default function AnnouncementCard({
           {isUrgent ? (
             <View style={[styles.badge, { backgroundColor: theme.accent }]}>
               <AlertCircle size={9} color="#fff" strokeWidth={1.75} />
-              <Text style={[styles.badgeText, { fontFamily: theme.fonts.black }]}>URGENT</Text>
+              <Text style={[styles.badgeText, { fontFamily: theme.fonts.black }]}>{t('compose.urgent').toUpperCase()}</Text>
             </View>
           ) : null}
         </View>
@@ -72,6 +74,13 @@ export default function AnnouncementCard({
         >
           {item.body}
         </Text>
+        {item.image ? (
+          <Image
+            source={{ uri: item.image }}
+            style={[styles.poster, { backgroundColor: theme.surface }]}
+            resizeMode="cover"
+          />
+        ) : null}
         <View style={styles.metaRow}>
           <Text style={{
             color: theme.textMuted,
@@ -101,7 +110,7 @@ export default function AnnouncementCard({
             from={{ opacity: 0 }}
             animate={{ scale: pressed ? 0.98 : 1, opacity: pressed ? 0.96 : 1 }}
             transition={{ type: 'timing', duration: 200 }}
-            style={[styles.row, baseStyle]}
+            style={[styles.row, baseStyle, theme.shadows.clay]}
           >
             {content}
           </MotiView>
@@ -115,7 +124,7 @@ export default function AnnouncementCard({
       from={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ type: 'timing', duration: 200 }}
-      style={[styles.row, baseStyle]}
+      style={[styles.row, baseStyle, theme.shadows.clay]}
     >
       {content}
     </MotiView>
@@ -126,12 +135,11 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     padding: 16,
-    borderRadius: 16,
-    marginBottom: 10,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 24,
+    marginBottom: 12,
   },
   iconWrap: {
-    width: 36, height: 36, borderRadius: 12,
+    width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
     marginEnd: 12,
   },
@@ -142,6 +150,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999,
   },
   badgeText: { color: '#fff', fontSize: 8.5, letterSpacing: 0.4 },
+  poster: { width: '100%', height: 150, borderRadius: 14, marginTop: 10 },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 },
   dot: { width: 2.5, height: 2.5, borderRadius: 2 },
 })

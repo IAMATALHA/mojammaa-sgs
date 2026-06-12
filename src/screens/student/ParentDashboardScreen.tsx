@@ -9,7 +9,7 @@ import { MotiView } from 'moti'
 import { useNavigation } from '@react-navigation/native'
 import {
   Megaphone, BookOpen, Users, X, Clock,
-  ChevronRight,
+  ChevronRight, Star, AlertTriangle, Smile, FolderOpen,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
@@ -27,7 +27,9 @@ import {
 } from '../../utils/dashboardTypes'
 import { useParentDevoirs } from '../../hooks/useParentDevoirs'
 import { useParentMessages } from '../../hooks/useParentMessages'
-import { greetingKey, hexWithAlpha, formatLongDate } from '../../utils/format'
+import { useParentComportements } from '../../hooks/useParentComportements'
+import { useUnreadMessagesCount } from '../../hooks/useUnreadMessagesCount'
+import { greetingKey, hexWithAlpha, formatLongDate, localeFor } from '../../utils/format'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 
 const { width: SCREEN_W } = Dimensions.get('window')
@@ -53,23 +55,24 @@ function ChildSlide({
       {({ pressed }) => (
         <MotiView
           animate={{
-            scale: pressed ? 0.97 : isActive ? 1 : 0.96,
+            scale: pressed ? 0.94 : isActive ? 1 : 0.96,
             opacity: isActive ? 1 : 0.72,
           }}
-          transition={{ type: 'timing', duration: 200 }}
+          transition={{ type: 'spring', damping: 15, stiffness: 240, mass: 0.7 }}
           style={[
             styles.carouselCard,
-            {
-              backgroundColor: theme.card,
-              borderColor: isActive ? hexWithAlpha(child.avatarColor, 0.45) : theme.border,
-              borderWidth: isActive ? 1.5 : StyleSheet.hairlineWidth,
-            },
-            theme.shadows.sm,
+            { backgroundColor: theme.card },
+            isActive && { backgroundColor: hexWithAlpha(child.avatarColor, 0.08) },
+            theme.shadows.clay,
           ]}
         >
-          <View style={[styles.childAccent, { backgroundColor: child.avatarColor }]} />
           <View style={styles.carouselRow}>
-            <View style={{ flex: 1 }}>
+            <View style={[styles.childAvatar, { backgroundColor: child.avatarColor }]}>
+              <Text style={styles.childAvatarText}>
+                {(child.firstName || '?').charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <View style={{ flex: 1, marginStart: 12 }}>
               <Text
                 numberOfLines={1}
                 style={{
@@ -170,7 +173,8 @@ export default function ParentDashboardScreen() {
   const { profile, logout } = useAuth()
   const parent = useParentData()
   const { devoirs: allDevoirs } = useParentDevoirs()
-  const { messages: liveMessages, unread: unreadMessages } = useParentMessages()
+  const { messages: liveMessages, unread: unreadMessages, error: messagesError } = useParentMessages()
+  const { entries: comportements } = useParentComportements()
   const nav = useNavigation<any>()
   const [refreshing, setRefreshing] = useState(false)
   const loading = parent.loading
@@ -183,6 +187,13 @@ export default function ParentDashboardScreen() {
   const fullName = profile
     ? `${profile.prenom} ${profile.nom}`.trim()
     : 'Parent'
+  const initials = fullName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part.charAt(0).toUpperCase())
+    .join('') || 'P'
+  const unread = useUnreadMessagesCount()
 
   const onRefresh = useCallback(() => {
     setRefreshing(true)
@@ -269,11 +280,9 @@ export default function ParentDashboardScreen() {
         <View style={styles.headerStrip}>
           <Pressable onPress={handleAccountPress} hitSlop={8}>
             <View style={[styles.avatarCircle, { borderColor: theme.accent }]}>
-              <Image
-                source={require('../../../assets/favicon.png')}
-                style={styles.avatarImg}
-                resizeMode="contain"
-              />
+              <Text style={{ color: theme.primary, fontFamily: theme.fonts.black, fontSize: 15 }}>
+                {initials}
+              </Text>
             </View>
           </Pressable>
           <View style={{ flex: 1, marginStart: 12 }}>
@@ -301,6 +310,11 @@ export default function ParentDashboardScreen() {
           </View>
           <Pressable onPress={() => goTo('StudentMessages')} hitSlop={8} style={[styles.avatarCircle, { borderColor: theme.accent }]}>
             <Megaphone size={18} color={theme.accent} strokeWidth={1.75} />
+            {unread > 0 ? (
+              <View style={[styles.unreadBadge, { backgroundColor: theme.danger }]}>
+                <Text style={styles.unreadBadgeText}>{unread > 99 ? '99+' : unread}</Text>
+              </View>
+            ) : null}
           </Pressable>
         </View>
 
@@ -337,7 +351,13 @@ export default function ParentDashboardScreen() {
                   <ChildSlide
                     child={c}
                     isActive={c.id === selectedChild?.id}
-                    onPress={() => setSelectedChildId(c.id)}
+                    // 1er tap : sélectionne (filtre les devoirs en dessous) ;
+                    // tap sur la carte active (toujours le cas avec un seul
+                    // enfant) : ouvre le détail — le chevron le promet.
+                    onPress={() => {
+                      if (c.id === selectedChild?.id) goTo('StudentNotes')
+                      else setSelectedChildId(c.id)
+                    }}
                     theme={theme}
                   />
                 </AnimatedSection>
@@ -346,8 +366,19 @@ export default function ParentDashboardScreen() {
           )}
         </View>
 
-        {/* ── Devoirs récents ──────────────────────────────── */}
+        {/* ── Accès rapide ─────────────────────────────────── */}
+        {/* Juste sous les enfants : c'est la section la plus utilisée. */}
         <AnimatedSection delay={100}>
+          <View style={styles.section}>
+            <SectionHeader
+              title={t('parent.quickAccess')}
+            />
+            <QuickActions actions={PARENT_QUICK_ACTIONS} onPress={handleQuickAction} />
+          </View>
+        </AnimatedSection>
+
+        {/* ── Devoirs récents ──────────────────────────────── */}
+        <AnimatedSection delay={140}>
           <View style={styles.section}>
             <SectionHeader
               title={t('parent.recentHomework')}
@@ -378,6 +409,80 @@ export default function ParentDashboardScreen() {
           </View>
         </AnimatedSection>
 
+        {/* ── Ressources (lien compact vers la bibliothèque) ── */}
+        <AnimatedSection delay={150}>
+          <View style={styles.section}>
+            <Card padding={14} onPress={() => goTo('StudentRessources')}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={[styles.behaviorIcon, { backgroundColor: hexWithAlpha(theme.info, 0.12) }]}>
+                  <FolderOpen size={15} color={theme.info} strokeWidth={2.2} />
+                </View>
+                <View style={{ flex: 1, marginStart: 10 }}>
+                  <Text style={{ color: theme.text, fontFamily: theme.fonts.semibold, fontSize: 13.5 }}>
+                    {t('resources.title')}
+                  </Text>
+                  <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: theme.fonts.regular, fontSize: 11, marginTop: 2 }}>
+                    {t('resources.parentSubtitle')}
+                  </Text>
+                </View>
+                <ChevronRight size={16} color={theme.textMuted} strokeWidth={1.75} />
+              </View>
+            </Card>
+          </View>
+        </AnimatedSection>
+
+        {/* ── Comportement (mérites / avertissements) ─────── */}
+        <AnimatedSection delay={160}>
+          <View style={styles.section}>
+            <SectionHeader
+              title={t('behavior.parentTitle')}
+              subtitle={t('behavior.parentSubtitle')}
+              actionLabel={t('common.seeAll')}
+              onAction={() => goTo('StudentComportement')}
+            />
+            <Card padding={12}>
+              {comportements.length === 0 ? (
+                <EmptyState
+                  icon={Smile}
+                  title={t('behavior.noEntries')}
+                  message={t('behavior.noEntriesMsg')}
+                />
+              ) : (
+                comportements.slice(0, 3).map((e, idx) => {
+                  const merite = e.kind === 'merite'
+                  const tint = merite ? theme.success : theme.danger
+                  const Icon = merite ? Star : AlertTriangle
+                  return (
+                    <Pressable
+                      key={e.id}
+                      onPress={() => goTo('StudentComportement')}
+                      android_ripple={{ color: theme.border }}
+                      style={[
+                        styles.behaviorRow,
+                        idx < Math.min(comportements.length, 3) - 1 &&
+                          { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+                      ]}
+                    >
+                      <View style={[styles.behaviorIcon, { backgroundColor: hexWithAlpha(tint, 0.12) }]}>
+                        <Icon size={15} color={tint} strokeWidth={2.2} />
+                      </View>
+                      <View style={{ flex: 1, marginStart: 10 }}>
+                        <Text numberOfLines={1} style={{ color: theme.text, fontFamily: theme.fonts.semibold, fontSize: 13 }}>
+                          {t(`behavior.reasons.${e.reason}`)}
+                        </Text>
+                        <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: theme.fonts.regular, fontSize: 11, marginTop: 2 }}>
+                          {e.elevePrenom} · {new Date(e.date).toLocaleDateString(localeFor(), { day: '2-digit', month: 'short' })}
+                        </Text>
+                      </View>
+                      <ChevronRight size={16} color={theme.textMuted} strokeWidth={1.75} />
+                    </Pressable>
+                  )
+                })
+              )}
+            </Card>
+          </View>
+        </AnimatedSection>
+
         {/* ── Annonces ─────────────────────────────────────── */}
         <AnimatedSection delay={180}>
           <View style={styles.section}>
@@ -386,7 +491,9 @@ export default function ParentDashboardScreen() {
               actionLabel={t('common.seeMore')}
               onAction={() => goTo('StudentMessages')}
             />
-            {liveMessages.length === 0 ? (
+            {messagesError && liveMessages.length === 0 ? (
+              <MessagesErrorBanner />
+            ) : liveMessages.length === 0 ? (
               <Card>
                 <EmptyState
                   icon={Megaphone}
@@ -404,16 +511,6 @@ export default function ParentDashboardScreen() {
                 ))}
               </View>
             )}
-          </View>
-        </AnimatedSection>
-
-        {/* ── Accès rapide ─────────────────────────────────── */}
-        <AnimatedSection delay={180}>
-          <View style={styles.section}>
-            <SectionHeader
-              title={t('parent.quickAccess')}
-            />
-            <QuickActions actions={PARENT_QUICK_ACTIONS} onPress={handleQuickAction} />
           </View>
         </AnimatedSection>
 
@@ -518,6 +615,13 @@ function AnnouncementDetailModal({
             }}>
               {item.body}
             </Text>
+            {item.image ? (
+              <Image
+                source={{ uri: item.image }}
+                style={{ width: '100%', height: 360, borderRadius: 14, marginTop: 14, backgroundColor: theme.surface }}
+                resizeMode="contain"
+              />
+            ) : null}
           </ScrollView>
         </Pressable>
       </Pressable>
@@ -600,8 +704,17 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#FFFFFF',
   },
-  avatarImg: {
-    width: 28, height: 28,
+  unreadBadge: {
+    position: 'absolute',
+    top: -4, right: -4,
+    minWidth: 18, height: 18, borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
 
   // Carousel enfants
@@ -615,16 +728,17 @@ const styles = StyleSheet.create({
     width: CAROUSEL_CARD_W,
   },
   carouselCard: {
-    borderRadius: 22,
+    borderRadius: 28,
     padding: 20,
-    overflow: 'hidden',
   },
-  childAccent: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    width: 4,
+  childAvatar: {
+    width: 42, height: 42, borderRadius: 21,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  childAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
   },
   carouselRow: {
     flexDirection: 'row',
@@ -650,6 +764,18 @@ const styles = StyleSheet.create({
 
   // Sections
   section: { paddingHorizontal: 20, marginTop: 22 },
+
+  // Comportement
+  behaviorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  behaviorIcon: {
+    width: 30, height: 30, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   // Footer
   footer: {

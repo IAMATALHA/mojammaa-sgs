@@ -23,6 +23,23 @@ service firebase.storage {
       allow write: if request.auth != null && request.auth.uid == teacherUid;
     }
 
+    // Ressources pédagogiques : même modèle que les devoirs — le prof
+    // propriétaire écrit dans son sous-dossier, tout connecté peut lire.
+    match /ressources/{teacherUid}/{filename} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == teacherUid;
+    }
+
+    // Affiches d'annonces (admin uniquement). Le rôle est vérifié via
+    // cross-service lookup Firestore (rules_version 2) : posséder le
+    // sous-dossier ne suffit pas, il faut role == 'admin'.
+    match /annonces/{adminUid}/{filename} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == adminUid
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // Tout le reste : refusé par défaut.
     match /{path=**} {
       allow read, write: if false;

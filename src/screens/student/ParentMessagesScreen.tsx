@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, Pressable, Modal, ScrollView,
-  ActivityIndicator, TextInput, TouchableOpacity, Alert,
-  KeyboardAvoidingView, Platform,
+  ActivityIndicator, TextInput, TouchableOpacity, Alert, Image,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -15,7 +14,7 @@ import {
   type MessageDoc,
 } from '../../services/messagesService'
 import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
-import { formatTimestamp } from '../../utils/format'
+import { formatTimestamp, initialsOf } from '../../utils/format'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import BottomSheet from '../../components/BottomSheet'
 import ParentComposeSheet from '../../components/ParentComposeSheet'
@@ -50,7 +49,7 @@ export default function ParentMessagesScreen() {
       () => { setLoadError(true); setLoading(false) },
     )
     return unsub
-  }, [profile?.uid])
+  }, [profile?.uid, profile?.role])
 
   // Arrivée via tap sur une notification push : ouvrir le message ciblé
   // dès qu'il est présent dans la liste, puis consommer le param.
@@ -152,10 +151,19 @@ export default function ParentMessagesScreen() {
     const isUrgent = item.priority === 'urgent'
     return (
       <Pressable onPress={() => openMessage(item)} onLongPress={() => handleDeleteMessage(item)} delayLongPress={350}
-        style={[styles.card, { backgroundColor: isUnread ? theme.white : theme.surface, borderColor: isUrgent ? theme.danger : isUnread ? theme.primary : theme.border }]}>
+        style={[styles.card, theme.shadows.xs, {
+          backgroundColor: isUrgent ? theme.dangerSurface : isUnread ? theme.white : theme.surface,
+          borderColor: isUrgent ? theme.danger : isUnread ? theme.primary : theme.border,
+        }]}>
         <View style={styles.cardRow}>
+          <View style={[styles.avatar, { backgroundColor: isUrgent ? theme.white : theme.violetSurface }]}>
+            <Text style={{ color: isUrgent ? theme.danger : theme.primary, fontFamily: theme.fonts.bold, fontSize: 13 }}>
+              {initialsOf(item.fromNom || t('parent.school'))}
+            </Text>
+          </View>
           <View style={{ flex: 1 }}>
             <View style={styles.nameRow}>
+              {isUnread ? <View style={[styles.unreadDot, { backgroundColor: theme.accent }]} /> : null}
               <Text numberOfLines={1} style={{ color: theme.text, fontWeight: isUnread ? '800' : '600', fontSize: 14, flex: 1 }}>
                 {item.fromNom || t('parent.school')}
               </Text>
@@ -181,7 +189,7 @@ export default function ParentMessagesScreen() {
         {query ? <Pressable onPress={() => setQuery('')} hitSlop={8}><X size={16} color={theme.textSoft} strokeWidth={2} /></Pressable> : null}
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.filterRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={styles.filterRow}>
         {FILTERS.map(f => {
           const active = filter === f.id
           return (
@@ -207,7 +215,7 @@ export default function ParentMessagesScreen() {
       )}
 
       {/* ── Compose : contacter un prof / l'école ── */}
-      <TouchableOpacity onPress={() => setShowCompose(true)} style={[styles.fab, { backgroundColor: theme.primary }]} activeOpacity={0.85}>
+      <TouchableOpacity onPress={() => setShowCompose(true)} style={[styles.fab, { backgroundColor: theme.accent }]} activeOpacity={0.85}>
         <PenSquare size={22} color="#fff" strokeWidth={2} />
       </TouchableOpacity>
       <ParentComposeSheet visible={showCompose} onClose={() => setShowCompose(false)} profile={profile} />
@@ -216,7 +224,8 @@ export default function ParentMessagesScreen() {
       {/* Detail + Reply — bottom sheet à ressort */}
       <BottomSheet visible={!!detail} onClose={() => setDetail(null)}>
         {detail && (
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          /* L'évitement clavier est géré par BottomSheet (KAV à la racine du Modal). */
+          <View>
             <View style={styles.sheetHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>
@@ -234,6 +243,11 @@ export default function ParentMessagesScreen() {
               )}
               <Text style={[{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }, dirStyle(localizedSubject(detail, lang))]}>{localizedSubject(detail, lang)}</Text>
               <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
+              {(detail.attachments || []).filter(a => a.mime?.startsWith('image/')).map(a => (
+                <Image key={a.url} source={{ uri: a.url }}
+                  style={{ width: '100%', height: 280, borderRadius: 14, marginTop: 12, backgroundColor: theme.surface }}
+                  resizeMode="contain" />
+              ))}
             </ScrollView>
 
             {/* Reply bar */}
@@ -250,7 +264,7 @@ export default function ParentMessagesScreen() {
                 </TouchableOpacity>
               </View>
             )}
-          </KeyboardAvoidingView>
+          </View>
         )}
       </BottomSheet>
     </ScreenLayout>
@@ -261,8 +275,10 @@ const styles = StyleSheet.create({
   searchWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
   filterRow: { gap: 6, paddingBottom: 12 },
   filterChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5 },
-  card: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 8 },
-  cardRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  card: { padding: 12, borderRadius: 20, borderWidth: 1, marginBottom: 9 },
+  cardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
+  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  unreadDot: { width: 7, height: 7, borderRadius: 4, marginEnd: 6 },
   nameRow: { flexDirection: 'row', alignItems: 'center' },
   center: { paddingVertical: 60, alignItems: 'center' },
   backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', paddingHorizontal: 20 },

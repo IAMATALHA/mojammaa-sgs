@@ -121,6 +121,22 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
+    // ── comportements (mérites / avertissements) ─────────────
+    // Même périmètre que les absences : nominatif → le parent ne lit QUE
+    // ses enfants, le prof QUE ses classes. Le prof peut retirer SA propre
+    // entrée (erreur de saisie) ; le message parent déjà envoyé reste.
+    match /comportements/{recordId} {
+      allow read: if isAdmin()
+                  || teacherTeaches(resource.data.classe)
+                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
+      allow create: if isAdmin()
+        || (teacherTeaches(request.resource.data.classe)
+            && request.resource.data.teacherId == myUid());
+      allow update: if isAdmin();
+      allow delete: if isAdmin()
+        || (isTeacher() && resource.data.teacherId == myUid());
+    }
+
     // ── classStats (agrégats ANONYMES par classe/semestre) ──
     // Maintenus par la CF onNoteWritten (Admin SDK) : moyennes de classe par
     // matière + tableau TRIÉ de moyennes d'élèves sans identifiants. C'est ce
@@ -163,6 +179,24 @@ service cloud.firestore {
     match /devoirs/{devoirId} {
       allow read: if isSignedIn();
       allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classeId);
+      allow delete: if isAdmin() || (isTeacher() && resource.data.teacherId == myUid());
+    }
+
+    // ── ressources (supports de cours, non nominatifs) ───────
+    // Même périmètre de lecture que `devoirs`. `viewedBy` = compteur de
+    // vues append-only : un lecteur ne peut que S'AJOUTER (selfAppendOnly,
+    // comme messages.readBy) ; le prof propriétaire/admin édite le reste.
+    match /ressources/{ressourceId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin()
+        || (teacherTeaches(request.resource.data.classeId)
+            && request.resource.data.teacherId == myUid());
+      allow update: if isSignedIn()
+        && (
+          resource.data.teacherId == myUid() || isAdmin()
+          || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy'])
+        )
+        && selfAppendOnly('viewedBy');
       allow delete: if isAdmin() || (isTeacher() && resource.data.teacherId == myUid());
     }
 

@@ -1,10 +1,11 @@
 /**
- * Parent / student navigation with a modern floating bottom bar.
+ * Parent / student navigation : NativeStack wrapping the floating tabs
+ * (même structure que TeacherStack — les écrans de détail hors tabs
+ * vivent dans le stack racine).
  */
 import React from 'react'
-import { StyleSheet, View } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import {
   LayoutDashboard, BookOpen, FileText, CalendarX, MessageSquare, Settings,
   type LucideIcon,
@@ -13,55 +14,34 @@ import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../contexts/ThemeContext'
 import { useUnreadMessagesCount } from '../hooks/useUnreadMessagesCount'
 import AnimatedTabIcon from '../components/AnimatedTabIcon'
+import AnimatedTabBar from '../components/AnimatedTabBar'
 import ParentDashboardScreen from '../screens/student/ParentDashboardScreen'
 import ParentDevoirsScreen from '../screens/student/ParentDevoirsScreen'
 import ParentNotesScreen from '../screens/student/ParentNotesScreen'
 import ParentAbsencesScreen from '../screens/student/ParentAbsencesScreen'
 import ParentMessagesScreen from '../screens/student/ParentMessagesScreen'
 import ParentSettingsScreen from '../screens/student/ParentSettingsScreen'
+import ParentComportementScreen from '../screens/student/ParentComportementScreen'
+import ParentRessourcesScreen from '../screens/student/ParentRessourcesScreen'
 
 const Tab = createBottomTabNavigator()
+const Stack = createNativeStackNavigator()
 
 function TabIcon(props: { Icon: LucideIcon; color: string; focused: boolean; theme: Theme }) {
-  return <AnimatedTabIcon {...props} />
+  return <AnimatedTabIcon {...props} bare />
 }
 
-export default function StudentStack() {
+function StudentTabs() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const insets = useSafeAreaInsets()
   const unread = useUnreadMessagesCount()
 
   return (
     <Tab.Navigator
+      tabBar={props => <AnimatedTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.primary,
-        tabBarInactiveTintColor: theme.textSoft,
-        tabBarStyle: {
-          backgroundColor: theme.card,
-          borderTopColor: theme.border,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          paddingBottom: Math.max(insets.bottom, 8),
-          paddingTop: 10,
-          minHeight: 68 + Math.max(insets.bottom, 0),
-          shadowColor: '#1D3557',
-          shadowOpacity: 0.06,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: -3 },
-          elevation: 6,
-        },
-        sceneStyle: {
-          backgroundColor: theme.bg,
-        },
-        tabBarItemStyle: {
-          minHeight: 46,
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontFamily: theme.fonts.semibold,
-          marginTop: 2,
-        },
+        sceneStyle: { backgroundColor: theme.bg },
       }}
     >
       <Tab.Screen
@@ -103,7 +83,6 @@ export default function StudentStack() {
           title: t('tabs.messages'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={MessageSquare} color={color} focused={focused} theme={theme} />,
           tabBarBadge: unread > 0 ? (unread > 99 ? '99+' : unread) : undefined,
-          tabBarBadgeStyle: { backgroundColor: theme.danger, color: '#fff', fontSize: 10, fontFamily: theme.fonts.semibold },
         }}
       />
       <Tab.Screen
@@ -118,18 +97,12 @@ export default function StudentStack() {
   )
 }
 
-const styles = StyleSheet.create({
-  iconActive: {
-    width: 40,
-    height: 34,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconInactive: {
-    width: 42,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-})
+export default function StudentStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="StudentTabs" component={StudentTabs} />
+      <Stack.Screen name="StudentComportement" component={ParentComportementScreen} />
+      <Stack.Screen name="StudentRessources" component={ParentRessourcesScreen} />
+    </Stack.Navigator>
+  )
+}

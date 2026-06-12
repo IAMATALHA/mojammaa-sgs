@@ -20,7 +20,8 @@ function toAnnouncement(m: MessageDoc): Announcement {
     author:   m.fromNom || 'École',
     date:     timestampToISO(m.createdAt),
     priority: m.priority === 'urgent' ? 'urgent' : 'normal',
-    category: m.category === 'event' ? 'event' : m.category === 'attendance' ? 'school' : 'admin',
+    category: m.category === 'event' ? 'event' : (m.category === 'attendance' || m.category === 'behavior') ? 'school' : 'admin',
+    image:    (m.attachments || []).find(a => a.mime?.startsWith('image/'))?.url,
   }
 }
 

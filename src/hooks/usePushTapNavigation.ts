@@ -24,7 +24,9 @@ function navigateToMessages(role: RoleLogic, messageId?: string) {
   } else if (role === 'teacher') {
     navigationRef.navigate('TeacherTabs', { screen: 'TeacherMessages', params })
   } else {
-    navigationRef.navigate('StudentMessages', params)
+    // Les tabs parent sont désormais imbriquées sous StudentTabs (stack
+    // racine ajouté pour les écrans de détail type comportement).
+    navigationRef.navigate('StudentTabs', { screen: 'StudentMessages', params })
   }
   return true
 }

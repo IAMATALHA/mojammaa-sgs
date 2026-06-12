@@ -4,6 +4,7 @@
  * Pattern de chemin :
  *   devoirs/{teacherUid}/{timestamp}_{filename}
  *   notes-imports/{teacherUid}/{timestamp}_{filename}
+ *   annonces/{adminUid}/{timestamp}_{filename}   (affiches d'annonces)
  *
  * On stocke le download URL renvoyé par Firebase dans le document
  * Firestore correspondant (pas le path raw, parce que les URLs incluent
@@ -32,7 +33,7 @@ function sanitize(name: string): string {
 
 export async function uploadAttachment(
   localUri: string,
-  folder: 'devoirs' | 'notes-imports',
+  folder: 'devoirs' | 'notes-imports' | 'annonces' | 'ressources',
   teacherUid: string,
   filename: string,
   mime: string,

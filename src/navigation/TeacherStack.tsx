@@ -3,10 +3,8 @@
  */
 
 import React from 'react'
-import { StyleSheet, View } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   LayoutDashboard, CalendarDays, Users, BookOpenCheck, MessageSquare, Settings,
   type LucideIcon,
@@ -15,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../contexts/ThemeContext'
 import { useUnreadMessagesCount } from '../hooks/useUnreadMessagesCount'
 import AnimatedTabIcon from '../components/AnimatedTabIcon'
+import AnimatedTabBar from '../components/AnimatedTabBar'
 import TeacherDashboardScreen from '../screens/teacher/TeacherDashboardScreen'
 import TeacherEdtScreen from '../screens/teacher/TeacherEdtScreen'
 import TeacherClassesScreen from '../screens/teacher/TeacherClassesScreen'
@@ -24,6 +23,8 @@ import TeacherAttendanceScreen from '../screens/teacher/TeacherAttendanceScreen'
 import TeacherClasseFolderScreen from '../screens/teacher/TeacherClasseFolderScreen'
 import TeacherClasseElevesScreen from '../screens/teacher/TeacherClasseElevesScreen'
 import TeacherNotesScreen from '../screens/teacher/TeacherNotesScreen'
+import TeacherComportementScreen from '../screens/teacher/TeacherComportementScreen'
+import TeacherRessourcesScreen from '../screens/teacher/TeacherRessourcesScreen'
 import TeacherStatsScreen from '../screens/teacher/TeacherStatsScreen'
 import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen'
 
@@ -31,43 +32,20 @@ const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
 
 function TabIcon(props: { Icon: LucideIcon; color: string; focused: boolean; theme: Theme }) {
-  return <AnimatedTabIcon {...props} />
+  return <AnimatedTabIcon {...props} bare />
 }
 
 function TeacherTabs() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const insets = useSafeAreaInsets()
   const unread = useUnreadMessagesCount()
 
   return (
     <Tab.Navigator
+      tabBar={props => <AnimatedTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.primary,
-        tabBarInactiveTintColor: theme.textSoft,
-        tabBarStyle: {
-          backgroundColor: theme.card,
-          borderTopColor: theme.border,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          paddingBottom: Math.max(insets.bottom, 8),
-          paddingTop: 10,
-          minHeight: 68 + Math.max(insets.bottom, 0),
-          shadowColor: '#1D3557',
-          shadowOpacity: 0.06,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: -3 },
-          elevation: 6,
-        },
-        sceneStyle: {
-          backgroundColor: theme.bg,
-        },
-        tabBarItemStyle: { minHeight: 46 },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontFamily: theme.fonts.semibold,
-          marginTop: 2,
-        },
+        sceneStyle: { backgroundColor: theme.bg },
       }}
     >
       <Tab.Screen
@@ -109,7 +87,6 @@ function TeacherTabs() {
           title: t('tabs.messages'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={MessageSquare} color={color} focused={focused} theme={theme} />,
           tabBarBadge: unread > 0 ? (unread > 99 ? '99+' : unread) : undefined,
-          tabBarBadgeStyle: { backgroundColor: theme.danger, color: '#fff', fontSize: 10, fontFamily: theme.fonts.semibold },
         }}
       />
       <Tab.Screen
@@ -132,24 +109,10 @@ export default function TeacherStack() {
       <Stack.Screen name="TeacherClasseFolder" component={TeacherClasseFolderScreen} />
       <Stack.Screen name="TeacherClasseEleves" component={TeacherClasseElevesScreen} />
       <Stack.Screen name="TeacherNotes" component={TeacherNotesScreen} />
+      <Stack.Screen name="TeacherComportement" component={TeacherComportementScreen} />
+      <Stack.Screen name="TeacherRessources" component={TeacherRessourcesScreen} />
       <Stack.Screen name="TeacherDevoirsDetail" component={TeacherDevoirsScreen} />
       <Stack.Screen name="TeacherStats" component={TeacherStatsScreen} />
     </Stack.Navigator>
   )
 }
-
-const styles = StyleSheet.create({
-  iconActive: {
-    width: 40,
-    height: 34,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconInactive: {
-    width: 42,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-})

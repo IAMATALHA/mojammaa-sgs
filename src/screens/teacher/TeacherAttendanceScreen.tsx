@@ -27,6 +27,7 @@ import { sendMessage } from '../../services/messagesService'
 import { getAbsenceRequestsForClassDate, decideAbsenceRequest, type AbsenceRequestDoc } from '../../services/absenceRequestsService'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
+import BehaviorSheet from '../../components/BehaviorSheet'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -140,6 +141,7 @@ export default function TeacherAttendanceScreen() {
   const [saving,  setSaving]  = useState(false)
   const [requests, setRequests] = useState<AbsenceRequestDoc[]>([])  // déclarations parents (classe+date)
   const [error,   setError]   = useState<string | null>(null)
+  const [behaviorFor, setBehaviorFor] = useState<EleveLite | null>(null)  // élève de la fiche comportement
 
   const date = todayISO()
 
@@ -309,6 +311,15 @@ export default function TeacherAttendanceScreen() {
               </Text>
             ) : null}
           </View>
+          {/* Mérite / avertissement sans quitter l'appel (Pressable imbriqué :
+              le tap sur le smiley ne doit PAS basculer l'absence). */}
+          <PressableScale
+            onPress={() => setBehaviorFor(item)}
+            scaleDown={0.88}
+            style={[styles.behaviorBtn, { borderColor: theme.border, backgroundColor: theme.white }]}
+          >
+            <Ionicons name="happy-outline" size={20} color={theme.primary} />
+          </PressableScale>
         </PressableScale>
       </Animated.View>
     )
@@ -386,6 +397,16 @@ export default function TeacherAttendanceScreen() {
             )}
         </PressableScale>
       </View>
+
+      <BehaviorSheet
+        visible={!!behaviorFor}
+        onClose={() => setBehaviorFor(null)}
+        eleve={behaviorFor}
+        classe={classe}
+        date={date}
+        seance={seance}
+        teacher={profile ? { uid: profile.uid, nom: profile.nom, prenom: profile.prenom } : null}
+      />
     </ScreenLayout>
   )
 }
@@ -399,6 +420,7 @@ const styles = StyleSheet.create({
   statusStripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   eleveName:    { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   eleveStatus:  { fontSize: 12, fontWeight: '600' },
+  behaviorBtn:  { width: 38, height: 38, borderRadius: 19, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginStart: 10 },
   loading:      { paddingVertical: 40, alignItems: 'center' },
   empty:        { paddingVertical: 60, alignItems: 'center' },
   errorBox:     { padding: 12, borderRadius: 10, marginBottom: 12 },

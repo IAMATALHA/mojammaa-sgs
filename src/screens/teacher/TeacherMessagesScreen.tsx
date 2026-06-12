@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, Pressable, Modal, ScrollView,
   ActivityIndicator, TouchableOpacity, TextInput, Alert,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Image,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -21,7 +21,7 @@ import DatePickerSheet from '../../components/DatePickerSheet'
 import * as Haptics from 'expo-haptics'
 import { MESSAGE_TEMPLATES, fillTemplate, type MessageTemplate } from '../../data/messageTemplates'
 import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
-import { formatTimestamp, formatLongDate } from '../../utils/format'
+import { formatTimestamp, formatLongDate, initialsOf } from '../../utils/format'
 import { ELEVE_PLACEHOLDER, eleveKey, eleveName, elevePrenom } from '../../utils/eleveLabels'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import { dirStyle, localizedSubject, localizedBody } from '../../utils/arabicText'
@@ -114,10 +114,21 @@ export default function TeacherMessagesScreen() {
     const isUrgent = item.priority === 'urgent'
     return (
       <Pressable onPress={() => openMessage(item)} onLongPress={() => handleDeleteMessage(item)} delayLongPress={350}
-        style={[styles.card, { backgroundColor: isUnread ? theme.white : theme.surface, borderColor: isUrgent ? theme.danger : isUnread ? theme.primary : theme.border }]}>
+        style={[styles.card, theme.shadows.xs, {
+          backgroundColor: isUrgent ? theme.dangerSurface : isUnread ? theme.white : theme.surface,
+          borderColor: isUrgent ? theme.danger : isUnread ? theme.primary : theme.border,
+        }]}>
         <View style={styles.cardRow}>
+          <View style={[styles.avatar, { backgroundColor: isUrgent ? theme.white : tab === 'sent' ? theme.primarySurface : theme.violetSurface }]}>
+            {tab === 'sent'
+              ? <Send size={15} color={theme.primary} strokeWidth={2} />
+              : <Text style={{ color: isUrgent ? theme.danger : theme.primary, fontFamily: theme.fonts.bold, fontSize: 13 }}>
+                  {initialsOf(item.fromNom)}
+                </Text>}
+          </View>
           <View style={{ flex: 1 }}>
             <View style={styles.nameRow}>
+              {isUnread ? <View style={[styles.unreadDot, { backgroundColor: theme.accent }]} /> : null}
               <Text numberOfLines={1} style={{ color: theme.text, fontWeight: isUnread ? '800' : '600', fontSize: 14, flex: 1 }}>
                 {tab === 'sent' ? (item.toLabel || '—') : (item.fromNom || '—')}
               </Text>
@@ -145,24 +156,24 @@ export default function TeacherMessagesScreen() {
 
   return (
     <ScreenLayout title={t('tabs.messages')} showBack={false}>
-      <View style={styles.tabRow}>
+      <View style={[styles.tabRow, { backgroundColor: theme.surfaceAlt }]}>
         <Pressable onPress={() => setTab('inbox')}
-          style={[styles.tab, { borderColor: tab === 'inbox' ? theme.primary : theme.border, backgroundColor: tab === 'inbox' ? theme.primary : 'transparent' }]}>
+          style={[styles.tab, tab === 'inbox' && [{ backgroundColor: theme.card, borderColor: theme.border }, styles.tabActive, theme.shadows.xs]]}>
           <View style={styles.tabContent}>
-            <Inbox size={14} color={tab === 'inbox' ? '#fff' : theme.textSoft} strokeWidth={2} />
-            <Text numberOfLines={1} style={{ color: tab === 'inbox' ? '#fff' : theme.text, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{t('parent.inbox')}</Text>
+            <Inbox size={14} color={tab === 'inbox' ? theme.primary : theme.textSoft} strokeWidth={2} />
+            <Text numberOfLines={1} style={{ color: tab === 'inbox' ? theme.primary : theme.textSoft, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{t('parent.inbox')}</Text>
+            {unreadCount > 0 && (
+              <View style={[styles.badge, { backgroundColor: theme.danger }]}>
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 10 }}>{unreadCount}</Text>
+              </View>
+            )}
           </View>
-          {unreadCount > 0 && (
-            <View style={[styles.badge, { backgroundColor: tab === 'inbox' ? 'rgba(255,255,255,0.3)' : theme.danger }]}>
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 10 }}>{unreadCount}</Text>
-            </View>
-          )}
         </Pressable>
         <Pressable onPress={() => setTab('sent')}
-          style={[styles.tab, { borderColor: tab === 'sent' ? theme.primary : theme.border, backgroundColor: tab === 'sent' ? theme.primary : 'transparent' }]}>
+          style={[styles.tab, tab === 'sent' && [{ backgroundColor: theme.card, borderColor: theme.border }, styles.tabActive, theme.shadows.xs]]}>
           <View style={styles.tabContent}>
-            <Send size={14} color={tab === 'sent' ? '#fff' : theme.textSoft} strokeWidth={2} />
-            <Text numberOfLines={1} style={{ color: tab === 'sent' ? '#fff' : theme.text, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{t('admin.sent')}</Text>
+            <Send size={14} color={tab === 'sent' ? theme.primary : theme.textSoft} strokeWidth={2} />
+            <Text numberOfLines={1} style={{ color: tab === 'sent' ? theme.primary : theme.textSoft, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{t('admin.sent')}</Text>
           </View>
         </Pressable>
       </View>
@@ -180,7 +191,7 @@ export default function TeacherMessagesScreen() {
         <FlatList data={displayed} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 80 }} />
       )}
 
-      <TouchableOpacity onPress={() => setShowCompose(true)} style={[styles.fab, { backgroundColor: theme.primary }]} activeOpacity={0.85}>
+      <TouchableOpacity onPress={() => setShowCompose(true)} style={[styles.fab, { backgroundColor: theme.accent }]} activeOpacity={0.85}>
         <PenSquare size={22} color="#fff" strokeWidth={2} />
       </TouchableOpacity>
 
@@ -206,6 +217,11 @@ export default function TeacherMessagesScreen() {
                 )}
                 <Text style={[{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }, dirStyle(localizedSubject(detail, lang))]}>{localizedSubject(detail, lang)}</Text>
                 <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
+                {(detail.attachments || []).filter(a => a.mime?.startsWith('image/')).map(a => (
+                  <Image key={a.url} source={{ uri: a.url }}
+                    style={{ width: '100%', height: 280, borderRadius: 14, marginTop: 12, backgroundColor: theme.surface }}
+                    resizeMode="contain" />
+                ))}
                 {tab === 'sent' && profile?.uid ? (
                   <ReadReceipts
                     message={sentMsgs.find(m => m.id === detail.id) || detail}
@@ -566,7 +582,7 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
             {/* Subject */}
             <Text style={[cs.label, { color: theme.textSoft, marginTop: 14 }]}>{t('compose.subject')}</Text>
             <TextInput value={subject} onChangeText={setSubject}
-              placeholder="Ex: Rappel devoirs" placeholderTextColor={theme.textMuted} maxLength={120}
+              placeholder={t('compose.subjectPlaceholder')} placeholderTextColor={theme.textMuted} maxLength={120}
               style={[cs.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]} />
 
             {/* Body */}
@@ -641,12 +657,15 @@ const cs = StyleSheet.create({
 })
 
 const styles = StyleSheet.create({
-  tabRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  tab: { flex: 1, position: 'relative', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 28, borderRadius: 12, borderWidth: 1.5, overflow: 'hidden' },
+  tabRow: { flexDirection: 'row', borderRadius: 14, padding: 4, marginBottom: 14 },
+  tab: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 9, paddingHorizontal: 12, borderRadius: 11 },
+  tabActive: { borderWidth: StyleSheet.hairlineWidth },
   tabContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', maxWidth: '100%' },
-  badge: { position: 'absolute', right: 8, top: '50%', marginTop: -9, minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
-  card: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 8 },
-  cardRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  badge: { minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, marginStart: 6 },
+  card: { padding: 12, borderRadius: 20, borderWidth: 1, marginBottom: 9 },
+  cardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
+  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  unreadDot: { width: 7, height: 7, borderRadius: 4, marginEnd: 6 },
   nameRow: { flexDirection: 'row', alignItems: 'center' },
   center: { paddingVertical: 40, alignItems: 'center' },
   fab: { position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 },

@@ -30,10 +30,11 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import type { Attachment } from './StorageService'
 
-export type MessageType = 'announcement' | 'direct' | 'attendance'
+export type MessageType = 'announcement' | 'direct' | 'attendance' | 'behavior'
 export type MessageToType = 'all' | 'parents' | 'teachers' | 'class' | 'user'
-export type MessageCategory = 'attendance' | 'homework' | 'grade' | 'event' | 'announcement' | 'admin'
+export type MessageCategory = 'attendance' | 'homework' | 'grade' | 'event' | 'announcement' | 'admin' | 'behavior'
 
 export interface MessageDoc {
   id?:        string
@@ -52,6 +53,7 @@ export interface MessageDoc {
   priority?:  'urgent' | 'normal'
   eleveId?:   string
   classe?:    string
+  attachments?: Attachment[]   // affiches/PJ (annonces admin — batch images)
   readBy?:    string[]
   deletedBy?: string[]
   status?:    string
@@ -211,6 +213,7 @@ interface BroadcastParams {
   category:   MessageCategory
   type:       MessageType
   classe?:    string
+  attachments?: Attachment[]
 }
 
 export async function broadcast(p: BroadcastParams): Promise<{ messageId: string; pushSent: number }> {
@@ -233,6 +236,7 @@ export async function broadcast(p: BroadcastParams): Promise<{ messageId: string
     priority: p.priority,
     category: p.category,
     classe:   p.classe ?? (classTarget ? p.toIds.join(', ') : undefined),
+    attachments: p.attachments,
   })
 
   return { messageId, pushSent: 0 }
@@ -292,6 +296,7 @@ export async function broadcastToParents(p: {
   category?:  MessageCategory
   teacher:    { uid: string; nom: string; prenom: string }
   fromRole?:  string
+  attachments?: Attachment[]
 }): Promise<{ parentsTargeted: number; messagesWritten: number; pushSent: number }> {
   const result = { parentsTargeted: p.parentUids.length, messagesWritten: 0, pushSent: 0 }
   if (p.parentUids.length === 0) return result
@@ -312,6 +317,7 @@ export async function broadcastToParents(p: {
     category: p.category || 'announcement',
     priority: p.urgent ? 'urgent' : 'normal',
     classe:   p.classe,
+    attachments: p.attachments,
     readBy:   [],
     status:   'sent',
   })
@@ -330,6 +336,7 @@ export async function broadcastPersonalized(p: {
   category?:  MessageCategory
   teacher:    { uid: string; nom: string; prenom: string }
   fromRole?:  string
+  attachments?: Attachment[]
 }): Promise<{ messagesWritten: number; pushSent: number; parentsTargeted: number }> {
   const result = { messagesWritten: 0, pushSent: 0, parentsTargeted: 0 }
   if (p.recipients.length === 0) return result
@@ -354,6 +361,7 @@ export async function broadcastPersonalized(p: {
       priority: p.urgent ? 'urgent' : 'normal',
       classe:   p.classe,
       eleveId:  r.eleveId,
+      attachments: p.attachments,
       readBy:   [],
       status:   'sent',
     })

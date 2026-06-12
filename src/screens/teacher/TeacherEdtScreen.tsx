@@ -3,13 +3,16 @@ import {
   View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { ClipboardCheck, BookOpenCheck, CheckCircle2 } from 'lucide-react-native';
 import ScreenLayout from '../../components/ScreenLayout';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   subscribeSchedule, type ScheduleDoc, type WeeklySlot, type WeekDay,
 } from '../../services/scheduleService';
+import { useTeacherDayCompletion } from '../../hooks/useTeacherDayCompletion';
 
 const DAY_ORDER: WeekDay[] = [
   'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
@@ -22,10 +25,34 @@ function todayWeekDay(): WeekDay {
   return names[new Date().getDay()]
 }
 
+/**
+ * Pastille d'avancement (inspirée des chips vertes de Suivi pédagogique) :
+ * appel fait / devoir posté pour les séances du JOUR.
+ */
+function CompletionChip({
+  Icon, label, done, theme,
+}: { Icon: typeof ClipboardCheck; label: string; done: boolean; theme: Theme }) {
+  const tint = done ? theme.success : theme.textMuted
+  return (
+    <View style={[
+      styles.completionChip,
+      {
+        backgroundColor: done ? theme.successSurface : theme.surfaceAlt,
+        borderColor: done ? theme.success + '55' : theme.border,
+      },
+    ]}>
+      <Icon size={12} color={tint} strokeWidth={2.2} />
+      <Text style={{ color: tint, fontSize: 10.5, fontWeight: '800' }}>{label}</Text>
+      {done ? <CheckCircle2 size={12} color={tint} strokeWidth={2.4} /> : null}
+    </View>
+  )
+}
+
 export default function TeacherEdtScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { profile } = useAuth();
+  const navigation = useNavigation<any>();
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -77,27 +104,52 @@ export default function TeacherEdtScreen() {
     [grouped, activeDay],
   )
 
-  const renderCard = ({ item: s }: { item: WeeklySlot }) => (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <View style={styles.timeRail}>
-        <Text style={[styles.startTime, { color: theme.text }]}>{s.startTime}</Text>
-        {s.seance ? (
-          <View style={[styles.seanceBadge, { backgroundColor: theme.primarySurface }]}>
-            <Text style={[styles.seanceText, { color: theme.primary }]}>{s.seance}</Text>
-          </View>
-        ) : null}
-        <Text style={[styles.endTime, { color: theme.textSoft }]}>{s.endTime}</Text>
-      </View>
-      <View style={[styles.accent, { backgroundColor: theme.primary }]} />
-      <View style={styles.cardBody}>
-        <Text style={[styles.matiere, { color: theme.text }]}>{s.subject || '—'}</Text>
-        <View style={styles.metaRow}>
-          <Text style={[styles.classe, { color: theme.text }]}>📚 {s.classe}</Text>
-          {s.room ? <Text style={[styles.salle, { color: theme.textSoft }]}>📍 {s.room}</Text> : null}
-        </View>
-      </View>
-    </View>
+  // Chips d'avancement : uniquement pour AUJOURD'HUI (l'appel est daté du jour).
+  const todayItems = useMemo(
+    () => grouped.find(g => g.day === today)?.items ?? [],
+    [grouped, today],
   )
+  const { attendanceDone, homeworkPosted } = useTeacherDayCompletion(todayItems, profile?.uid)
+
+  const renderCard = ({ item: s }: { item: WeeklySlot }) => {
+    const isToday = s.day === today
+    const appelFait = isToday && !!s.seance && attendanceDone.has(`${s.classe}|${s.seance}`)
+    const devoirPoste = isToday && homeworkPosted.has(s.classe)
+    return (
+      <TouchableOpacity
+        activeOpacity={0.85}
+        // Tap = aller faire l'appel de cette séance (préréglé classe+séance).
+        // Aujourd'hui uniquement : l'appel est toujours daté du jour.
+        disabled={!isToday}
+        onPress={() => navigation.navigate('TeacherAttendance', { classe: s.classe, seance: s.seance })}
+        style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
+      >
+        <View style={styles.timeRail}>
+          <Text style={[styles.startTime, { color: theme.text }]}>{s.startTime}</Text>
+          {s.seance ? (
+            <View style={[styles.seanceBadge, { backgroundColor: theme.primarySurface }]}>
+              <Text style={[styles.seanceText, { color: theme.primary }]}>{s.seance}</Text>
+            </View>
+          ) : null}
+          <Text style={[styles.endTime, { color: theme.textSoft }]}>{s.endTime}</Text>
+        </View>
+        <View style={[styles.accent, { backgroundColor: theme.primary }]} />
+        <View style={styles.cardBody}>
+          <Text style={[styles.matiere, { color: theme.text }]}>{s.subject || '—'}</Text>
+          <View style={styles.metaRow}>
+            <Text style={[styles.classe, { color: theme.text }]}>📚 {s.classe}</Text>
+            {s.room ? <Text style={[styles.salle, { color: theme.textSoft }]}>📍 {s.room}</Text> : null}
+          </View>
+          {isToday ? (
+            <View style={styles.chipsRow}>
+              <CompletionChip Icon={ClipboardCheck} label={t('teacher.edtChipAppel')} done={appelFait} theme={theme} />
+              <CompletionChip Icon={BookOpenCheck} label={t('teacher.edtChipDevoir')} done={devoirPoste} theme={theme} />
+            </View>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    )
+  }
 
   return (
     <ScreenLayout title={t('teacher.mySchedule')}>
@@ -193,6 +245,8 @@ const styles = StyleSheet.create({
   metaRow:   { flexDirection: 'row', gap: 14, flexWrap: 'wrap', alignItems: 'center' },
   classe:    { fontSize: 13, fontWeight: '600' },
   salle:     { fontSize: 13 },
+  chipsRow:  { flexDirection: 'row', gap: 6, marginTop: 10, flexWrap: 'wrap' },
+  completionChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
 
   loading:   { paddingVertical: 40, alignItems: 'center' },
   empty:     { paddingVertical: 60, alignItems: 'center', paddingHorizontal: 32 },

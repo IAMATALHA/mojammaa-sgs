@@ -28,6 +28,7 @@ export interface Announcement {
   date:     string   // ISO date string
   priority: Priority
   category: 'school' | 'staff' | 'event' | 'admin'
+  image?:   string   // URL de l'affiche (1ʳᵉ pièce jointe image du message)
 }
 
 export interface Child {

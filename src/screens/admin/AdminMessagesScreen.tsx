@@ -2,14 +2,15 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, Pressable, Modal, ScrollView,
   ActivityIndicator, TouchableOpacity, TextInput, Alert,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Image,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import {
   X, Send, Inbox, PenSquare, AlertCircle, Users,
-  GraduationCap, Search, CalendarDays, Check, Languages,
+  GraduationCap, Search, CalendarDays, Check, Languages, ImagePlus,
 } from 'lucide-react-native'
+import * as ImagePicker from 'expo-image-picker'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
@@ -20,11 +21,12 @@ import {
   type MessageDoc, type MessageToType,
 } from '../../services/messagesService'
 import { listEleves, type EleveDoc } from '../../services/elevesService'
+import { uploadAttachment, type Attachment } from '../../services/StorageService'
 import DatePickerSheet from '../../components/DatePickerSheet'
 import * as Haptics from 'expo-haptics'
 import { MESSAGE_TEMPLATES, fillTemplate, type MessageTemplate } from '../../data/messageTemplates'
 import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
-import { formatTimestamp, formatLongDate } from '../../utils/format'
+import { formatTimestamp, formatLongDate, initialsOf } from '../../utils/format'
 import { ELEVE_PLACEHOLDER, eleveKey, eleveName, elevePrenom } from '../../utils/eleveLabels'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import { dirStyle, localizedSubject, localizedBody } from '../../utils/arabicText'
@@ -123,10 +125,21 @@ export default function AdminMessagesScreen() {
     const isUrgent = item.priority === 'urgent'
     return (
       <Pressable onPress={() => openMessage(item)} onLongPress={() => handleDeleteMessage(item)} delayLongPress={350}
-        style={[styles.card, { backgroundColor: isUnread ? theme.white : theme.surface, borderColor: isUrgent ? theme.danger : isUnread ? theme.primary : theme.border }]}>
+        style={[styles.card, theme.shadows.xs, {
+          backgroundColor: isUrgent ? theme.dangerSurface : isUnread ? theme.white : theme.surface,
+          borderColor: isUrgent ? theme.danger : isUnread ? theme.primary : theme.border,
+        }]}>
         <View style={styles.cardRow}>
+          <View style={[styles.avatar, { backgroundColor: isUrgent ? theme.white : tab === 'sent' ? theme.primarySurface : theme.violetSurface }]}>
+            {tab === 'sent'
+              ? <Send size={15} color={theme.primary} strokeWidth={2} />
+              : <Text style={{ color: isUrgent ? theme.danger : theme.primary, fontFamily: theme.fonts.bold, fontSize: 13 }}>
+                  {initialsOf(item.fromNom)}
+                </Text>}
+          </View>
           <View style={{ flex: 1 }}>
             <View style={styles.nameRow}>
+              {isUnread ? <View style={[styles.unreadDot, { backgroundColor: theme.accent }]} /> : null}
               <Text numberOfLines={1} style={{ color: theme.text, fontWeight: isUnread ? '800' : '600', fontSize: 14, flex: 1 }}>
                 {tab === 'sent' ? (item.toLabel || '—') : (item.fromNom || '—')}
               </Text>
@@ -154,24 +167,24 @@ export default function AdminMessagesScreen() {
 
   return (
     <ScreenLayout title={t('tabs.messages')} showBack={false}>
-      <View style={styles.tabRow}>
+      <View style={[styles.tabRow, { backgroundColor: theme.surfaceAlt }]}>
         <Pressable onPress={() => setTab('inbox')}
-          style={[styles.tab, { borderColor: tab === 'inbox' ? theme.primary : theme.border, backgroundColor: tab === 'inbox' ? theme.primary : 'transparent' }]}>
+          style={[styles.tab, tab === 'inbox' && [{ backgroundColor: theme.card, borderColor: theme.border }, styles.tabActive, theme.shadows.xs]]}>
           <View style={styles.tabContent}>
-            <Inbox size={14} color={tab === 'inbox' ? '#fff' : theme.textSoft} strokeWidth={2} />
-            <Text numberOfLines={1} style={{ color: tab === 'inbox' ? '#fff' : theme.text, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{t('parent.inbox')}</Text>
+            <Inbox size={14} color={tab === 'inbox' ? theme.primary : theme.textSoft} strokeWidth={2} />
+            <Text numberOfLines={1} style={{ color: tab === 'inbox' ? theme.primary : theme.textSoft, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{t('parent.inbox')}</Text>
+            {unreadCount > 0 && (
+              <View style={[styles.badge, { backgroundColor: theme.danger }]}>
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 10 }}>{unreadCount}</Text>
+              </View>
+            )}
           </View>
-          {unreadCount > 0 && (
-            <View style={[styles.badge, { backgroundColor: tab === 'inbox' ? 'rgba(255,255,255,0.3)' : theme.danger }]}>
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 10 }}>{unreadCount}</Text>
-            </View>
-          )}
         </Pressable>
         <Pressable onPress={() => setTab('sent')}
-          style={[styles.tab, { borderColor: tab === 'sent' ? theme.primary : theme.border, backgroundColor: tab === 'sent' ? theme.primary : 'transparent' }]}>
+          style={[styles.tab, tab === 'sent' && [{ backgroundColor: theme.card, borderColor: theme.border }, styles.tabActive, theme.shadows.xs]]}>
           <View style={styles.tabContent}>
-            <Send size={14} color={tab === 'sent' ? '#fff' : theme.textSoft} strokeWidth={2} />
-            <Text numberOfLines={1} style={{ color: tab === 'sent' ? '#fff' : theme.text, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{t('admin.sent')}</Text>
+            <Send size={14} color={tab === 'sent' ? theme.primary : theme.textSoft} strokeWidth={2} />
+            <Text numberOfLines={1} style={{ color: tab === 'sent' ? theme.primary : theme.textSoft, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{t('admin.sent')}</Text>
           </View>
         </Pressable>
       </View>
@@ -189,7 +202,7 @@ export default function AdminMessagesScreen() {
         <FlatList data={displayed} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 80 }} />
       )}
 
-      <TouchableOpacity onPress={() => setShowCompose(true)} style={[styles.fab, { backgroundColor: theme.primary }]} activeOpacity={0.85}>
+      <TouchableOpacity onPress={() => setShowCompose(true)} style={[styles.fab, { backgroundColor: theme.accent }]} activeOpacity={0.85}>
         <PenSquare size={22} color="#fff" strokeWidth={2} />
       </TouchableOpacity>
 
@@ -214,6 +227,11 @@ export default function AdminMessagesScreen() {
                 )}
                 <Text style={[{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }, dirStyle(localizedSubject(detail, lang))]}>{localizedSubject(detail, lang)}</Text>
                 <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
+                {(detail.attachments || []).filter(a => a.mime?.startsWith('image/')).map(a => (
+                  <Image key={a.url} source={{ uri: a.url }}
+                    style={{ width: '100%', height: 280, borderRadius: 14, marginTop: 12, backgroundColor: theme.surface }}
+                    resizeMode="contain" />
+                ))}
                 {tab === 'sent' && profile?.uid ? (
                   <ReadReceipts
                     message={sentMsgs.find(m => m.id === detail.id) || detail}
@@ -256,6 +274,8 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
   const [bodyAr, setBodyAr] = useState('')
   const [urgent, setUrgent] = useState(false)
   const [sending, setSending] = useState(false)
+  // Affiche (poster) optionnelle — uploadée vers annonces/{adminUid}/ à l'envoi.
+  const [poster, setPoster] = useState<{ uri: string; name: string; mime: string } | null>(null)
 
   const [availableClasses, setAvailableClasses] = useState<string[]>([])
   const [allParents, setAllParents] = useState<Recipient[]>([])
@@ -403,6 +423,29 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
     (targetMode === 'people' && selectedPeople.length > 0)
   )
 
+  const pickPoster = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) {
+        Alert.alert(t('teacher.permissionDenied'), t('teacher.cameraAccessDenied'))
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+      })
+      const asset = result.assets?.[0]
+      if (result.canceled || !asset) return
+      setPoster({
+        uri:  asset.uri,
+        name: asset.fileName || `affiche_${Date.now()}.jpg`,
+        mime: asset.mimeType || 'image/jpeg',
+      })
+    } catch {
+      Alert.alert(t('common.error'), t('teacher.imageSelectFailed'))
+    }
+  }
+
   const handleSend = async () => {
     if (!profile || !canSend) return
     setSending(true)
@@ -413,6 +456,12 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
     const arBody    = withArabic && bodyAr.trim()    ? bodyAr.trim()    : undefined
     try {
       let reach = 0
+
+      // Upload de l'affiche AVANT les writes Firestore (échec → rien d'envoyé).
+      let attachments: Attachment[] | undefined
+      if (poster) {
+        attachments = [await uploadAttachment(poster.uri, 'annonces', profile.uid, poster.name, poster.mime)]
+      }
 
       if (targetMode === 'class') {
         if (body.includes(ELEVE_PLACEHOLDER)) {
@@ -428,7 +477,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
             }))
           const r = await broadcastPersonalized({
             recipients, subject: subject.trim(), subjectAr: arSubject, classe: selectedClasses.join(', '),
-            urgent, category: 'announcement', teacher: sender, fromRole,
+            urgent, category: 'announcement', teacher: sender, fromRole, attachments,
           })
           reach = r.parentsTargeted
         } else {
@@ -437,7 +486,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
             parentUids, label: classRecipientLabel, classe: selectedClasses.join(', '),
             subject: subject.trim(), body: body.trim(),
             subjectAr: arSubject, bodyAr: arBody, urgent, category: 'announcement',
-            teacher: sender, fromRole,
+            teacher: sender, fromRole, attachments,
           })
           reach = r.parentsTargeted
         }
@@ -449,6 +498,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
           fromId: profile.uid, fromNom, fromRole,
           toType: 'user', toIds: selectedPeople.map(p => p.uid), toLabel: targetLabel,
           priority: urgent ? 'urgent' : 'normal', category: 'announcement',
+          attachments,
         })
         reach = selectedPeople.length
       } else {
@@ -463,6 +513,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
           fromId: profile.uid, fromNom, fromRole,
           toType, toIds, toLabel: targetLabel,
           priority: urgent ? 'urgent' : 'normal', category: 'announcement',
+          attachments,
         })
         reach = toIds.length || allParents.length + allTeachers.length
       }
@@ -481,6 +532,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
     setTargetMode(mode)
     setSelectedTmpl(null); setSubject(''); setBody(''); setVars({}); setDateValues({})
     setSubjectAr(''); setBodyAr('')
+    setPoster(null)
   }
 
   const TARGET_OPTS: { mode: TargetMode; label: string; icon: any }[] = [
@@ -728,7 +780,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
             {/* Subject + Body */}
             <Text style={[cs.label, { color: theme.textSoft, marginTop: 14 }]}>{t('compose.subject')}</Text>
             <TextInput value={subject} onChangeText={setSubject}
-              placeholder="Ex: Réunion parents-profs" placeholderTextColor={theme.textMuted} maxLength={120}
+              placeholder={t('compose.subjectPlaceholder')} placeholderTextColor={theme.textMuted} maxLength={120}
               style={[cs.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }, dirStyle(subject)]} />
 
             <Text style={[cs.label, { color: theme.textSoft, marginTop: 14 }]}>{t('compose.body')}</Text>
@@ -768,6 +820,26 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
                   multiline textAlignVertical="top" maxLength={2000}
                   style={[cs.input, cs.textarea, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white, writingDirection: 'rtl', textAlign: 'right' }]} />
               </>
+            )}
+
+            {/* Affiche (image) — comme les "avis aux parents" papier, mais
+                dans le feed. Une seule image, pleine largeur côté lecteur. */}
+            {poster ? (
+              <View style={[cs.posterPreview, { borderColor: theme.border }]}>
+                <Image source={{ uri: poster.uri }} style={cs.posterImage} resizeMode="cover" />
+                <Pressable onPress={() => setPoster(null)} hitSlop={8}
+                  style={[cs.posterRemove, { backgroundColor: theme.danger }]}>
+                  <X size={14} color="#fff" strokeWidth={2.5} />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable onPress={pickPoster}
+                style={[cs.urgentRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <ImagePlus size={16} color={theme.textSoft} strokeWidth={2} />
+                <Text style={{ flex: 1, marginStart: 10, color: theme.text, fontWeight: '700', fontSize: 13 }}>
+                  {lang === 'ar' ? 'إضافة ملصق (صورة)' : lang === 'en' ? 'Add a poster (image)' : 'Ajouter une affiche (image)'}
+                </Text>
+              </Pressable>
             )}
 
             {/* Urgent */}
@@ -824,15 +896,21 @@ const cs = StyleSheet.create({
   eleveRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 10, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, marginBottom: 5 },
   checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   dateBtn: { flexDirection: 'row', alignItems: 'center' },
+  posterPreview: { marginTop: 14, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
+  posterImage: { width: '100%', height: 180 },
+  posterRemove: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
 })
 
 const styles = StyleSheet.create({
-  tabRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  tab: { flex: 1, position: 'relative', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 28, borderRadius: 12, borderWidth: 1.5, overflow: 'hidden' },
+  tabRow: { flexDirection: 'row', borderRadius: 14, padding: 4, marginBottom: 14 },
+  tab: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 9, paddingHorizontal: 12, borderRadius: 11 },
+  tabActive: { borderWidth: StyleSheet.hairlineWidth },
   tabContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', maxWidth: '100%' },
-  badge: { position: 'absolute', right: 8, top: '50%', marginTop: -9, minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
-  card: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 8 },
-  cardRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  badge: { minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, marginStart: 6 },
+  card: { padding: 12, borderRadius: 20, borderWidth: 1, marginBottom: 9 },
+  cardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
+  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  unreadDot: { width: 7, height: 7, borderRadius: 4, marginEnd: 6 },
   nameRow: { flexDirection: 'row', alignItems: 'center' },
   center: { paddingVertical: 40, alignItems: 'center' },
   fab: { position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 },

@@ -130,6 +130,20 @@ export default function TeacherClasseFolderScreen() {
           sub={notesCount != null ? `${notesCount} note(s)` : t('teacher.notesSeeEnter')}
           onPress={() => navigation.navigate('TeacherNotes', { classe })}
         />
+        <Action
+          icon="happy-outline"
+          label={t('behavior.folderAction')}
+          sub={t('behavior.folderActionSub')}
+          onPress={() => navigation.navigate('TeacherComportement', { classe })}
+          color={theme.warning}
+        />
+        <Action
+          icon="folder-open-outline"
+          label={t('resources.title')}
+          sub={t('resources.folderActionSub')}
+          onPress={() => navigation.navigate('TeacherRessources', { classe })}
+          color={theme.info}
+        />
       </ScrollView>
     </ScreenLayout>
   )
