@@ -215,6 +215,7 @@ const fr = {
     mySchedule: 'Mon emploi du temps',
     edtChipAppel: 'Appel',
     edtChipDevoir: 'Devoir',
+    noSessionTodayForClass: 'Aucune séance prévue aujourd\'hui pour cette classe — toutes les séances sont affichées.',
     coursesCount: '{{count}} cours',
     noCourseFound: 'Aucun cours trouvé pour vous.',
     todayLabel: 'aujourd\'hui',

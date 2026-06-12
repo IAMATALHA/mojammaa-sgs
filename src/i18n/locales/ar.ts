@@ -216,6 +216,7 @@ const ar = {
     coursesCount: '{{count}} حصة',
     edtChipAppel: 'الحضور',
     edtChipDevoir: 'واجب',
+    noSessionTodayForClass: 'لا توجد حصة مبرمجة اليوم لهذا القسم — تُعرض جميع الحصص.',
     noCourseFound: 'لا حصص لك.',
     todayLabel: 'اليوم',
     myHomework: 'واجباتي',

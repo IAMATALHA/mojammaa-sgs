@@ -24,6 +24,7 @@ import {
   documentId,
 } from 'firebase/firestore'
 import { sendMessage } from '../../services/messagesService'
+import { getSchedule } from '../../services/scheduleService'
 import { getAbsenceRequestsForClassDate, decideAbsenceRequest, type AbsenceRequestDoc } from '../../services/absenceRequestsService'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
@@ -48,6 +49,11 @@ interface RouteParams {
 
 function todayISO(): string {
   return new Date().toISOString().split('T')[0]
+}
+
+function todayWeekDay(): string {
+  const names = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+  return names[new Date().getDay()]
 }
 
 interface TeacherInfo {
@@ -142,6 +148,9 @@ export default function TeacherAttendanceScreen() {
   const [requests, setRequests] = useState<AbsenceRequestDoc[]>([])  // déclarations parents (classe+date)
   const [error,   setError]   = useState<string | null>(null)
   const [behaviorFor, setBehaviorFor] = useState<EleveLite | null>(null)  // élève de la fiche comportement
+  // Séances de CETTE classe AUJOURD'HUI selon l'EDT du prof. null = pas
+  // encore chargé ; [] = rien de prévu (fallback : toutes les séances).
+  const [todaySeances, setTodaySeances] = useState<string[] | null>(null)
 
   const date = todayISO()
 
@@ -178,6 +187,35 @@ export default function TeacherAttendanceScreen() {
   }, [classe, date, seance])
 
   useEffect(() => { load() }, [load])
+
+  // L'appel se fait sur les séances réellement prévues AUJOURD'HUI pour
+  // cette classe (EDT du prof) — pas sur S1..S6 à l'aveugle. Si l'EDT n'a
+  // rien (donnée manquante, rattrapage), on retombe sur toutes les séances.
+  useEffect(() => {
+    if (!profile?.uid) return
+    let cancelled = false
+    getSchedule(profile.uid)
+      .then(schedule => {
+        if (cancelled) return
+        const day = todayWeekDay()
+        const seances = [...new Set(
+          (schedule?.weeklySlots || [])
+            .filter(s => s.day === day && s.classe === classe && s.seance)
+            .map(s => s.seance as string),
+        )].sort()
+        setTodaySeances(seances)
+        // Pré-sélectionner la séance du jour si l'utilisateur n'en a pas
+        // déjà choisi une valide (ex. arrivée depuis le dossier de classe).
+        if (seances.length > 0 && !seances.includes(initialSeance || '')) {
+          setSeance(prev => (seances.includes(prev) ? prev : seances[0]))
+        }
+      })
+      .catch(() => { if (!cancelled) setTodaySeances([]) })
+    return () => { cancelled = true }
+  }, [profile?.uid, classe, initialSeance])
+
+  const seanceChoices: readonly string[] =
+    todaySeances && todaySeances.length > 0 ? todaySeances : SEANCES
 
   const toggleAbsent = (id: string) => {
     // Vibration impact moyen = signal clair "j'ai marqué un absent"
@@ -335,8 +373,13 @@ export default function TeacherAttendanceScreen() {
 
       <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.session')}</Text>
       <View style={styles.chipRow}>
-        {SEANCES.map(s => <SeanceChip key={s} value={s} />)}
+        {seanceChoices.map(s => <SeanceChip key={s} value={s} />)}
       </View>
+      {todaySeances !== null && todaySeances.length === 0 ? (
+        <Text style={{ color: theme.warning, fontSize: 11, fontWeight: '600', marginTop: -4, marginBottom: 10 }}>
+          ⚠ {t('teacher.noSessionTodayForClass')}
+        </Text>
+      ) : null}
 
       <View style={[styles.summary, { backgroundColor: theme.white, borderColor: theme.border }]}>
         <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800' }}>

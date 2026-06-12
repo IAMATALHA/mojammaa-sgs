@@ -216,6 +216,7 @@ const en = {
     coursesCount: '{{count}} courses',
     edtChipAppel: 'Roll call',
     edtChipDevoir: 'Homework',
+    noSessionTodayForClass: 'No session scheduled today for this class — all sessions shown.',
     noCourseFound: 'No courses found for you.',
     todayLabel: 'today',
     myHomework: 'My homework',
