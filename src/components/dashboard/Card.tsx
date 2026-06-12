@@ -23,16 +23,18 @@ export default function Card({
   children, onPress, padding, style, variant = 'default',
 }: CardProps) {
   const theme = useTheme()
+  // Direction "clay" : surfaces gonflées — très arrondies, ombre douce,
+  // pas de bordure visible sur la variante par défaut.
   const base: ViewStyle = {
     backgroundColor: variant === 'flat' ? theme.surface : theme.card,
-    borderRadius:    theme.radius.md,
+    borderRadius:    theme.radius.xxl,
     padding:         padding ?? theme.spacing.lg,
-    borderWidth:     StyleSheet.hairlineWidth,
+    borderWidth:     variant === 'default' ? 0 : StyleSheet.hairlineWidth,
     borderColor:     variant === 'outline' ? theme.borderStrong : theme.border,
   }
   const elevation = variant === 'flat' || variant === 'outline'
     ? null
-    : theme.shadows.none
+    : theme.shadows.clay
 
   if (onPress) {
     return (
@@ -46,9 +48,9 @@ export default function Card({
             from={{ opacity: 0 }}
             animate={{
               opacity: pressed ? 0.96 : 1,
-              scale: pressed ? 0.98 : 1,
+              scale: pressed ? 0.95 : 1,
             }}
-            transition={{ type: 'timing', duration: 200 }}
+            transition={{ type: 'spring', damping: 15, stiffness: 260, mass: 0.7 }}
             style={[base, elevation, style]}
           >
             {children}

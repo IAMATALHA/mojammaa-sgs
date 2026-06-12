@@ -12,7 +12,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, Pressable,
-  ActivityIndicator, Alert, ScrollView, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Alert, ScrollView,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { Building2, GraduationCap, Send } from 'lucide-react-native'
@@ -107,7 +107,8 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
 
   return (
     <BottomSheet visible={visible} onClose={() => { reset(); onClose() }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* L'évitement clavier est géré par BottomSheet (KAV à la racine du Modal). */}
+      <View>
         <Text style={{ color: theme.text, fontWeight: '800', fontSize: 17 }}>
           {t('parentCompose.title')}
         </Text>
@@ -184,7 +185,7 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
               </>
             )}
         </TouchableOpacity>
-      </KeyboardAvoidingView>
+      </View>
     </BottomSheet>
   )
 }

@@ -520,7 +520,7 @@ function EditNoteModal({
           <TextInput
             value={value}
             onChangeText={setValue}
-            placeholder="Ex : 14.5"
+            placeholder={t('teacher.notePlaceholder')}
             placeholderTextColor={theme.textSoft}
             style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white, fontSize: 28, textAlign: 'center', fontWeight: '700' }]}
             keyboardType="numeric"

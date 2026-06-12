@@ -4,10 +4,10 @@
  * Le prof la voit sur son écran d'appel et l'absence est justifiée
  * d'office avec ce motif à l'enregistrement.
  */
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, Pressable,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Alert,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { CalendarDays, Send } from 'lucide-react-native'
@@ -42,6 +42,12 @@ export default function DeclareAbsenceSheet({ visible, onClose, profile, childre
   const [reason, setReason] = useState('')
   const [sending, setSending] = useState(false)
 
+  // `children` arrive en asynchrone (vide au montage) : pré-sélectionner
+  // l'enfant unique dès qu'il est connu.
+  useEffect(() => {
+    if (children.length === 1) setChildId(children[0].id)
+  }, [children])
+
   const reset = () => { setChildId(children.length === 1 ? children[0].id : null); setDate(null); setReason('') }
 
   const submit = async () => {
@@ -72,71 +78,72 @@ export default function DeclareAbsenceSheet({ visible, onClose, profile, childre
   const canSubmit = !!childId && !!date && !!reason.trim() && !sending
 
   return (
-    <>
-      <BottomSheet visible={visible} onClose={() => { reset(); onClose() }}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Text style={{ color: theme.text, fontWeight: '800', fontSize: 17 }}>
-            {t('absenceRequest.declare')}
+    <BottomSheet visible={visible} onClose={() => { reset(); onClose() }}>
+      {/* L'évitement clavier est géré par BottomSheet (KAV à la racine du Modal). */}
+      <View>
+        <Text style={{ color: theme.text, fontWeight: '800', fontSize: 17 }}>
+          {t('absenceRequest.declare')}
+        </Text>
+
+        <Text style={[styles.label, { color: theme.textSoft }]}>{t('absenceRequest.child')}</Text>
+        <View style={styles.chipRow}>
+          {children.map(c => {
+            const active = childId === c.id
+            return (
+              <Pressable key={c.id} onPress={() => setChildId(c.id)}
+                style={[styles.chip, {
+                  borderColor: active ? (c.avatarColor || theme.primary) : theme.border,
+                  backgroundColor: active ? (c.avatarColor || theme.primary) : theme.surface,
+                }]}>
+                <Text style={{ color: active ? '#fff' : theme.text, fontWeight: '700', fontSize: 12.5 }}>
+                  {c.firstName}
+                </Text>
+              </Pressable>
+            )
+          })}
+        </View>
+
+        <Text style={[styles.label, { color: theme.textSoft }]}>{t('absenceRequest.date')}</Text>
+        <Pressable onPress={() => setShowDatePicker(true)}
+          style={[styles.dateBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <CalendarDays size={16} color={theme.primary} strokeWidth={2} />
+          <Text style={{ color: date ? theme.text : theme.textMuted, fontWeight: '600', fontSize: 13, marginStart: 8 }}>
+            {date
+              ? date.toLocaleDateString(localeFor(), { weekday: 'long', day: '2-digit', month: 'long' })
+              : t('absenceRequest.date')}
           </Text>
+        </Pressable>
 
-          <Text style={[styles.label, { color: theme.textSoft }]}>{t('absenceRequest.child')}</Text>
-          <View style={styles.chipRow}>
-            {children.map(c => {
-              const active = childId === c.id
-              return (
-                <Pressable key={c.id} onPress={() => setChildId(c.id)}
-                  style={[styles.chip, {
-                    borderColor: active ? (c.avatarColor || theme.primary) : theme.border,
-                    backgroundColor: active ? (c.avatarColor || theme.primary) : theme.surface,
-                  }]}>
-                  <Text style={{ color: active ? '#fff' : theme.text, fontWeight: '700', fontSize: 12.5 }}>
-                    {c.firstName}
-                  </Text>
-                </Pressable>
-              )
-            })}
-          </View>
+        <Text style={[styles.label, { color: theme.textSoft }]}>{t('absenceRequest.reason')}</Text>
+        <TextInput
+          value={reason} onChangeText={setReason} multiline maxLength={300}
+          placeholder={t('absenceRequest.reasonPlaceholder')} placeholderTextColor={theme.textMuted}
+          style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(reason)]} />
 
-          <Text style={[styles.label, { color: theme.textSoft }]}>{t('absenceRequest.date')}</Text>
-          <Pressable onPress={() => setShowDatePicker(true)}
-            style={[styles.dateBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <CalendarDays size={16} color={theme.primary} strokeWidth={2} />
-            <Text style={{ color: date ? theme.text : theme.textMuted, fontWeight: '600', fontSize: 13, marginStart: 8 }}>
-              {date
-                ? date.toLocaleDateString(localeFor(), { weekday: 'long', day: '2-digit', month: 'long' })
-                : t('absenceRequest.date')}
-            </Text>
-          </Pressable>
+        <TouchableOpacity onPress={submit} disabled={!canSubmit} activeOpacity={0.85}
+          style={[styles.submitBtn, { backgroundColor: canSubmit ? theme.primary : theme.surfaceAlt }]}>
+          {sending
+            ? <ActivityIndicator size="small" color="#fff" />
+            : (
+              <>
+                <Send size={15} color={canSubmit ? '#fff' : theme.textMuted} strokeWidth={2.2} />
+                <Text style={{ color: canSubmit ? '#fff' : theme.textMuted, fontWeight: '800', fontSize: 14 }}>
+                  {t('absenceRequest.submit')}
+                </Text>
+              </>
+            )}
+        </TouchableOpacity>
+      </View>
 
-          <Text style={[styles.label, { color: theme.textSoft }]}>{t('absenceRequest.reason')}</Text>
-          <TextInput
-            value={reason} onChangeText={setReason} multiline maxLength={300}
-            placeholder={t('absenceRequest.reasonPlaceholder')} placeholderTextColor={theme.textMuted}
-            style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(reason)]} />
-
-          <TouchableOpacity onPress={submit} disabled={!canSubmit} activeOpacity={0.85}
-            style={[styles.submitBtn, { backgroundColor: canSubmit ? theme.primary : theme.surfaceAlt }]}>
-            {sending
-              ? <ActivityIndicator size="small" color="#fff" />
-              : (
-                <>
-                  <Send size={15} color={canSubmit ? '#fff' : theme.textMuted} strokeWidth={2.2} />
-                  <Text style={{ color: canSubmit ? '#fff' : theme.textMuted, fontWeight: '800', fontSize: 14 }}>
-                    {t('absenceRequest.submit')}
-                  </Text>
-                </>
-              )}
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </BottomSheet>
-
+      {/* Rendu DANS le BottomSheet (modal imbriqué) : un modal FRÈRE d'un
+          modal déjà présenté ne s'affiche jamais sur iOS. */}
       <DatePickerSheet
         visible={showDatePicker}
         value={date}
         onSelect={setDate}
         onClose={() => setShowDatePicker(false)}
       />
-    </>
+    </BottomSheet>
   )
 }
 

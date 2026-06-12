@@ -1,40 +1,37 @@
-import React, { useState } from 'react';
+/**
+ * BasicSettingsScreen — écran Réglages partagé (prof + parent).
+ * Liste groupée sobre : profil avec avatar, langue, version, déconnexion.
+ * L'écran admin (AdminSettingsScreen) garde sa propre version avec les
+ * outils d'administration en plus.
+ */
+import React, { useState } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking,
-} from 'react-native';
-import { useTranslation } from 'react-i18next';
-import { Globe, ExternalLink, Eye, ChevronRight } from 'lucide-react-native';
-import Constants from 'expo-constants';
-import ScreenLayout from '../../components/ScreenLayout';
-import LanguagePicker from '../../components/LanguagePicker';
-import { useTheme, type Theme } from '../../contexts/ThemeContext';
-import { useAuth } from '../../contexts/AuthContext';
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
+} from 'react-native'
+import { useTranslation } from 'react-i18next'
+import { Globe, ChevronRight } from 'lucide-react-native'
+import Constants from 'expo-constants'
+import ScreenLayout from './ScreenLayout'
+import LanguagePicker from './LanguagePicker'
+import { useTheme } from '../contexts/ThemeContext'
+import { useAuth } from '../contexts/AuthContext'
+import { initialsOf } from '../utils/format'
 
 const APP_VERSION = Constants.expoConfig?.version ?? '—'
-const ADMIN_WEB_URL = 'https://mojammaa-admin.vercel.app'
 
-export default function AdminSettingsScreen() {
+export default function BasicSettingsScreen({ roleLabel }: { roleLabel: string }) {
   const theme = useTheme()
   const { t, i18n } = useTranslation()
   const { profile, logout } = useAuth()
   const [langOpen, setLangOpen] = useState(false)
 
   const langLabel = i18n.language === 'ar' ? 'العربية' : i18n.language === 'en' ? 'English' : 'Français'
-
   const fullName = profile ? `${profile.prenom} ${profile.nom}`.trim() : '—'
-  const initials = profile
-    ? `${profile.prenom?.[0] ?? ''}${profile.nom?.[0] ?? ''}`.toUpperCase() || '—'
-    : '—'
-
-  const openWebAdmin = () => {
-    Linking.openURL(ADMIN_WEB_URL).catch(() =>
-      Alert.alert(t('common.error'), "Impossible d'ouvrir le navigateur."))
-  }
 
   const handleLogout = () => {
     Alert.alert(t('common.logoutTitle'), t('common.logoutConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.logout'), style: 'destructive', onPress: () => logout() },
+      { text: t('common.logout'), style: 'destructive', onPress: () => logout().catch(() => {}) },
     ])
   }
 
@@ -45,44 +42,25 @@ export default function AdminSettingsScreen() {
         <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>
           <View style={[styles.row, styles.rowLast]}>
             <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-              <Text style={{ color: theme.white, fontFamily: theme.fonts.bold, fontSize: 15 }}>{initials}</Text>
+              <Text style={{ color: theme.white, fontFamily: theme.fonts.bold, fontSize: 15 }}>{initialsOf(fullName)}</Text>
             </View>
             <View style={{ flex: 1, marginStart: 12 }}>
               <Text style={[styles.rowTitle, { color: theme.text, fontFamily: theme.fonts.bold, fontSize: 15 }]}>{fullName}</Text>
               <Text numberOfLines={1} style={[styles.rowSub, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>
-                {profile?.email || ''} · {t('admin.administrator')}
+                {profile?.email || ''} · {roleLabel}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Langue + outils admin */}
+        {/* Langue */}
         <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>
-          <TouchableOpacity style={[styles.row, { borderBottomColor: theme.border }]} onPress={() => setLangOpen(true)}>
-            <RowIcon bg={theme.primarySurface}><Globe size={16} color={theme.primary} strokeWidth={2} /></RowIcon>
+          <TouchableOpacity style={[styles.row, styles.rowLast]} onPress={() => setLangOpen(true)}>
+            <View style={[styles.rowIcon, { backgroundColor: theme.primarySurface }]}>
+              <Globe size={16} color={theme.primary} strokeWidth={2} />
+            </View>
             <Text style={[styles.rowTitle, { flex: 1, color: theme.text, fontFamily: theme.fonts.semibold }]}>{t('common.language')}</Text>
             <Text style={[styles.rowValue, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>{langLabel}</Text>
-            <ChevronRight size={16} color={theme.textMuted} strokeWidth={2} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.row, { borderBottomColor: theme.border }]} onPress={openWebAdmin}>
-            <RowIcon bg={theme.accentSurface}><ExternalLink size={16} color={theme.accent} strokeWidth={2} /></RowIcon>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.rowTitle, { color: theme.text, fontFamily: theme.fonts.semibold }]}>{t('admin.openWebAdmin')}</Text>
-              <Text style={[styles.rowSub, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>mojammaa-admin.vercel.app</Text>
-            </View>
-            <ChevronRight size={16} color={theme.textMuted} strokeWidth={2} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.row, styles.rowLast]}
-            onPress={() => Alert.alert(t('admin.impersonation'), t('admin.impersonationMsg'))}
-          >
-            <RowIcon bg={theme.violetSurface}><Eye size={16} color={theme.primary} strokeWidth={2} /></RowIcon>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.rowTitle, { color: theme.text, fontFamily: theme.fonts.semibold }]}>{t('admin.impersonation')}</Text>
-              <Text style={[styles.rowSub, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>{t('admin.impersonationMsg')}</Text>
-            </View>
             <ChevronRight size={16} color={theme.textMuted} strokeWidth={2} />
           </TouchableOpacity>
         </View>
@@ -110,10 +88,6 @@ export default function AdminSettingsScreen() {
       <LanguagePicker visible={langOpen} onClose={() => setLangOpen(false)} />
     </ScreenLayout>
   )
-}
-
-function RowIcon({ bg, children }: { bg: string; children: React.ReactNode }) {
-  return <View style={[styles.rowIcon, { backgroundColor: bg }]}>{children}</View>
 }
 
 const styles = StyleSheet.create({
@@ -144,4 +118,4 @@ const styles = StyleSheet.create({
   rowSub:   { fontSize: 11.5, marginTop: 2 },
   rowValue: { fontSize: 13 },
   footer: { textAlign: 'center', fontSize: 10.5, letterSpacing: 0.4, marginTop: 10 },
-});
+})

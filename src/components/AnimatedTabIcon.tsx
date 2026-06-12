@@ -17,9 +17,11 @@ interface Props {
   color:   string
   focused: boolean
   theme:   Theme
+  /** Sans fond : la pastille active est dessinée ailleurs (AnimatedTabBar). */
+  bare?:   boolean
 }
 
-export default function AnimatedTabIcon({ Icon, color, focused, theme }: Props) {
+export default function AnimatedTabIcon({ Icon, color, focused, theme, bare }: Props) {
   const scale = useSharedValue(focused ? 1 : 0.9)
 
   useEffect(() => {
@@ -40,11 +42,11 @@ export default function AnimatedTabIcon({ Icon, color, focused, theme }: Props) 
     <Animated.View
       style={[
         styles.pill,
-        focused && { backgroundColor: theme.primary },
+        focused && !bare && { backgroundColor: theme.primary },
         animStyle,
       ]}
     >
-      <Icon color={focused ? '#FFFFFF' : color} size={19} strokeWidth={focused ? 1.9 : 1.8} />
+      <Icon color={bare ? color : focused ? '#FFFFFF' : color} size={19} strokeWidth={focused ? 1.9 : 1.8} />
     </Animated.View>
   )
 }

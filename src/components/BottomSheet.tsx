@@ -8,7 +8,9 @@
  *   </BottomSheet>
  */
 import React, { useEffect } from 'react'
-import { Modal, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native'
+import {
+  Keyboard, Modal, Pressable, StyleSheet, View, useWindowDimensions,
+} from 'react-native'
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS,
 } from 'react-native-reanimated'
@@ -56,12 +58,24 @@ export default function BottomSheet({ visible, onClose, children, maxHeightRatio
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={handleClose}>
       <View style={styles.root}>
-        <AnimatedPressable style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]} onPress={handleClose} />
+        {/* Clavier ouvert : le tap sur le fond ferme d'abord le clavier
+            (sans perdre la saisie) ; sinon il ferme la feuille. */}
+        <AnimatedPressable
+          style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}
+          onPress={() => {
+            if (Keyboard.isVisible()) { Keyboard.dismiss(); return }
+            handleClose()
+          }}
+        />
         <Animated.View
           style={[styles.sheet, { backgroundColor: theme.card, maxHeight: height * maxHeightRatio }, sheetStyle]}
         >
-          <View style={[styles.handle, { backgroundColor: theme.border }]} />
-          {children}
+          {/* Tap sur une zone neutre de la feuille → ferme le clavier
+              (les boutons/champs enfants gardent la priorité). */}
+          <Pressable accessible={false} onPress={Keyboard.dismiss}>
+            <View style={[styles.handle, { backgroundColor: theme.border }]} />
+            {children}
+          </Pressable>
         </Animated.View>
       </View>
     </Modal>

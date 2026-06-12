@@ -6,9 +6,10 @@ import {
 import { useTranslation } from 'react-i18next'
 import { collection, onSnapshot, type Unsubscribe } from 'firebase/firestore'
 import {
-  CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2,
+  ChevronLeft, ChevronRight, Plus, Trash2,
 } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
+import BottomSheet from '../../components/BottomSheet'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
@@ -89,6 +90,7 @@ export default function AdminCalendarScreen() {
   const [selectedDate, setSelectedDate] = useState(localISO(new Date()))
   const [selectedType, setSelectedType] = useState<JourType>('evenement')
   const [saving, setSaving] = useState(false)
+  const [markOpen, setMarkOpen] = useState(false)
 
   const cells = useMemo(() => buildMonthCells(monthDate), [monthDate])
   const visibleStart = cells[0]?.iso || localISO(new Date())
@@ -115,6 +117,33 @@ export default function AdminCalendarScreen() {
   const selectedJour = joursMap.get(selectedDate)
   const selectedTasks = tasksByDate.get(selectedDate) || []
   const hasContent = !!selectedJour || selectedTasks.length > 0
+
+  // Agenda « À venir » : jours spéciaux + échéances du mois affiché, fusionnés.
+  const upcoming = useMemo(() => {
+    const today = localISO(new Date())
+    const items: { key: string; date: string; label: string; sub: string; color: string; isJour: boolean }[] = []
+    jours.forEach(j => {
+      if (j.date >= today) {
+        items.push({
+          key: `j-${j.date}`, date: j.date, label: j.label,
+          sub: t(`calendar.${j.type}`),
+          color: JOUR_TYPES.find(jt => jt.value === j.type)?.color || '#D95B00',
+          isJour: true,
+        })
+      }
+    })
+    tasks.forEach(task => {
+      if (task.dateLimite >= today) {
+        items.push({
+          key: `t-${task.id}`, date: task.dateLimite,
+          label: task.title || t('tabs.homework'), sub: task.className,
+          color: task.type === 'examen' ? theme.danger : theme.primary,
+          isJour: false,
+        })
+      }
+    })
+    return items.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 12)
+  }, [jours, tasks, t, theme])
 
   const loadJours = useCallback(async () => {
     setLoading(true)
@@ -159,6 +188,7 @@ export default function AdminCalendarScreen() {
     try {
       const typeInfo = JOUR_TYPES.find(jt => jt.value === selectedType)!
       await setJourScolaire({ date: selectedDate, type: selectedType, label: t(typeInfo.labelKey), annuleCours: true }, profile.uid)
+      setMarkOpen(false)
       loadJours()
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message)
@@ -237,93 +267,115 @@ export default function AdminCalendarScreen() {
           </View>
         )}
 
-        {/* Selected day detail */}
-        <View style={[s.dayDetail, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[s.dayDetailTitle, { color: theme.text }]}>
-            {formatSelectedDate(selectedDate, lang)}
-          </Text>
-
-          {!hasContent && (
-            <Text style={{ color: theme.textSoft, fontSize: 13, marginTop: 8 }}>
-              {lang === 'ar' ? 'لا أحداث في هذا اليوم' : lang === 'en' ? 'No events this day' : 'Aucun événement ce jour'}
+        {/* Détail du jour sélectionné — seulement s'il a du contenu */}
+        {hasContent && (
+          <View style={[s.dayDetail, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[s.dayDetailTitle, { color: theme.text }]}>
+              {formatSelectedDate(selectedDate, lang)}
             </Text>
-          )}
 
-          {selectedJour && (
-            <View style={[s.eventRow, { backgroundColor: (JOUR_TYPES.find(jt => jt.value === selectedJour.type)?.color || '#D95B00') + '15' }]}>
-              <View style={[s.eventDot, { backgroundColor: JOUR_TYPES.find(jt => jt.value === selectedJour.type)?.color || '#D95B00' }]} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>{selectedJour.label}</Text>
-                <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>{t(`calendar.${selectedJour.type}`)}</Text>
-              </View>
-              <Pressable onPress={() => handleDeleteSpecialDay(selectedJour.date)} hitSlop={8}>
-                <Trash2 size={16} color={theme.danger} strokeWidth={2} />
-              </Pressable>
-            </View>
-          )}
-
-          {selectedTasks.map(task => (
-            <View key={task.id} style={[s.eventRow, { backgroundColor: theme.primarySurface }]}>
-              <View style={[s.eventDot, { backgroundColor: task.type === 'examen' ? theme.danger : theme.primary }]} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>{task.title || t('tabs.homework')}</Text>
-                <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>{task.className}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Add special day */}
-        <View style={[s.addSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <View style={s.typeRow}>
-            {JOUR_TYPES.map(jt => {
-              const active = selectedType === jt.value
-              return (
-                <Pressable key={jt.value} onPress={() => { Haptics.selectionAsync(); setSelectedType(jt.value) }}
-                  style={[s.typeChip, { backgroundColor: active ? jt.color : theme.surface }]}>
-                  <View style={[s.typeDot, { backgroundColor: active ? '#fff' : jt.color }]} />
-                  <Text style={{ color: active ? '#fff' : theme.text, fontWeight: '700', fontSize: 12 }}>{t(jt.labelKey)}</Text>
-                </Pressable>
-              )
-            })}
-          </View>
-          <Pressable
-            disabled={saving || joursMap.has(selectedDate)}
-            onPress={handleAddSpecialDay}
-            style={[s.addBtn, { backgroundColor: joursMap.has(selectedDate) ? theme.surfaceAlt : theme.primary }]}>
-            {saving ? <ActivityIndicator color="#fff" size="small" /> : (
-              <Text style={{ color: joursMap.has(selectedDate) ? theme.textMuted : '#fff', fontWeight: '800', fontSize: 13 }}>
-                {t('calendar.mark')} · {selectedDate.split('-').reverse().join('/')}
-              </Text>
-            )}
-          </Pressable>
-        </View>
-
-        {/* All special days list */}
-        {jours.length > 0 && (
-          <View style={{ marginTop: 16 }}>
-            <Text style={[s.sectionTitle, { color: theme.text }]}>
-              {lang === 'ar' ? 'الأيام الخاصة' : lang === 'en' ? 'Special days' : 'Jours spéciaux'} ({jours.length})
-            </Text>
-            {jours.map(jour => {
-              const jt = JOUR_TYPES.find(j => j.value === jour.type)
-              return (
-                <View key={jour.date} style={[s.specialRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                  <View style={[s.specialDot, { backgroundColor: jt?.color || '#D95B00' }]} />
-                  <Text style={{ color: theme.text, fontWeight: '600', fontSize: 13, flex: 1 }}>
-                    {jour.date.split('-').reverse().join('/')} · {jour.label}
-                  </Text>
-                  <Pressable onPress={() => handleDeleteSpecialDay(jour.date)} hitSlop={8}>
-                    <Trash2 size={14} color={theme.danger} strokeWidth={2} />
-                  </Pressable>
+            {selectedJour && (
+              <View style={[s.eventRow, { backgroundColor: (JOUR_TYPES.find(jt => jt.value === selectedJour.type)?.color || '#D95B00') + '15' }]}>
+                <View style={[s.eventDot, { backgroundColor: JOUR_TYPES.find(jt => jt.value === selectedJour.type)?.color || '#D95B00' }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>{selectedJour.label}</Text>
+                  <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>{t(`calendar.${selectedJour.type}`)}</Text>
                 </View>
-              )
-            })}
+                <Pressable onPress={() => handleDeleteSpecialDay(selectedJour.date)} hitSlop={8}>
+                  <Trash2 size={16} color={theme.danger} strokeWidth={2} />
+                </Pressable>
+              </View>
+            )}
+
+            {selectedTasks.map(task => (
+              <View key={task.id} style={[s.eventRow, { backgroundColor: theme.primarySurface }]}>
+                <View style={[s.eventDot, { backgroundColor: task.type === 'examen' ? theme.danger : theme.primary }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>{task.title || t('tabs.homework')}</Text>
+                  <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>{task.className}</Text>
+                </View>
+              </View>
+            ))}
           </View>
         )}
+
+        {/* Agenda « À venir » */}
+        <Text style={[s.sectionTitle, { color: theme.textMuted }]}>{t('calendar.agendaUpcoming')}</Text>
+        {upcoming.length === 0 ? (
+          <Text style={{ color: theme.textSoft, fontSize: 13, marginTop: 2 }}>{t('calendar.emptyUnified')}</Text>
+        ) : (
+          upcoming.map(item => {
+            const [, , dd] = item.date.split('-')
+            return (
+              <Pressable key={item.key} onPress={() => setSelectedDate(item.date)} style={s.agendaItem}>
+                <View style={[s.agendaDate, { backgroundColor: theme.card, borderColor: item.color + '66' }]}>
+                  <Text style={{ color: item.color, fontWeight: '800', fontSize: 17, lineHeight: 20 }}>{Number(dd)}</Text>
+                  <Text style={{ color: theme.textMuted, fontSize: 9, fontWeight: '700', textTransform: 'uppercase' }}>
+                    {formatWeekdayShort(item.date, lang)}
+                  </Text>
+                </View>
+                <View style={[s.agendaBody, { backgroundColor: item.color + '15' }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={1} style={{ color: theme.text, fontWeight: '700', fontSize: 13 }}>{item.label}</Text>
+                    <Text numberOfLines={1} style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>{item.sub}</Text>
+                  </View>
+                  {item.isJour && (
+                    <Pressable onPress={() => handleDeleteSpecialDay(item.date)} hitSlop={8}>
+                      <Trash2 size={15} color={theme.danger} strokeWidth={2} />
+                    </Pressable>
+                  )}
+                </View>
+              </Pressable>
+            )
+          })
+        )}
+        <View style={{ height: 80 }} />
       </ScrollView>
+
+      {/* FAB : marquer un jour spécial */}
+      <Pressable onPress={() => { Haptics.selectionAsync(); setMarkOpen(true) }}
+        style={[s.fab, { backgroundColor: theme.accent }, theme.shadows.lg]}>
+        <Plus size={26} color="#fff" strokeWidth={2.5} />
+      </Pressable>
+
+      {/* Feuille de marquage */}
+      <BottomSheet visible={markOpen} onClose={() => setMarkOpen(false)}>
+        <Text style={[s.sheetTitle, { color: theme.text }]}>{t('calendar.addDay')}</Text>
+        <Text style={{ color: theme.textSoft, fontSize: 13, marginTop: 4, marginBottom: 14, textTransform: 'capitalize' }}>
+          {formatSelectedDate(selectedDate, lang)}
+        </Text>
+        <View style={s.typeRow}>
+          {JOUR_TYPES.map(jt => {
+            const active = selectedType === jt.value
+            return (
+              <Pressable key={jt.value} onPress={() => { Haptics.selectionAsync(); setSelectedType(jt.value) }}
+                style={[s.typeChip, { backgroundColor: active ? jt.color : theme.surfaceAlt }]}>
+                <View style={[s.typeDot, { backgroundColor: active ? '#fff' : jt.color }]} />
+                <Text style={{ color: active ? '#fff' : theme.text, fontWeight: '700', fontSize: 12 }}>{t(jt.labelKey)}</Text>
+              </Pressable>
+            )
+          })}
+        </View>
+        <Pressable
+          disabled={saving || joursMap.has(selectedDate)}
+          onPress={handleAddSpecialDay}
+          style={[s.addBtn, { backgroundColor: joursMap.has(selectedDate) ? theme.surfaceAlt : theme.primary }]}>
+          {saving ? <ActivityIndicator color="#fff" size="small" /> : (
+            <Text style={{ color: joursMap.has(selectedDate) ? theme.textMuted : '#fff', fontWeight: '800', fontSize: 13 }}>
+              {joursMap.has(selectedDate)
+                ? t('calendar.alreadyExists')
+                : `${t('calendar.mark')} · ${selectedDate.split('-').reverse().join('/')}`}
+            </Text>
+          )}
+        </Pressable>
+      </BottomSheet>
     </ScreenLayout>
   )
+}
+
+function formatWeekdayShort(iso: string, locale: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(new Date(y, m - 1, d))
 }
 
 const s = StyleSheet.create({
@@ -337,7 +389,7 @@ const s = StyleSheet.create({
   weekDay: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '700' },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cell: { width: `${100 / 7}%`, alignItems: 'center', paddingVertical: 10, borderRadius: 12 },
+  cell: { width: `${100 / 7}%`, alignItems: 'center', paddingVertical: 6, borderRadius: 12 },
   dayNum: { fontSize: 14 },
   dotRow: { flexDirection: 'row', gap: 3, marginTop: 4, height: 6 },
   dot: { width: 6, height: 6, borderRadius: 3 },
@@ -347,15 +399,22 @@ const s = StyleSheet.create({
   eventRow: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, marginTop: 10, gap: 10 },
   eventDot: { width: 10, height: 10, borderRadius: 5 },
 
-  addSection: { borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 12 },
-  typeRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
-  typeChip: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderRadius: 999 },
+  typeRow: { flexDirection: 'row', gap: 6, marginBottom: 12 },
+  typeChip: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 999 },
   typeDot: { width: 8, height: 8, borderRadius: 4 },
-  addBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12 },
+  addBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 13, borderRadius: 14 },
 
-  sectionTitle: { fontSize: 14, fontWeight: '800', marginBottom: 8 },
-  specialRow: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, borderWidth: 1, marginBottom: 6 },
-  specialDot: { width: 8, height: 8, borderRadius: 4, marginEnd: 8 },
+  sectionTitle: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.1, marginTop: 18, marginBottom: 10 },
+  agendaItem: { flexDirection: 'row', gap: 10, marginBottom: 9 },
+  agendaDate: { width: 46, borderRadius: 13, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
+  agendaBody: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 13, paddingHorizontal: 13, paddingVertical: 9, gap: 8 },
+
+  fab: {
+    position: 'absolute', bottom: 18, right: 0,
+    width: 54, height: 54, borderRadius: 27,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sheetTitle: { fontSize: 17, fontWeight: '800' },
 
   loading: { paddingVertical: 40, alignItems: 'center' },
 })

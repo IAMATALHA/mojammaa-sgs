@@ -11,6 +11,7 @@ import {
 import Svg, { Circle } from 'react-native-svg'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
+import { palette, chartColors } from '../../theme/designTokens'
 import { db } from '../../config/firebase'
 
 type CollectionName = 'eleves' | 'users' | 'notes' | 'absences' | 'devoirs'
@@ -211,10 +212,10 @@ function bubbleSize(count: number, minCount: number, maxCount: number): number {
 
 function gradeBands(notes: NoteRow[]): GradeBand[] {
   return [
-    { label: '<8', value: notes.filter(row => row.note! < 8).length, color: '#E76F51' },
-    { label: '8-10', value: notes.filter(row => row.note! >= 8 && row.note! < 10).length, color: '#FF8C42' },
-    { label: '10-14', value: notes.filter(row => row.note! >= 10 && row.note! < 14).length, color: '#1D3557' },
-    { label: '14+', value: notes.filter(row => row.note! >= 14).length, color: '#52B788' },
+    { label: '<8', value: notes.filter(row => row.note! < 8).length, color: palette.danger },
+    { label: '8-10', value: notes.filter(row => row.note! >= 8 && row.note! < 10).length, color: palette.orange },
+    { label: '10-14', value: notes.filter(row => row.note! >= 10 && row.note! < 14).length, color: palette.navy },
+    { label: '14+', value: notes.filter(row => row.note! >= 14).length, color: palette.green },
   ]
 }
 
@@ -605,7 +606,7 @@ export default function AdminStatsScreen() {
           </View>
         ) : data ? (
           <>
-            <VisualHero data={data} theme={theme} t={t} />
+            <VisualHero data={data} theme={theme} t={t} onSelectView={setView} />
             <ViewTabs value={view} onChange={setView} theme={theme} t={t} />
             {view === 'classes' ? <ClassesView data={data} theme={theme} t={t} /> : null}
             {view === 'subjects' ? <SubjectsView data={data} theme={theme} t={t} /> : null}
@@ -619,7 +620,9 @@ export default function AdminStatsScreen() {
   )
 }
 
-function VisualHero({ data, theme, t }: { data: DashboardData; theme: Theme; t: any }) {
+function VisualHero({ data, theme, t, onSelectView }: {
+  data: DashboardData; theme: Theme; t: any; onSelectView: (view: StatsView) => void
+}) {
   const alerts = data.classStats.filter(item => item.healthScore < 58).length
   return (
     <View style={[styles.hero, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -639,9 +642,9 @@ function VisualHero({ data, theme, t }: { data: DashboardData; theme: Theme; t: 
         />
       </View>
       <View style={styles.heroTiles}>
-        <MiniTile icon={<TrendingUp size={18} color={theme.primary} />} value={formatNote(data.avgNote)} label={t('tabs.grades')} bg={theme.primarySurface} theme={theme} />
-        <MiniTile icon={<AlertTriangle size={18} color={alerts > 0 ? theme.danger : theme.info} />} value={String(alerts)} label={t('admin.alerts')} bg={alerts > 0 ? theme.dangerSurface : theme.infoSurface} theme={theme} />
-        <MiniTile icon={<BookOpen size={18} color={theme.warning} />} value={String(data.subjectStats.length)} label={t('admin.viewSubjects')} bg={theme.warningSurface} theme={theme} />
+        <MiniTile icon={<TrendingUp size={18} color={theme.primary} />} value={formatNote(data.avgNote)} label={t('tabs.grades')} bg={theme.primarySurface} theme={theme} onPress={() => onSelectView('niveaux')} />
+        <MiniTile icon={<AlertTriangle size={18} color={alerts > 0 ? theme.danger : theme.info} />} value={String(alerts)} label={t('admin.alerts')} bg={alerts > 0 ? theme.dangerSurface : theme.infoSurface} theme={theme} onPress={() => onSelectView('classes')} />
+        <MiniTile icon={<BookOpen size={18} color={theme.warning} />} value={String(data.subjectStats.length)} label={t('admin.viewSubjects')} bg={theme.warningSurface} theme={theme} onPress={() => onSelectView('subjects')} />
       </View>
     </View>
   )
@@ -680,7 +683,7 @@ function ViewTabs({ value, onChange, theme, t }: {
 }
 
 function NiveauxView({ data, theme, t }: { data: DashboardData; theme: Theme; t: any }) {
-  const COLORS = ['#1D3557', '#D95B00', '#52B788', '#E63946', '#D4A017', '#6C63FF']
+  const COLORS = chartColors
   return (
     <>
       {data.niveauStats.length === 0 ? (
@@ -692,7 +695,8 @@ function NiveauxView({ data, theme, t }: { data: DashboardData; theme: Theme; t:
             <View key={niv.name} style={[styles.niveauCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.niveauHeader}>
                 <View style={[styles.niveauBadge, { backgroundColor: color }]}>
-                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13 }}>{niv.name}</Text>
+                  {/* 'Autre' est la sentinelle de regroupement posée par computeData. */}
+                  <Text style={{ color: palette.white, fontWeight: '900', fontSize: 13 }}>{niv.name === 'Autre' ? t('common.other') : niv.name}</Text>
                 </View>
                 <Text style={{ color: theme.textSoft, fontWeight: '700', fontSize: 12 }}>
                   {niv.classCount} {t('tabs.classes').toLowerCase()} · {niv.studentCount} {t('admin.eleves').toLowerCase()}
@@ -828,19 +832,25 @@ function SubjectsView({ data, theme, t }: { data: DashboardData; theme: Theme; t
   )
 }
 
-function MiniTile({ icon, value, label, bg, theme }: {
+function MiniTile({ icon, value, label, bg, theme, onPress }: {
   icon: React.ReactNode
   value: string
   label: string
   bg: string
   theme: Theme
+  onPress?: () => void
 }) {
   return (
-    <View style={[styles.miniTile, { backgroundColor: bg }]}>
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      android_ripple={{ color: theme.border }}
+      style={({ pressed }) => [styles.miniTile, { backgroundColor: bg, opacity: pressed ? 0.85 : 1 }]}
+    >
       {icon}
       <Text numberOfLines={1} style={[styles.miniValue, { color: theme.text }]}>{value}</Text>
       <Text numberOfLines={1} style={[styles.miniLabel, { color: theme.textSoft }]}>{label}</Text>
-    </View>
+    </Pressable>
   )
 }
 
@@ -1169,8 +1179,8 @@ const styles = StyleSheet.create({
   smallFill: { height: 7, borderRadius: 999 },
 
   scatter: { height: 196, borderRadius: 8, overflow: 'hidden' },
-  scatterDot: { position: 'absolute', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FFFFFF' },
-  scatterCount: { color: '#FFFFFF', fontWeight: '900', opacity: 0.9, fontVariant: ['tabular-nums'] },
+  scatterDot: { position: 'absolute', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: palette.white },
+  scatterCount: { color: palette.white, fontWeight: '900', opacity: 0.9, fontVariant: ['tabular-nums'] },
   axisRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 7 },
   axisText: { fontSize: 10, fontWeight: '800' },
 

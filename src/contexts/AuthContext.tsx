@@ -70,6 +70,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async fbUser => {
       if (fbUser) {
+        // Re-raise the gate before exposing the user: role is unknown until
+        // the profile doc arrives, and rendering with the 'student' fallback
+        // flashes the parent UI to teachers/admins right after login.
+        setIsLoading(true)
         setUser(fbUser)
         await fetchProfile(fbUser)
       } else {

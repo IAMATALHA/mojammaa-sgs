@@ -56,17 +56,14 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
             {({ pressed }) => (
               <MotiView
                 from={{ opacity: 0 }}
-                animate={{ scale: pressed ? 0.97 : 1, opacity: pressed ? 0.92 : 1 }}
-                transition={{ type: 'timing', duration: 200 }}
+                animate={{ scale: pressed ? 0.92 : 1, opacity: pressed ? 0.94 : 1 }}
+                transition={{ type: 'spring', damping: 14, stiffness: 240, mass: 0.7 }}
                 style={[
                   styles.tile,
-                  {
-                    backgroundColor: theme.card,
-                    borderColor: tint.border,
-                  },
+                  theme.shadows.clay,
+                  { backgroundColor: tint.bg },
                 ]}
               >
-                <View style={[styles.accentLine, { backgroundColor: tint.fg }]} />
                 {action.badge != null && action.badge !== 0 ? (
                   <View style={[styles.badge, { backgroundColor: tint.fg }]}>
                     <Text style={styles.badgeText}>
@@ -74,7 +71,7 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
                     </Text>
                   </View>
                 ) : null}
-                <View style={[styles.iconCircle, { backgroundColor: tint.bg }]}>
+                <View style={[styles.iconCircle, { backgroundColor: theme.card }]}>
                   <Icon size={21} color={tint.fg} strokeWidth={1.9} />
                 </View>
                 <Text
@@ -112,25 +109,16 @@ const styles = StyleSheet.create({
   },
   tile: {
     flex: 1,
-    minHeight: 96,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 13,
+    minHeight: 100,
+    borderRadius: 24,
+    padding: 14,
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    overflow: 'hidden',
-  },
-  accentLine: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
   },
   iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },

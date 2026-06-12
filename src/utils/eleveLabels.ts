@@ -12,7 +12,9 @@ import type { EleveDoc } from '../services/elevesService'
 // Remplacé par le prénom de chaque élève à l'envoi personnalisé.
 export const ELEVE_PLACEHOLDER = '{élève}'
 
-export const eleveKey = (e: EleveDoc) => e.codeMassar
+// codeMassar peut manquer (élève saisi à la main) → fallback id du doc,
+// puis classe+nom en dernier recours, pour ne jamais rendre une clé undefined.
+export const eleveKey = (e: EleveDoc) => e.codeMassar || e.id || `${e.classe}-${eleveName(e)}`
 
 export const eleveName = (e: EleveDoc) =>
   `${e.prenomLatin || e.prenom || ''} ${e.nomLatin || e.nom || ''}`.trim() || e.nomComplet || '—'

@@ -132,3 +132,10 @@ export function formatRelative(value: unknown, lang?: string): string {
   if (days < 7) return i18n.t('time.daysAgo', { count: days })
   return formatDayMonth(d, lang)
 }
+
+/** Initiales (2 max) d'un nom complet — pour les avatars de la messagerie. */
+export function initialsOf(name?: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '—'
+  return parts.slice(0, 2).map(p => p[0]).join('').toUpperCase()
+}

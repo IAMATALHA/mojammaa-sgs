@@ -6,7 +6,7 @@
  * weekday labels come from Intl, localised via the active language.
  */
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { View, Text, Pressable, Modal, StyleSheet } from 'react-native'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext'
@@ -31,6 +31,12 @@ export default function DatePickerSheet({ visible, value, onSelect, onClose }: P
   const today = new Date()
 
   const [view, setView] = useState<Date>(startOfMonth(value ?? today))
+
+  // Re-synchronise le mois affiché à chaque ouverture (sinon il reste figé
+  // sur le mois consulté lors d'une ouverture précédente).
+  useEffect(() => {
+    if (visible) setView(startOfMonth(value ?? new Date()))
+  }, [visible])
 
   // Weekday headers, Monday-first.
   const weekdays = useMemo(() => {

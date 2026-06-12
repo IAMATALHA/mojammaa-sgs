@@ -364,7 +364,7 @@ function CreateDevoirModal({
           <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.titleLabel')}</Text>
           <TextInput
             value={titre} onChangeText={setTitre}
-            placeholder="Ex : Exercices Chapitre 3"
+            placeholder={t('teacher.devoirTitlePlaceholder')}
             placeholderTextColor={theme.textSoft}
             style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
             maxLength={100}
@@ -373,7 +373,7 @@ function CreateDevoirModal({
           <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>{t('teacher.descriptionLabel')}</Text>
           <TextInput
             value={description} onChangeText={setDescription}
-            placeholder="Détails, consignes…"
+            placeholder={t('teacher.devoirDescPlaceholder')}
             placeholderTextColor={theme.textSoft}
             style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white, minHeight: 90 }]}
             multiline textAlignVertical="top"

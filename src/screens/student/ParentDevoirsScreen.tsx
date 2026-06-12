@@ -48,7 +48,9 @@ export default function ParentDevoirsScreen() {
         </Text>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.chips}>
+      {/* flexShrink: 0 — sinon Yoga écrase cette rangée (hors du scroll
+          vertical) proportionnellement à la hauteur de la liste en dessous. */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={styles.chips}>
         <FilterChip label={t('parent.allFilter')} active={selectedChildId === 'all'} onPress={() => setSelectedChildId('all')} theme={theme} />
         {parent.children.map(c => (
           <FilterChip key={c.id} label={c.firstName} active={selectedChildId === c.id} color={c.avatarColor} onPress={() => setSelectedChildId(c.id)} theme={theme} />
@@ -71,8 +73,8 @@ export default function ParentDevoirsScreen() {
                 {pending.length === 0 ? (
                   <EmptyState icon={Check} title={t('parent.noHomework')} message={t('parent.allDone')} />
                 ) : (
-                  pending.map(d => (
-                    <DevoirRow key={d.id} item={d} childName={childName(d.childId)} onPress={() => setDetail(d)} theme={theme} />
+                  pending.map((d, idx) => (
+                    <DevoirRow key={d.id} item={d} childName={childName(d.childId)} isLast={idx === pending.length - 1} onPress={() => setDetail(d)} theme={theme} />
                   ))
                 )}
               </Card>
@@ -82,8 +84,8 @@ export default function ParentDevoirsScreen() {
               <View style={styles.section}>
                 <SectionHeader title={t('parent.submitted')} subtitle={t('parent.archived', { count: past.length })} />
                 <Card padding={12}>
-                  {past.map(d => (
-                    <DevoirRow key={d.id} item={d} childName={childName(d.childId)} onPress={() => setDetail(d)} theme={theme} />
+                  {past.map((d, idx) => (
+                    <DevoirRow key={d.id} item={d} childName={childName(d.childId)} isLast={idx === past.length - 1} onPress={() => setDetail(d)} theme={theme} />
                   ))}
                 </Card>
               </View>
@@ -158,9 +160,9 @@ function FilterChip({ label, active, onPress, color, theme }: { label: string; a
   )
 }
 
-function DevoirRow({ item, childName, onPress, theme }: { item: ParentDevoir; childName: string; onPress: () => void; theme: Theme }) {
+function DevoirRow({ item, childName, isLast, onPress, theme }: { item: ParentDevoir; childName: string; isLast: boolean; onPress: () => void; theme: Theme }) {
   return (
-    <Pressable onPress={onPress} style={[styles.devoirRow, { borderBottomColor: theme.border }]}>
+    <Pressable onPress={onPress} style={[styles.devoirRow, !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}>
       <View style={[styles.devoirDot, { backgroundColor: item.isPast ? theme.success : theme.warning }]} />
       <View style={{ flex: 1, marginStart: 10 }}>
         <Text numberOfLines={1} style={{ color: theme.text, fontFamily: theme.fonts.semibold, fontSize: 14 }}>{item.title}</Text>
@@ -180,7 +182,7 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, marginEnd: 6 },
   scroll: { paddingBottom: 32 },
   section: { paddingHorizontal: 20, marginTop: 6, marginBottom: 4 },
-  devoirRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  devoirRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   devoirDot: { width: 8, height: 8, borderRadius: 4 },
   backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', paddingHorizontal: 20 },
   sheet: { padding: 20, borderRadius: 22, maxHeight: '85%' },

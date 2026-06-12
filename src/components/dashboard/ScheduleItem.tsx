@@ -10,6 +10,7 @@
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
+import { useTranslation } from 'react-i18next'
 import { Clock, MapPin } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import type { ScheduleEntry } from '../../utils/dashboardTypes'
@@ -18,6 +19,7 @@ export default function ScheduleItem({
   item, onPress,
 }: { item: ScheduleEntry; onPress?: () => void }) {
   const theme = useTheme()
+  const { t } = useTranslation()
   const isNow  = item.status === 'now'
   const isDone = item.status === 'done'
 
@@ -81,7 +83,7 @@ export default function ScheduleItem({
       {isNow ? (
         <View style={[styles.pill, { backgroundColor: theme.accent }]}>
           <View style={styles.pulse} />
-          <Text style={[styles.pillText, { fontFamily: theme.fonts.black }]}>EN COURS</Text>
+          <Text style={[styles.pillText, { fontFamily: theme.fonts.black }]}>{t('teacher.ongoing').toUpperCase()}</Text>
         </View>
       ) : null}
     </>

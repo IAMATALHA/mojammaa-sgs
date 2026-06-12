@@ -10,14 +10,13 @@ import { useNavigation } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
 import {
   MessageSquare, Users, GraduationCap,
-  CheckCircle2, CalendarX, BookOpen, Send, Clock,
+  CheckCircle2, CalendarX, BookOpen, Send, ChevronRight,
 } from 'lucide-react-native'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
 import { getTodayJour, type JourScolaire } from '../../services/calendarService'
-import { SectionHeader, Card } from '../../components/dashboard'
 import AnimatedCounter from '../../components/AnimatedCounter'
 import ProgressRing from '../../components/ProgressRing'
 import { greetingKey } from '../../utils/format'
@@ -156,6 +155,10 @@ export default function AdminDashboardScreen() {
     )
   }
 
+  const presenceColor = state
+    ? state.presenceRate >= 95 ? theme.success : state.presenceRate >= 85 ? theme.warning : theme.danger
+    : theme.success
+
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
       <StatusBar style="dark" />
@@ -172,23 +175,24 @@ export default function AdminDashboardScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
-        {/* ── Header strip ──────────────────────────────── */}
-        <View style={[styles.headerStrip, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>
-          <Pressable onPress={handleAccountPress} hitSlop={8} style={styles.accountBlock}>
+        {/* ── En-tête ──────────────────────────────────── */}
+        <View style={styles.header}>
+          <Pressable onPress={handleAccountPress} hitSlop={8} style={{ flex: 1 }}>
             <Text numberOfLines={1} style={{
               color: theme.text,
-              fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
-              fontSize: isAr ? 16 : 15,
+              fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.black,
+              fontSize: isAr ? 19 : 19,
+              letterSpacing: isAr ? 0 : -0.4,
               writingDirection: isAr ? 'rtl' : 'ltr',
               textAlign: isAr ? 'right' : 'left',
             }}>
               {t(greetingKey())}, {fullName.split(' ')[0] || 'Admin'}
             </Text>
             <Text style={{
-              color: theme.textSoft,
-              fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium,
-              fontSize: 11,
-              letterSpacing: isAr ? 0 : 0.5,
+              color: theme.accent,
+              fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold,
+              fontSize: 10,
+              letterSpacing: isAr ? 0 : 1.4,
               marginTop: 2,
               textTransform: 'uppercase',
               writingDirection: isAr ? 'rtl' : 'ltr',
@@ -197,17 +201,18 @@ export default function AdminDashboardScreen() {
               {t('roles.admin')}
             </Text>
           </Pressable>
-          <Pressable onPress={() => goTo('AdminMessages')} hitSlop={8} style={[styles.bellBtn, { backgroundColor: theme.surface }]}>
+          <Pressable onPress={() => goTo('AdminMessages')} hitSlop={8}
+            style={[styles.mailBtn, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>
             <MessageSquare size={18} color={theme.text} strokeWidth={1.75} />
           </Pressable>
         </View>
 
-        {/* Special day banner */}
+        {/* Bannière jour spécial */}
         {todayJour && todayJour.annuleCours ? (
-          <View style={[styles.specialBanner, { backgroundColor: todayJour.type === 'vacances' ? '#52B788' : todayJour.type === 'examen' ? '#E63946' : '#D95B00' }]}>
-            <CalendarX size={18} color="#fff" strokeWidth={2} />
+          <View style={[styles.specialBanner, { backgroundColor: todayJour.type === 'vacances' ? theme.info : theme.danger }]}>
+            <CalendarX size={18} color={theme.white} strokeWidth={2} />
             <View style={{ flex: 1, marginStart: 10 }}>
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>{t('calendar.specialDay')}</Text>
+              <Text style={{ color: theme.white, fontFamily: theme.fonts.bold, fontSize: 14 }}>{t('calendar.specialDay')}</Text>
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2 }}>{todayJour.label} — {t('calendar.coursesCancelled')}</Text>
             </View>
           </View>
@@ -217,93 +222,75 @@ export default function AdminDashboardScreen() {
           <View style={styles.loadingBox}><ActivityIndicator color={theme.primary} /></View>
         ) : state ? (
           <>
-            {/* ── État de l'école ────────────────────────── */}
-            <View style={styles.section}>
-              <SectionHeader title={t('admin.attendanceToday')} />
-              <Pressable onPress={() => goTo('AdminAbsences')}>
-                <View style={[styles.stateCard, { backgroundColor: state.absentsToday > 5 ? '#FEF2F0' : '#F0F7F4', borderColor: state.absentsToday > 5 ? '#FADAD4' : '#D4EDDA' }]}>
-                  <View style={styles.stateRow}>
-                    <StatBlock value={String(state.absentsToday)} label={t('tabs.absences')} color={state.absentsToday > 0 ? theme.danger : theme.success} theme={theme} isAr={isAr} />
-                    <View style={[styles.statSep, { backgroundColor: theme.border }]} />
-                    <StatBlock value={String(state.retardsToday)} label={t('parent.lateArrivals')} color={state.retardsToday > 0 ? theme.warning : theme.success} theme={theme} isAr={isAr} />
-                    <View style={[styles.statSep, { backgroundColor: theme.border }]} />
-                    <View style={styles.statBlock}>
-                      {(() => {
-                        const rateColor = state.presenceRate >= 95 ? theme.success : state.presenceRate >= 85 ? theme.warning : theme.danger
-                        return (
-                          <ProgressRing
-                            progress={state.presenceRate / 100}
-                            size={58} strokeWidth={6}
-                            color={rateColor} trackColor={theme.border} textColor={rateColor}
-                          />
-                        )
-                      })()}
-                      <Text style={{
-                        color: theme.textSoft,
-                        fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium,
-                        fontSize: 10, textTransform: 'uppercase',
-                        letterSpacing: isAr ? 0 : 0.3, marginTop: 4, textAlign: 'center',
-                      }}>
-                        {t('admin.attendanceRate')}
-                      </Text>
-                    </View>
-
-                  </View>
-                </View>
-              </Pressable>
-            </View>
-
-            {/* ── Résumé école ───────────────────────────── */}
-            <View style={styles.section}>
-              <View style={styles.summaryRow}>
-                <View style={{ flex: 1 }}>
-                  <SummaryChip icon={<Users size={14} color="#457B9D" strokeWidth={2} />} value={state.totalProfs} label={t('admin.profs')} bg="#E4F0F6" theme={theme} />
-                </View>
-                <Pressable style={{ flex: 1 }} onPress={() => goTo('AdminStatsTab')}>
-                  <SummaryChip icon={<GraduationCap size={14} color="#1D3557" strokeWidth={2} />} value={state.totalClasses} label={t('tabs.classes')} bg="#E8EEF4" theme={theme} />
-                </Pressable>
-                <Pressable style={{ flex: 1 }} onPress={() => goTo('AdminDevoirs')}>
-                  <SummaryChip icon={<BookOpen size={14} color="#d96614af" strokeWidth={2} />} value={state.devoirsToday} label={t('tabs.homework')} bg="#FFF3E0" theme={theme} />
-                </Pressable>
+            {/* ── Bento : présence + absents/retards ────── */}
+            <View style={styles.bentoRow}>
+              <View style={[styles.tile, styles.presenceTile, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.clay]}>
+                <ProgressRing
+                  progress={state.presenceRate / 100}
+                  size={92} strokeWidth={9}
+                  color={presenceColor} trackColor={theme.surfaceAlt} textColor={presenceColor}
+                />
+                <Text style={[styles.tileLabel, { color: theme.textMuted, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold, marginTop: 10 }]}>
+                  {t('admin.attendanceToday')}
+                </Text>
+              </View>
+              <View style={styles.bentoCol}>
+                <BentoMini
+                  value={state.absentsToday}
+                  label={t('tabs.absences')}
+                  color={state.absentsToday > 0 ? theme.danger : theme.success}
+                  bg={state.absentsToday > 0 ? theme.dangerSurface : theme.card}
+                  border={state.absentsToday > 0 ? theme.danger : theme.border}
+                  onPress={() => goTo('AdminAbsences')}
+                  theme={theme} isAr={isAr}
+                />
+                <BentoMini
+                  value={state.retardsToday}
+                  label={t('parent.lateArrivals')}
+                  color={state.retardsToday > 0 ? theme.warning : theme.success}
+                  bg={state.retardsToday > 0 ? theme.warningSurface : theme.card}
+                  border={state.retardsToday > 0 ? theme.warning : theme.border}
+                  onPress={() => goTo('AdminAbsences')}
+                  theme={theme} isAr={isAr}
+                />
               </View>
             </View>
 
-            {/* ── Activité du jour ───────────────────────── */}
-            <View style={styles.section}>
-              <SectionHeader title={t('teacher.today')} />
-              <Card padding={14}>
-                <ActivityRow
-                  icon={<CheckCircle2 size={16} color={theme.success} strokeWidth={2} />}
-                  text={t('admin.profsDidAppel', { count: state.profsDoneAppel })}
+            {/* ── Bento : effectifs ──────────────────────── */}
+            <View style={styles.bentoRow3}>
+              <BentoSmall icon={<Users size={15} color={theme.primary} strokeWidth={2} />} value={state.totalProfs} label={t('admin.profs')} iconBg={theme.primarySurface} theme={theme} isAr={isAr} />
+              <BentoSmall icon={<GraduationCap size={15} color={theme.info} strokeWidth={2} />} value={state.totalClasses} label={t('tabs.classes')} iconBg={theme.infoSurface} onPress={() => goTo('AdminStatsTab')} theme={theme} isAr={isAr} />
+              <BentoSmall icon={<BookOpen size={15} color={theme.accent} strokeWidth={2} />} value={state.devoirsToday} label={t('tabs.homework')} iconBg={theme.accentSurface} onPress={() => goTo('AdminDevoirs')} theme={theme} isAr={isAr} />
+            </View>
+
+            {/* ── Bento : activité du jour ───────────────── */}
+            <View style={styles.bentoWideGroup}>
+              {state.profsMissingAppel > 0 ? (
+                <BentoWide
+                  icon={<CalendarX size={16} color={theme.danger} strokeWidth={2} />}
+                  iconBg={theme.white}
+                  text={t('admin.profsMissingAppel', { count: state.profsMissingAppel })}
+                  bg={theme.dangerSurface} border={theme.danger} bold
                   onPress={() => goTo('AdminAbsences')}
-                  theme={theme}
-                  isAr={isAr}
+                  theme={theme} isAr={isAr}
                 />
-                {state.profsMissingAppel > 0 ? (
-                  <ActivityRow
-                    icon={<CalendarX size={16} color={theme.danger} strokeWidth={2} />}
-                    text={t('admin.profsMissingAppel', { count: state.profsMissingAppel })}
-                    onPress={() => goTo('AdminAbsences')}
-                    theme={theme}
-                    isAr={isAr}
-                  />
-                ) : null}
-                <ActivityRow
-                  icon={<BookOpen size={16} color={theme.accent} strokeWidth={2} />}
-                  text={t('admin.homeworkActive', { count: state.devoirsToday })}
-                  onPress={() => goTo('AdminDevoirs')}
-                  theme={theme}
-                  isAr={isAr}
-                />
-                <ActivityRow
-                  icon={<Send size={16} color={theme.primary} strokeWidth={2} />}
-                  text={t('admin.messagesToday', { count: state.messagesToday })}
-                  onPress={() => goTo('AdminMessages')}
-                  theme={theme}
-                  isAr={isAr}
-                  last
-                />
-              </Card>
+              ) : null}
+              <BentoWide
+                icon={<CheckCircle2 size={16} color={theme.success} strokeWidth={2} />}
+                iconBg={theme.successSurface}
+                text={t('admin.profsDidAppel', { count: state.profsDoneAppel })}
+                bg={theme.card} border={theme.border}
+                onPress={() => goTo('AdminAbsences')}
+                theme={theme} isAr={isAr}
+              />
+              <BentoWide
+                icon={<Send size={16} color={theme.primary} strokeWidth={2} />}
+                iconBg={theme.primarySurface}
+                text={t('admin.messagesToday', { count: state.messagesToday })}
+                bg={theme.card} border={theme.border}
+                onPress={() => goTo('AdminMessages')}
+                theme={theme} isAr={isAr}
+              />
             </View>
 
             <View style={styles.footer}>
@@ -318,62 +305,61 @@ export default function AdminDashboardScreen() {
   )
 }
 
-function StatBlock({ value, suffix, label, color, theme, isAr }: {
-  value: string; suffix?: string; label: string; color: string; theme: Theme; isAr: boolean
+function BentoMini({ value, label, color, bg, border, onPress, theme, isAr }: {
+  value: number; label: string; color: string; bg: string; border: string
+  onPress?: () => void; theme: Theme; isAr: boolean
 }) {
   return (
-    <View style={styles.statBlock}>
-      <Text style={{
-        color,
-        fontWeight: '800',
-        fontSize: 24,
-        letterSpacing: -0.5,
-      }}>
-        <AnimatedCounter value={Number(value) || 0} />{suffix ? <Text style={{ fontSize: 9, fontWeight: '600' }}>{suffix}</Text> : null}
+    <Pressable onPress={onPress} style={[styles.tile, styles.miniTile, { backgroundColor: bg, borderColor: border }, theme.shadows.sm]}>
+      <ChevronRight size={14} color={theme.textMuted} strokeWidth={2} style={styles.miniChevron} />
+      <Text style={{ color, fontFamily: theme.fonts.black, fontSize: 24, letterSpacing: -0.8 }}>
+        <AnimatedCounter value={value} />
       </Text>
-      <Text style={{
-        color: theme.textSoft,
-        fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium,
-        fontSize: 10,
-        textTransform: 'uppercase',
-        letterSpacing: isAr ? 0 : 0.3,
-        marginTop: 2,
-      }}>
+      <Text style={[styles.tileLabel, { color: theme.textMuted, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold }]}>
         {label}
       </Text>
-    </View>
+    </Pressable>
   )
 }
 
-function SummaryChip({ icon, value, label, bg, theme }: {
-  icon: React.ReactNode; value: number; label: string; bg: string; theme: Theme
+function BentoSmall({ icon, value, label, iconBg, onPress, theme, isAr }: {
+  icon: React.ReactNode; value: number; label: string; iconBg: string
+  onPress?: () => void; theme: Theme; isAr: boolean
 }) {
   return (
-    <View style={[styles.summaryChip, { backgroundColor: bg }]}>
-      {icon}
-      <Text style={{ color: theme.text, fontWeight: '800', fontSize: 16, marginTop: 4 }}><AnimatedCounter value={value} /></Text>
-      <Text style={{ color: theme.textSoft, fontSize: 9, fontWeight: '600', textTransform: 'uppercase', marginTop: 1 }}>{label}</Text>
-    </View>
+    <Pressable onPress={onPress} disabled={!onPress}
+      style={[styles.tile, styles.smallTile, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.sm]}>
+      <View style={[styles.smallIcon, { backgroundColor: iconBg }]}>{icon}</View>
+      <Text style={{ color: theme.text, fontFamily: theme.fonts.black, fontSize: 19, letterSpacing: -0.5, marginTop: 6 }}>
+        <AnimatedCounter value={value} />
+      </Text>
+      <Text style={[styles.tileLabel, { color: theme.textMuted, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold }]}>
+        {label}
+      </Text>
+    </Pressable>
   )
 }
 
-function ActivityRow({ icon, text, onPress, theme, isAr, last }: {
-  icon: React.ReactNode; text: string; onPress?: () => void; theme: Theme; isAr: boolean; last?: boolean
+function BentoWide({ icon, iconBg, text, bg, border, bold, onPress, theme, isAr }: {
+  icon: React.ReactNode; iconBg: string; text: string; bg: string; border: string
+  bold?: boolean; onPress?: () => void; theme: Theme; isAr: boolean
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.activityRow, !last && { borderBottomWidth: 1, borderBottomColor: theme.border }]}>
-      {icon}
+    <Pressable onPress={onPress} style={[styles.tile, styles.wideTile, { backgroundColor: bg, borderColor: border }, theme.shadows.xs]}>
+      <View style={[styles.smallIcon, { backgroundColor: iconBg }]}>{icon}</View>
       <Text style={{
         flex: 1,
         color: theme.text,
-        fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium,
+        fontFamily: isAr
+          ? (bold ? theme.fonts.arabicBold : theme.fonts.arabicSemi)
+          : (bold ? theme.fonts.bold : theme.fonts.medium),
         fontSize: 13,
-        marginStart: 10,
+        marginStart: 11,
         writingDirection: isAr ? 'rtl' : 'ltr',
       }}>
         {text}
       </Text>
-      <Clock size={12} color={theme.textMuted} strokeWidth={2} />
+      <ChevronRight size={14} color={theme.textMuted} strokeWidth={2} />
     </Pressable>
   )
 }
@@ -387,64 +373,86 @@ const styles = StyleSheet.create({
   blobB: { width: 88, height: 88, top: 120, left: -24 },
   blobC: { width: 128, height: 128, bottom: 36, right: -40 },
 
-  headerStrip: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 20,
-    marginTop: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
+    marginTop: 14,
   },
-  accountBlock: {
-    flex: 1,
-    paddingVertical: 2,
-  },
-  bellBtn: {
+  mailBtn: {
     width: 40, height: 40, borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center', justifyContent: 'center',
   },
 
-  section: { paddingHorizontal: 20, marginTop: 18 },
-
-  stateCard: {
-    borderRadius: 16,
+  tile: {
     borderWidth: 1,
-    padding: 16,
+    borderRadius: 24,
   },
-  stateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
+  tileLabel: {
+    fontSize: 9.5,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginTop: 3,
   },
-  statBlock: { alignItems: 'center', flex: 1 },
-  statSep: { width: 1, height: 32 },
 
-  summaryRow: {
+  bentoRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
+    marginHorizontal: 20,
+    marginTop: 18,
   },
-  summaryChip: {
+  presenceTile: {
     flex: 1,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 28,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+  },
+  bentoCol: { flex: 1, gap: 12 },
+  miniTile: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  miniChevron: { position: 'absolute', top: 14, right: 12 },
+
+  bentoRow3: {
+    flexDirection: 'row',
+    gap: 12,
+    marginHorizontal: 20,
+    marginTop: 12,
+  },
+  smallTile: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 6,
+  },
+  smallIcon: {
+    width: 30, height: 30, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
   },
 
-  activityRow: {
+  bentoWideGroup: {
+    gap: 10,
+    marginHorizontal: 20,
+    marginTop: 12,
+  },
+  wideTile: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
+    paddingHorizontal: 14,
   },
 
   specialBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 20,
-    marginTop: 4,
+    marginTop: 12,
     padding: 14,
-    borderRadius: 14,
+    borderRadius: 16,
   },
   loadingBox: { paddingVertical: 60, alignItems: 'center' },
   footer: { alignItems: 'center', justifyContent: 'center', marginTop: 28 },

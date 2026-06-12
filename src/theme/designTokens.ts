@@ -152,6 +152,9 @@ export const radius = {
   md: 10,
   lg: 12,
   xl: 16,
+  // Direction "clay" (2026-06) : surfaces très arrondies.
+  xxl: 24,
+  clay: 28,
   pill: 999,
 } as const
 
@@ -200,6 +203,8 @@ export const shadows = {
   sm: { ...iosShadow(16, 0.08, 6), elevation: 2 },
   md: { ...iosShadow(24, 0.10, 10), elevation: 4 },
   lg: { ...iosShadow(32, 0.14, 16), elevation: 6 },
+  // Ombre "clay" : diffuse et décalée vers le bas pour un volume doux.
+  clay: { ...iosShadow(18, 0.14, 9), elevation: 7 },
 } as const
 
 export const hitSlop = { top: 8, bottom: 8, left: 8, right: 8 }

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Pressable,
 } from 'react-native'
 import { collection, getDocs, query, where } from 'firebase/firestore'
+import { useNavigation } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
 import {
   Users, TrendingUp, Award, TrendingDown, Target,
@@ -40,6 +41,7 @@ function monthStart(): string {
 export default function TeacherStatsScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
+  const navigation = useNavigation<any>()
   const { profile } = useAuth()
   const teacher = useTeacherData()
   const [classStats, setClassStats] = useState<ClassStats[]>([])
@@ -126,7 +128,12 @@ export default function TeacherStatsScreen() {
           classStats.map((cs, idx) => {
             const palette = CLASS_COLORS[idx % CLASS_COLORS.length]
             return (
-              <View key={cs.name} style={[styles.classCard, { backgroundColor: palette.bg }]}>
+              <Pressable
+                key={cs.name}
+                onPress={() => navigation.navigate('TeacherClasseFolder', { classe: cs.name })}
+                android_ripple={{ color: 'rgba(255,255,255,0.15)' }}
+                style={({ pressed }) => [styles.classCard, { backgroundColor: palette.bg, opacity: pressed ? 0.92 : 1 }]}
+              >
                 {/* Header */}
                 <View style={styles.cardHeader}>
                   <Text style={[styles.className, { color: palette.fg }]}>{cs.name}</Text>
@@ -155,7 +162,7 @@ export default function TeacherStatsScreen() {
                       {cs.topNote != null ? `${cs.topNote}` : '—'}
                     </Text>
                     <Text style={[styles.kpiLabel, { color: 'rgba(255,255,255,0.7)' }]}>
-                      Top
+                      {t('teacher.statTop')}
                     </Text>
                   </View>
                   <View style={[styles.kpiBox, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
@@ -164,7 +171,7 @@ export default function TeacherStatsScreen() {
                       {cs.minNote != null ? `${cs.minNote}` : '—'}
                     </Text>
                     <Text style={[styles.kpiLabel, { color: 'rgba(255,255,255,0.7)' }]}>
-                      Min
+                      {t('teacher.statMin')}
                     </Text>
                   </View>
                   <View style={[styles.kpiBox, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
@@ -173,7 +180,7 @@ export default function TeacherStatsScreen() {
                       {cs.successRate != null ? `${cs.successRate}%` : '—'}
                     </Text>
                     <Text style={[styles.kpiLabel, { color: 'rgba(255,255,255,0.7)' }]}>
-                      ≥10
+                      {t('teacher.statPass')}
                     </Text>
                   </View>
                 </View>
@@ -184,7 +191,7 @@ export default function TeacherStatsScreen() {
                     {cs.absencesMonth} {t('tabs.absences').toLowerCase()} · {t('parent.history').toLowerCase()}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             )
           })
         )}
