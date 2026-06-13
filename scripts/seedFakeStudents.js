@@ -15,7 +15,7 @@
 const path = require('path')
 const fs   = require('fs')
 
-const CLASSES = ['3APIC-1', '3APIC-2', '3APIC-3']
+const CLASSES = ['2APIC-3', '3APIC-5']
 const PER_CLASS = 20
 
 // noms de famille marocains : [arabe, latin]
@@ -48,9 +48,16 @@ const GIRLS = [
 
 function pick(arr, i) { return arr[i % arr.length] }
 
-function randomDOB() {
-  // 3APIC ≈ nés vers 2010-2011
-  const year = 2010 + Math.floor(Math.random() * 2)
+function niveauFromClasse(classe) {
+  // "2APIC-3" -> "2APIC", "3APIC-5" -> "3APIC"
+  return classe.split('-')[0]
+}
+
+function randomDOB(niveau) {
+  // APIC niveau N : nés ≈ 2014 - N (1APIC~2013, 2APIC~2012, 3APIC~2011)
+  const lvl = parseInt(niveau, 10)
+  const baseYear = Number.isFinite(lvl) ? 2014 - lvl : 2011
+  const year = baseYear + Math.floor(Math.random() * 2)
   const month = String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')
   const day = String(1 + Math.floor(Math.random() * 28)).padStart(2, '0')
   return `${year}-${month}-${day}`
@@ -60,6 +67,7 @@ function build() {
   const students = []
   let seq = 1
   CLASSES.forEach((classe, ci) => {
+    const niveau = niveauFromClasse(classe)
     for (let i = 0; i < PER_CLASS; i++) {
       const fam = pick(FAMILY, ci * 7 + i * 3 + 1)
       const given = (i % 2 === 0) ? pick(BOYS, ci * 5 + i) : pick(GIRLS, ci * 5 + i)
@@ -72,8 +80,8 @@ function build() {
         prenomLatin: given[1],
         nomComplet: `${fam[0]} ${given[0]}`,
         classe,
-        niveau: '3APIC',
-        dateNaissance: randomDOB(),
+        niveau,
+        dateNaissance: randomDOB(niveau),
       })
     }
   })
