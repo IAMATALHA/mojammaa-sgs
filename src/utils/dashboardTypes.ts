@@ -109,8 +109,10 @@ export interface AbsenceEntry {
 
 // ── Quick actions (config statique, pas du mock) ─────────────────────────
 export const PARENT_QUICK_ACTIONS: QuickAction[] = [
-  { id: 'pqa1', label: 'Voir bulletin',   labelKey: 'actions.viewBulletin',    icon: 'graduation-cap', tint: 'primary' },
-  { id: 'pqa2', label: 'Absences',        labelKey: 'actions.absences',        icon: 'calendar-x',     tint: 'warning' },
-  { id: 'pqa3', label: 'Devoirs',         labelKey: 'actions.homework',        icon: 'book-open',      tint: 'info'    },
-  { id: 'pqa4', label: 'Contacter prof',  labelKey: 'actions.contactTeacher',  icon: 'message-circle', tint: 'success' },
+  { id: 'pqa1', label: 'Performance',      labelKey: 'actions.performance',  icon: 'bar-chart-3',     tint: 'primary' },
+  { id: 'pqa2', label: 'Absences',         labelKey: 'actions.absences',     icon: 'calendar-x',      tint: 'warning' },
+  { id: 'pqa3', label: 'Devoirs',          labelKey: 'actions.homework',     icon: 'book-open',       tint: 'info'    },
+  { id: 'pqa4', label: 'Messages',         labelKey: 'actions.messages',     icon: 'message-circle',  tint: 'success' },
+  { id: 'pqa5', label: 'Ressources',       labelKey: 'actions.resources',    icon: 'folder-open',     tint: 'accent'  },
+  { id: 'pqa6', label: 'Emploi du temps',  labelKey: 'actions.schedule',     icon: 'calendar-clock',  tint: 'primary' },
 ]

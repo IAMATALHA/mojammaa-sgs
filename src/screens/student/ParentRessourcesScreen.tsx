@@ -10,7 +10,8 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { FolderOpen, Paperclip, Eye } from 'lucide-react-native'
+import { useNavigation } from '@react-navigation/native'
+import { FolderOpen, Paperclip, Eye, ChevronLeft } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { Card, EmptyState, SectionHeader } from '../../components/dashboard'
@@ -27,6 +28,7 @@ import { dirStyle } from '../../utils/arabicText'
 export default function ParentRessourcesScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
+  const nav = useNavigation<any>()
   const parent = useParentData()
   const { profile } = useAuth()
   const [ressources, setRessources] = useState<RessourceDoc[]>([])
@@ -68,22 +70,31 @@ export default function ParentRessourcesScreen() {
       <ScreenBackground />
 
       <View style={styles.header}>
-        <Text style={{
-          color: theme.text,
-          fontFamily: theme.fonts.black,
-          fontSize: theme.fontSize.h2,
-          letterSpacing: -0.5,
-        }}>
-          {t('resources.title')}
-        </Text>
-        <Text style={{
-          color: theme.textSoft,
-          fontFamily: theme.fonts.regular,
-          fontSize: theme.fontSize.small,
-          marginTop: 2,
-        }}>
-          {t('resources.parentSubtitle')}
-        </Text>
+        <Pressable
+          onPress={() => nav.goBack()}
+          hitSlop={8}
+          style={[styles.backBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        >
+          <ChevronLeft size={20} color={theme.primary} strokeWidth={2} />
+        </Pressable>
+        <View style={{ flex: 1, marginStart: 12 }}>
+          <Text style={{
+            color: theme.text,
+            fontFamily: theme.fonts.black,
+            fontSize: theme.fontSize.h2,
+            letterSpacing: -0.5,
+          }}>
+            {t('resources.title')}
+          </Text>
+          <Text style={{
+            color: theme.textSoft,
+            fontFamily: theme.fonts.regular,
+            fontSize: theme.fontSize.small,
+            marginTop: 2,
+          }}>
+            {t('resources.parentSubtitle')}
+          </Text>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -207,7 +218,12 @@ function Chip({
 
 const styles = StyleSheet.create({
   safe:   { flex: 1 },
-  header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center', justifyContent: 'center',
+  },
   scroll: { paddingBottom: 32 },
   chips:  { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4, gap: 8 },
   chip:   { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, marginEnd: 6 },

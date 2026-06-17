@@ -3,7 +3,8 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
 import {
   CheckCircle, PencilLine, BookOpen, Send,
-  GraduationCap, CalendarX, MessageCircle, Bell,
+  GraduationCap, CalendarX, MessageCircle, Bell, BarChart3, FolderOpen,
+  CalendarClock,
   type LucideIcon,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -19,6 +20,9 @@ const ICONS: Record<string, LucideIcon> = {
   'calendar-x': CalendarX,
   'message-circle': MessageCircle,
   bell: Bell,
+  'bar-chart-3': BarChart3,
+  'folder-open': FolderOpen,
+  'calendar-clock': CalendarClock,
 }
 
 function actionTone(theme: Theme): Record<string, { bg: string; fg: string; border: string }> {

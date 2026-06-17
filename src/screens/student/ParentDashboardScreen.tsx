@@ -1,45 +1,44 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, ScrollView, RefreshControl, StyleSheet, Pressable, Text, Image,
-  Alert, Modal, Dimensions,
+  Dimensions,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { MotiView } from 'moti'
+import { MotiView, AnimatePresence } from 'moti'
 import { useNavigation } from '@react-navigation/native'
 import {
-  Megaphone, BookOpen, Users, X, Clock,
-  ChevronRight, Star, AlertTriangle, Smile, FolderOpen,
+  Users, Clock,
+  ChevronRight, Star, AlertTriangle, Smile,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useParentData } from '../../hooks/useParentData'
 import {
-  SectionHeader, Card,
-  HomeworkRow, AnnouncementCard,
-  QuickActions, EmptyState, SkeletonRow,
+  Card,
+  QuickActions, EmptyState,
 } from '../../components/dashboard'
 import {
   PARENT_QUICK_ACTIONS,
-  type Announcement, type HomeworkItem, type QuickAction,
+  type QuickAction,
   type Child,
 } from '../../utils/dashboardTypes'
-import { useParentDevoirs } from '../../hooks/useParentDevoirs'
-import { useParentMessages } from '../../hooks/useParentMessages'
 import { useParentComportements } from '../../hooks/useParentComportements'
-import { useUnreadMessagesCount } from '../../hooks/useUnreadMessagesCount'
-import { greetingKey, hexWithAlpha, formatLongDate, localeFor } from '../../utils/format'
+import { useClassLiveCourse } from '../../hooks/useClassLiveCourse'
+import { greetingKey, hexWithAlpha, localeFor } from '../../utils/format'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 
 const { width: SCREEN_W } = Dimensions.get('window')
 const CAROUSEL_CARD_W = SCREEN_W - 42
 
 const QUICK_ACTION_ROUTES: Record<string, string> = {
-  pqa1: 'StudentNotes',
+  pqa1: 'StudentPerformance',
   pqa2: 'StudentAbsences',
   pqa3: 'StudentDevoirs',
   pqa4: 'StudentMessages',
+  pqa5: 'StudentRessources',
+  pqa6: 'StudentEdt',
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -99,47 +98,87 @@ function ChildSlide({
             <ChevronRight size={20} color={theme.textMuted} strokeWidth={1.75} />
           </View>
 
-          <View style={styles.carouselStatsRow}>
-            <MiniStat label={t('parent.attendance')} value={`${child.attendance}%`} theme={theme} />
-            <View style={[styles.statSep, { backgroundColor: theme.border }]} />
-            <MiniStat
-              label={t('parent.average')}
-              value={child.averageGrade > 0 ? child.averageGrade.toFixed(1) : '—'}
-              theme={theme}
-            />
-            <View style={[styles.statSep, { backgroundColor: theme.border }]} />
-            <MiniStat
-              label={t('tabs.homework')}
-              value={String(child.pendingHomework)}
-              theme={theme}
-            />
-          </View>
+          <LiveCourseStrip classe={child.classe} theme={theme} />
         </MotiView>
       )}
     </Pressable>
   )
 }
 
-function MiniStat({ label, value, theme }: { label: string; value: string; theme: Theme }) {
+/**
+ * LiveCourseStrip — bande « cours en cours / à venir » d'une classe, mise à
+ * jour chaque minute. Remplace les anciennes mini-stats (présence/moyenne/
+ * devoirs) pour donner au parent le contexte temps réel de son enfant.
+ */
+function LiveCourseStrip({ classe, theme }: { classe: string; theme: Theme }) {
+  const { t } = useTranslation()
+  const { loading, hasSchedule, course } = useClassLiveCourse(classe)
+
+  const isNow = course?.status === 'now'
+  const tint = isNow ? theme.success : theme.accent
+
+  let title: string
+  let subtitle: string | null = null
+  if (course) {
+    const s = course.slot
+    title = s.matiere || t('parent.liveCourse')
+    const bits: string[] = []
+    if (course.status === 'soon' && s.startTime) bits.push(s.startTime)
+    if (s.salle) bits.push(s.salle)
+    if (s.professeurNom) bits.push(s.professeurNom)
+    subtitle = bits.join(' · ') || null
+  } else if (loading) {
+    title = '—'
+  } else if (hasSchedule) {
+    title = t('parent.liveNone')
+  } else {
+    title = t('parent.liveNoSchedule')
+  }
+
   return (
-    <View style={styles.miniStatItem}>
-      <Text style={{
-        color: theme.text,
-        fontFamily: theme.fonts.bold,
-        fontSize: 18,
-      }}>
-        {value}
-      </Text>
-      <Text style={{
-        color: theme.textSoft,
-        fontFamily: theme.fonts.medium,
-        fontSize: 11,
-        textTransform: 'uppercase',
-        letterSpacing: 0.4,
-        marginTop: 3,
-      }}>
-        {label}
-      </Text>
+    <View style={[styles.liveStrip, { borderTopColor: theme.border }]}>
+      <View style={[styles.liveBadge, { backgroundColor: hexWithAlpha(tint, 0.12) }]}>
+        {isNow ? (
+          <MotiView
+            from={{ opacity: 0.4 }}
+            animate={{ opacity: 1 }}
+            transition={{ type: 'timing', duration: 800, loop: true, repeatReverse: true }}
+            style={[styles.liveDot, { backgroundColor: tint }]}
+          />
+        ) : (
+          <Clock size={13} color={tint} strokeWidth={2.4} />
+        )}
+        <Text style={{
+          color: tint,
+          fontFamily: theme.fonts.bold,
+          fontSize: 9.5,
+          letterSpacing: 0.5,
+          marginStart: 5,
+        }}>
+          {course
+            ? (isNow ? t('parent.liveNow') : t('parent.liveNext')).toUpperCase()
+            : t('parent.liveLabel').toUpperCase()}
+        </Text>
+      </View>
+      <View style={{ flex: 1, marginStart: 10 }}>
+        <Text numberOfLines={1} style={{
+          color: course ? theme.text : theme.textMuted,
+          fontFamily: theme.fonts.semibold,
+          fontSize: 14,
+        }}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text numberOfLines={1} style={{
+            color: theme.textSoft,
+            fontFamily: theme.fonts.regular,
+            fontSize: 11.5,
+            marginTop: 2,
+          }}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
     </View>
   )
 }
@@ -168,32 +207,27 @@ function AnimatedSection({
 
 export default function ParentDashboardScreen() {
   const theme = useTheme()
+  const insets = useSafeAreaInsets()
   const { t, i18n } = useTranslation()
   const isAr = i18n.language === 'ar'
-  const { profile, logout } = useAuth()
+  const { profile } = useAuth()
   const parent = useParentData()
-  const { devoirs: allDevoirs } = useParentDevoirs()
-  const { messages: liveMessages, unread: unreadMessages, error: messagesError } = useParentMessages()
   const { entries: comportements } = useParentComportements()
   const nav = useNavigation<any>()
   const [refreshing, setRefreshing] = useState(false)
-  const loading = parent.loading
   const [selectedChildId, setSelectedChildId] = useState<string>('')
-
-  // Detail modal state
-  const [hwDetail,    setHwDetail]    = useState<HomeworkItem | null>(null)
-  const [annDetail,   setAnnDetail]   = useState<Announcement | null>(null)
 
   const fullName = profile
     ? `${profile.prenom} ${profile.nom}`.trim()
     : 'Parent'
-  const initials = fullName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(part => part.charAt(0).toUpperCase())
-    .join('') || 'P'
-  const unread = useUnreadMessagesCount()
+
+  const [showGreeting, setShowGreeting] = useState(true)
+
+  // Le toast de salutation s'affiche une seule fois au montage puis s'efface.
+  useEffect(() => {
+    const id = setTimeout(() => setShowGreeting(false), 2600)
+    return () => clearTimeout(id)
+  }, [])
 
   const onRefresh = useCallback(() => {
     setRefreshing(true)
@@ -211,43 +245,12 @@ export default function ParentDashboardScreen() {
     [parent.children, selectedChildId],
   )
 
-  const homeworkForSelected = useMemo(() => {
-    const childClasse = selectedChild?.classe
-    if (!childClasse) return []
-    return allDevoirs
-      .filter(d => d.classeId === childClasse && !d.isPast)
-      .slice(0, 4)
-      .map(d => ({ id: d.id, subject: d.type, title: d.title, dueDate: d.dateLimite, childId: d.childId || '', status: 'pending' as const }))
-  }, [allDevoirs, selectedChild])
-
   const goTo = (route: string) => nav.navigate(route)
 
   const handleQuickAction = (action: QuickAction) => {
     const route = QUICK_ACTION_ROUTES[action.id]
     if (route) goTo(route)
   }
-
-  const handleAccountPress = () => {
-    Alert.alert(
-      fullName,
-      profile?.email ?? t('parent.accountParent'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.logout'),
-          style: 'destructive',
-          onPress: () => logout().catch(() => {}),
-        },
-      ],
-    )
-  }
-
-  const childName = (id: string): string => {
-    const c = parent.children.find(x => x.id === id)
-    return c ? c.firstName : ''
-  }
-
-  const tint = selectedChild?.avatarColor || theme.accent
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
@@ -276,56 +279,8 @@ export default function ParentDashboardScreen() {
             <MessagesErrorBanner messageKey="common.dataLoadError" />
           </View>
         ) : null}
-        {/* ── Header strip ──────────────────────────────── */}
-        <View style={styles.headerStrip}>
-          <Pressable onPress={handleAccountPress} hitSlop={8}>
-            <View style={[styles.avatarCircle, { borderColor: theme.accent }]}>
-              <Text style={{ color: theme.primary, fontFamily: theme.fonts.black, fontSize: 15 }}>
-                {initials}
-              </Text>
-            </View>
-          </Pressable>
-          <View style={{ flex: 1, marginStart: 12 }}>
-            <Text numberOfLines={1} style={{
-              color: theme.text,
-              fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
-              fontSize: isAr ? 16 : 15,
-              writingDirection: isAr ? 'rtl' : 'ltr',
-              textAlign: isAr ? 'right' : 'left',
-            }}>
-              {t(greetingKey())}, {fullName.split(' ')[0] || 'Parent'}
-            </Text>
-            <Text style={{
-              color: theme.textSoft,
-              fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium,
-              fontSize: 11,
-              letterSpacing: isAr ? 0 : 0.5,
-              marginTop: 2,
-              textTransform: 'uppercase',
-              writingDirection: isAr ? 'rtl' : 'ltr',
-              textAlign: isAr ? 'right' : 'left',
-            }}>
-              {t('roles.parent')}
-            </Text>
-          </View>
-          <Pressable onPress={() => goTo('StudentMessages')} hitSlop={8} style={[styles.avatarCircle, { borderColor: theme.accent }]}>
-            <Megaphone size={18} color={theme.accent} strokeWidth={1.75} />
-            {unread > 0 ? (
-              <View style={[styles.unreadBadge, { backgroundColor: theme.danger }]}>
-                <Text style={styles.unreadBadgeText}>{unread > 99 ? '99+' : unread}</Text>
-              </View>
-            ) : null}
-          </Pressable>
-        </View>
-
         {/* ── Mes enfants ──────────────────────────────────── */}
         <View style={styles.section}>
-          <SectionHeader
-            title={t('parent.myChildren')}
-            subtitle={t('parent.childCount', { count: parent.children.length })}
-            actionLabel={t('common.seeAll')}
-            onAction={() => goTo('StudentNotes')}
-          />
           {parent.children.length === 0 ? (
             <Card>
               <EmptyState
@@ -370,76 +325,13 @@ export default function ParentDashboardScreen() {
         {/* Juste sous les enfants : c'est la section la plus utilisée. */}
         <AnimatedSection delay={100}>
           <View style={styles.section}>
-            <SectionHeader
-              title={t('parent.quickAccess')}
-            />
             <QuickActions actions={PARENT_QUICK_ACTIONS} onPress={handleQuickAction} />
-          </View>
-        </AnimatedSection>
-
-        {/* ── Devoirs récents ──────────────────────────────── */}
-        <AnimatedSection delay={140}>
-          <View style={styles.section}>
-            <SectionHeader
-              title={t('parent.recentHomework')}
-              subtitle={selectedChild ? t('parent.forChild', { name: selectedChild.firstName }) : undefined}
-              actionLabel={t('common.seeAll')}
-              onAction={() => goTo('StudentDevoirs')}
-            />
-            <Card padding={12}>
-              {loading ? (
-                <><SkeletonRow /><SkeletonRow /></>
-              ) : homeworkForSelected.length === 0 ? (
-                <EmptyState
-                  icon={BookOpen}
-                  title={t('parent.noHomework')}
-                  message={t('parent.noHomeworkMsg')}
-                />
-              ) : (
-                homeworkForSelected.map(h => (
-                  <HomeworkRow
-                    key={h.id}
-                    item={h}
-                    childName={selectedChild?.firstName}
-                    onPress={() => setHwDetail(h)}
-                  />
-                ))
-              )}
-            </Card>
-          </View>
-        </AnimatedSection>
-
-        {/* ── Ressources (lien compact vers la bibliothèque) ── */}
-        <AnimatedSection delay={150}>
-          <View style={styles.section}>
-            <Card padding={14} onPress={() => goTo('StudentRessources')}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={[styles.behaviorIcon, { backgroundColor: hexWithAlpha(theme.info, 0.12) }]}>
-                  <FolderOpen size={15} color={theme.info} strokeWidth={2.2} />
-                </View>
-                <View style={{ flex: 1, marginStart: 10 }}>
-                  <Text style={{ color: theme.text, fontFamily: theme.fonts.semibold, fontSize: 13.5 }}>
-                    {t('resources.title')}
-                  </Text>
-                  <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: theme.fonts.regular, fontSize: 11, marginTop: 2 }}>
-                    {t('resources.parentSubtitle')}
-                  </Text>
-                </View>
-                <ChevronRight size={16} color={theme.textMuted} strokeWidth={1.75} />
-              </View>
-            </Card>
           </View>
         </AnimatedSection>
 
         {/* ── Comportement (mérites / avertissements) ─────── */}
         <AnimatedSection delay={160}>
           <View style={styles.section}>
-            <SectionHeader
-              title={t('behavior.parentTitle')}
-              subtitle={t('behavior.parentSubtitle')}
-              actionLabel={t('common.seeAll')}
-              onAction={() => goTo('StudentComportement')}
-            />
             <Card padding={12}>
               {comportements.length === 0 ? (
                 <EmptyState
@@ -483,37 +375,6 @@ export default function ParentDashboardScreen() {
           </View>
         </AnimatedSection>
 
-        {/* ── Annonces ─────────────────────────────────────── */}
-        <AnimatedSection delay={180}>
-          <View style={styles.section}>
-            <SectionHeader
-              title={t('parent.announcementsTitle')}
-              actionLabel={t('common.seeMore')}
-              onAction={() => goTo('StudentMessages')}
-            />
-            {messagesError && liveMessages.length === 0 ? (
-              <MessagesErrorBanner />
-            ) : liveMessages.length === 0 ? (
-              <Card>
-                <EmptyState
-                  icon={Megaphone}
-                  title={t('parent.noAnnouncements')}
-                />
-              </Card>
-            ) : (
-              <View>
-                {liveMessages.slice(0, 3).map(a => (
-                  <AnnouncementCard
-                    key={a.id}
-                    item={a}
-                    onPress={() => setAnnDetail(a)}
-                  />
-                ))}
-              </View>
-            )}
-          </View>
-        </AnimatedSection>
-
         <View style={styles.footer}>
           <Text style={{
             color: theme.textMuted,
@@ -527,157 +388,51 @@ export default function ParentDashboardScreen() {
         </View>
       </ScrollView>
 
-      {/* Detail modals */}
-      <HomeworkDetailModal
-        item={hwDetail}
-        childName={hwDetail ? childName(hwDetail.childId) : ''}
-        onClose={() => setHwDetail(null)}
-        onOpenList={() => { setHwDetail(null); goTo('StudentDevoirs') }}
-        theme={theme}
-        tint={tint}
-      />
-      <AnnouncementDetailModal
-        item={annDetail}
-        onClose={() => setAnnDetail(null)}
-        theme={theme}
-      />
+      {/* ── Floating greeting toast (overlay, hors du flux) ── */}
+      <AnimatePresence>
+        {showGreeting && (
+          <MotiView
+            key="greeting"
+            from={{ opacity: 0, translateY: -16 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            exit={{ opacity: 0, translateY: -16 }}
+            transition={{ type: 'timing', duration: 320 }}
+            pointerEvents="box-none"
+            style={[styles.greetingWrap, { top: insets.top + 8 }]}
+          >
+            <Pressable
+              onPress={() => setShowGreeting(false)}
+              style={[styles.greetingToast, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.md]}
+            >
+              <Text numberOfLines={1} style={{
+                color: theme.text,
+                fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold,
+                fontSize: isAr ? 16 : 15,
+                writingDirection: isAr ? 'rtl' : 'ltr',
+                textAlign: 'center',
+              }}>
+                {t(greetingKey())}, {fullName.split(' ')[0] || 'Parent'}
+              </Text>
+              <Text style={{
+                color: theme.textSoft,
+                fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium,
+                fontSize: 11,
+                letterSpacing: isAr ? 0 : 0.5,
+                marginTop: 2,
+                textTransform: 'uppercase',
+                textAlign: 'center',
+                writingDirection: isAr ? 'rtl' : 'ltr',
+              }}>
+                {t('roles.parent')}
+              </Text>
+            </Pressable>
+          </MotiView>
+        )}
+      </AnimatePresence>
     </SafeAreaView>
   )
 }
 
-function HomeworkDetailModal({
-  item, childName, onClose, onOpenList, theme, tint,
-}: {
-  item: HomeworkItem | null
-  childName: string
-  onClose: () => void
-  onOpenList: () => void
-  theme: Theme
-  tint: string
-}) {
-  const { t } = useTranslation()
-  if (!item) return null
-  const due = formatLongDate(item.dueDate)
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={[styles.sheet, { backgroundColor: theme.card }]}>
-          <SheetHeader theme={theme} onClose={onClose} icon={<BookOpen size={20} color={tint} strokeWidth={2.2} />} label={item.subject} />
-          <Text style={[styles.sheetTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}>
-            {item.title}
-          </Text>
-          <SheetMeta theme={theme} icon={<Clock size={14} color={theme.textSoft} strokeWidth={2} />} text={due} />
-          {childName ? (
-            <SheetMeta theme={theme} icon={<Users size={14} color={theme.textSoft} strokeWidth={2} />} text={childName} />
-          ) : null}
-          <Pressable
-            onPress={onOpenList}
-            android_ripple={{ color: '#ffffff30' }}
-            style={[styles.cta, { backgroundColor: tint }]}
-          >
-            <Text style={{ color: '#fff', fontFamily: theme.fonts.bold, fontSize: 13 }}>
-              {t('parent.seeAllHomework')}
-            </Text>
-            <ChevronRight size={16} color="#fff" strokeWidth={2.4} style={{ marginStart: 4 }} />
-          </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  )
-}
-
-function AnnouncementDetailModal({
-  item, onClose, theme,
-}: { item: Announcement | null; onClose: () => void; theme: Theme }) {
-  if (!item) return null
-  const date = formatLongDate(item.date, undefined, true)
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={[styles.sheet, { backgroundColor: theme.card }]}>
-          <SheetHeader theme={theme} onClose={onClose} icon={<Megaphone size={20} color={theme.accent} strokeWidth={2.2} />} label={item.author} />
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 12 }}
-          >
-            <Text style={[styles.sheetTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}>
-              {item.title}
-            </Text>
-            <Text style={{
-              color: theme.textSoft, fontFamily: theme.fonts.medium,
-              fontSize: 12, marginTop: 4,
-            }}>
-              {date}
-            </Text>
-            <Text style={{
-              color: theme.text, fontFamily: theme.fonts.regular,
-              fontSize: 14, lineHeight: 21, marginTop: 14,
-            }}>
-              {item.body}
-            </Text>
-            {item.image ? (
-              <Image
-                source={{ uri: item.image }}
-                style={{ width: '100%', height: 360, borderRadius: 14, marginTop: 14, backgroundColor: theme.surface }}
-                resizeMode="contain"
-              />
-            ) : null}
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  )
-}
-
-function SheetHeader({
-  theme, onClose, icon, label,
-}: { theme: Theme; onClose: () => void; icon: React.ReactNode; label: string }) {
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-      <View style={[
-        styles.sheetIcon,
-        { backgroundColor: theme.surface },
-      ]}>
-        {icon}
-      </View>
-      <Text
-        numberOfLines={1}
-        style={{
-          flex: 1,
-          color: theme.textSoft,
-          fontFamily: theme.fonts.semibold,
-          fontSize: 12,
-          marginStart: 10,
-          letterSpacing: 0.4,
-          textTransform: 'uppercase',
-        }}
-      >
-        {label}
-      </Text>
-      <Pressable onPress={onClose} hitSlop={8} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
-        <X size={18} color={theme.text} strokeWidth={2} />
-      </Pressable>
-    </View>
-  )
-}
-
-function SheetMeta({
-  theme, icon, text,
-}: { theme: Theme; icon: React.ReactNode; text: string }) {
-  return (
-    <View style={[styles.sheetMetaRow, { backgroundColor: theme.surface }]}>
-      {icon}
-      <Text style={{
-        color: theme.text,
-        fontFamily: theme.fonts.medium,
-        fontSize: 13,
-        marginStart: 8,
-      }}>
-        {text}
-      </Text>
-    </View>
-  )
-}
 
 // ────────────────────────────────────────────────────────────────────────
 // Styles
@@ -692,29 +447,17 @@ const styles = StyleSheet.create({
   blobB: { width: 88, height: 88, top: 120, left: -24 },
   blobC: { width: 128, height: 128, bottom: 36, right: -40 },
 
-  headerStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  avatarCircle: {
-    width: 44, height: 44, borderRadius: 22,
-    borderWidth: 2,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  unreadBadge: {
+  greetingWrap: {
     position: 'absolute',
-    top: -4, right: -4,
-    minWidth: 18, height: 18, borderRadius: 9,
-    paddingHorizontal: 4,
-    alignItems: 'center', justifyContent: 'center',
+    left: 20, right: 20,
+    alignItems: 'center',
   },
-  unreadBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '800',
+  greetingToast: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    minWidth: 200,
   },
 
   // Carousel enfants
@@ -744,22 +487,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  carouselStatsRow: {
+  liveStrip: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 16,
     paddingTop: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(29, 53, 87, 0.08)',
   },
-  miniStatItem: {
-    flex: 1,
-    alignItems: 'flex-start',
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
   },
-  statSep: {
-    width: StyleSheet.hairlineWidth,
-    alignSelf: 'stretch',
-    marginHorizontal: 4,
+  liveDot: {
+    width: 8, height: 8, borderRadius: 4,
   },
 
   // Sections
@@ -781,41 +524,5 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: 'center', justifyContent: 'center',
     marginTop: 28,
-  },
-
-  // Modal
-  backdrop: {
-    flex: 1, backgroundColor: 'rgba(15,23,42,0.45)',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  sheet: {
-    padding: 20,
-    borderRadius: 22,
-    maxHeight: '85%',
-  },
-  sheetIcon: {
-    width: 44, height: 44, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  closeBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  sheetTitle: {
-    fontSize: 20,
-    marginTop: 12,
-    letterSpacing: -0.3,
-  },
-  sheetMetaRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 10, paddingHorizontal: 12,
-    borderRadius: 12, marginTop: 8,
-  },
-  cta: {
-    flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 13, borderRadius: 14,
-    marginTop: 16,
   },
 })

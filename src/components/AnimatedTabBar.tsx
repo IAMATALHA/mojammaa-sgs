@@ -11,6 +11,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import { useTheme } from '../contexts/ThemeContext'
+import { hexWithAlpha } from '../utils/format'
 
 const PILL_W = 46
 const PILL_H = 36
@@ -43,7 +44,8 @@ export default function AnimatedTabBar({ state, descriptors, navigation }: Botto
         styles.bar,
         theme.shadows.md,
         {
-          backgroundColor: theme.card,
+          // Translucide : on devine le contenu qui défile derrière la barre.
+          backgroundColor: hexWithAlpha(theme.card, 0.75),
           borderTopColor: theme.border,
           paddingBottom: Math.max(insets.bottom, 8),
           minHeight: 68 + Math.max(insets.bottom, 0),

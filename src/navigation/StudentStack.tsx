@@ -1,7 +1,15 @@
 /**
- * Parent / student navigation : NativeStack wrapping the floating tabs
- * (même structure que TeacherStack — les écrans de détail hors tabs
- * vivent dans le stack racine).
+ * Parent / student navigation.
+ *
+ * Structure (pilote « menu partout + animations d'ouverture ») :
+ *   Tab.Navigator (racine — la barre vit ICI, donc visible sur TOUTES les pages)
+ *   ├─ HomeTab = NativeStack
+ *   │    ├─ StudentHome (dashboard)
+ *   │    └─ Comportement / Ressources / Performance / EDT  (poussés → animés + swipe-back)
+ *   ├─ StudentDevoirs, StudentNotes, StudentAbsences, StudentMessages, StudentSettings
+ *
+ * Les écrans détail étant *dans* l'onglet Accueil, la tab bar reste affichée
+ * pendant qu'ils sont poussés (push natif), au lieu d'être recouverte.
  */
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
@@ -23,15 +31,42 @@ import ParentMessagesScreen from '../screens/student/ParentMessagesScreen'
 import ParentSettingsScreen from '../screens/student/ParentSettingsScreen'
 import ParentComportementScreen from '../screens/student/ParentComportementScreen'
 import ParentRessourcesScreen from '../screens/student/ParentRessourcesScreen'
+import ParentPerformanceScreen from '../screens/student/ParentPerformanceScreen'
+import ParentEdtScreen from '../screens/student/ParentEdtScreen'
 
 const Tab = createBottomTabNavigator()
-const Stack = createNativeStackNavigator()
+const HomeStackNav = createNativeStackNavigator()
 
 function TabIcon(props: { Icon: LucideIcon; color: string; focused: boolean; theme: Theme }) {
   return <AnimatedTabIcon {...props} bare />
 }
 
-function StudentTabs() {
+/**
+ * Pile de l'onglet Accueil : le dashboard + tous les écrans détail accessibles
+ * depuis lui (quick actions, carte enfant, comportement…). Poussés ici, ils
+ * conservent la tab bar visible.
+ */
+function HomeStack() {
+  return (
+    <HomeStackNav.Navigator
+      screenOptions={{
+        headerShown: false,
+        // Apparition instantanée (comme une bascule d'onglet) + pas de swipe-back :
+        // les écrans détail se comportent comme les autres pages. Retour = bouton ‹.
+        animation: 'none',
+        gestureEnabled: false,
+      }}
+    >
+      <HomeStackNav.Screen name="StudentHome" component={ParentDashboardScreen} />
+      <HomeStackNav.Screen name="StudentComportement" component={ParentComportementScreen} />
+      <HomeStackNav.Screen name="StudentRessources" component={ParentRessourcesScreen} />
+      <HomeStackNav.Screen name="StudentPerformance" component={ParentPerformanceScreen} />
+      <HomeStackNav.Screen name="StudentEdt" component={ParentEdtScreen} />
+    </HomeStackNav.Navigator>
+  )
+}
+
+export default function StudentStack() {
   const theme = useTheme()
   const { t } = useTranslation()
   const unread = useUnreadMessagesCount()
@@ -45,8 +80,8 @@ function StudentTabs() {
       }}
     >
       <Tab.Screen
-        name="StudentHome"
-        component={ParentDashboardScreen}
+        name="HomeTab"
+        component={HomeStack}
         options={{
           title: t('tabs.home'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={LayoutDashboard} color={color} focused={focused} theme={theme} />,
@@ -94,15 +129,5 @@ function StudentTabs() {
         }}
       />
     </Tab.Navigator>
-  )
-}
-
-export default function StudentStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="StudentTabs" component={StudentTabs} />
-      <Stack.Screen name="StudentComportement" component={ParentComportementScreen} />
-      <Stack.Screen name="StudentRessources" component={ParentRessourcesScreen} />
-    </Stack.Navigator>
   )
 }
