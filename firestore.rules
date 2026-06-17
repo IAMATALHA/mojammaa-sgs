@@ -270,6 +270,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── stats (agrégat du tableau de bord admin, maintenu par CF) ──
+    // Document unique stats/summary calculé par aggregateSchoolStats /
+    // recomputeSchoolStats (Admin SDK). Agrège TOUTE l'école (effectifs,
+    // moyennes, présence…) → lecture ADMIN uniquement. Écriture INTERDITE
+    // côté client (seul l'Admin SDK écrit, qui contourne les règles).
+    match /stats/{docId} {
+      allow read:  if isAdmin();
+      allow write: if false;
+    }
+
     // ── config (liste des superadmins, etc.) ────────────────
     // Lecture ADMIN uniquement (l'app mobile ne lit jamais config/ — vérifié
     // 2026-06-10 ; inutile d'exposer la liste des superadmins aux parents).

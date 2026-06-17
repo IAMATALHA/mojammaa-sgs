@@ -11,11 +11,13 @@
 
 const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/firestore')
 const { onSchedule } = require('firebase-functions/v2/scheduler')
+const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const { setGlobalOptions } = require('firebase-functions/v2')
 const { initializeApp } = require('firebase-admin/app')
 const { getFirestore, FieldPath } = require('firebase-admin/firestore')
 const logger = require('firebase-functions/logger')
 const { computeClassStats, statsDocId } = require('./classStats')
+const { computeSchoolStats } = require('./schoolStats')
 
 initializeApp()
 const db = getFirestore()
@@ -230,3 +232,53 @@ exports.weeklyDigest = onSchedule(
     logger.info('weeklyDigest done', { parents: digests.length, sent })
   },
 )
+
+// ── stats/summary : agrégat complet du tableau de bord admin ────────────────
+//
+// Pourquoi : l'écran Statistiques scannait 5 collections entières (notes,
+// absences… non bornées) à chaque ouverture → lent dès que les données
+// grossissent. On pré-calcule tout côté serveur dans UN document `stats/summary`
+// que le client lit en une lecture. Recalcul planifié (toutes les 30 min) +
+// callable à la demande (pull-to-refresh / amorçage initial).
+
+/** Recalcule l'agrégat complet depuis les 5 collections et l'écrit (Admin SDK). */
+async function refreshSchoolStats() {
+  const [eleves, users, notes, absences, devoirs] = await Promise.all([
+    db.collection('eleves').get(),
+    db.collection('users').get(),
+    db.collection('notes').get(),
+    db.collection('absences').get(),
+    db.collection('devoirs').get(),
+  ])
+  const toRows = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const summary = computeSchoolStats({
+    eleves: toRows(eleves),
+    users: toRows(users),
+    notes: toRows(notes),
+    absences: toRows(absences),
+    devoirs: toRows(devoirs),
+  })
+  await db.collection('stats').doc('summary').set({ ...summary, updatedAt: new Date() })
+  return summary
+}
+
+exports.aggregateSchoolStats = onSchedule(
+  { schedule: 'every 30 minutes', timeZone: 'Africa/Casablanca' },
+  async () => {
+    const s = await refreshSchoolStats()
+    logger.info('stats/summary refreshed (scheduled)', { eleves: s.totalEleves, classes: s.totalClasses })
+  },
+)
+
+// Recalcul à la demande — réservé aux admins (pull-to-refresh + amorçage).
+exports.recomputeSchoolStats = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in required.')
+  const me = await db.collection('users').doc(uid).get()
+  if (!me.exists || me.get('role') !== 'admin') {
+    throw new HttpsError('permission-denied', 'Admin only.')
+  }
+  const s = await refreshSchoolStats()
+  logger.info('stats/summary refreshed (on-demand)', { by: uid, eleves: s.totalEleves })
+  return { ok: true, updatedAt: Date.now(), totalEleves: s.totalEleves, totalClasses: s.totalClasses }
+})

@@ -15,6 +15,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app'
 import { getAuth, initializeAuth, type Auth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
+import { getFunctions } from 'firebase/functions'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 export const firebaseConfig = {
@@ -47,3 +48,5 @@ try {
 export { app, auth }
 export const db      = getFirestore(app)
 export const storage = getStorage(app)
+// Functions colocalisées en europe-west1 (cf. functions/index.js setGlobalOptions).
+export const functions = getFunctions(app, 'europe-west1')

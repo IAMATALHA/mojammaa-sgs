@@ -1,21 +1,22 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, RefreshControl,
 } from 'react-native'
-import { collection, onSnapshot, type Unsubscribe } from 'firebase/firestore'
+import { collection, doc, onSnapshot, query, where, type Unsubscribe } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { useTranslation } from 'react-i18next'
 import {
   AlertTriangle, Award, BarChart3, BookOpen, CalendarX, CheckCircle2,
-  ClipboardCheck, GraduationCap, TrendingUp, Users, type LucideIcon,
+  ChevronLeft, ChevronRight, ClipboardCheck, TrendingUp, Users, type LucideIcon,
 } from 'lucide-react-native'
 import Svg, { Circle } from 'react-native-svg'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { palette, chartColors } from '../../theme/designTokens'
-import { db } from '../../config/firebase'
+import { db, functions } from '../../config/firebase'
 
 type CollectionName = 'eleves' | 'users' | 'notes' | 'absences' | 'devoirs'
-type StatsView = 'classes' | 'subjects' | 'niveaux'
+type StatsView = 'niveaux' | 'subjects'
 
 interface EleveRow {
   id: string
@@ -67,6 +68,7 @@ interface GradeBand {
 interface ClassStats {
   name: string
   niveau: string
+  niveauGroup?: string
   studentCount: number
   presenceRate: number
   avgNote: number | null
@@ -449,6 +451,7 @@ function buildDashboardData(cache: SnapshotCache): DashboardData {
   const niveauMap = new Map<string, ClassStats[]>()
   classStats.forEach(cs => {
     const niv = cs.niveau || cs.name.replace(/[-\d]/g, '').trim() || 'Autre'
+    cs.niveauGroup = niv
     const list = niveauMap.get(niv) || []
     list.push(cs)
     niveauMap.set(niv, list)
@@ -497,9 +500,25 @@ export default function AdminStatsScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
   const [data, setData] = useState<DashboardData | null>(null)
-  const [view, setView] = useState<StatsView>('classes')
+  const [view, setView] = useState<StatsView>('niveaux')
+  const [selectedNiveau, setSelectedNiveau] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+
+  // Pull-to-refresh : force le recalcul serveur (callable admin-only). Le
+  // listener stats/summary reçoit ensuite la MAJ tout seul. Si la CF n'est pas
+  // déployée, l'échec est silencieux et le fallback live reste affiché.
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await httpsCallable(functions, 'recomputeSchoolStats')()
+    } catch {
+      /* no-op : fallback live déjà à l'écran */
+    } finally {
+      setRefreshing(false)
+    }
+  }, [])
 
   useEffect(() => {
     const cache: SnapshotCache = {
@@ -523,7 +542,16 @@ export default function AdminStatsScreen() {
       setLoading(false)
     }
 
-    const unsubs: Unsubscribe[] = [
+    // ── Fallback : calcul live à partir des 5 collections ──────────────────
+    // Utilisé UNIQUEMENT si l'agrégat serveur stats/summary n'existe pas encore
+    // (CF pas déployée / pas encore exécutée). Les absences sont bornées à la
+    // fenêtre réellement exploitée (aujourd'hui + mois courant + tendance 5 j).
+    const startLiveFallback = (): Unsubscribe => {
+      const monthStart = monthStartISO()
+      const trendStart = lastDays(5)[0].iso
+      const absencesSince = monthStart < trendStart ? monthStart : trendStart
+
+      const unsubs: Unsubscribe[] = [
       onSnapshot(collection(db, 'eleves'), snap => {
         cache.eleves = snap.docs.map(docSnap => {
           const row = docSnap.data() as Record<string, unknown>
@@ -562,7 +590,7 @@ export default function AdminStatsScreen() {
         ready.add('notes')
         recompute()
       }, handleError),
-      onSnapshot(collection(db, 'absences'), snap => {
+      onSnapshot(query(collection(db, 'absences'), where('date', '>=', absencesSince)), snap => {
         cache.absences = snap.docs.map(docSnap => {
           const row = docSnap.data() as Record<string, unknown>
           return {
@@ -590,14 +618,44 @@ export default function AdminStatsScreen() {
         ready.add('devoirs')
         recompute()
       }, handleError),
-    ]
+      ]
+      return () => unsubs.forEach(unsub => unsub())
+    }
 
-    return () => unsubs.forEach(unsub => unsub())
+    // ── Chemin rapide : lire l'agrégat serveur en 1 document ───────────────
+    // Si stats/summary existe → affichage instantané (et live : la CF le
+    // réécrit toutes les 30 min). Sinon → bascule sur le calcul client.
+    let fallbackUnsub: Unsubscribe | null = null
+    const ensureFallback = () => { if (!fallbackUnsub) fallbackUnsub = startLiveFallback() }
+
+    const summaryUnsub = onSnapshot(
+      doc(db, 'stats', 'summary'),
+      snap => {
+        if (snap.exists()) {
+          setData(snap.data() as DashboardData)
+          setLoading(false)
+          setError(null)
+          if (fallbackUnsub) { fallbackUnsub(); fallbackUnsub = null }
+        } else {
+          ensureFallback()
+        }
+      },
+      () => ensureFallback(),
+    )
+
+    return () => {
+      summaryUnsub()
+      if (fallbackUnsub) fallbackUnsub()
+    }
   }, [t])
 
   return (
     <ScreenLayout title={t('admin.statsTitle')}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+      >
         {loading && !data ? (
           <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
         ) : error ? (
@@ -606,11 +664,16 @@ export default function AdminStatsScreen() {
           </View>
         ) : data ? (
           <>
-            <VisualHero data={data} theme={theme} t={t} onSelectView={setView} />
-            <ViewTabs value={view} onChange={setView} theme={theme} t={t} />
-            {view === 'classes' ? <ClassesView data={data} theme={theme} t={t} /> : null}
+            <VisualHero data={data} theme={theme} t={t} onSelectView={(v) => { setView(v); setSelectedNiveau(null) }} />
+            <ViewTabs value={view} onChange={(v) => { setView(v); setSelectedNiveau(null) }} theme={theme} t={t} />
             {view === 'subjects' ? <SubjectsView data={data} theme={theme} t={t} /> : null}
-            {view === 'niveaux' ? <NiveauxView data={data} theme={theme} t={t} /> : null}
+            {view === 'niveaux' ? (
+              selectedNiveau != null ? (
+                <NiveauClassesView data={data} niveau={selectedNiveau} onBack={() => setSelectedNiveau(null)} theme={theme} t={t} />
+              ) : (
+                <NiveauxView data={data} onSelectNiveau={setSelectedNiveau} theme={theme} t={t} />
+              )
+            ) : null}
           </>
         ) : (
           <EmptyText theme={theme} text={t('common.noData')} />
@@ -643,7 +706,7 @@ function VisualHero({ data, theme, t, onSelectView }: {
       </View>
       <View style={styles.heroTiles}>
         <MiniTile icon={<TrendingUp size={18} color={theme.primary} />} value={formatNote(data.avgNote)} label={t('tabs.grades')} bg={theme.primarySurface} theme={theme} onPress={() => onSelectView('niveaux')} />
-        <MiniTile icon={<AlertTriangle size={18} color={alerts > 0 ? theme.danger : theme.info} />} value={String(alerts)} label={t('admin.alerts')} bg={alerts > 0 ? theme.dangerSurface : theme.infoSurface} theme={theme} onPress={() => onSelectView('classes')} />
+        <MiniTile icon={<AlertTriangle size={18} color={alerts > 0 ? theme.danger : theme.info} />} value={String(alerts)} label={t('admin.alerts')} bg={alerts > 0 ? theme.dangerSurface : theme.infoSurface} theme={theme} onPress={() => onSelectView('niveaux')} />
         <MiniTile icon={<BookOpen size={18} color={theme.warning} />} value={String(data.subjectStats.length)} label={t('admin.viewSubjects')} bg={theme.warningSurface} theme={theme} onPress={() => onSelectView('subjects')} />
       </View>
     </View>
@@ -657,9 +720,8 @@ function ViewTabs({ value, onChange, theme, t }: {
   t: any
 }) {
   const items: { id: StatsView; label: string; Icon: LucideIcon }[] = [
-    { id: 'classes', label: t('tabs.classes'), Icon: GraduationCap },
-    { id: 'subjects', label: t('admin.viewSubjects'), Icon: BookOpen },
     { id: 'niveaux', label: t('admin.niveaux'), Icon: BarChart3 },
+    { id: 'subjects', label: t('admin.viewSubjects'), Icon: BookOpen },
   ]
 
   return (
@@ -682,7 +744,7 @@ function ViewTabs({ value, onChange, theme, t }: {
   )
 }
 
-function NiveauxView({ data, theme, t }: { data: DashboardData; theme: Theme; t: any }) {
+function NiveauxView({ data, onSelectNiveau, theme, t }: { data: DashboardData; onSelectNiveau: (niveau: string) => void; theme: Theme; t: any }) {
   const COLORS = chartColors
   return (
     <>
@@ -692,15 +754,16 @@ function NiveauxView({ data, theme, t }: { data: DashboardData; theme: Theme; t:
         data.niveauStats.map((niv, idx) => {
           const color = COLORS[idx % COLORS.length]
           return (
-            <View key={niv.name} style={[styles.niveauCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Pressable key={niv.name} onPress={() => onSelectNiveau(niv.name)} style={({ pressed }) => [styles.niveauCard, { backgroundColor: theme.card, borderColor: theme.border }, pressed && { opacity: 0.7 }]}>
               <View style={styles.niveauHeader}>
                 <View style={[styles.niveauBadge, { backgroundColor: color }]}>
                   {/* 'Autre' est la sentinelle de regroupement posée par computeData. */}
                   <Text style={{ color: palette.white, fontWeight: '900', fontSize: 13 }}>{niv.name === 'Autre' ? t('common.other') : niv.name}</Text>
                 </View>
-                <Text style={{ color: theme.textSoft, fontWeight: '700', fontSize: 12 }}>
+                <Text style={{ color: theme.textSoft, fontWeight: '700', fontSize: 12, flex: 1, marginStart: 8 }}>
                   {niv.classCount} {t('tabs.classes').toLowerCase()} · {niv.studentCount} {t('admin.eleves').toLowerCase()}
                 </Text>
+                <ChevronRight size={18} color={theme.textMuted} />
               </View>
               <View style={styles.niveauGrid}>
                 <View style={[styles.niveauStat, { backgroundColor: theme.primarySurface }]}>
@@ -720,7 +783,7 @@ function NiveauxView({ data, theme, t }: { data: DashboardData; theme: Theme; t:
                   <Text style={{ color: theme.textSoft, fontWeight: '700', fontSize: 10, marginTop: 2 }}>{t('admin.monthIncidents')}</Text>
                 </View>
               </View>
-            </View>
+            </Pressable>
           )
         })
       )}
@@ -732,32 +795,26 @@ function NiveauxView({ data, theme, t }: { data: DashboardData; theme: Theme; t:
   )
 }
 
-function ClassesView({ data, theme, t }: { data: DashboardData; theme: Theme; t: any }) {
+function NiveauClassesView({ data, niveau, onBack, theme, t }: {
+  data: DashboardData; niveau: string; onBack: () => void; theme: Theme; t: any
+}) {
+  const classes = data.classStats.filter(item => item.niveauGroup === niveau)
+  const label = niveau === 'Autre' ? t('common.other') : niveau
   return (
     <>
-      <View style={styles.classSummary}>
-        <SummaryPill value={String(data.classStats.length)} label={t('tabs.classes')} color={theme.primary} bg={theme.primarySurface} theme={theme} />
-        <SummaryPill value={String(data.totalEleves)} label={t('admin.eleves')} color={theme.info} bg={theme.infoSurface} theme={theme} />
-        <SummaryPill value={data.classStats.length > 0 ? String(Math.round(data.totalEleves / data.classStats.length)) : '0'} label={t('admin.averageSize')} color={theme.accent} bg={theme.accentSurface} theme={theme} />
-      </View>
-
+      <Pressable onPress={onBack} style={[styles.niveauBack, { backgroundColor: theme.surfaceAlt }]}>
+        <ChevronLeft size={18} color={theme.primary} />
+        <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 13, marginStart: 2 }}>{t('admin.niveaux')}</Text>
+        <Text style={{ color: theme.textSoft, fontWeight: '800', fontSize: 13, marginStart: 8 }}>— {label}</Text>
+      </Pressable>
       <View style={styles.classGrid}>
-        {data.classStats.length === 0 ? (
+        {classes.length === 0 ? (
           <EmptyText theme={theme} text={t('common.noData')} />
         ) : (
-          data.classStats.map(item => <ClassCardRich key={item.name} item={item} theme={theme} t={t} />)
+          classes.map(item => <ClassCardRich key={item.name} item={item} theme={theme} t={t} />)
         )}
       </View>
     </>
-  )
-}
-
-function SummaryPill({ value, label, color, bg, theme }: { value: string; label: string; color: string; bg: string; theme: Theme }) {
-  return (
-    <View style={[styles.summaryPill, { backgroundColor: bg }]}>
-      <Text style={{ color, fontWeight: '900', fontSize: 16 }}>{value}</Text>
-      <Text numberOfLines={1} style={{ color: theme.textSoft, fontWeight: '700', fontSize: 10, marginTop: 1 }}>{label}</Text>
-    </View>
   )
 }
 
@@ -1185,6 +1242,7 @@ const styles = StyleSheet.create({
   axisText: { fontSize: 10, fontWeight: '800' },
 
   niveauCard: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 10 },
+  niveauBack: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, marginBottom: 12 },
   niveauHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   niveauBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   niveauGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
