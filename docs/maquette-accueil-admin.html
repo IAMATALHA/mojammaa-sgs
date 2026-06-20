@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accueil Admin — 3 directions de design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  /* ───────── Tokens (copiés de designTokens.ts) ───────── */
+  :root {
+    --navy: #1D3557;
+    --navy-dark: #16304F;
+    --navy-soft: rgba(29,53,87,0.10);
+    --text: #1D3557;
+    --text-soft: rgba(29,53,87,0.92);
+    --text-muted: rgba(29,53,87,0.55);
+    --cream: #FAF8F5;
+    --surface: #FFFDFC;
+    --elevated: #FFFFFF;
+    --grouped: #F6F1EA;
+    --border: rgba(29,53,87,0.10);
+    --accent: #FF8C42;
+    --accent-soft: rgba(255,140,66,0.12);
+    --success: #15803D;
+    --success-soft: rgba(21,128,61,0.12);
+    --danger: #E76F51;
+    --danger-soft: rgba(231,111,81,0.14);
+    --warning: #FF8C42;
+    --warning-soft: rgba(255,140,66,0.14);
+    --info: #52B788;
+    --info-soft: rgba(82,183,136,0.16);
+    --gold: #FFD23F;
+    --gold-soft: rgba(255,210,63,0.18);
+    --rose-soft: rgba(242,181,212,0.18);
+    --violet-soft: rgba(184,181,255,0.18);
+    --r-lg: 12px; --r-xl: 16px; --r-xxl: 24px; --r-clay: 28px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background:
+      radial-gradient(900px 500px at 12% -10%, var(--gold-soft), transparent 60%),
+      radial-gradient(800px 520px at 95% 8%, var(--violet-soft), transparent 55%),
+      radial-gradient(700px 600px at 50% 110%, var(--rose-soft), transparent 60%),
+      var(--cream);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 48px 32px 80px;
+  }
+
+  /* ───────── En-tête de la page ───────── */
+  .page-head { max-width: 1380px; margin: 0 auto 44px; }
+  .page-head .kicker {
+    font-size: 12px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 10px;
+  }
+  .page-head h1 {
+    font-family: 'Poppins', sans-serif; font-weight: 800;
+    font-size: clamp(28px, 4vw, 44px); letter-spacing: -1px; line-height: 1.05;
+  }
+  .page-head p { margin-top: 12px; color: var(--text-muted); font-size: 15px; max-width: 560px; }
+
+  /* ───────── Grille des 3 directions ───────── */
+  .compare {
+    max-width: 1380px; margin: 0 auto;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px;
+  }
+  @media (max-width: 1200px) { .compare { grid-template-columns: 1fr; max-width: 480px; } }
+
+  .direction { display: flex; flex-direction: column; align-items: center; opacity: 0; transform: translateY(24px); animation: rise .7s cubic-bezier(.2,.7,.2,1) forwards; }
+  .direction:nth-child(1) { animation-delay: .05s; }
+  .direction:nth-child(2) { animation-delay: .2s; }
+  .direction:nth-child(3) { animation-delay: .35s; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  .direction .tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--navy); color: #fff; border-radius: 999px;
+    padding: 8px 18px; font-size: 13px; font-weight: 700; margin-bottom: 18px;
+  }
+  .direction .tag .letter {
+    background: var(--gold); color: var(--navy); width: 22px; height: 22px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;
+  }
+
+  /* ───────── Cadre téléphone ───────── */
+  .phone {
+    width: 375px; height: 740px; background: #0d1b2e; border-radius: 54px; padding: 10px;
+    box-shadow: 0 30px 60px -18px rgba(29,53,87,.35), 0 4px 12px rgba(29,53,87,.18);
+    position: relative; flex-shrink: 0;
+  }
+  .phone::after { /* encoche */
+    content: ''; position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 26px; background: #0d1b2e; border-radius: 16px; z-index: 30;
+  }
+  .screen {
+    width: 100%; height: 100%; border-radius: 44px; overflow: hidden;
+    background: var(--cream); position: relative; display: flex; flex-direction: column;
+  }
+  .statusbar {
+    height: 54px; flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 0 28px 6px; font-size: 13px; font-weight: 700; position: relative; z-index: 20;
+  }
+  .scrollzone { flex: 1; overflow-y: auto; scrollbar-width: none; position: relative; }
+  .scrollzone::-webkit-scrollbar { display: none; }
+
+  /* blobs aquarelle (signature de l'app) */
+  .blobs { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+  .blob { position: absolute; border-radius: 50%; }
+
+  /* ───────── Tab bar ───────── */
+  .tabbar {
+    flex-shrink: 0; background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; padding: 10px 8px 22px; position: relative; z-index: 20;
+  }
+  .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 9px; font-weight: 600; color: var(--text-muted); }
+  .tab.active { color: var(--navy); }
+  .tab .ico { width: 34px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; }
+  .tab.active .ico { background: var(--navy-soft); }
+  .tab svg { width: 18px; height: 18px; }
+
+  /* ───────── Éléments partagés ───────── */
+  .section-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--text-muted); margin: 22px 20px 10px;
+  }
+  .ring { border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; }
+  .ring .hole { border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .ring .pct { font-weight: 800; letter-spacing: -0.5px; }
+
+  .activity-card { background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r-xl); margin: 0 20px; padding: 4px 14px; box-shadow: 0 6px 16px rgba(29,53,87,.05); position: relative; z-index: 1; }
+  .activity-row { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 500; }
+  .activity-row:last-child { border-bottom: none; }
+  .activity-row .dot { width: 28px; height: 28px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+  .activity-row .chev { margin-left: auto; color: var(--text-muted); font-size: 15px; }
+
+  .qa-row { display: flex; gap: 10px; margin: 0 20px; position: relative; z-index: 1; }
+  .qa {
+    flex: 1; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r-xl);
+    padding: 12px 6px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    font-size: 10px; font-weight: 600; color: var(--text-soft);
+    box-shadow: 0 4px 12px rgba(29,53,87,.05);
+    transition: transform .15s ease;
+  }
+  .qa:hover { transform: translateY(-2px); }
+  .qa .qa-ico { width: 34px; height: 34px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+
+  .footer-sig { text-align: center; font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); padding: 26px 0 18px; }
+
+  /* ═════════ DIRECTION A — Hero immersif ═════════ */
+  .hero {
+    margin: 0; padding: 18px 20px 26px; position: relative; overflow: hidden;
+    background: linear-gradient(150deg, #24416B 0%, var(--navy) 45%, var(--navy-dark) 100%);
+    border-radius: 0 0 var(--r-clay) var(--r-clay); z-index: 1;
+  }
+  .hero .h-blob { position: absolute; border-radius: 50%; }
+  .hero-top { display: flex; justify-content: space-between; align-items: center; position: relative; }
+  .hero-greet { color: #fff; font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
+  .hero-role { color: var(--gold); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 3px; }
+  .hero-btn { width: 38px; height: 38px; border-radius: 19px; background: rgba(255,255,255,.14); display: flex; align-items: center; justify-content: center; }
+  .hero-stats { display: flex; align-items: center; gap: 18px; margin-top: 22px; position: relative; }
+  .hero-stat { flex: 1; text-align: center; }
+  .hero-stat .v { color: #fff; font-size: 26px; font-weight: 800; letter-spacing: -1px; font-family: 'Poppins', sans-serif; }
+  .hero-stat .v.warn { color: var(--gold); }
+  .hero-stat .v.bad { color: #FFAD93; }
+  .hero-stat .l { color: rgba(255,255,255,.65); font-size: 9.5px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-top: 3px; }
+  .hero-sep { width: 1px; height: 34px; background: rgba(255,255,255,.16); }
+
+  .chips-row { display: flex; gap: 10px; margin: 0 20px; position: relative; z-index: 1; }
+  .chip-card {
+    flex: 1; border-radius: var(--r-xl); padding: 12px 8px; text-align: center;
+    background: var(--elevated); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(29,53,87,.05);
+  }
+  .chip-card .ci { width: 30px; height: 30px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; margin-bottom: 5px; }
+  .chip-card .cv { font-size: 17px; font-weight: 800; font-family: 'Poppins', sans-serif; }
+  .chip-card .cl { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); margin-top: 1px; }
+
+  /* ═════════ DIRECTION B — Bento grid ═════════ */
+  .bento-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px 4px; position: relative; z-index: 1; }
+  .bento-greet { font-size: 19px; font-weight: 800; letter-spacing: -0.4px; font-family: 'Poppins', sans-serif; }
+  .bento-role { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); margin-top: 2px; }
+  .bento { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 20px 0; position: relative; z-index: 1; }
+  .tile {
+    background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r-clay);
+    padding: 16px; box-shadow: 0 9px 18px rgba(29,53,87,.07);
+    transition: transform .15s ease;
+  }
+  .tile:hover { transform: translateY(-3px); }
+  .tile.presence { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: linear-gradient(170deg, #FFFFFF 30%, var(--info-soft)); }
+  .tile .t-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); }
+  .tile .t-value { font-size: 26px; font-weight: 800; letter-spacing: -1px; font-family: 'Poppins', sans-serif; }
+  .tile-col { display: flex; flex-direction: column; gap: 12px; }
+  .tile.mini { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 2px; position: relative; }
+  .tile.mini .chev { position: absolute; top: 14px; right: 14px; color: var(--text-muted); font-size: 14px; }
+  .bento-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 12px 20px 0; position: relative; z-index: 1; }
+  .tile.small { padding: 14px 10px; text-align: center; border-radius: var(--r-xxl); }
+  .tile.small .t-value { font-size: 20px; }
+  .tile.wide { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--r-xxl); }
+  .tile.wide .t-text { font-size: 13px; font-weight: 600; flex: 1; }
+  .tile.wide .chev { color: var(--text-muted); }
+
+  /* ═════════ DIRECTION C — Raffinement ═════════ */
+  .head-card {
+    margin: 10px 20px 0; background: var(--elevated); border: 1px solid var(--border);
+    border-radius: 18px; padding: 13px 15px; display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 4px 12px rgba(29,53,87,.05); position: relative; z-index: 1;
+  }
+  .head-card .greet { font-size: 15px; font-weight: 700; }
+  .head-card .role { font-size: 10px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-muted); margin-top: 2px; }
+  .head-card .btn { width: 38px; height: 38px; border-radius: 19px; background: var(--grouped); display: flex; align-items: center; justify-content: center; }
+
+  .presence-card {
+    margin: 0 20px; background: var(--elevated); border: 1px solid var(--border);
+    border-radius: var(--r-xl); padding: 16px 10px; display: flex; align-items: center;
+    box-shadow: 0 6px 16px rgba(29,53,87,.05); position: relative; z-index: 1;
+  }
+  .presence-card.alert { background: linear-gradient(0deg, var(--danger-soft), var(--danger-soft)), var(--elevated); border-color: rgba(231,111,81,.25); }
+  .p-stat { flex: 1; text-align: center; }
+  .p-stat .v { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; font-family: 'Poppins', sans-serif; }
+  .p-stat .l { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); margin-top: 3px; }
+  .p-sep { width: 1px; height: 36px; background: var(--border); }
+
+  /* ───────── Carte verdict sous chaque téléphone ───────── */
+  .verdict {
+    margin-top: 22px; width: 375px; background: var(--elevated); border: 1px solid var(--border);
+    border-radius: var(--r-xl); padding: 18px 20px; box-shadow: 0 10px 24px rgba(29,53,87,.07);
+  }
+  .verdict h3 { font-family: 'Poppins', sans-serif; font-size: 15px; margin-bottom: 8px; }
+  .verdict ul { list-style: none; }
+  .verdict li { font-size: 12.5px; color: var(--text-soft); padding: 3px 0 3px 22px; position: relative; line-height: 1.45; }
+  .verdict li.plus::before { content: '+'; position: absolute; left: 2px; font-weight: 800; color: var(--success); }
+  .verdict li.minus::before { content: '−'; position: absolute; left: 2px; font-weight: 800; color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header class="page-head">
+  <div class="kicker">Mojammaa Connect · Rôle administration</div>
+  <h1>Accueil admin — 3 directions</h1>
+  <p>Mêmes données, mêmes tokens du thème (crème, navy, orange, or). Les écrans défilent — scrolle à l'intérieur de chaque téléphone.</p>
+</header>
+
+<main class="compare">
+
+  <!-- ════════════ A · HERO IMMERSIF ════════════ -->
+  <section class="direction">
+    <div class="tag"><span class="letter">A</span> Hero immersif</div>
+    <div class="phone"><div class="screen">
+
+      <!-- le hero englobe la status bar -->
+      <div class="hero" style="padding-top:54px; margin-top:-54px;"></div>
+      <div style="position:absolute; inset:0; display:flex; flex-direction:column;">
+        <div class="scrollzone">
+          <div class="hero" style="padding-top:58px;">
+            <div class="h-blob" style="width:170px;height:170px;top:-50px;right:-40px;background:rgba(255,210,63,.12);"></div>
+            <div class="h-blob" style="width:110px;height:110px;bottom:-30px;left:-30px;background:rgba(184,181,255,.14);"></div>
+            <div style="position:absolute;top:18px;left:28px;right:28px;display:flex;justify-content:space-between;color:#fff;font-size:13px;font-weight:700;"><span>9:41</span><span>𝍤 ⚡︎ ▮▮▮</span></div>
+            <div class="hero-top">
+              <div>
+                <div class="hero-greet">Bonjour, Youssef 👋</div>
+                <div class="hero-role">Administrateur</div>
+              </div>
+              <div class="hero-btn">✉️</div>
+            </div>
+            <div class="hero-stats">
+              <div class="ring" style="width:78px;height:78px;background:conic-gradient(var(--gold) 0 96%, rgba(255,255,255,.18) 96% 100%);flex-shrink:0;">
+                <div class="hole" style="width:62px;height:62px;background:var(--navy);">
+                  <span class="pct" style="color:#fff;font-size:17px;">96%</span>
+                  <span style="color:rgba(255,255,255,.6);font-size:7.5px;font-weight:700;letter-spacing:.8px;">PRÉSENCE</span>
+                </div>
+              </div>
+              <div class="hero-stat"><div class="v bad">12</div><div class="l">Absents</div></div>
+              <div class="hero-sep"></div>
+              <div class="hero-stat"><div class="v warn">3</div><div class="l">Retards</div></div>
+            </div>
+          </div>
+
+          <div class="blobs">
+            <div class="blob" style="width:120px;height:120px;bottom:120px;right:-40px;background:var(--violet-soft);"></div>
+            <div class="blob" style="width:90px;height:90px;bottom:280px;left:-30px;background:var(--rose-soft);"></div>
+          </div>
+
+          <div class="section-title">⚡ Actions rapides</div>
+          <div class="qa-row">
+            <div class="qa"><div class="qa-ico" style="background:var(--accent-soft);">📣</div>Annonce</div>
+            <div class="qa"><div class="qa-ico" style="background:var(--gold-soft);">📅</div>Jour spécial</div>
+            <div class="qa"><div class="qa-ico" style="background:var(--danger-soft);">👁</div>Absences</div>
+          </div>
+
+          <div class="section-title">L'école</div>
+          <div class="chips-row">
+            <div class="chip-card"><div class="ci" style="background:var(--navy-soft);">🧑‍🏫</div><div class="cv">14</div><div class="cl">Profs</div></div>
+            <div class="chip-card"><div class="ci" style="background:var(--info-soft);">🎓</div><div class="cv">8</div><div class="cl">Classes</div></div>
+            <div class="chip-card"><div class="ci" style="background:var(--warning-soft);">📖</div><div class="cv">5</div><div class="cl">Devoirs</div></div>
+          </div>
+
+          <div class="section-title">Aujourd'hui</div>
+          <div class="activity-card">
+            <div class="activity-row"><div class="dot" style="background:var(--success-soft);">✓</div>12 profs ont fait l'appel<span class="chev">›</span></div>
+            <div class="activity-row"><div class="dot" style="background:var(--danger-soft);">⚠️</div><b>2 profs n'ont pas fait l'appel</b><span class="chev">›</span></div>
+            <div class="activity-row"><div class="dot" style="background:var(--warning-soft);">📖</div>5 devoirs actifs<span class="chev">›</span></div>
+            <div class="activity-row"><div class="dot" style="background:var(--navy-soft);">✈️</div>7 messages aujourd'hui<span class="chev">›</span></div>
+          </div>
+
+          <div class="footer-sig">Mojammaa Al Maarifa · Administrateur</div>
+        </div>
+
+        <div class="tabbar">
+          <div class="tab active"><div class="ico">▦</div>Accueil</div>
+          <div class="tab"><div class="ico">📈</div>Stats</div>
+          <div class="tab"><div class="ico">📅</div>Calendrier</div>
+          <div class="tab"><div class="ico">💬</div>Messages</div>
+          <div class="tab"><div class="ico">⚙︎</div>Réglages</div>
+        </div>
+      </div>
+    </div></div>
+
+    <div class="verdict">
+      <h3>A · Hero immersif</h3>
+      <ul>
+        <li class="plus">Point focal immédiat : l'état de l'école se lit en 1 seconde</li>
+        <li class="plus">Look « app pro », différencie bien l'admin du parent</li>
+        <li class="plus">La bannière jour spécial s'intègre dans le hero</li>
+        <li class="minus">Le navy plein écran s'éloigne du ton crème/aquarelle</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ════════════ B · BENTO GRID ════════════ -->
+  <section class="direction">
+    <div class="tag"><span class="letter">B</span> Bento grid</div>
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>𝍤 ⚡︎ ▮▮▮</span></div>
+      <div class="scrollzone">
+        <div class="blobs">
+          <div class="blob" style="width:150px;height:150px;top:-40px;right:-30px;background:var(--gold-soft);"></div>
+          <div class="blob" style="width:100px;height:100px;top:300px;left:-35px;background:var(--rose-soft);"></div>
+          <div class="blob" style="width:120px;height:120px;bottom:60px;right:-40px;background:var(--violet-soft);"></div>
+        </div>
+
+        <div class="bento-head">
+          <div>
+            <div class="bento-greet">Bonjour, Youssef</div>
+            <div class="bento-role">Administrateur</div>
+          </div>
+          <div class="head-card" style="margin:0;padding:0;border:none;box-shadow:none;background:transparent;"><div class="btn" style="background:var(--elevated);border:1px solid var(--border);">✉️</div></div>
+        </div>
+
+        <div class="bento">
+          <div class="tile presence">
+            <div class="ring" style="width:96px;height:96px;background:conic-gradient(var(--info) 0 96%, var(--border) 96% 100%);">
+              <div class="hole" style="width:74px;height:74px;background:var(--elevated);">
+                <span class="pct" style="color:var(--success);font-size:21px;">96%</span>
+              </div>
+            </div>
+            <div class="t-label">Présence aujourd'hui</div>
+          </div>
+          <div class="tile-col">
+            <div class="tile mini" style="background:linear-gradient(0deg,var(--danger-soft),var(--danger-soft)),#fff;">
+              <span class="chev">›</span>
+              <div class="t-value" style="color:var(--danger);">12</div>
+              <div class="t-label">Absents</div>
+            </div>
+            <div class="tile mini" style="background:linear-gradient(0deg,var(--warning-soft),var(--warning-soft)),#fff;">
+              <span class="chev">›</span>
+              <div class="t-value" style="color:var(--accent);">3</div>
+              <div class="t-label">Retards</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bento-3">
+          <div class="tile small"><div class="t-value">14</div><div class="t-label">Profs</div></div>
+          <div class="tile small"><div class="t-value">8</div><div class="t-label">Classes</div></div>
+          <div class="tile small"><div class="t-value">5</div><div class="t-label">Devoirs</div></div>
+        </div>
+
+        <div class="bento" style="margin-top:12px;">
+          <div class="tile wide" style="background:linear-gradient(0deg,var(--danger-soft),var(--danger-soft)),#fff;">
+            <div class="dot" style="width:30px;height:30px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;">⚠️</div>
+            <div class="t-text"><b>2 profs n'ont pas fait l'appel</b></div>
+            <span class="chev">›</span>
+          </div>
+          <div class="tile wide">
+            <div class="dot" style="width:30px;height:30px;border-radius:10px;background:var(--success-soft);display:flex;align-items:center;justify-content:center;">✓</div>
+            <div class="t-text">12 profs ont fait l'appel</div>
+            <span class="chev">›</span>
+          </div>
+          <div class="tile wide">
+            <div class="dot" style="width:30px;height:30px;border-radius:10px;background:var(--navy-soft);display:flex;align-items:center;justify-content:center;">✈️</div>
+            <div class="t-text">7 messages aujourd'hui</div>
+            <span class="chev">›</span>
+          </div>
+        </div>
+
+        <div class="footer-sig">Mojammaa Al Maarifa · Administrateur</div>
+      </div>
+
+      <div class="tabbar">
+        <div class="tab active"><div class="ico">▦</div>Accueil</div>
+        <div class="tab"><div class="ico">📈</div>Stats</div>
+        <div class="tab"><div class="ico">📅</div>Calendrier</div>
+        <div class="tab"><div class="ico">💬</div>Messages</div>
+        <div class="tab"><div class="ico">⚙︎</div>Réglages</div>
+      </div>
+    </div></div>
+
+    <div class="verdict">
+      <h3>B · Bento grid</h3>
+      <ul>
+        <li class="plus">Tout est cliquable et scannable, très peu de scroll</li>
+        <li class="plus">Cohérent avec la direction « clay » (radius 28) déjà dans les tokens</li>
+        <li class="plus">Reste fidèle au fond crème + aquarelle</li>
+        <li class="minus">Hiérarchie moins marquée : beaucoup de tuiles au même poids</li>
+        <li class="minus">Pas de bloc actions rapides dédié (les tuiles font office)</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ════════════ C · RAFFINEMENT ════════════ -->
+  <section class="direction">
+    <div class="tag"><span class="letter">C</span> Raffinement en place</div>
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>𝍤 ⚡︎ ▮▮▮</span></div>
+      <div class="scrollzone">
+        <div class="blobs">
+          <div class="blob" style="width:148px;height:148px;top:-30px;right:-24px;background:var(--gold-soft);"></div>
+          <div class="blob" style="width:88px;height:88px;top:120px;left:-24px;background:var(--rose-soft);"></div>
+          <div class="blob" style="width:128px;height:128px;bottom:36px;right:-40px;background:var(--violet-soft);"></div>
+        </div>
+
+        <div class="head-card">
+          <div>
+            <div class="greet">Bonjour, Youssef</div>
+            <div class="role">Administrateur</div>
+          </div>
+          <div class="btn">✉️</div>
+        </div>
+
+        <div class="section-title">⚡ Actions rapides</div>
+        <div class="qa-row">
+          <div class="qa"><div class="qa-ico" style="background:var(--accent-soft);">📣</div>Annonce</div>
+          <div class="qa"><div class="qa-ico" style="background:var(--gold-soft);">📅</div>Jour spécial</div>
+          <div class="qa"><div class="qa-ico" style="background:var(--danger-soft);">👁</div>Absences</div>
+        </div>
+
+        <div class="section-title">Présence aujourd'hui</div>
+        <div class="presence-card">
+          <div class="p-stat"><div class="v" style="color:var(--danger);">12</div><div class="l">Absents</div></div>
+          <div class="p-sep"></div>
+          <div class="p-stat"><div class="v" style="color:var(--accent);">3</div><div class="l">Retards</div></div>
+          <div class="p-sep"></div>
+          <div class="p-stat">
+            <div class="ring" style="width:58px;height:58px;background:conic-gradient(var(--success) 0 96%, var(--border) 96% 100%);margin:0 auto;">
+              <div class="hole" style="width:44px;height:44px;background:var(--elevated);"><span class="pct" style="color:var(--success);font-size:13px;">96%</span></div>
+            </div>
+            <div class="l" style="margin-top:5px;">Présence</div>
+          </div>
+        </div>
+
+        <div class="section-title">L'école</div>
+        <div class="chips-row">
+          <div class="chip-card"><div class="ci" style="background:var(--navy-soft);">🧑‍🏫</div><div class="cv">14</div><div class="cl">Profs</div></div>
+          <div class="chip-card"><div class="ci" style="background:var(--info-soft);">🎓</div><div class="cv">8</div><div class="cl">Classes</div></div>
+          <div class="chip-card"><div class="ci" style="background:var(--warning-soft);">📖</div><div class="cv">5</div><div class="cl">Devoirs</div></div>
+        </div>
+
+        <div class="section-title">Aujourd'hui</div>
+        <div class="activity-card">
+          <div class="activity-row"><div class="dot" style="background:var(--success-soft);">✓</div>12 profs ont fait l'appel<span class="chev">›</span></div>
+          <div class="activity-row"><div class="dot" style="background:var(--danger-soft);">⚠️</div><b>2 profs n'ont pas fait l'appel</b><span class="chev">›</span></div>
+          <div class="activity-row"><div class="dot" style="background:var(--warning-soft);">📖</div>5 devoirs actifs<span class="chev">›</span></div>
+          <div class="activity-row"><div class="dot" style="background:var(--navy-soft);">✈️</div>7 messages aujourd'hui<span class="chev">›</span></div>
+        </div>
+
+        <div class="footer-sig">Mojammaa Al Maarifa · Administrateur</div>
+      </div>
+
+      <div class="tabbar">
+        <div class="tab active"><div class="ico">▦</div>Accueil</div>
+        <div class="tab"><div class="ico">📈</div>Stats</div>
+        <div class="tab"><div class="ico">📅</div>Calendrier</div>
+        <div class="tab"><div class="ico">💬</div>Messages</div>
+        <div class="tab"><div class="ico">⚙︎</div>Réglages</div>
+      </div>
+    </div></div>
+
+    <div class="verdict">
+      <h3>C · Raffinement en place</h3>
+      <ul>
+        <li class="plus">Changement minimal : structure actuelle conservée</li>
+        <li class="plus">Couleurs en dur remplacées par les tokens (dark mode OK)</li>
+        <li class="plus">+ actions rapides, typo et espacements unifiés</li>
+        <li class="minus">Reste sans point focal fort : tout a le même poids visuel</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+</body>
+</html>
