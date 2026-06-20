@@ -55,6 +55,7 @@ yarn-error.*
 # Real student data — never commit (RGPD / vie privée mineurs)
 # Anchored to root so it does NOT match src/data/ (app source).
 /data/
+/backups/
 
 # Firebase local cache
 .firebase/
