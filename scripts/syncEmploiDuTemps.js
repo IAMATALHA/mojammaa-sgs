@@ -6,7 +6,7 @@
  * Chaque créneau d'un prof devient un doc `emploiDuTemps` :
  *   id = `${classeId}__${day}__${startTime}`   (idempotent)
  *   { classeId, day, startTime, endTime, durationMin,
- *     matiere, salle?, professeurNom, teacherUid, updatedAt }
+ *     seance?, matiere, salle?, professeurNom, teacherUid, updatedAt }
  *
  * matiere / professeurNom sont résolus depuis users/{teacherUid}
  * (champ `matiere` global du prof + prenom/nom).
@@ -66,6 +66,7 @@ async function main() {
           startTime: s.startTime,
           endTime: s.endTime || null,
           durationMin: s.durationMin || null,
+          seance: s.seance || null,
           matiere: s.subject || info.matiere || null,
           salle: s.room || null,
           professeurNom: info.professeurNom,

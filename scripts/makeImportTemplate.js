@@ -3,6 +3,7 @@
  *   - Enseignants (profs)
  *   - Élèves
  *   - Parents
+ *   - Emploi du temps
  *
  * Les en-têtes correspondent EXACTEMENT aux champs de la base Firestore.
  * Tu remplis le fichier, puis un script d'import lira chaque feuille.
@@ -26,6 +27,7 @@ const instructions = [
   ['  1) Élèves   — à importer EN PREMIER (les parents s’y rattachent)'],
   ['  2) Parents  — se lient aux élèves via le codeMassar'],
   ['  3) Enseignants — indépendant, peut se faire à tout moment'],
+  ['  4) EmploiDuTemps — après Enseignants (teacherEmail doit exister)'],
   [''],
   ['RÈGLES GÉNÉRALES :'],
   ['  • Ne change PAS la ligne d’en-tête (ligne 1 de chaque feuille).'],
@@ -48,6 +50,11 @@ const instructions = [
   ['FEUILLE "Parents" :'],
   ['  email, password(optionnel), nom, prenom,'],
   ['  enfants_codeMassar (codes MASSAR des enfants, séparés par virgule)'],
+  [''],
+  ['FEUILLE "EmploiDuTemps" :'],
+  ['  teacherEmail, day (monday..saturday ou lundi..samedi), startTime, endTime,'],
+  ['  durationMin, classe, seance (S1..S6), room, subject'],
+  ['  → Une ligne = un créneau hebdomadaire.'],
 ]
 const wsI = XLSX.utils.aoa_to_sheet(instructions)
 wsI['!cols'] = [{ wch: 70 }]
@@ -80,7 +87,19 @@ const wsP = XLSX.utils.aoa_to_sheet(parents)
 wsP['!cols'] = [{ wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 30 }]
 XLSX.utils.book_append_sheet(wb, wsP, 'Parents')
 
+// ── Feuille EmploiDuTemps ─────────────────────────────────────────────
+const schedule = [
+  ['teacherEmail', 'day', 'startTime', 'endTime', 'durationMin', 'classe', 'seance', 'room', 'subject'],
+  ['EXEMPLE prof@gmail.com', 'monday', '08:30', '09:30', 60, '3APIC-1', 'S1', 'Salle 4', 'Mathématiques'],
+]
+const wsE = XLSX.utils.aoa_to_sheet(schedule)
+wsE['!cols'] = [
+  { wch: 28 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 12 },
+  { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 22 },
+]
+XLSX.utils.book_append_sheet(wb, wsE, 'EmploiDuTemps')
+
 const out = path.join(__dirname, '..', 'mojammaa_import_template.xlsx')
 XLSX.writeFile(wb, out)
 console.log('✅ Modèle créé :', out)
-console.log('   Feuilles : Instructions, Enseignants, Eleves, Parents')
+console.log('   Feuilles : Instructions, Enseignants, Eleves, Parents, EmploiDuTemps')
