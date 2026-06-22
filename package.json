@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "doctor": "npx expo-doctor",
+    "verify:rules": "node scripts/verifyRulesLive.js",
     "db:import:eleves": "node scripts/importStudents.js",
     "db:import:eleves:commit": "node scripts/importStudents.js --commit",
     "db:reset:eleves": "node scripts/importStudents.js --commit --wipe",
