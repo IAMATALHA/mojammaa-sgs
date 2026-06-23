@@ -435,15 +435,22 @@ async function main() {
 
   // ── 8. devoirs (à venir) ──
   const future = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10)
+  // Devoirs du prof démo (Reda, maths collège) → UNIQUEMENT ses classes
+  // (demoTeacherLocal.classes), avec des intitulés de maths cohérents. Avant,
+  // le seed lui attribuait des devoirs de primaire (4AEP-1/5AEP-1) qu'il
+  // n'enseigne pas → l'onglet « Devoirs » affichait des classes incohérentes.
   const devoirsSeed = [
-    { titre: 'Exercices chapitre 5', description: 'Faire les exercices 1 à 8 page 72.', type: 'Exercices', classeId: '4AEP-1', d: 3 },
-    { titre: 'Lecture suivie', description: 'Lire le chapitre 3 et résumer en 5 lignes.', type: 'Lecture', classeId: '1APIC-1', d: 2 },
-    { titre: 'Révision contrôle', description: 'Réviser les leçons 4 et 5 pour le contrôle.', type: 'Révision', classeId: '2APIC-1', d: 5 },
-    { titre: 'Fiche de vocabulaire', description: 'Compléter la fiche distribuée en classe.', type: 'Exercices', classeId: '3APIC-1', d: 1 },
+    { titre: 'Exercices sur les fractions', description: 'Faire les exercices 1 à 8 page 72.', type: 'Exercices', classeId: '1APIC-1', d: 3 },
+    { titre: 'Calcul littéral', description: 'Développer et réduire les expressions de la fiche distribuée.', type: 'Exercices', classeId: '1APIC-1', d: 2 },
     { titre: 'Problèmes de géométrie', description: 'Exercices 12 à 15 page 90.', type: 'Exercices', classeId: '1APIC-2', d: 4 },
-    { titre: 'Dictée préparée', description: 'Apprendre le texte page 45.', type: 'Révision', classeId: '5AEP-1', d: 2 },
+    { titre: 'Révision contrôle — nombres relatifs', description: 'Réviser les chapitres 4 et 5 pour le contrôle.', type: 'Révision', classeId: '2APIC-1', d: 5 },
+    { titre: 'Symétrie centrale', description: 'Terminer la construction commencée en classe.', type: 'Exercices', classeId: '2APIC-1', d: 2 },
+    { titre: 'Théorème de Thalès', description: "Exercices d'application page 88.", type: 'Contrôle', classeId: '3APIC-1', d: 1 },
   ]
-  const devoirDocs = devoirsSeed.map(x => ({ ref: db.collection('devoirs').doc(), data: {
+  // Garde-fou : n'émettre que des devoirs pour des classes réellement enseignées
+  // par le prof démo (évite toute régression si la liste ci-dessus dérive).
+  const teacherClasses = new Set(demoTeacherLocal.classes)
+  const devoirDocs = devoirsSeed.filter(x => teacherClasses.has(x.classeId)).map(x => ({ ref: db.collection('devoirs').doc(), data: {
     titre: x.titre, description: x.description, type: x.type, classeId: x.classeId,
     teacherId: teacherUid, teacherNom: `${demoTeacherLocal.prenom} ${demoTeacherLocal.nom}`,
     dateLimite: future(x.d), attachments: [], createdAt: TS(),
