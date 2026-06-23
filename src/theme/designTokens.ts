@@ -191,6 +191,14 @@ export const fontSize = {
   display: 40,
 } as const
 
+// iOS honore shadowColor/Opacity/Radius/Offset → ombre douce et teintée navy.
+// Android IGNORE tout ça et n'utilise QUE `elevation`, qui rend une ombre dure
+// et grise pilotée par l'OS (sur fond translucide elle "bave" en halo gris —
+// cf. les tuiles bento sur Android). On garde shadowColor (Android ≥ 9 / API 28
+// le respecte pour teinter l'ombre d'elevation) MAIS on baisse fortement
+// l'elevation pour retrouver le rendu léger d'iOS au lieu du halo gris.
+// NB : `elevation` n'a AUCUN effet sur iOS — baisser ces valeurs ne touche
+// donc QUE le rendu Android.
 const iosShadow = (shadowRadius: number, opacity: number, y = 2) => ({
   shadowColor: '#1D3557',
   shadowOpacity: opacity,
@@ -201,11 +209,11 @@ const iosShadow = (shadowRadius: number, opacity: number, y = 2) => ({
 export const shadows = {
   none: { ...iosShadow(0, 0, 0), elevation: 0 },
   xs: { ...iosShadow(10, 0.05, 2), elevation: 1 },
-  sm: { ...iosShadow(16, 0.08, 6), elevation: 2 },
-  md: { ...iosShadow(24, 0.10, 10), elevation: 4 },
-  lg: { ...iosShadow(32, 0.14, 16), elevation: 6 },
+  sm: { ...iosShadow(16, 0.08, 6), elevation: 1 },
+  md: { ...iosShadow(24, 0.10, 10), elevation: 2 },
+  lg: { ...iosShadow(32, 0.14, 16), elevation: 3 },
   // Ombre "clay" : diffuse et décalée vers le bas pour un volume doux.
-  clay: { ...iosShadow(18, 0.14, 9), elevation: 7 },
+  clay: { ...iosShadow(18, 0.14, 9), elevation: 2 },
 } as const
 
 export const hitSlop = { top: 8, bottom: 8, left: 8, right: 8 }
