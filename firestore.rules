@@ -177,7 +177,18 @@ service cloud.firestore {
 
     // ── devoirs (contenu pédagogique, non nominatif) ─────────
     match /devoirs/{devoirId} {
-      allow read: if isSignedIn();
+      // Lecture scopée (défense en profondeur — le filtre client par teacherId
+      // ne suffit pas à empêcher l'énumération directe de la collection) :
+      //   - admin  : tout
+      //   - prof   : SES devoirs (teacherId) OU une classe qu'il enseigne
+      //              → un prof ne lit plus les devoirs des autres profs/classes
+      //   - parent : devoirs des classes de ses enfants. Le périmètre exact par
+      //              enfant n'est PAS requêtable en règles (pas de query dans les
+      //              règles) ; le contenu étant non nominatif, on cantonne au rôle.
+      allow read: if isAdmin()
+        || (isTeacher() && (resource.data.teacherId == myUid()
+                            || teacherTeaches(resource.data.classeId)))
+        || isParent();
       allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classeId);
       allow delete: if isAdmin() || (isTeacher() && resource.data.teacherId == myUid());
     }
