@@ -52,18 +52,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile,   setProfile]   = useState<UserProfile | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  const fetchProfile = useCallback(async (firebaseUser: User) => {
+  // Statut de lecture du profil :
+  //  'ok'      → doc trouvé, profil renseigné
+  //  'missing' → lecture réussie mais AUCUN doc users/{uid} (compte non provisionné)
+  //  'error'   → lecture en échec (offline / permission) → on ne déconnecte PAS
+  const fetchProfile = useCallback(async (firebaseUser: User): Promise<'ok' | 'missing' | 'error'> => {
     try {
       const snap = await getDoc(doc(db, 'users', firebaseUser.uid))
       if (snap.exists()) {
         setProfile({ uid: firebaseUser.uid, ...snap.data() } as UserProfile)
-      } else {
-        setProfile(null)
+        // Attempt to register for push notifications
+        registerForPushNotificationsAsync(firebaseUser.uid)
+        return 'ok'
       }
-      // Attempt to register for push notifications
-      registerForPushNotificationsAsync(firebaseUser.uid)
+      setProfile(null)
+      return 'missing'
     } catch {
       setProfile(null)
+      return 'error'
     }
   }, [])
 
@@ -74,8 +80,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // the profile doc arrives, and rendering with the 'student' fallback
         // flashes the parent UI to teachers/admins right after login.
         setIsLoading(true)
+        const status = await fetchProfile(fbUser)
+        if (status === 'missing') {
+          // Authentifié mais sans doc users/{uid} : compte non provisionné (ou
+          // session persistée d'un ancien essai). On déconnecte et on renvoie au
+          // login, au lieu d'afficher à tort l'espace parent vide.
+          setUser(null)
+          try { await signOut(auth) } catch { setIsLoading(false) }
+          return // signOut relance le listener (branche null) qui remet isLoading=false
+        }
+        // 'ok' ou 'error' (offline) : on expose l'utilisateur. En cas d'erreur
+        // réseau on NE le déconnecte pas — il conserve sa session.
         setUser(fbUser)
-        await fetchProfile(fbUser)
       } else {
         setUser(null)
         setProfile(null)
