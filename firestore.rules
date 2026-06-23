@@ -263,12 +263,14 @@ service cloud.firestore {
 
     // ── infos scolaires non nominatives (lisibles par tous les connectés) ──
     match /emploiDuTemps/{docId}  { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    // evenements : calendrier partagé lu par tous. Durci 23/06/2026 — un prof ne
-    // peut créer qu'un événement DONT IL EST PROPRIÉTAIRE (createdBy == son uid),
-    // et ne peut modifier/supprimer QUE les siens. L'admin gère tout. (Empêche un
-    // prof de vandaliser/supprimer les événements créés par d'autres.)
+    // evenements : calendrier scolaire. Lecture PUBLIQUE (non connectés inclus) —
+    // l'agenda du site web public (mojammaa-admin/SchoolHome) interroge cette
+    // collection sans authentification ; ce sont des infos non sensibles (titre,
+    // type, dates). Durci 23/06/2026 côté écriture seulement : un prof ne peut
+    // créer qu'un événement DONT IL EST PROPRIÉTAIRE (createdBy == son uid) et ne
+    // peut modifier/supprimer QUE les siens ; l'admin gère tout.
     match /evenements/{eventId} {
-      allow read:   if isSignedIn();
+      allow read:   if true;
       allow create: if isAdmin()
                     || (isTeacher() && request.resource.data.createdBy == myUid());
       allow update, delete: if isAdmin()
