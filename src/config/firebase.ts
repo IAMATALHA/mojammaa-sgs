@@ -39,9 +39,16 @@ try {
     getReactNativePersistence: (s: typeof AsyncStorage) => any
   }
   auth = initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) })
-} catch {
-  // Cas de re-initialisation (fast refresh) ou plateforme web : fallback
-  // sur le singleton standard. Persistance dégradée mais l'app boot.
+} catch (e: any) {
+  // Cas BÉNIN attendu : re-initialisation (fast refresh) ou plateforme web —
+  // Firebase lève alors 'auth/already-initialized'. On récupère silencieusement
+  // le singleton déjà câblé (persistance conservée).
+  // Cas RÉEL : tout autre échec dégrade la persistance (session perdue à chaque
+  // cold start) — on le LOGUE pour ne pas le rendre invisible, puis on retombe
+  // sur getAuth pour que l'app boot quand même.
+  if (e?.code !== 'auth/already-initialized') {
+    console.warn('[firebase] initializeAuth a échoué — persistance dégradée:', e)
+  }
   auth = getAuth(app)
 }
 

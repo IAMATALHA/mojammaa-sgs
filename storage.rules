@@ -13,7 +13,7 @@ service firebase.storage {
     // arbitraires/volumineux servis ensuite à tous les utilisateurs.
     function isAllowedDoc() {
       return request.resource.size < 25 * 1024 * 1024
-        && request.resource.contentType.matches('application/pdf|image/.*|text/.*|application/vnd.*|application/msword|application/octet-stream');
+        && request.resource.contentType.matches('application/pdf|image/.*|text/.*|application/vnd.*|application/msword');
     }
 
     // Devoirs : seul le prof propriétaire peut écrire dans son sous-dossier.

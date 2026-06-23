@@ -64,8 +64,11 @@ export default function LoginScreen() {
     } catch (e: any) {
       const code = e?.code || ''
       if (code === 'auth/invalid-email') setError(t('login.errorInvalidEmail'))
+      // 'auth/invalid-credential' couvre désormais mauvais mot de passe ET
+      // compte inexistant (protection anti-énumération de Firebase). On NE
+      // distingue pas le cas « compte introuvable » pour ne pas révéler
+      // l'existence d'un compte.
       else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') setError(t('login.errorWrongPassword'))
-      else if (code === 'auth/user-not-found') setError(t('login.errorNotFound'))
       else if (code === 'auth/too-many-requests') setError(t('login.errorTooMany'))
       else setError(e?.message || t('login.errorGeneric'))
     } finally {

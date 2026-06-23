@@ -31,6 +31,32 @@ function sanitize(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80)
 }
 
+// Les pickers (expo-document-picker) ne renvoient pas toujours un mimeType ;
+// les appelants tombaient alors sur 'application/octet-stream', désormais
+// REFUSÉ par storage.rules (isAllowedDoc). On déduit un type réel depuis
+// l'extension pour que l'upload passe sans rouvrir la faille du blob générique.
+const EXT_MIME: Record<string, string> = {
+  pdf:  'application/pdf',
+  png:  'image/png',
+  jpg:  'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif:  'image/gif',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  txt:  'text/plain',
+  csv:  'text/csv',
+  doc:  'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls:  'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+}
+
+function resolveMime(mime: string, filename: string): string {
+  if (mime && mime !== 'application/octet-stream') return mime
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  return EXT_MIME[ext] || 'application/pdf'
+}
+
 export async function uploadAttachment(
   localUri: string,
   folder: 'devoirs' | 'notes-imports' | 'annonces' | 'ressources',
@@ -39,10 +65,11 @@ export async function uploadAttachment(
   mime: string,
 ): Promise<Attachment> {
   const safe = sanitize(filename) || 'fichier'
+  const resolvedMime = resolveMime(mime, safe)
   const path = `${folder}/${teacherUid}/${Date.now()}_${safe}`
   const fileRef = ref(storage, path)
   const blob = await localUriToBlob(localUri)
-  await uploadBytes(fileRef, blob, { contentType: mime })
+  await uploadBytes(fileRef, blob, { contentType: resolvedMime })
   const url = await getDownloadURL(fileRef)
-  return { url, name: safe, mime, size: (blob as any).size }
+  return { url, name: safe, mime: resolvedMime, size: (blob as any).size }
 }

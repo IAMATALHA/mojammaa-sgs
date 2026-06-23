@@ -15,6 +15,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const { setGlobalOptions } = require('firebase-functions/v2')
 const { initializeApp } = require('firebase-admin/app')
 const { getFirestore, FieldPath } = require('firebase-admin/firestore')
+const { getAuth } = require('firebase-admin/auth')
 const logger = require('firebase-functions/logger')
 const { computeClassStats, statsDocId } = require('./classStats')
 const { computeSchoolStats } = require('./schoolStats')
@@ -193,6 +194,25 @@ async function refreshDirectory() {
 exports.onUserWritten = onDocumentWritten('users/{uid}', async (event) => {
   const before = event.data?.before?.exists ? event.data.before.data() : null
   const after = event.data?.after?.exists ? event.data.after.data() : null
+
+  // Offboarding (#2b) : supprimer users/{uid} ne révoque PAS la session Firebase
+  // Auth — le mot de passe resterait valide et le compte pourrait se reconnecter.
+  // À la suppression du doc, on DÉSACTIVE le compte Auth (révocation immédiate du
+  // credential). `disabled` plutôt que delete : réversible et auditable, et il
+  // suffit à bloquer toute connexion. Le garde onSnapshot côté client déconnecte
+  // déjà en cours de session ; ceci ferme la reconnexion ultérieure.
+  if (before && !after) {
+    const uid = event.params.uid
+    try {
+      await getAuth().updateUser(uid, { disabled: true })
+      logger.info('auth account disabled after user doc deletion', { uid })
+    } catch (e) {
+      // Compte Auth déjà absent (supprimé séparément) : rien à révoquer.
+      if (e?.code === 'auth/user-not-found') logger.info('no auth account to disable', { uid })
+      else logger.error('failed to disable auth account', { uid, error: e?.message })
+    }
+  }
+
   // users/{uid} est réécrit à CHAQUE login (expoPushToken) : ne recalculer
   // que si un champ visible dans l'annuaire a réellement changé.
   const pick = (u) => (u ? JSON.stringify([u.role, u.nom, u.prenom, u.matiere, u.classes, u.classe]) : '')
