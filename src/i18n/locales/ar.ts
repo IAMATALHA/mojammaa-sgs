@@ -19,6 +19,14 @@ const ar = {
     logoutConfirm: 'هل تريد تسجيل الخروج؟',
     logoutTitle: 'تسجيل الخروج',
     language: 'اللغة',
+    add: 'إضافة',
+    search: 'بحث',
+    clearSearch: 'مسح البحث',
+    notifications: 'الإشعارات',
+    changeLanguage: 'تغيير اللغة',
+    attachment: 'مرفق',
+    prevMonth: 'الشهر السابق',
+    nextMonth: 'الشهر التالي',
   },
 
   greeting: {
@@ -311,8 +319,6 @@ const ar = {
     platform: 'المنصة',
     actionsSection: 'الإجراءات',
     openWebAdmin: 'فتح لوحة الإدارة',
-    impersonation: 'وضع الانتحال',
-    impersonationMsg: 'غير متاح حالياً',
     administrator: 'مدير',
     users: 'المستخدمون',
     allUsers: 'الكل ({{count}})',
@@ -535,6 +541,12 @@ const ar = {
     invalidDrop: 'اختر خلية صالحة في التقويم.',
     emptyUnified: 'لا مواعيد ولا أيام خاصة.',
     agendaUpcoming: 'القادم',
+    eventsSection: 'الأحداث',
+    homeworkSection: 'الواجبات',
+    noEvents: 'لا أحداث قادمة.',
+    noHomework: 'لا واجبات قادمة.',
+    homeworkAttachments: 'المرفقات',
+    noAttachments: 'لا مستند مرفق.',
   },
 
   langPicker: {

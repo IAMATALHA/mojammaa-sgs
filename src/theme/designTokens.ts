@@ -16,9 +16,10 @@ export const colors = {
       primary: '#1D3557',
       secondary: 'rgba(29, 53, 87, 0.92)',
       // Muted/caption text. The old olive at 48% sat around 1.8:1 on cream
-      // (failed even 3:1). Navy at 55% keeps the de-emphasised feel while
-      // clearing ~3.2:1, and stays in the same hue family as primary text.
-      tertiary: 'rgba(29, 53, 87, 0.55)',
+      // (failed even 3:1). Bumped 23/06/2026 from 55% (~3.2:1, still failed AA
+      // for normal text) to 65% (~4.5:1 on cream), keeping the de-emphasised
+      // feel in the same hue family as primary text while clearing WCAG AA.
+      tertiary: 'rgba(29, 53, 87, 0.65)',
       inverse: '#FFFFFF',
     },
     surface: {
@@ -209,6 +210,16 @@ export const shadows = {
 
 export const hitSlop = { top: 8, bottom: 8, left: 8, right: 8 }
 export const minTouch = 44
+
+// Source de vérité unique pour le motion des états pressés (cf. DESIGN_NOTES :
+// 200 ms, scale 0.98). Les écrans doivent consommer ces constantes plutôt que
+// de redéfinir des scales/durées ad-hoc (0.8–0.95, 130–900 ms).
+export const motion = {
+  pressScale: 0.98,
+  pressTransition: { type: 'timing' as const, duration: 200 },
+  // Durée d'entrée standard (apparition de cartes/listes).
+  enterDuration: 320,
+} as const
 
 export const chartColors = [
   palette.navy,

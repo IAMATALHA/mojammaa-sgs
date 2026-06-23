@@ -18,6 +18,8 @@ export default function ScreenBackground() {
         source={require('../../assets/logo.png')}
         resizeMode="contain"
         style={styles.watermark}
+        accessible={false}
+        importantForAccessibility="no"
       />
     </View>
   )

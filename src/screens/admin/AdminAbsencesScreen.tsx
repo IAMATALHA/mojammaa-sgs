@@ -59,7 +59,11 @@ export default function AdminAbsencesScreen() {
       const [absSnap, retSnap, monthSnap] = await Promise.all([
         getDocs(query(collection(db, 'absences'), where('date', '==', today), where('statut', '==', 'absent'))),
         getDocs(query(collection(db, 'absences'), where('date', '==', today), where('statut', '==', 'retard'))),
-        getDocs(query(collection(db, 'absences'), where('statut', 'in', ['absent', 'retard']))),
+        // Borné au mois courant (23/06/2026) : avant, on lisait TOUTES les
+        // absences de l'année (statut in …) puis on filtrait côté client → la
+        // lecture grossissait sans limite. Range sur un seul champ (`date`) →
+        // pas d'index composite ; on filtre le statut côté client.
+        getDocs(query(collection(db, 'absences'), where('date', '>=', mStart))),
       ])
       const toRow = (d: any): AbsenceRow => {
         const data = d.data()
@@ -67,7 +71,7 @@ export default function AdminAbsencesScreen() {
       }
       setAbsents(absSnap.docs.map(toRow))
       setRetards(retSnap.docs.map(toRow))
-      setAllMonth(monthSnap.docs.map(toRow).filter(r => r.date >= mStart))
+      setAllMonth(monthSnap.docs.map(toRow).filter(r => r.statut === 'absent' || r.statut === 'retard'))
     } catch {}
     finally { setLoading(false) }
   }, [])
@@ -115,6 +119,9 @@ export default function AdminAbsencesScreen() {
             <Pressable
               key={tb.key}
               onPress={() => setTab(tb.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={tb.label}
               style={[styles.tabChip, {
                 backgroundColor: active ? tb.color : 'transparent',
                 borderColor: active ? tb.color : theme.border,

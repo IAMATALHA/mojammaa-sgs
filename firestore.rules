@@ -89,17 +89,17 @@ service cloud.firestore {
 
     // ── notes ────────────────────────────────────────────────
     match /notes/{noteId} {
-      // DETTE DE CONFIDENTIALITÉ — dernier trou parent. L'agrégat serveur
-      // (classStats, CF onNoteWritten) existe depuis Batch 1 et le client
-      // useParentNotes ne lit plus la classe entière. MAIS l'ancien build
-      // installé chez les parents appelle encore getClassNotes() → NE FLIPPER
-      // qu'après adoption du build EAS Batch 1+. Règle cible :
-      //   allow read: if isAdmin()
-      //               || teacherTeaches(resource.data.classe)
-      //               || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
+      // CONFIDENTIALITÉ FERMÉE (2026-06-22) — le parent ne lit QUE les notes
+      // de SES enfants. L'agrégat serveur ANONYME (classStats, CF onNoteWritten)
+      // fournit moyenne de classe + rang depuis Batch 1 (v1.0.4, 2026-06-10) ;
+      // useParentNotes interroge `notes where eleveId == enfant` (jamais la
+      // classe entière) → cette requête par-enfant reste autorisée. Données
+      // live vérifiées 2026-06-22 : 100% des notes.eleveId == ID doc eleves,
+      // donc eleveParentUid(eleveId) résout. (Ancien getClassNotes() supprimé
+      // depuis v1.0.4 ; builds < 1.0.4 verraient leur requête classe refusée.)
       allow read: if isAdmin()
                   || teacherTeaches(resource.data.classe)
-                  || isParent();
+                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
       // Prof : uniquement SA classe ET SA matière. Admin : tout.
       allow create, update: if isAdmin() || (
         teacherTeaches(request.resource.data.classe) &&
@@ -231,9 +231,14 @@ service cloud.firestore {
       );
       // Création : seulement en SON nom (anti-usurpation) ; les diffusions
       // larges (all/parents/teachers/class) réservées prof/admin.
+      // Durci 23/06/2026 : `fromRole` ne peut pas mentir — s'il est présent il
+      // DOIT valoir le rôle réel de l'auteur (sinon un parent pourrait poster un
+      // message affiché comme « administration » → phishing in-app).
       allow create: if isSignedIn()
         && request.resource.data.fromId == myUid()
-        && (request.resource.data.toType == 'user' || isTeacher() || isAdmin());
+        && (request.resource.data.toType == 'user' || isTeacher() || isAdmin())
+        && (!request.resource.data.keys().hasAny(['fromRole'])
+            || request.resource.data.fromRole == myRole());
       // MAJ : un destinataire ne touche QUE readBy/deletedBy, et seulement en
       // s'AJOUTANT lui-même (append-only). Intégrité requise : readBy devient
       // un accusé de lecture sur lequel l'école s'appuie — personne ne doit
@@ -258,7 +263,17 @@ service cloud.firestore {
 
     // ── infos scolaires non nominatives (lisibles par tous les connectés) ──
     match /emploiDuTemps/{docId}  { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /evenements/{eventId}   { allow read: if isSignedIn(); allow write: if isAdmin() || isTeacher(); }
+    // evenements : calendrier partagé lu par tous. Durci 23/06/2026 — un prof ne
+    // peut créer qu'un événement DONT IL EST PROPRIÉTAIRE (createdBy == son uid),
+    // et ne peut modifier/supprimer QUE les siens. L'admin gère tout. (Empêche un
+    // prof de vandaliser/supprimer les événements créés par d'autres.)
+    match /evenements/{eventId} {
+      allow read:   if isSignedIn();
+      allow create: if isAdmin()
+                    || (isTeacher() && request.resource.data.createdBy == myUid());
+      allow update, delete: if isAdmin()
+                    || (isTeacher() && resource.data.get('createdBy', '') == myUid());
+    }
     match /joursScolaires/{dateId}{ allow read: if isSignedIn(); allow write: if isAdmin(); }
 
     // ── directory (annuaire du personnel, maintenu par CF) ──

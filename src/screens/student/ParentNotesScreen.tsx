@@ -78,6 +78,9 @@ export default function ParentNotesScreen() {
           <Pressable
             key={c.id}
             onPress={() => setSelectedChildId(c.id)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: selectedChildId === c.id }}
+            accessibilityLabel={c.firstName}
             style={[styles.chip, {
               backgroundColor: selectedChildId === c.id ? c.avatarColor : theme.surface,
               borderColor: selectedChildId === c.id ? c.avatarColor : theme.border,

@@ -77,6 +77,7 @@ export default function AnnouncementCard({
         {item.image ? (
           <Image
             source={{ uri: item.image }}
+            accessibilityLabel={item.title || t('common.attachment')}
             style={[styles.poster, { backgroundColor: theme.surface }]}
             resizeMode="cover"
           />

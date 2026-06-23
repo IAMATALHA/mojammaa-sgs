@@ -3,6 +3,7 @@ import { View, StyleSheet, Text, Pressable, Image } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
+import { useTranslation } from 'react-i18next'
 import { ChevronLeft } from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext'
 
@@ -15,6 +16,7 @@ interface ScreenLayoutProps {
 export default function ScreenLayout({ children, title, showBack }: ScreenLayoutProps) {
   const theme = useTheme()
   const navigation = useNavigation()
+  const { t } = useTranslation()
   const canGoBack = showBack ?? navigation.canGoBack()
 
   return (
@@ -29,6 +31,8 @@ export default function ScreenLayout({ children, title, showBack }: ScreenLayout
             source={require('../../assets/logo.png')}
             resizeMode="contain"
             style={styles.watermark}
+            accessible={false}
+            importantForAccessibility="no"
           />
         </View>
 
@@ -39,6 +43,8 @@ export default function ScreenLayout({ children, title, showBack }: ScreenLayout
                 <Pressable
                   onPress={() => navigation.goBack()}
                   hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.back')}
                   style={[styles.backBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
                 >
                   <ChevronLeft size={20} color={theme.primary} strokeWidth={2} />

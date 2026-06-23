@@ -182,6 +182,9 @@ export default function TeacherEdtScreen() {
                   <TouchableOpacity
                     key={g.day}
                     onPress={() => setSelectedDay(g.day)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: isSel }}
+                    accessibilityLabel={t(`days.${g.day}`)}
                     style={[
                       styles.dayChip,
                       { borderColor: theme.border, backgroundColor: isSel ? theme.primary : theme.surface },

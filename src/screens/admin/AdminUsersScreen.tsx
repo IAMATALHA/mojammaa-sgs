@@ -109,6 +109,9 @@ export default function AdminUsersScreen() {
             <TouchableOpacity
               key={v}
               onPress={() => setFilter(v)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={label}
               style={[styles.chip, {
                 borderColor: active ? theme.primary : theme.border,
                 backgroundColor: active ? theme.primary : 'transparent',

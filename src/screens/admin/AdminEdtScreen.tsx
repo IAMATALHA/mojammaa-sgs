@@ -89,6 +89,9 @@ export default function AdminEdtScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={{ gap: 8 }}>
           <TouchableOpacity
             onPress={() => setClasseFilter('')}
+            accessibilityRole="button"
+            accessibilityState={{ selected: !classeFilter }}
+            accessibilityLabel={t('admin.allClasses')}
             style={[styles.chip, { borderColor: !classeFilter ? theme.primary : theme.border, backgroundColor: !classeFilter ? theme.primarySurface : 'transparent' }]}
           >
             <Text style={{ color: !classeFilter ? theme.primary : theme.textSoft, fontWeight: !classeFilter ? '700' : '500', fontSize: 12 }}>
@@ -100,6 +103,9 @@ export default function AdminEdtScreen() {
             return (
               <TouchableOpacity key={c}
                 onPress={() => setClasseFilter(c)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={c}
                 style={[styles.chip, { borderColor: active ? theme.primary : theme.border, backgroundColor: active ? theme.primarySurface : 'transparent' }]}
               >
                 <Text style={{ color: active ? theme.primary : theme.textSoft, fontWeight: active ? '700' : '500', fontSize: 12 }}>{c}</Text>

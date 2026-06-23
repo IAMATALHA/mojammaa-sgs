@@ -8,26 +8,34 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // Limites communes (durci 23/06/2026) : pièces jointes pédagogiques =
+    // documents ou images uniquement, ≤ 25 Mo. Empêche l'upload de fichiers
+    // arbitraires/volumineux servis ensuite à tous les utilisateurs.
+    function isAllowedDoc() {
+      return request.resource.size < 25 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf|image/.*|text/.*|application/vnd.*|application/msword|application/octet-stream');
+    }
+
     // Devoirs : seul le prof propriétaire peut écrire dans son sous-dossier.
     // Lecture autorisée à tout utilisateur authentifié (parents, élèves,
     // autres profs, admin) — sinon le parent ne pourrait pas télécharger
     // la pièce jointe du devoir de son enfant.
     match /devoirs/{teacherUid}/{filename} {
       allow read:  if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == teacherUid;
+      allow write: if request.auth != null && request.auth.uid == teacherUid && isAllowedDoc();
     }
 
     // Imports de notes (Excel/CSV) : strictement privé au prof qui upload.
     match /notes-imports/{teacherUid}/{filename} {
       allow read:  if request.auth != null && request.auth.uid == teacherUid;
-      allow write: if request.auth != null && request.auth.uid == teacherUid;
+      allow write: if request.auth != null && request.auth.uid == teacherUid && isAllowedDoc();
     }
 
     // Ressources pédagogiques : même modèle que les devoirs — le prof
     // propriétaire écrit dans son sous-dossier, tout connecté peut lire.
     match /ressources/{teacherUid}/{filename} {
       allow read:  if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == teacherUid;
+      allow write: if request.auth != null && request.auth.uid == teacherUid && isAllowedDoc();
     }
 
     // Affiches d'annonces (admin uniquement). Le rôle est vérifié via

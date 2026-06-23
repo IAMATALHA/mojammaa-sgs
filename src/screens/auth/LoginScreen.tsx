@@ -87,6 +87,8 @@ export default function LoginScreen() {
         <Pressable
           onPress={() => setLangOpen(true)}
           hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.changeLanguage')}
           style={[styles.langGlobe, { top: insets.top + 12 }]}
         >
           <Globe size={20} color={theme.textSoft} strokeWidth={1.5} />
@@ -106,6 +108,8 @@ export default function LoginScreen() {
               source={require('../../../assets/logo.png')}
               style={styles.arabicLogo}
               resizeMode="contain"
+              accessible={false}
+              importantForAccessibility="no"
             />
           </Animated.View>
 
@@ -138,6 +142,7 @@ export default function LoginScreen() {
               <TextInput
                 value={email}
                 onChangeText={setEmail}
+                accessibilityLabel={t('login.email')}
                 placeholder={t('login.email')}
                 placeholderTextColor="rgba(29, 53, 87, 0.38)"
                 autoCapitalize="none"
@@ -155,6 +160,7 @@ export default function LoginScreen() {
               <TextInput
                 value={password}
                 onChangeText={setPassword}
+                accessibilityLabel={t('login.password')}
                 placeholder={t('login.password')}
                 placeholderTextColor="rgba(29, 53, 87, 0.38)"
                 secureTextEntry
@@ -169,6 +175,9 @@ export default function LoginScreen() {
             <Pressable
               onPress={submit}
               disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel={t('login.submit')}
+              accessibilityState={{ disabled: loading, busy: loading }}
               style={({ pressed }) => [
                 styles.button,
                 {

@@ -125,6 +125,9 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
           <ScrollView style={{ maxHeight: 190 }} showsVerticalScrollIndicator={false}>
             <Pressable
               onPress={() => setRecipient({ kind: 'school' })}
+              accessibilityRole="button"
+              accessibilityState={{ selected: recipient?.kind === 'school' }}
+              accessibilityLabel={t('parentCompose.school')}
               style={[styles.recipientRow, {
                 borderColor: recipient?.kind === 'school' ? theme.primary : theme.border,
                 backgroundColor: recipient?.kind === 'school' ? theme.primarySurface : theme.surface,
@@ -142,6 +145,9 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
               return (
                 <Pressable key={te.uid}
                   onPress={() => setRecipient({ kind: 'teacher', teacher: te })}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={`${te.prenom} ${te.nom}`.trim()}
                   style={[styles.recipientRow, {
                     borderColor: active ? theme.primary : theme.border,
                     backgroundColor: active ? theme.primarySurface : theme.surface,
@@ -164,10 +170,12 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
         {/* ── Objet + message ── */}
         <TextInput
           value={subject} onChangeText={setSubject} maxLength={120}
+          accessibilityLabel={t('compose.subject')}
           placeholder={t('compose.subject')} placeholderTextColor={theme.textMuted}
           style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(subject)]} />
         <TextInput
           value={body} onChangeText={setBody} multiline maxLength={1000}
+          accessibilityLabel={t('teacher.writeMessage')}
           placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
           style={[styles.input, styles.bodyInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(body)]} />
 

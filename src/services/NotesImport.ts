@@ -8,7 +8,9 @@
  * associées aux contrôles, puis on applique le plafond matière/niveau fourni
  * par l'écran d'import.
  */
-import * as XLSX from 'xlsx'
+// xlsx (~400 Ko) chargé à la demande dans parseNotesFile — pas au démarrage de
+// l'écran Notes (cf. audit perf 23/06/2026).
+import type * as XLSXType from 'xlsx'
 import {
   averageControlNotes,
   makeControlNotes,
@@ -252,6 +254,7 @@ export async function parseNotesFile(uri: string, mime: string, options: ParseNo
   const buf  = await res.arrayBuffer()
   const data = new Uint8Array(buf)
 
+  const XLSX: typeof XLSXType = await import('xlsx')
   const wb    = XLSX.read(data, { type: 'array' })
   const sheet = wb.Sheets[wb.SheetNames[0]]
   if (!sheet) return []

@@ -19,6 +19,14 @@ const fr = {
     logoutConfirm: 'Confirmer la déconnexion ?',
     logoutTitle: 'Déconnexion',
     language: 'Langue',
+    add: 'Ajouter',
+    search: 'Rechercher',
+    clearSearch: 'Effacer la recherche',
+    notifications: 'Notifications',
+    changeLanguage: 'Changer de langue',
+    attachment: 'Pièce jointe',
+    prevMonth: 'Mois précédent',
+    nextMonth: 'Mois suivant',
   },
 
   greeting: {
@@ -311,8 +319,6 @@ const fr = {
     platform: 'Plateforme',
     actionsSection: 'Actions',
     openWebAdmin: 'Ouvrir l\'app web admin',
-    impersonation: 'Mode impersonation',
-    impersonationMsg: 'Pas encore disponible',
     administrator: 'ADMINISTRATEUR',
     users: 'Utilisateurs',
     allUsers: 'Tous ({{count}})',
@@ -535,6 +541,12 @@ const fr = {
     invalidDrop: 'Choisissez une cellule valide du calendrier.',
     emptyUnified: 'Aucune échéance ni journée spéciale.',
     agendaUpcoming: 'À venir',
+    eventsSection: 'Événements',
+    homeworkSection: 'Devoirs',
+    noEvents: 'Aucun événement à venir.',
+    noHomework: 'Aucun devoir à venir.',
+    homeworkAttachments: 'Pièces jointes',
+    noAttachments: 'Aucun document joint.',
   },
 
   langPicker: {

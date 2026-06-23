@@ -6,7 +6,9 @@ The dashboard visual language now follows the Arabic poster inspiration through 
 
 ## Color
 
-The core palette is `#F5F1E8` cream, `#1D3557` navy, `#E63946` coral, `#F77F00` orange, and `#FCBF49` yellow. Navy is used for text and primary action structure, coral for urgent/emphasis moments, and orange/yellow for small status indicators only.
+**Source de vérité = `src/theme/designTokens.ts`** (et non ce document — réconcilié le 23/06/2026, la palette avait dérivé). Valeurs réelles : surface `#FAF8F5` (crème), texte/structure navy `#1D3557`, accent **orange `#FF8C42`** (l'« accent.primary » — c'est lui qui porte CTAs, icônes actives, dégradés), `success` vert `#15803D` (lisible en texte), `danger` `#E76F51`, gold `#FFD23F` réservé aux graphiques/réussites. Le navy porte le texte et la structure ; l'orange porte l'emphase/action ; le gold reste décoratif (jamais en texte sémantique).
+
+> Note historique : les anciennes notes mentionnaient un coral `#E63946` et un canvas `#F5F1E8` distincts — ils n'existent plus comme tokens séparés (coral est aliasé sur l'orange). La règle « orange = points seulement » est donc caduque : l'orange EST la couleur d'accent. Pour un vrai point de statut discret, utiliser `status.warning`/`gold` en fond/pastille, pas en texte.
 
 ## Type And Shape
 

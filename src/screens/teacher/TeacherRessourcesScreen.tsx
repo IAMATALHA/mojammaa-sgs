@@ -79,7 +79,7 @@ export default function TeacherRessourcesScreen() {
             {formatTimestamp(item.createdAt)}
           </Text>
           {item.teacherId === profile?.uid ? (
-            <PressableScale onPress={() => confirmDelete(item)} scaleDown={0.85} style={{ padding: 4, marginStart: 8 }}>
+            <PressableScale onPress={() => confirmDelete(item)} scaleDown={0.85} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('common.delete')} style={{ padding: 4, marginStart: 8 }}>
               <Trash2 size={16} color={theme.textMuted} strokeWidth={2} />
             </PressableScale>
           ) : null}
@@ -94,7 +94,7 @@ export default function TeacherRessourcesScreen() {
         ) : null}
         {item.attachments.map(a => (
           <TouchableOpacity key={a.url} activeOpacity={0.8}
-            onPress={() => Linking.openURL(a.url).catch(() => {})}
+            onPress={() => { if (/^https:\/\//i.test(a.url)) Linking.openURL(a.url).catch(() => {}) }}
             style={[styles.attachRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Paperclip size={14} color={theme.primary} strokeWidth={2.2} />
             <Text numberOfLines={1} style={{ flex: 1, color: theme.text, fontSize: 12.5, fontWeight: '600', marginStart: 8 }}>
@@ -143,6 +143,7 @@ export default function TeacherRessourcesScreen() {
 
       {/* FAB nouvelle ressource */}
       <PressableScale onPress={() => setShowCreate(true)} scaleDown={0.9}
+        accessibilityRole="button" accessibilityLabel={t('resources.newResource')}
         style={[styles.fab, { backgroundColor: theme.primary }]}>
         <Plus size={26} color="#fff" strokeWidth={2.4} />
       </PressableScale>
@@ -257,12 +258,14 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
         <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.titleLabel')}</Text>
         <TextInput
           value={titre} onChangeText={setTitre} maxLength={100}
+          accessibilityLabel={t('teacher.titleLabel')}
           placeholder={t('resources.titlePlaceholder')} placeholderTextColor={theme.textMuted}
           style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(titre)]} />
 
         <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.descriptionLabel')}</Text>
         <TextInput
           value={description} onChangeText={setDescription} multiline maxLength={500}
+          accessibilityLabel={t('teacher.descriptionLabel')}
           placeholder={t('teacher.devoirDescPlaceholder')} placeholderTextColor={theme.textMuted}
           style={[styles.input, styles.textarea, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(description)]} />
 
@@ -290,7 +293,7 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
         {attachments.map((a, i) => (
           <View key={a.url + i} style={[styles.attachItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             {a.mime.startsWith('image/') ? (
-              <Image source={{ uri: a.url }} style={styles.attachThumb} />
+              <Image source={{ uri: a.url }} accessibilityLabel={a.name} style={styles.attachThumb} />
             ) : (
               <View style={[styles.attachThumb, { alignItems: 'center', justifyContent: 'center', backgroundColor: theme.primarySurface }]}>
                 <Ionicons name="document" size={20} color={theme.primary} />
@@ -299,7 +302,7 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
             <Text numberOfLines={1} style={{ flex: 1, color: theme.text, fontSize: 12.5, fontWeight: '600', marginStart: 10 }}>
               {a.name}
             </Text>
-            <TouchableOpacity onPress={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}>
+            <TouchableOpacity onPress={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('common.delete')}>
               <Ionicons name="close-circle" size={20} color={theme.danger} />
             </TouchableOpacity>
           </View>

@@ -184,9 +184,10 @@ export default function ParentMessagesScreen() {
       <View style={[styles.searchWrap, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Search size={16} color={theme.textSoft} strokeWidth={2} />
         <TextInput value={query} onChangeText={setQuery}
+          accessibilityLabel={t('parent.searchMessages')}
           placeholder={t('parent.searchMessages')} placeholderTextColor={theme.textMuted}
           style={{ flex: 1, color: theme.text, fontSize: 13, marginStart: 8, paddingVertical: 0 }} />
-        {query ? <Pressable onPress={() => setQuery('')} hitSlop={8}><X size={16} color={theme.textSoft} strokeWidth={2} /></Pressable> : null}
+        {query ? <Pressable onPress={() => setQuery('')} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('common.clearSearch')}><X size={16} color={theme.textSoft} strokeWidth={2} /></Pressable> : null}
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={styles.filterRow}>
@@ -194,6 +195,9 @@ export default function ParentMessagesScreen() {
           const active = filter === f.id
           return (
             <Pressable key={f.id} onPress={() => setFilter(f.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={f.label}
               style={[styles.filterChip, { borderColor: active ? theme.primary : theme.border, backgroundColor: active ? theme.primary : 'transparent' }]}>
               <Text style={{ color: active ? '#fff' : theme.text, fontWeight: '600', fontSize: 12 }}>{f.label}</Text>
             </Pressable>
@@ -215,7 +219,7 @@ export default function ParentMessagesScreen() {
       )}
 
       {/* ── Compose : contacter un prof / l'école ── */}
-      <TouchableOpacity onPress={() => setShowCompose(true)} style={[styles.fab, { backgroundColor: theme.accent }]} activeOpacity={0.85}>
+      <TouchableOpacity onPress={() => setShowCompose(true)} accessibilityRole="button" accessibilityLabel={t('teacher.newMessage')} style={[styles.fab, { backgroundColor: theme.accent }]} activeOpacity={0.85}>
         <PenSquare size={22} color="#fff" strokeWidth={2} />
       </TouchableOpacity>
       <ParentComposeSheet visible={showCompose} onClose={() => setShowCompose(false)} profile={profile} />
@@ -233,7 +237,7 @@ export default function ParentMessagesScreen() {
                 </Text>
                 <Text style={{ color: theme.textSoft, fontSize: 11 }}>{formatTimestamp(detail.createdAt)}</Text>
               </View>
-              <Pressable onPress={() => setDetail(null)} hitSlop={8}><X size={20} color={theme.text} strokeWidth={2} /></Pressable>
+              <Pressable onPress={() => setDetail(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')}><X size={20} color={theme.text} strokeWidth={2} /></Pressable>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 300 }}>
               {detail.priority === 'urgent' && (
@@ -245,6 +249,7 @@ export default function ParentMessagesScreen() {
               <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
               {(detail.attachments || []).filter(a => a.mime?.startsWith('image/')).map(a => (
                 <Image key={a.url} source={{ uri: a.url }}
+                  accessibilityLabel={t('common.attachment')}
                   style={{ width: '100%', height: 280, borderRadius: 14, marginTop: 12, backgroundColor: theme.surface }}
                   resizeMode="contain" />
               ))}
@@ -254,10 +259,14 @@ export default function ParentMessagesScreen() {
             {detail.fromId && detail.type !== 'announcement' && (
               <View style={[styles.replyBar, { borderTopColor: theme.border }]}>
                 <TextInput value={replyText} onChangeText={setReplyText}
+                  accessibilityLabel={t('teacher.writeMessage')}
                   placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
                   style={[styles.replyInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(replyText)]}
                   multiline maxLength={500} />
                 <TouchableOpacity onPress={handleReply} disabled={!replyText.trim() || replying}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('compose.send')}
+                  accessibilityState={{ disabled: !replyText.trim() || replying, busy: replying }}
                   style={[styles.replyBtn, { backgroundColor: replyText.trim() ? theme.primary : theme.surfaceAlt }]}>
                   {replying ? <ActivityIndicator color="#fff" size="small" /> :
                     <Send size={18} color={replyText.trim() ? '#fff' : theme.textMuted} strokeWidth={2} />}

@@ -61,7 +61,9 @@ export default function ParentRessourcesScreen() {
     if (item.id && profile?.uid && !(item.viewedBy || []).includes(profile.uid)) {
       markRessourceViewed(item.id, profile.uid).catch(() => {})
     }
-    Linking.openURL(url).catch(() => {})
+    // Sécurité : n'ouvrir que des URL https (les pièces jointes sont écrites par
+    // des profs/admins, mais on refuse tout schéma autre — cf. audit 23/06/2026).
+    if (/^https:\/\//i.test(url)) Linking.openURL(url).catch(() => {})
   }
 
   return (
@@ -73,6 +75,8 @@ export default function ParentRessourcesScreen() {
         <Pressable
           onPress={() => nav.goBack()}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
           style={[styles.backBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
         >
           <ChevronLeft size={20} color={theme.primary} strokeWidth={2} />
@@ -196,6 +200,9 @@ function Chip({
     <Pressable
       onPress={onPress}
       android_ripple={{ color: theme.border }}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
       style={({ pressed }) => [
         styles.chip,
         {

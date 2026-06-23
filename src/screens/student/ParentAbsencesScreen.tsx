@@ -221,6 +221,9 @@ function Chip({
     <Pressable
       onPress={onPress}
       android_ripple={{ color: theme.border }}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
       style={({ pressed }) => [
         styles.chip,
         {

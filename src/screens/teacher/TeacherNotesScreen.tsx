@@ -288,6 +288,9 @@ export default function TeacherNotesScreen() {
 
   const Chip = ({ value, active, onPress }: { value: string; active: boolean; onPress: () => void }) => (
     <TouchableOpacity onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={value}
       style={[styles.chip, { borderColor: active ? theme.primary : theme.border, backgroundColor: active ? theme.primarySurface : 'transparent' }]}>
       <Text style={{ color: active ? theme.primary : theme.textSoft, fontWeight: active ? '700' : '500', fontSize: 12 }}>{value}</Text>
     </TouchableOpacity>
@@ -520,6 +523,7 @@ function EditNoteModal({
           <TextInput
             value={value}
             onChangeText={setValue}
+            accessibilityLabel={t('teacher.noteLabel')}
             placeholder={t('teacher.notePlaceholder')}
             placeholderTextColor={theme.textSoft}
             style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white, fontSize: 28, textAlign: 'center', fontWeight: '700' }]}

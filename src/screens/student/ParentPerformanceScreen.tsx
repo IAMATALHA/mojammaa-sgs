@@ -76,6 +76,8 @@ export default function ParentPerformanceScreen() {
         <Pressable
           onPress={() => nav.goBack()}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
           style={[styles.backBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
         >
           <ChevronLeft size={20} color={theme.primary} strokeWidth={2} />
@@ -112,6 +114,9 @@ export default function ParentPerformanceScreen() {
             <Pressable
               key={c.id}
               onPress={() => setSelectedChildId(c.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: selectedChildId === c.id }}
+              accessibilityLabel={c.firstName}
               style={[styles.chip, {
                 backgroundColor: selectedChildId === c.id ? c.avatarColor : theme.surface,
                 borderColor:     selectedChildId === c.id ? c.avatarColor : theme.border,

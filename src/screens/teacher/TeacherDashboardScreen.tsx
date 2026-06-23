@@ -112,7 +112,7 @@ export default function TeacherDashboardScreen() {
         <View style={[styles.blob, styles.blobA, { backgroundColor: theme.watercolorA }]} />
         <View style={[styles.blob, styles.blobB, { backgroundColor: theme.roseSurface }]} />
         <View style={[styles.blob, styles.blobC, { backgroundColor: theme.violetSurface }]} />
-        <Image source={require('../../../assets/logo.png')} resizeMode="contain" style={{ width: 240, height: 240, opacity: 0.08 }} />
+        <Image source={require('../../../assets/logo.png')} resizeMode="contain" accessible={false} importantForAccessibility="no" style={{ width: 240, height: 240, opacity: 0.08 }} />
       </View>
 
       <ScrollView

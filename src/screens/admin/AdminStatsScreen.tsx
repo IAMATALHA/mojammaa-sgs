@@ -733,6 +733,9 @@ function ViewTabs({ value, onChange, theme, t }: {
           <Pressable
             key={item.id}
             onPress={() => onChange(item.id)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={item.label}
             style={[styles.tab, active && { backgroundColor: theme.card, borderColor: theme.border }]}
           >
             <Icon color={active ? theme.primary : theme.textSoft} size={18} />

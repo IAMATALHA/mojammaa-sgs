@@ -59,6 +59,8 @@ export default function ParentComportementScreen() {
         <Pressable
           onPress={() => nav.goBack()}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
           style={[styles.backBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
         >
           <ChevronLeft size={20} color={theme.primary} strokeWidth={2} />
@@ -156,6 +158,9 @@ function Chip({
     <Pressable
       onPress={onPress}
       android_ripple={{ color: theme.border }}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
       style={({ pressed }) => [
         styles.chip,
         {

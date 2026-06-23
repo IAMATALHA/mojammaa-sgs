@@ -9,6 +9,7 @@ import {
 import { MotiView } from 'moti'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Bell } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface DashboardHeaderProps {
@@ -25,6 +26,7 @@ export default function DashboardHeader({
   notifications = 0, onPressBell, onPressAccount,
 }: DashboardHeaderProps) {
   const theme = useTheme()
+  const { t } = useTranslation()
 
   return (
     <View style={styles.wrapper}>
@@ -53,6 +55,8 @@ export default function DashboardHeader({
                 source={require('../../../assets/icon.png')}
                 style={styles.brandLogo}
                 resizeMode="contain"
+                accessible={false}
+                importantForAccessibility="no"
               />
             </View>
             <View style={{ flex: 1, marginStart: 12 }}>
@@ -81,7 +85,7 @@ export default function DashboardHeader({
             </View>
           </View>
 
-          <Pressable onPress={onPressBell} hitSlop={8}>
+          <Pressable onPress={onPressBell} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.notifications')}>
             {({ pressed }) => (
               <MotiView
                 animate={{ scale: pressed ? 0.97 : 1, opacity: pressed ? 0.9 : 1 }}

@@ -90,7 +90,7 @@ export default function TeacherComportementScreen() {
             </Text>
           </View>
           {mine ? (
-            <PressableScale onPress={() => confirmDelete(item)} scaleDown={0.85} style={styles.deleteBtn}>
+            <PressableScale onPress={() => confirmDelete(item)} scaleDown={0.85} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('common.delete')} style={styles.deleteBtn}>
               <Trash2 size={17} color={theme.textMuted} strokeWidth={2} />
             </PressableScale>
           ) : null}

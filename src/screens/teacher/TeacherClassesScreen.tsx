@@ -69,16 +69,20 @@ export default function TeacherClassesScreen() {
       })
 
       const classeNames = [...subjectsByClasse.keys()]
-      const rows: ClasseRow[] = []
 
-      for (const c of classeNames) {
-        const elevesSnap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', c)))
-        rows.push({
-          name:         c,
-          studentCount: elevesSnap.size,
-          subjects:     [...subjectsByClasse.get(c)!],
-        })
-      }
+      // Requêtes par classe lancées en PARALLÈLE (23/06/2026) — avant, une
+      // boucle `for … await` séquentielle faisait un aller-retour réseau par
+      // classe et bloquait le rendu initial.
+      const rows: ClasseRow[] = await Promise.all(
+        classeNames.map(async c => {
+          const elevesSnap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', c)))
+          return {
+            name:         c,
+            studentCount: elevesSnap.size,
+            subjects:     [...subjectsByClasse.get(c)!],
+          }
+        }),
+      )
       rows.sort((a, b) => a.name.localeCompare(b.name, 'fr'))
       setClasses(rows)
     } catch (e: any) {

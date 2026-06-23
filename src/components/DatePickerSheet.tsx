@@ -26,7 +26,7 @@ const sameDay = (a: Date, b: Date) =>
 
 export default function DatePickerSheet({ visible, value, onSelect, onClose }: Props) {
   const theme = useTheme()
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const locale = localeFor(i18n.language)
   const today = new Date()
 
@@ -72,16 +72,16 @@ export default function DatePickerSheet({ visible, value, onSelect, onClose }: P
         <Pressable style={[styles.sheet, { backgroundColor: theme.card }, theme.shadows.lg]}>
           {/* Header: month nav + close */}
           <View style={styles.header}>
-            <Pressable onPress={() => shiftMonth(-1)} hitSlop={8} style={[styles.navBtn, { backgroundColor: theme.surface }]}>
+            <Pressable onPress={() => shiftMonth(-1)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.prevMonth')} style={[styles.navBtn, { backgroundColor: theme.surface }]}>
               <ChevronLeft size={18} color={theme.text} strokeWidth={2} />
             </Pressable>
             <Text style={{ flex: 1, textAlign: 'center', color: theme.text, fontFamily: theme.fonts.bold, fontSize: 15, textTransform: 'capitalize' }}>
               {monthLabel}
             </Text>
-            <Pressable onPress={() => shiftMonth(1)} hitSlop={8} style={[styles.navBtn, { backgroundColor: theme.surface }]}>
+            <Pressable onPress={() => shiftMonth(1)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.nextMonth')} style={[styles.navBtn, { backgroundColor: theme.surface }]}>
               <ChevronRight size={18} color={theme.text} strokeWidth={2} />
             </Pressable>
-            <Pressable onPress={onClose} hitSlop={8} style={[styles.navBtn, { backgroundColor: theme.surface, marginStart: 6 }]}>
+            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')} style={[styles.navBtn, { backgroundColor: theme.surface, marginStart: 6 }]}>
               <X size={18} color={theme.text} strokeWidth={2} />
             </Pressable>
           </View>
@@ -105,6 +105,9 @@ export default function DatePickerSheet({ visible, value, onSelect, onClose }: P
                 <Pressable
                   key={i}
                   onPress={() => { onSelect(d); onClose() }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSel }}
+                  accessibilityLabel={d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })}
                   style={styles.dayCell}
                 >
                   <View style={[

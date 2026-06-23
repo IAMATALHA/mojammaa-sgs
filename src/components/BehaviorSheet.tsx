@@ -88,6 +88,9 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
         <View style={[styles.kindRow, { marginTop: 16 }]}>
           <Pressable
             onPress={() => pickKind('merite')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: kind === 'merite' }}
+            accessibilityLabel={t('behavior.merite')}
             style={[styles.kindBtn, {
               borderColor: kind === 'merite' ? theme.success : theme.border,
               backgroundColor: kind === 'merite' ? theme.successSurface : theme.surface,
@@ -100,6 +103,9 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
           </Pressable>
           <Pressable
             onPress={() => pickKind('avertissement')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: kind === 'avertissement' }}
+            accessibilityLabel={t('behavior.avertissement')}
             style={[styles.kindBtn, {
               borderColor: kind === 'avertissement' ? theme.danger : theme.border,
               backgroundColor: kind === 'avertissement' ? theme.dangerSurface : theme.surface,
@@ -118,6 +124,9 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
             const active = reason === r
             return (
               <Pressable key={r} onPress={() => setReason(r)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={t(`behavior.reasons.${r}`)}
                 style={[styles.chip, {
                   borderColor: active ? kindColor : theme.border,
                   backgroundColor: active ? kindColor : theme.surface,
@@ -133,6 +142,7 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
         <Text style={[styles.label, { color: theme.textSoft }]}>{t('behavior.comment')}</Text>
         <TextInput
           value={comment} onChangeText={setComment} multiline maxLength={300}
+          accessibilityLabel={t('behavior.comment')}
           placeholder={t('behavior.commentPlaceholder')} placeholderTextColor={theme.textMuted}
           style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(comment)]} />
 

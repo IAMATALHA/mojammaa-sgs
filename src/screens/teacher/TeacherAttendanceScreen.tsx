@@ -304,6 +304,9 @@ export default function TeacherAttendanceScreen() {
       <PressableScale
         onPress={() => setSeance(value)}
         scaleDown={0.92}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: active }}
+        accessibilityLabel={value}
         style={[
           styles.chip,
           { borderColor: active ? theme.primary : theme.border, backgroundColor: active ? theme.primarySurface : 'transparent' },
@@ -327,6 +330,9 @@ export default function TeacherAttendanceScreen() {
           onPress={() => toggleAbsent(item.id)}
           scaleDown={0.97}
           haptic={false}  // on a déjà un impact dans toggleAbsent
+          accessibilityRole="button"
+          accessibilityState={{ selected: isAbsent }}
+          accessibilityLabel={`${item.prenom} ${item.nom}`}
           style={[
             styles.card,
             {
@@ -354,6 +360,9 @@ export default function TeacherAttendanceScreen() {
           <PressableScale
             onPress={() => setBehaviorFor(item)}
             scaleDown={0.88}
+            hitSlop={14}
+            accessibilityRole="button"
+            accessibilityLabel={t('behavior.sheetTitle')}
             style={[styles.behaviorBtn, { borderColor: theme.border, backgroundColor: theme.white }]}
           >
             <Ionicons name="happy-outline" size={20} color={theme.primary} />

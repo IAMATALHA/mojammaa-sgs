@@ -51,9 +51,15 @@ export async function deleteJourScolaire(date: string): Promise<void> {
 }
 
 export async function getJoursScolaires(fromDate: string, toDate: string): Promise<JourScolaire[]> {
-  const snap = await getDocs(collection(db, COL))
+  // Borné côté serveur (23/06/2026) : avant, on téléchargeait TOUTE la
+  // collection puis on filtrait côté client. Filtre par plage sur un seul
+  // champ (`date`) → pas d'index composite requis.
+  const snap = await getDocs(query(
+    collection(db, COL),
+    where('date', '>=', fromDate),
+    where('date', '<=', toDate),
+  ))
   return snap.docs
     .map(d => d.data() as JourScolaire)
-    .filter(j => j.date >= fromDate && j.date <= toDate)
     .sort((a, b) => a.date.localeCompare(b.date))
 }

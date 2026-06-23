@@ -91,6 +91,9 @@ export default function DeclareAbsenceSheet({ visible, onClose, profile, childre
             const active = childId === c.id
             return (
               <Pressable key={c.id} onPress={() => setChildId(c.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={c.firstName}
                 style={[styles.chip, {
                   borderColor: active ? (c.avatarColor || theme.primary) : theme.border,
                   backgroundColor: active ? (c.avatarColor || theme.primary) : theme.surface,
@@ -117,6 +120,7 @@ export default function DeclareAbsenceSheet({ visible, onClose, profile, childre
         <Text style={[styles.label, { color: theme.textSoft }]}>{t('absenceRequest.reason')}</Text>
         <TextInput
           value={reason} onChangeText={setReason} multiline maxLength={300}
+          accessibilityLabel={t('absenceRequest.reason')}
           placeholder={t('absenceRequest.reasonPlaceholder')} placeholderTextColor={theme.textMuted}
           style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(reason)]} />
 

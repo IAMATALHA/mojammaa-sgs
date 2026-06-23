@@ -19,6 +19,14 @@ const en = {
     logoutConfirm: 'Are you sure you want to log out?',
     logoutTitle: 'Log out',
     language: 'Language',
+    add: 'Add',
+    search: 'Search',
+    clearSearch: 'Clear search',
+    notifications: 'Notifications',
+    changeLanguage: 'Change language',
+    attachment: 'Attachment',
+    prevMonth: 'Previous month',
+    nextMonth: 'Next month',
   },
 
   greeting: {
@@ -311,8 +319,6 @@ const en = {
     platform: 'Platform',
     actionsSection: 'Actions',
     openWebAdmin: 'Open web admin',
-    impersonation: 'Impersonation mode',
-    impersonationMsg: 'Not yet available',
     administrator: 'ADMINISTRATOR',
     users: 'Users',
     allUsers: 'All ({{count}})',
@@ -535,6 +541,12 @@ const en = {
     invalidDrop: 'Choose a valid calendar cell.',
     emptyUnified: 'No deadlines or special days.',
     agendaUpcoming: 'Coming up',
+    eventsSection: 'Events',
+    homeworkSection: 'Homework',
+    noEvents: 'No upcoming events.',
+    noHomework: 'No upcoming homework.',
+    homeworkAttachments: 'Attachments',
+    noAttachments: 'No attached document.',
   },
 
   langPicker: {

@@ -105,7 +105,7 @@ export default function ParentDevoirsScreen() {
                     {detail.type.toUpperCase()}
                   </Text>
                 </View>
-                <Pressable onPress={() => setDetail(null)} hitSlop={8} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
+                <Pressable onPress={() => setDetail(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
                   <X size={18} color={theme.text} strokeWidth={2} />
                 </Pressable>
               </View>
@@ -154,6 +154,9 @@ export default function ParentDevoirsScreen() {
 function FilterChip({ label, active, onPress, color, theme }: { label: string; active: boolean; onPress: () => void; color?: string; theme: Theme }) {
   return (
     <Pressable onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
       style={[styles.chip, { backgroundColor: active ? (color ?? theme.primary) : theme.surface, borderColor: active ? (color ?? theme.primary) : theme.border }]}>
       <Text style={{ color: active ? '#fff' : theme.text, fontFamily: theme.fonts.semibold, fontSize: 12.5 }}>{label}</Text>
     </Pressable>

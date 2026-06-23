@@ -158,6 +158,9 @@ export default function TeacherMessagesScreen() {
     <ScreenLayout title={t('tabs.messages')} showBack={false}>
       <View style={[styles.tabRow, { backgroundColor: theme.surfaceAlt }]}>
         <Pressable onPress={() => setTab('inbox')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: tab === 'inbox' }}
+          accessibilityLabel={t('parent.inbox')}
           style={[styles.tab, tab === 'inbox' && [{ backgroundColor: theme.card, borderColor: theme.border }, styles.tabActive, theme.shadows.xs]]}>
           <View style={styles.tabContent}>
             <Inbox size={14} color={tab === 'inbox' ? theme.primary : theme.textSoft} strokeWidth={2} />
@@ -170,6 +173,9 @@ export default function TeacherMessagesScreen() {
           </View>
         </Pressable>
         <Pressable onPress={() => setTab('sent')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: tab === 'sent' }}
+          accessibilityLabel={t('admin.sent')}
           style={[styles.tab, tab === 'sent' && [{ backgroundColor: theme.card, borderColor: theme.border }, styles.tabActive, theme.shadows.xs]]}>
           <View style={styles.tabContent}>
             <Send size={14} color={tab === 'sent' ? theme.primary : theme.textSoft} strokeWidth={2} />
@@ -191,7 +197,7 @@ export default function TeacherMessagesScreen() {
         <FlatList data={displayed} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 80 }} />
       )}
 
-      <TouchableOpacity onPress={() => setShowCompose(true)} style={[styles.fab, { backgroundColor: theme.accent }]} activeOpacity={0.85}>
+      <TouchableOpacity onPress={() => setShowCompose(true)} accessibilityRole="button" accessibilityLabel={t('teacher.newMessage')} style={[styles.fab, { backgroundColor: theme.accent }]} activeOpacity={0.85}>
         <PenSquare size={22} color="#fff" strokeWidth={2} />
       </TouchableOpacity>
 
@@ -207,7 +213,7 @@ export default function TeacherMessagesScreen() {
                   </Text>
                   <Text style={{ color: theme.textSoft, fontSize: 11 }}>{formatTimestamp(detail.createdAt)}</Text>
                 </View>
-                <Pressable onPress={() => setDetail(null)} hitSlop={8}><X size={20} color={theme.text} strokeWidth={2} /></Pressable>
+                <Pressable onPress={() => setDetail(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')}><X size={20} color={theme.text} strokeWidth={2} /></Pressable>
               </View>
               <ScrollView showsVerticalScrollIndicator={false}>
                 {detail.priority === 'urgent' && (
@@ -219,6 +225,7 @@ export default function TeacherMessagesScreen() {
                 <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
                 {(detail.attachments || []).filter(a => a.mime?.startsWith('image/')).map(a => (
                   <Image key={a.url} source={{ uri: a.url }}
+                    accessibilityLabel={t('common.attachment')}
                     style={{ width: '100%', height: 280, borderRadius: 14, marginTop: 12, backgroundColor: theme.surface }}
                     resizeMode="contain" />
                 ))}
@@ -419,7 +426,7 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
           {/* Header */}
           <View style={cs.header}>
             <Text style={{ color: theme.text, fontWeight: '800', fontSize: 18, flex: 1 }}>{t('teacher.newMessage')}</Text>
-            <Pressable onPress={onClose} hitSlop={8}><X size={22} color={theme.text} strokeWidth={2} /></Pressable>
+            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')}><X size={22} color={theme.text} strokeWidth={2} /></Pressable>
           </View>
 
           <ScrollView contentContainerStyle={cs.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -430,6 +437,9 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
                 const sel = selectedClasses.includes(c)
                 return (
                   <TouchableOpacity key={c} onPress={() => toggleClass(c)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: sel }}
+                    accessibilityLabel={c}
                     style={[cs.chip, { borderColor: sel ? theme.primary : theme.border, backgroundColor: sel ? theme.primary : 'transparent' }]}>
                     <Users size={12} color={sel ? '#fff' : theme.textSoft} strokeWidth={2} />
                     <Text style={{ color: sel ? '#fff' : theme.text, fontWeight: '700', fontSize: 12, marginStart: 4 }}>{c}</Text>
@@ -464,6 +474,9 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
               <>
                 {/* Whole-class shortcut at the top */}
                 <TouchableOpacity onPress={() => selectAll(!allSelected)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: allSelected }}
+                  accessibilityLabel={lang === 'ar' ? 'كل القسم' : lang === 'en' ? 'Whole class' : 'Toute la classe'}
                   style={[cs.wholeClassBtn, { borderColor: allSelected ? theme.primary : theme.border, backgroundColor: allSelected ? theme.primary : theme.surface }]}>
                   <Users size={15} color={allSelected ? '#fff' : theme.textSoft} strokeWidth={2} />
                   <Text style={{ flex: 1, marginStart: 8, color: allSelected ? '#fff' : theme.text, fontWeight: '800', fontSize: 13 }}>
@@ -483,6 +496,9 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
                       const hasParent = !!(e as any).parentUid
                       return (
                         <TouchableOpacity key={id} onPress={() => toggleEleve(id)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: on }}
+                          accessibilityLabel={eleveName(e)}
                           style={[cs.eleveRow, { borderColor: on ? theme.primary : theme.border, backgroundColor: on ? theme.primarySurface : theme.white }]}>
                           <View style={[cs.checkbox, { borderColor: on ? theme.primary : theme.borderStrong, backgroundColor: on ? theme.primary : 'transparent' }]}>
                             {on && <Check size={12} color="#fff" strokeWidth={3} />}
@@ -550,6 +566,9 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
                           const active = vars[v.key] === opt
                           return (
                             <TouchableOpacity key={opt} onPress={() => updateVar(v.key, opt)}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: active }}
+                              accessibilityLabel={opt}
                               style={[cs.chip, { borderColor: active ? theme.primary : theme.border, backgroundColor: active ? theme.primary : 'transparent' }]}>
                               <Text style={{ color: active ? '#fff' : theme.text, fontWeight: '600', fontSize: 11 }}>{opt}</Text>
                             </TouchableOpacity>
@@ -569,6 +588,7 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
                     ) : (
                       <TextInput
                         value={vars[v.key] || ''} onChangeText={val => updateVar(v.key, val)}
+                        accessibilityLabel={varLabel(v)}
                         placeholder={v.placeholder} placeholderTextColor={theme.textMuted}
                         keyboardType={v.type === 'number' ? 'numeric' : 'default'}
                         style={[cs.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
@@ -582,12 +602,14 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
             {/* Subject */}
             <Text style={[cs.label, { color: theme.textSoft, marginTop: 14 }]}>{t('compose.subject')}</Text>
             <TextInput value={subject} onChangeText={setSubject}
+              accessibilityLabel={t('compose.subject')}
               placeholder={t('compose.subjectPlaceholder')} placeholderTextColor={theme.textMuted} maxLength={120}
               style={[cs.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]} />
 
             {/* Body */}
             <Text style={[cs.label, { color: theme.textSoft, marginTop: 14 }]}>{t('compose.body')}</Text>
             <TextInput value={body} onChangeText={setBody}
+              accessibilityLabel={t('compose.body')}
               placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
               multiline textAlignVertical="top" maxLength={1500}
               style={[cs.input, cs.textarea, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]} />
@@ -603,6 +625,9 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
 
             {/* Urgent */}
             <Pressable onPress={() => setUrgent(u => !u)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: urgent }}
+              accessibilityLabel={t('teacher.markUrgent')}
               style={[cs.urgentRow, { backgroundColor: urgent ? theme.dangerSurface : theme.surface, borderColor: urgent ? theme.danger : theme.border }]}>
               <AlertCircle size={16} color={urgent ? theme.danger : theme.textSoft} strokeWidth={2} />
               <Text style={{ flex: 1, marginStart: 10, color: theme.text, fontWeight: '700', fontSize: 13 }}>{t('teacher.markUrgent')}</Text>
@@ -612,6 +637,9 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
 
           {/* Send */}
           <TouchableOpacity onPress={handleSend} disabled={!canSend || sending}
+            accessibilityRole="button"
+            accessibilityLabel={t('compose.send')}
+            accessibilityState={{ disabled: !canSend || sending, busy: sending }}
             style={[cs.sendBtn, { backgroundColor: canSend ? theme.primary : theme.surfaceAlt }]}>
             {sending ? <ActivityIndicator color="#fff" /> : (
               <>

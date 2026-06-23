@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl,
-  Pressable, Alert,
+  Pressable, Alert, Linking,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { collection, onSnapshot, type Unsubscribe } from 'firebase/firestore'
 import {
-  ChevronLeft, ChevronRight, Plus, Trash2,
+  ChevronLeft, ChevronRight, Plus, Trash2, X, BookOpen, FileText, Image as ImageIcon, Clock, Users,
 } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
 import BottomSheet from '../../components/BottomSheet'
@@ -17,6 +17,7 @@ import {
   getJoursScolaires, setJourScolaire, deleteJourScolaire,
   type JourScolaire, type JourType,
 } from '../../services/calendarService'
+import type { Attachment } from '../../services/StorageService'
 import * as Haptics from 'expo-haptics'
 
 const JOUR_TYPES: { value: JourType; labelKey: string; color: string }[] = [
@@ -33,8 +34,11 @@ interface CalendarTask {
   id: string
   title: string
   className: string
+  teacherNom: string
+  description: string
   dateLimite: string
   type: string
+  attachments: Attachment[]
 }
 
 interface CalendarCell {
@@ -91,6 +95,7 @@ export default function AdminCalendarScreen() {
   const [selectedType, setSelectedType] = useState<JourType>('evenement')
   const [saving, setSaving] = useState(false)
   const [markOpen, setMarkOpen] = useState(false)
+  const [hwDetail, setHwDetail] = useState<CalendarTask | null>(null)
 
   const cells = useMemo(() => buildMonthCells(monthDate), [monthDate])
   const visibleStart = cells[0]?.iso || localISO(new Date())
@@ -118,32 +123,27 @@ export default function AdminCalendarScreen() {
   const selectedTasks = tasksByDate.get(selectedDate) || []
   const hasContent = !!selectedJour || selectedTasks.length > 0
 
-  // Agenda « À venir » : jours spéciaux + échéances du mois affiché, fusionnés.
-  const upcoming = useMemo(() => {
+  // Agenda « À venir » — événements (jours spéciaux) et devoirs séparés.
+  const upcomingEvents = useMemo(() => {
     const today = localISO(new Date())
-    const items: { key: string; date: string; label: string; sub: string; color: string; isJour: boolean }[] = []
-    jours.forEach(j => {
-      if (j.date >= today) {
-        items.push({
-          key: `j-${j.date}`, date: j.date, label: j.label,
-          sub: t(`calendar.${j.type}`),
-          color: JOUR_TYPES.find(jt => jt.value === j.type)?.color || '#D95B00',
-          isJour: true,
-        })
-      }
-    })
-    tasks.forEach(task => {
-      if (task.dateLimite >= today) {
-        items.push({
-          key: `t-${task.id}`, date: task.dateLimite,
-          label: task.title || t('tabs.homework'), sub: task.className,
-          color: task.type === 'examen' ? theme.danger : theme.primary,
-          isJour: false,
-        })
-      }
-    })
-    return items.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 12)
-  }, [jours, tasks, t, theme])
+    return jours
+      .filter(j => j.date >= today)
+      .map(j => ({
+        key: `j-${j.date}`, date: j.date, label: j.label,
+        sub: t(`calendar.${j.type}`),
+        color: JOUR_TYPES.find(jt => jt.value === j.type)?.color || '#D95B00',
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 12)
+  }, [jours, t])
+
+  const upcomingHomework = useMemo(() => {
+    const today = localISO(new Date())
+    return tasks
+      .filter(task => task.dateLimite >= today)
+      .sort((a, b) => a.dateLimite.localeCompare(b.dateLimite))
+      .slice(0, 12)
+  }, [tasks])
 
   const loadJours = useCallback(async () => {
     setLoading(true)
@@ -163,8 +163,11 @@ export default function AdminCalendarScreen() {
           id: d.id,
           title: data.titre || '',
           className: data.classeId || '',
+          teacherNom: data.teacherNom || '',
+          description: data.description || '',
           dateLimite: data.dateLimite || '',
           type: data.type || 'devoir',
+          attachments: Array.isArray(data.attachments) ? data.attachments : [],
         }
       }).filter(t => t.dateLimite >= visibleStart && t.dateLimite <= visibleEnd))
     }, () => {})
@@ -220,13 +223,13 @@ export default function AdminCalendarScreen() {
       >
         {/* Month nav */}
         <View style={s.monthNav}>
-          <Pressable onPress={() => shiftMonth(-1)} hitSlop={12} style={[s.navBtn, { backgroundColor: theme.surface }]}>
+          <Pressable onPress={() => shiftMonth(-1)} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('common.prevMonth')} style={[s.navBtn, { backgroundColor: theme.surface }]}>
             <ChevronLeft size={20} color={theme.text} strokeWidth={2} />
           </Pressable>
           <Pressable onPress={() => { Haptics.selectionAsync(); setMonthDate(new Date()); setSelectedDate(localISO(new Date())) }}>
             <Text style={[s.monthTitle, { color: theme.text }]}>{formatMonthTitle(monthDate, lang)}</Text>
           </Pressable>
-          <Pressable onPress={() => shiftMonth(1)} hitSlop={12} style={[s.navBtn, { backgroundColor: theme.surface }]}>
+          <Pressable onPress={() => shiftMonth(1)} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('common.nextMonth')} style={[s.navBtn, { backgroundColor: theme.surface }]}>
             <ChevronRight size={20} color={theme.text} strokeWidth={2} />
           </Pressable>
         </View>
@@ -248,6 +251,9 @@ export default function AdminCalendarScreen() {
               const dots = dotColors(cell.iso)
               return (
                 <Pressable key={cell.iso} onPress={() => handleCellPress(cell)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={formatSelectedDate(cell.iso, lang)}
                   style={[s.cell, {
                     backgroundColor: selected ? theme.primary : 'transparent',
                     opacity: cell.inMonth ? 1 : 0.3,
@@ -281,7 +287,7 @@ export default function AdminCalendarScreen() {
                   <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>{selectedJour.label}</Text>
                   <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>{t(`calendar.${selectedJour.type}`)}</Text>
                 </View>
-                <Pressable onPress={() => handleDeleteSpecialDay(selectedJour.date)} hitSlop={8}>
+                <Pressable onPress={() => handleDeleteSpecialDay(selectedJour.date)} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('common.delete')}>
                   <Trash2 size={16} color={theme.danger} strokeWidth={2} />
                 </Pressable>
               </View>
@@ -299,12 +305,12 @@ export default function AdminCalendarScreen() {
           </View>
         )}
 
-        {/* Agenda « À venir » */}
-        <Text style={[s.sectionTitle, { color: theme.textMuted }]}>{t('calendar.agendaUpcoming')}</Text>
-        {upcoming.length === 0 ? (
-          <Text style={{ color: theme.textSoft, fontSize: 13, marginTop: 2 }}>{t('calendar.emptyUnified')}</Text>
+        {/* Événements à venir */}
+        <Text style={[s.sectionTitle, { color: theme.textMuted }]}>{t('calendar.eventsSection')}</Text>
+        {upcomingEvents.length === 0 ? (
+          <Text style={{ color: theme.textSoft, fontSize: 13, marginTop: 2 }}>{t('calendar.noEvents')}</Text>
         ) : (
-          upcoming.map(item => {
+          upcomingEvents.map(item => {
             const [, , dd] = item.date.split('-')
             return (
               <Pressable key={item.key} onPress={() => setSelectedDate(item.date)} style={s.agendaItem}>
@@ -319,11 +325,46 @@ export default function AdminCalendarScreen() {
                     <Text numberOfLines={1} style={{ color: theme.text, fontWeight: '700', fontSize: 13 }}>{item.label}</Text>
                     <Text numberOfLines={1} style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>{item.sub}</Text>
                   </View>
-                  {item.isJour && (
-                    <Pressable onPress={() => handleDeleteSpecialDay(item.date)} hitSlop={8}>
-                      <Trash2 size={15} color={theme.danger} strokeWidth={2} />
-                    </Pressable>
+                  <Pressable onPress={() => handleDeleteSpecialDay(item.date)} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('common.delete')}>
+                    <Trash2 size={15} color={theme.danger} strokeWidth={2} />
+                  </Pressable>
+                </View>
+              </Pressable>
+            )
+          })
+        )}
+
+        {/* Devoirs à venir — tap pour voir l'exercice / le document */}
+        <Text style={[s.sectionTitle, { color: theme.textMuted }]}>{t('calendar.homeworkSection')}</Text>
+        {upcomingHomework.length === 0 ? (
+          <Text style={{ color: theme.textSoft, fontSize: 13, marginTop: 2 }}>{t('calendar.noHomework')}</Text>
+        ) : (
+          upcomingHomework.map(task => {
+            const [, , dd] = task.dateLimite.split('-')
+            const color = task.type === 'examen' ? theme.danger : theme.primary
+            const nbAtt = task.attachments.length
+            return (
+              <Pressable key={task.id} onPress={() => { Haptics.selectionAsync(); setHwDetail(task) }} style={s.agendaItem}>
+                <View style={[s.agendaDate, { backgroundColor: theme.card, borderColor: color + '66' }]}>
+                  <Text style={{ color, fontWeight: '800', fontSize: 17, lineHeight: 20 }}>{Number(dd)}</Text>
+                  <Text style={{ color: theme.textMuted, fontSize: 9, fontWeight: '700', textTransform: 'uppercase' }}>
+                    {formatWeekdayShort(task.dateLimite, lang)}
+                  </Text>
+                </View>
+                <View style={[s.agendaBody, { backgroundColor: color + '15' }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={1} style={{ color: theme.text, fontWeight: '700', fontSize: 13 }}>{task.title || t('tabs.homework')}</Text>
+                    <Text numberOfLines={1} style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>
+                      {task.className}{task.teacherNom ? ` · ${task.teacherNom}` : ''}
+                    </Text>
+                  </View>
+                  {nbAtt > 0 && (
+                    <View style={s.attBadge}>
+                      <FileText size={12} color={color} strokeWidth={2} />
+                      <Text style={{ color, fontWeight: '800', fontSize: 11, marginStart: 3 }}>{nbAtt}</Text>
+                    </View>
                   )}
+                  <ChevronRight size={16} color={theme.textMuted} strokeWidth={2} />
                 </View>
               </Pressable>
             )
@@ -334,6 +375,7 @@ export default function AdminCalendarScreen() {
 
       {/* FAB : marquer un jour spécial */}
       <Pressable onPress={() => { Haptics.selectionAsync(); setMarkOpen(true) }}
+        accessibilityRole="button" accessibilityLabel={t('calendar.addDay')}
         style={[s.fab, { backgroundColor: theme.accent }, theme.shadows.lg]}>
         <Plus size={26} color="#fff" strokeWidth={2.5} />
       </Pressable>
@@ -349,6 +391,9 @@ export default function AdminCalendarScreen() {
             const active = selectedType === jt.value
             return (
               <Pressable key={jt.value} onPress={() => { Haptics.selectionAsync(); setSelectedType(jt.value) }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={t(jt.labelKey)}
                 style={[s.typeChip, { backgroundColor: active ? jt.color : theme.surfaceAlt }]}>
                 <View style={[s.typeDot, { backgroundColor: active ? '#fff' : jt.color }]} />
                 <Text style={{ color: active ? '#fff' : theme.text, fontWeight: '700', fontSize: 12 }}>{t(jt.labelKey)}</Text>
@@ -368,6 +413,71 @@ export default function AdminCalendarScreen() {
             </Text>
           )}
         </Pressable>
+      </BottomSheet>
+
+      {/* Détail d'un devoir : énoncé + pièces jointes (exercice / document) */}
+      <BottomSheet visible={!!hwDetail} onClose={() => setHwDetail(null)}>
+        {hwDetail && (
+          <>
+            <View style={s.hwHeader}>
+              <View style={[s.hwTypePill, { backgroundColor: theme.primarySurface }]}>
+                <BookOpen size={12} color={theme.primary} strokeWidth={2.4} />
+                <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 11, letterSpacing: 0.4, marginStart: 5 }}>
+                  {(hwDetail.type || t('tabs.homework')).toUpperCase()}
+                </Text>
+              </View>
+              <Pressable onPress={() => setHwDetail(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')} style={[s.hwClose, { backgroundColor: theme.surface }]}>
+                <X size={18} color={theme.text} strokeWidth={2} />
+              </Pressable>
+            </View>
+
+            <Text style={[s.sheetTitle, { color: theme.text, marginTop: 12 }]}>{hwDetail.title || t('tabs.homework')}</Text>
+
+            {hwDetail.description ? (
+              <Text style={{ color: theme.textSoft, fontSize: 13, lineHeight: 20, marginTop: 8 }}>{hwDetail.description}</Text>
+            ) : null}
+
+            <View style={[s.hwMeta, { backgroundColor: theme.surface }]}>
+              <Clock size={14} color={theme.textSoft} strokeWidth={2} />
+              <Text style={{ color: theme.text, fontSize: 13, marginStart: 8 }}>
+                {hwDetail.dateLimite.split('-').reverse().join('/')}
+              </Text>
+            </View>
+            <View style={[s.hwMeta, { backgroundColor: theme.surface }]}>
+              <Users size={14} color={theme.textSoft} strokeWidth={2} />
+              <Text style={{ color: theme.text, fontSize: 13, marginStart: 8 }}>
+                {hwDetail.className}{hwDetail.teacherNom ? ` · ${hwDetail.teacherNom}` : ''}
+              </Text>
+            </View>
+
+            <Text style={[s.sectionTitle, { color: theme.textMuted, marginTop: 18 }]}>{t('calendar.homeworkAttachments')}</Text>
+            {hwDetail.attachments.length === 0 ? (
+              <Text style={{ color: theme.textSoft, fontSize: 13, marginTop: 2 }}>{t('calendar.noAttachments')}</Text>
+            ) : (
+              hwDetail.attachments.map((a, i) => {
+                const isImg = a.mime?.startsWith('image/')
+                return (
+                  <Pressable key={a.url + i} onPress={() => { if (/^https:\/\//i.test(a.url)) Linking.openURL(a.url).catch(() => {}) }}
+                    style={[s.attRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <View style={[s.attIcon, { backgroundColor: theme.primarySurface }]}>
+                      {isImg
+                        ? <ImageIcon size={18} color={theme.primary} strokeWidth={2} />
+                        : <FileText size={18} color={theme.primary} strokeWidth={2} />}
+                    </View>
+                    <View style={{ flex: 1, marginStart: 10 }}>
+                      <Text numberOfLines={1} style={{ color: theme.text, fontWeight: '600', fontSize: 13 }}>{a.name}</Text>
+                      <Text numberOfLines={1} style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>
+                        {a.mime}{a.size ? ` · ${Math.round(a.size / 1024)} KB` : ''}
+                      </Text>
+                    </View>
+                    <ChevronRight size={16} color={theme.textMuted} strokeWidth={2} />
+                  </Pressable>
+                )
+              })
+            )}
+            <View style={{ height: 8 }} />
+          </>
+        )}
       </BottomSheet>
     </ScreenLayout>
   )
@@ -415,6 +525,15 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   sheetTitle: { fontSize: 17, fontWeight: '800' },
+
+  attBadge: { flexDirection: 'row', alignItems: 'center', marginEnd: 6 },
+
+  hwHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  hwTypePill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  hwClose: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  hwMeta: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, marginTop: 8 },
+  attRow: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, borderWidth: 1, marginTop: 8 },
+  attIcon: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
 
   loading: { paddingVertical: 40, alignItems: 'center' },
 })

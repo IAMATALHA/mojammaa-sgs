@@ -55,6 +55,9 @@ export default function LanguagePicker({ visible, onClose }: Props) {
                 <Pressable
                   key={code}
                   onPress={() => pick(code)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={native}
                   style={[
                     styles.row,
                     {

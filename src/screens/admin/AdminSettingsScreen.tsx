@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Globe, ExternalLink, Eye, ChevronRight } from 'lucide-react-native';
+import { Globe, ExternalLink, ChevronRight } from 'lucide-react-native';
 import Constants from 'expo-constants';
 import ScreenLayout from '../../components/ScreenLayout';
 import LanguagePicker from '../../components/LanguagePicker';
@@ -65,23 +65,11 @@ export default function AdminSettingsScreen() {
             <ChevronRight size={16} color={theme.textMuted} strokeWidth={2} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.row, { borderBottomColor: theme.border }]} onPress={openWebAdmin}>
+          <TouchableOpacity style={[styles.row, styles.rowLast]} onPress={openWebAdmin}>
             <RowIcon bg={theme.accentSurface}><ExternalLink size={16} color={theme.accent} strokeWidth={2} /></RowIcon>
             <View style={{ flex: 1 }}>
               <Text style={[styles.rowTitle, { color: theme.text, fontFamily: theme.fonts.semibold }]}>{t('admin.openWebAdmin')}</Text>
               <Text style={[styles.rowSub, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>mojammaa-admin.vercel.app</Text>
-            </View>
-            <ChevronRight size={16} color={theme.textMuted} strokeWidth={2} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.row, styles.rowLast]}
-            onPress={() => Alert.alert(t('admin.impersonation'), t('admin.impersonationMsg'))}
-          >
-            <RowIcon bg={theme.violetSurface}><Eye size={16} color={theme.primary} strokeWidth={2} /></RowIcon>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.rowTitle, { color: theme.text, fontFamily: theme.fonts.semibold }]}>{t('admin.impersonation')}</Text>
-              <Text style={[styles.rowSub, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>{t('admin.impersonationMsg')}</Text>
             </View>
             <ChevronRight size={16} color={theme.textMuted} strokeWidth={2} />
           </TouchableOpacity>

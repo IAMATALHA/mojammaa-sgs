@@ -146,7 +146,8 @@ export default function TeacherDevoirsScreen() {
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: theme.primary }]}
         onPress={openCreate}
-        accessibilityLabel="Créer un devoir"
+        accessibilityRole="button"
+        accessibilityLabel={t('teacher.newHomework')}
       >
         <Text style={[styles.fabText, { color: theme.white }]}>+</Text>
       </TouchableOpacity>
@@ -364,6 +365,7 @@ function CreateDevoirModal({
           <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.titleLabel')}</Text>
           <TextInput
             value={titre} onChangeText={setTitre}
+            accessibilityLabel={t('teacher.titleLabel')}
             placeholder={t('teacher.devoirTitlePlaceholder')}
             placeholderTextColor={theme.textSoft}
             style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white }]}
@@ -373,6 +375,7 @@ function CreateDevoirModal({
           <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>{t('teacher.descriptionLabel')}</Text>
           <TextInput
             value={description} onChangeText={setDescription}
+            accessibilityLabel={t('teacher.descriptionLabel')}
             placeholder={t('teacher.devoirDescPlaceholder')}
             placeholderTextColor={theme.textSoft}
             style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white, minHeight: 90 }]}
@@ -387,6 +390,9 @@ function CreateDevoirModal({
               return (
                 <TouchableOpacity key={tp}
                   onPress={() => setType(tp)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={tp}
                   style={[styles.chip, { borderColor: active ? theme.primary : theme.border, backgroundColor: active ? theme.primarySurface : 'transparent' }]}
                 >
                   <Text style={{ color: active ? theme.primary : theme.textSoft, fontWeight: active ? '700' : '500', fontSize: 12 }}>{tp}</Text>
@@ -403,6 +409,9 @@ function CreateDevoirModal({
               return (
                 <TouchableOpacity key={c}
                   onPress={() => setClasseId(c)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={c}
                   style={[styles.chip, {
                     borderColor: active ? theme.primary : theme.border,
                     backgroundColor: active ? theme.primary : 'transparent',
@@ -422,6 +431,9 @@ function CreateDevoirModal({
               return (
                 <TouchableOpacity key={dc.iso}
                   onPress={() => setDateLimite(dc.iso)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={`${dc.label} ${dc.sub}`}
                   style={[styles.dateChip, {
                     borderColor: active ? theme.primary : theme.border,
                     backgroundColor: active ? theme.primary : theme.surface,
@@ -475,7 +487,7 @@ function CreateDevoirModal({
               {attachments.map((a, i) => (
                 <View key={a.url + i} style={[styles.attachItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   {a.mime.startsWith('image/') ? (
-                    <Image source={{ uri: a.url }} style={styles.attachThumb} />
+                    <Image source={{ uri: a.url }} accessibilityLabel={a.name} style={styles.attachThumb} />
                   ) : (
                     <View style={[styles.attachThumb, { alignItems: 'center', justifyContent: 'center', backgroundColor: theme.primarySurface }]}>
                       <Ionicons name="document" size={22} color={theme.primary} />
@@ -487,7 +499,7 @@ function CreateDevoirModal({
                       {a.mime}{a.size ? ` · ${Math.round(a.size / 1024)} KB` : ''}
                     </Text>
                   </View>
-                  <TouchableOpacity onPress={() => removeAttachment(i)}>
+                  <TouchableOpacity onPress={() => removeAttachment(i)} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('common.delete')}>
                     <Ionicons name="close-circle" size={22} color={theme.danger} />
                   </TouchableOpacity>
                 </View>
