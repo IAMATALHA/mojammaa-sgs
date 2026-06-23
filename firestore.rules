@@ -198,7 +198,14 @@ service cloud.firestore {
     // vues append-only : un lecteur ne peut que S'AJOUTER (selfAppendOnly,
     // comme messages.readBy) ; le prof propriétaire/admin édite le reste.
     match /ressources/{ressourceId} {
-      allow read: if isSignedIn();
+      // Même périmètre de lecture scopé que `devoirs` (défense en profondeur) :
+      // admin = tout ; prof = ses ressources OU une classe qu'il enseigne ;
+      // parent = large (contenu non nominatif, périmètre par enfant non
+      // requêtable en règles). N'affecte pas l'update append-only de viewedBy.
+      allow read: if isAdmin()
+        || (isTeacher() && (resource.data.teacherId == myUid()
+                            || teacherTeaches(resource.data.classeId)))
+        || isParent();
       allow create: if isAdmin()
         || (teacherTeaches(request.resource.data.classeId)
             && request.resource.data.teacherId == myUid());
