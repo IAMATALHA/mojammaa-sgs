@@ -2,7 +2,7 @@
   "expo": {
     "name": "Mojammaa Connect",
     "slug": "mojammaa-sgs",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
