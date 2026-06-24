@@ -18,6 +18,7 @@ export interface ScheduleEntry {
   startTime: string   // "08:30"
   endTime:   string   // "09:30"
   status:    ScheduleStatus
+  seance?:   string   // "S1".."S6" si fourni par l'emploi du temps
 }
 
 export interface Announcement {

@@ -5,9 +5,11 @@ import i18n from '../i18n'
 import { localizedSubject, localizedBody } from '../utils/arabicText'
 import type { Announcement } from '../utils/dashboardTypes'
 
-function timestampToISO(ts: any): string {
+function timestampToISO(ts: unknown): string {
   if (!ts) return new Date().toISOString()
-  if (typeof ts.toDate === 'function') return ts.toDate().toISOString()
+  if (typeof ts === 'object' && 'toDate' in ts && typeof (ts as { toDate: unknown }).toDate === 'function') {
+    return (ts as { toDate: () => Date }).toDate().toISOString()
+  }
   if (typeof ts === 'string') return ts
   return new Date().toISOString()
 }

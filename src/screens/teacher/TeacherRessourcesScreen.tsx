@@ -29,6 +29,7 @@ import {
 import { uploadAttachment, type Attachment } from '../../services/StorageService'
 import { formatTimestamp } from '../../utils/format'
 import { dirStyle } from '../../utils/arabicText'
+import type { UserProfile } from '../../types'
 
 export default function TeacherRessourcesScreen() {
   const theme = useTheme()
@@ -161,7 +162,7 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
   visible: boolean
   onClose: () => void
   classe: string
-  profile: any
+  profile: UserProfile | null
 }) {
   const theme = useTheme()
   const { t } = useTranslation()

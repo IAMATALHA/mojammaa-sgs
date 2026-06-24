@@ -5,6 +5,7 @@ import {
 import { collection, doc, onSnapshot, query, where, type Unsubscribe } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   AlertTriangle, Award, BarChart3, BookOpen, CalendarX, CheckCircle2,
   ChevronLeft, ChevronRight, ClipboardCheck, TrendingUp, Users, type LucideIcon,
@@ -684,7 +685,7 @@ export default function AdminStatsScreen() {
 }
 
 function VisualHero({ data, theme, t, onSelectView }: {
-  data: DashboardData; theme: Theme; t: any; onSelectView: (view: StatsView) => void
+  data: DashboardData; theme: Theme; t: TFunction; onSelectView: (view: StatsView) => void
 }) {
   const alerts = data.classStats.filter(item => item.healthScore < 58).length
   return (
@@ -717,7 +718,7 @@ function ViewTabs({ value, onChange, theme, t }: {
   value: StatsView
   onChange: (next: StatsView) => void
   theme: Theme
-  t: any
+  t: TFunction
 }) {
   const items: { id: StatsView; label: string; Icon: LucideIcon }[] = [
     { id: 'niveaux', label: t('admin.niveaux'), Icon: BarChart3 },
@@ -747,7 +748,7 @@ function ViewTabs({ value, onChange, theme, t }: {
   )
 }
 
-function NiveauxView({ data, onSelectNiveau, theme, t }: { data: DashboardData; onSelectNiveau: (niveau: string) => void; theme: Theme; t: any }) {
+function NiveauxView({ data, onSelectNiveau, theme, t }: { data: DashboardData; onSelectNiveau: (niveau: string) => void; theme: Theme; t: TFunction }) {
   const COLORS = chartColors
   return (
     <>
@@ -799,7 +800,7 @@ function NiveauxView({ data, onSelectNiveau, theme, t }: { data: DashboardData; 
 }
 
 function NiveauClassesView({ data, niveau, onBack, theme, t }: {
-  data: DashboardData; niveau: string; onBack: () => void; theme: Theme; t: any
+  data: DashboardData; niveau: string; onBack: () => void; theme: Theme; t: TFunction
 }) {
   const classes = data.classStats.filter(item => item.niveauGroup === niveau)
   const label = niveau === 'Autre' ? t('common.other') : niveau
@@ -821,7 +822,7 @@ function NiveauClassesView({ data, niveau, onBack, theme, t }: {
   )
 }
 
-function ClassCardRich({ item, theme, t }: { item: ClassStats; theme: Theme; t: any }) {
+function ClassCardRich({ item, theme, t }: { item: ClassStats; theme: Theme; t: TFunction }) {
   const healthColor = item.healthScore >= 75 ? theme.info : item.healthScore >= 55 ? theme.warning : theme.danger
   return (
     <View style={[styles.classCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -874,7 +875,7 @@ function MetricLine({ icon, label, value, theme }: { icon: React.ReactNode; labe
   )
 }
 
-function SubjectsView({ data, theme, t }: { data: DashboardData; theme: Theme; t: any }) {
+function SubjectsView({ data, theme, t }: { data: DashboardData; theme: Theme; t: TFunction }) {
   return (
     <>
       <ChartCard title={t('admin.subjectHeatmap')} theme={theme}>
@@ -1038,7 +1039,7 @@ function DistributionBars({ bands, theme }: { bands: GradeBand[]; theme: Theme }
   )
 }
 
-function RiskRail({ data, theme, t }: { data: ClassStats[]; theme: Theme; t: any }) {
+function RiskRail({ data, theme, t }: { data: ClassStats[]; theme: Theme; t: TFunction }) {
   if (data.length === 0) return null
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
@@ -1059,7 +1060,7 @@ function RiskRail({ data, theme, t }: { data: ClassStats[]; theme: Theme; t: any
   )
 }
 
-function ClassMap({ classes, theme, t }: { classes: ClassStats[]; theme: Theme; t: any }) {
+function ClassMap({ classes, theme, t }: { classes: ClassStats[]; theme: Theme; t: TFunction }) {
   if (classes.length === 0) return <EmptyText theme={theme} text={t('common.noData')} />
   const counts = classes.map(item => item.studentCount)
   const minCount = Math.min(...counts)
@@ -1113,7 +1114,7 @@ function IconStat({ icon, value, theme }: { icon: React.ReactNode; value: string
   )
 }
 
-function SubjectHeatmap({ data, theme, t }: { data: DashboardData; theme: Theme; t: any }) {
+function SubjectHeatmap({ data, theme, t }: { data: DashboardData; theme: Theme; t: TFunction }) {
   if (data.matrixClasses.length === 0 || data.matrixSubjects.length === 0) {
     return <EmptyText theme={theme} text={t('admin.noSubjects')} />
   }
@@ -1148,7 +1149,7 @@ function SubjectHeatmap({ data, theme, t }: { data: DashboardData; theme: Theme;
   )
 }
 
-function SubjectTile({ item, theme, t }: { item: SubjectStats; theme: Theme; t: any }) {
+function SubjectTile({ item, theme, t }: { item: SubjectStats; theme: Theme; t: TFunction }) {
   const color = scoreColor(item.heatScore, theme)
   return (
     <View style={[styles.subjectTile, { backgroundColor: theme.card, borderColor: theme.border }]}>

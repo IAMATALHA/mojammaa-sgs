@@ -19,6 +19,8 @@ import {
   type MessageDoc,
 } from '../../services/messagesService'
 import { listEleves, type EleveDoc } from '../../services/elevesService'
+import type { TFunction } from 'i18next'
+import type { UserProfile } from '../../types'
 import DatePickerSheet from '../../components/DatePickerSheet'
 import * as Haptics from 'expo-haptics'
 import { MESSAGE_TEMPLATES, fillTemplate, type MessageTemplate } from '../../data/messageTemplates'
@@ -260,7 +262,7 @@ export default function TeacherMessagesScreen() {
    ════════════════════════════════════════════════════════════════════════ */
 
 function ComposeModal({ theme, t, lang, profile, onClose }: {
-  theme: Theme; t: any; lang: 'fr' | 'ar' | 'en'; profile: any; onClose: () => void
+  theme: Theme; t: TFunction; lang: 'fr' | 'ar' | 'en'; profile: UserProfile | null; onClose: () => void
 }) {
   const templates = useMemo(
     () => MESSAGE_TEMPLATES.filter(tmpl => tmpl.target === 'parents' || tmpl.target === 'all'),
@@ -325,7 +327,7 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
 
   const selectedEleves = useMemo(() => eleves.filter(e => selectedEleveIds.has(eleveKey(e))), [eleves, selectedEleveIds])
   const parentUids = useMemo(
-    () => [...new Set(selectedEleves.map(e => (e as any).parentUid as string | undefined).filter(Boolean) as string[])],
+    () => [...new Set(selectedEleves.map(e => e.parentUid).filter(Boolean) as string[])],
     [selectedEleves],
   )
 
@@ -390,9 +392,9 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
       if (body.includes(ELEVE_PLACEHOLDER)) {
         // Personalised: one message per student with their first name filled in.
         const recipients = selectedEleves
-          .filter(e => (e as any).parentUid)
+          .filter(e => e.parentUid)
           .map(e => ({
-            parentUid: (e as any).parentUid as string,
+            parentUid: e.parentUid!,
             body:      body.split(ELEVE_PLACEHOLDER).join(elevePrenom(e)).trim(),
             label:     `${eleveName(e)} · ${e.classe}`,
             eleveId:   e.codeMassar,
@@ -495,7 +497,7 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
                     {elevesByClasse[classe].map(e => {
                       const id = eleveKey(e)
                       const on = selectedEleveIds.has(id)
-                      const hasParent = !!(e as any).parentUid
+                      const hasParent = !!e.parentUid
                       return (
                         <TouchableOpacity key={id} onPress={() => toggleEleve(id)}
                           accessibilityRole="button"

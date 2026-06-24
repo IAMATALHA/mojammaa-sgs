@@ -20,6 +20,7 @@ import {
 import { computeTeacherPresenceRate } from '../services/absencesService'
 import { toDoc } from '../services/firestore'
 import { db } from '../config/firebase'
+import type { UserProfile } from '../types'
 import type { ScheduleEntry, ScheduleStatus, ClassPerformance } from '../utils/dashboardTypes'
 
 export interface TeacherKpis {
@@ -84,7 +85,7 @@ function toScheduleEntry(
   }
 }
 
-function getClassesFromProfile(profile: any): string[] {
+function getClassesFromProfile(profile: UserProfile | null | undefined): string[] {
   if (!profile) return []
   if (Array.isArray(profile.classes) && profile.classes.length > 0) return profile.classes
   if (typeof profile.classe === 'string' && profile.classe) return [profile.classe]
@@ -199,7 +200,7 @@ export function useTeacherData(): TeacherData {
 
   const byClasse = useMemo(() => groupByClasse(eleves), [eleves])
 
-  const subject = (profile as any)?.matiere || 'Mathématiques'
+  const subject = profile?.matiere || 'Mathématiques'
 
   const todaySlots: ScheduleEntry[] = useMemo(() => {
     if (!schedule?.weeklySlots) return []

@@ -9,6 +9,9 @@ import { CalendarX, Clock, CheckCircle2, AlertTriangle } from 'lucide-react-nati
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
+import { toDoc } from '../../services/firestore'
+import type { AbsenceDoc } from '../../services/absencesService'
+import type { QueryDocumentSnapshot } from 'firebase/firestore'
 
 interface AbsenceRow {
   id: string
@@ -65,8 +68,8 @@ export default function AdminAbsencesScreen() {
         // pas d'index composite ; on filtre le statut côté client.
         getDocs(query(collection(db, 'absences'), where('date', '>=', mStart))),
       ])
-      const toRow = (d: any): AbsenceRow => {
-        const data = d.data()
+      const toRow = (d: QueryDocumentSnapshot): AbsenceRow => {
+        const data = toDoc<AbsenceDoc>(d)
         return { id: d.id, eleveId: data.eleveId || '', eleveNom: data.eleveNom || '', elevePrenom: data.elevePrenom || '', classe: data.classe || '', seance: data.seance || '', date: data.date || '', statut: data.statut }
       }
       setAbsents(absSnap.docs.map(toRow))

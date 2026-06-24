@@ -23,6 +23,8 @@ import {
   type MessageDoc, type MessageToType,
 } from '../../services/messagesService'
 import { listEleves, type EleveDoc } from '../../services/elevesService'
+import type { TFunction } from 'i18next'
+import type { UserProfile } from '../../types'
 import { uploadAttachment, type Attachment } from '../../services/StorageService'
 import DatePickerSheet from '../../components/DatePickerSheet'
 import * as Haptics from 'expo-haptics'
@@ -266,7 +268,7 @@ export default function AdminMessagesScreen() {
    ════════════════════════════════════════════════════════════════════════ */
 
 function AdminComposeModal({ theme, t, lang, profile, onClose }: {
-  theme: Theme; t: any; lang: 'fr' | 'ar' | 'en'; profile: any; onClose: () => void
+  theme: Theme; t: TFunction; lang: 'fr' | 'ar' | 'en'; profile: UserProfile | null; onClose: () => void
 }) {
   const [targetMode, setTargetMode] = useState<TargetMode>('all')
   const [selectedClasses, setSelectedClasses] = useState<string[]>([])
@@ -339,7 +341,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
 
   const selectedEleves = useMemo(() => eleves.filter(e => selectedEleveIds.has(eleveKey(e))), [eleves, selectedEleveIds])
   const parentUids = useMemo(
-    () => [...new Set(selectedEleves.map(e => (e as any).parentUid as string | undefined).filter(Boolean) as string[])],
+    () => [...new Set(selectedEleves.map(e => e.parentUid).filter(Boolean) as string[])],
     [selectedEleves],
   )
   const toggleEleve = (id: string) => setSelectedEleveIds(prev => {
@@ -476,9 +478,9 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
         if (body.includes(ELEVE_PLACEHOLDER)) {
           // Personnalisé : un message par élève → son propre parent.
           const recipients = selectedEleves
-            .filter(e => (e as any).parentUid)
+            .filter(e => e.parentUid)
             .map(e => ({
-              parentUid: (e as any).parentUid as string,
+              parentUid: e.parentUid!,
               body:      body.split(ELEVE_PLACEHOLDER).join(elevePrenom(e)).trim(),
               bodyAr:    arBody ? arBody.split(ELEVE_PLACEHOLDER).join(elevePrenom(e)).trim() : undefined,
               label:     `${eleveName(e)} · ${e.classe}`,
@@ -641,7 +643,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
                         {elevesByClasse[classe].map(e => {
                           const id = eleveKey(e)
                           const on = selectedEleveIds.has(id)
-                          const hasParent = !!(e as any).parentUid
+                          const hasParent = !!e.parentUid
                           return (
                             <TouchableOpacity key={id} onPress={() => toggleEleve(id)}
                               accessibilityRole="button"

@@ -14,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
 import { subscribeSchedule, type ScheduleDoc, type WeeklySlot } from '../../services/scheduleService'
 import type { TeacherStackParamList } from '../../navigation/types'
+import type { UserProfile } from '../../types'
 
 interface ClasseRow {
   name:         string
@@ -21,7 +22,7 @@ interface ClasseRow {
   subjects:     string[]
 }
 
-function getClassesFromProfile(profile: any): string[] {
+function getClassesFromProfile(profile: UserProfile | null | undefined): string[] {
   if (!profile) return []
   if (Array.isArray(profile.classes) && profile.classes.length > 0) return profile.classes
   if (typeof profile.classe === 'string' && profile.classe) return [profile.classe]

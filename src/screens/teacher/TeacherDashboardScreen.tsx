@@ -44,7 +44,7 @@ const QUICK_ACTION_ROUTES: Record<string, TeacherQuickRoute> = {
 }
 
 function seanceForSlot(entry: ScheduleEntry): string {
-  if ((entry as any).seance) return (entry as any).seance
+  if (entry.seance) return entry.seance
   const seances: Record<string, string> = {
     '08:30': 'S1', '09:30': 'S2', '10:30': 'S3', '11:30': 'S4',
     '13:00': 'S5', '14:00': 'S6',

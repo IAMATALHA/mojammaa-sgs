@@ -31,6 +31,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 import { uploadAttachment, type Attachment } from '../../services/StorageService';
 import { broadcastToClasses } from '../../services/messagesService';
+import type { UserProfile } from '../../types';
 
 interface Devoir {
   id:           string
@@ -184,7 +185,7 @@ function generateDateChips(count: number): { iso: string; label: string; sub: st
   return chips
 }
 
-function getAvailableClasses(profile: any): string[] {
+function getAvailableClasses(profile: UserProfile | null | undefined): string[] {
   if (!profile) return []
   if (Array.isArray(profile.classes) && profile.classes.length > 0) return profile.classes
   if (typeof profile.classe === 'string' && profile.classe) return [profile.classe]

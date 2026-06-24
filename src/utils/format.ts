@@ -29,8 +29,8 @@ export function localeFor(lang?: string): string {
 export function toDate(value: unknown): Date | null {
   if (value == null) return null
   if (value instanceof Date) return isNaN(value.getTime()) ? null : value
-  if (typeof value === 'object' && typeof (value as any).toDate === 'function') {
-    const d = (value as any).toDate()
+  if (typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: unknown }).toDate === 'function') {
+    const d = (value as { toDate: () => unknown }).toDate()
     return d instanceof Date && !isNaN(d.getTime()) ? d : null
   }
   if (typeof value === 'number') {
