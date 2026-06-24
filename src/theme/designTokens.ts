@@ -191,29 +191,37 @@ export const fontSize = {
   display: 40,
 } as const
 
-// iOS honore shadowColor/Opacity/Radius/Offset → ombre douce et teintée navy.
-// Android IGNORE tout ça et n'utilise QUE `elevation`, qui rend une ombre dure
-// et grise pilotée par l'OS (sur fond translucide elle "bave" en halo gris —
-// cf. les tuiles bento sur Android). On garde shadowColor (Android ≥ 9 / API 28
-// le respecte pour teinter l'ombre d'elevation) MAIS on baisse fortement
-// l'elevation pour retrouver le rendu léger d'iOS au lieu du halo gris.
-// NB : `elevation` n'a AUCUN effet sur iOS — baisser ces valeurs ne touche
-// donc QUE le rendu Android.
-const iosShadow = (shadowRadius: number, opacity: number, y = 2) => ({
-  shadowColor: '#1D3557',
-  shadowOpacity: opacity,
-  shadowRadius,
-  shadowOffset: { width: 0, height: y },
-})
+// Ombre douce et teintée navy, identique sur les deux plateformes.
+//  - iOS    : shadowColor/Opacity/Radius/Offset (rendu de référence).
+//  - Android: `elevation` ignore shadowColor → ombre DURE et GRISE de l'OS
+//             (halo gris autour des tuiles bento). On n'utilise donc PAS
+//             elevation : sous la New Architecture (RN 0.81), `boxShadow`
+//             rend une vraie ombre douce ET teintée, calquée sur iOS.
+// `boxShadow` : offsetX offsetY blur color  (blur ≈ shadowRadius iOS).
+const NAVY = '29, 53, 87' // #1D3557 en RGB (pour rgba dans boxShadow)
+const softShadow = (radius: number, opacity: number, y = 2) =>
+  Platform.select({
+    ios: {
+      shadowColor: '#1D3557',
+      shadowOpacity: opacity,
+      shadowRadius: radius,
+      shadowOffset: { width: 0, height: y },
+    },
+    android: {
+      // pas d'elevation : on s'appuie sur boxShadow (Fabric) pour éviter le gris.
+      boxShadow: `0px ${y}px ${radius}px rgba(${NAVY}, ${opacity})`,
+    },
+    default: {},
+  }) as object
 
 export const shadows = {
-  none: { ...iosShadow(0, 0, 0), elevation: 0 },
-  xs: { ...iosShadow(10, 0.05, 2), elevation: 1 },
-  sm: { ...iosShadow(16, 0.08, 6), elevation: 1 },
-  md: { ...iosShadow(24, 0.10, 10), elevation: 2 },
-  lg: { ...iosShadow(32, 0.14, 16), elevation: 3 },
+  none: {},
+  xs: softShadow(10, 0.05, 2),
+  sm: softShadow(16, 0.08, 6),
+  md: softShadow(24, 0.10, 10),
+  lg: softShadow(32, 0.14, 16),
   // Ombre "clay" : diffuse et décalée vers le bas pour un volume doux.
-  clay: { ...iosShadow(18, 0.14, 9), elevation: 2 },
+  clay: softShadow(18, 0.14, 9),
 } as const
 
 export const hitSlop = { top: 8, bottom: 8, left: 8, right: 8 }

@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native'
+import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MotiView } from 'moti'
 import {
   CheckCircle, PencilLine, BookOpen, Send,
@@ -66,13 +66,6 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
                   styles.tile,
                   theme.shadows.clay,
                   { backgroundColor: tint.bg },
-                  // Android : l'ombre est volontairement légère (cf. shadows
-                  // tokens) → un liseré discret redonne la définition des bords
-                  // sans le halo gris. iOS reste sans bordure (rendu Image #1).
-                  Platform.OS === 'android' && {
-                    borderWidth: StyleSheet.hairlineWidth,
-                    borderColor: theme.border,
-                  },
                 ]}
               >
                 {action.badge != null && action.badge !== 0 ? (
