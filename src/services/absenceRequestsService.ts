@@ -11,7 +11,7 @@
  */
 import {
   collection, query, where, addDoc, getDocs, onSnapshot, updateDoc, doc,
-  serverTimestamp, type Unsubscribe,
+  serverTimestamp, type Unsubscribe, type Timestamp,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { toDocs } from './firestore'
@@ -29,9 +29,9 @@ export interface AbsenceRequestDoc {
   date:         string   // ISO 'YYYY-MM-DD'
   reason:       string
   status:       AbsenceRequestStatus
-  createdAt?:   any
+  createdAt?:   Timestamp
   decidedBy?:   string
-  decidedAt?:   any
+  decidedAt?:   Timestamp
 }
 
 const COL = 'absenceRequests'

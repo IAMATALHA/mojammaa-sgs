@@ -12,7 +12,7 @@
  */
 
 import {
-  collection, query, where, orderBy, onSnapshot, type Unsubscribe,
+  collection, query, where, orderBy, onSnapshot, type Unsubscribe, type Timestamp,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { toDoc } from './firestore'
@@ -23,7 +23,7 @@ export interface EventDoc {
   type:      string
   dateDebut: string   // ISO
   dateFin?:  string
-  createdAt?: any
+  createdAt?: Timestamp
 }
 
 const COL = 'evenements'

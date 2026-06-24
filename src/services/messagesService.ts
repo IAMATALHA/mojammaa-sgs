@@ -27,7 +27,7 @@
 import {
   collection, query, where, addDoc, onSnapshot, updateDoc, doc,
   serverTimestamp, getDocs, arrayUnion,
-  type Unsubscribe, type Query, type DocumentData,
+  type Unsubscribe, type Query, type DocumentData, type Timestamp,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { toDoc, toDocs } from './firestore'
@@ -60,7 +60,7 @@ export interface MessageDoc {
   readBy?:    string[]
   deletedBy?: string[]
   status?:    string
-  createdAt?: any
+  createdAt?: Timestamp
 }
 
 const COL = 'messages'

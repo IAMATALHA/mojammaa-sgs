@@ -32,7 +32,7 @@ export interface RessourceDoc {
   teacherId:    string
   teacherNom:   string
   viewedBy?:    string[]
-  createdAt?:   any
+  createdAt?:   Timestamp
 }
 
 const COL = 'ressources'

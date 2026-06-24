@@ -39,7 +39,7 @@ export interface ComportementDoc {
   comment?:     string
   teacherId:    string
   teacherNom:   string
-  createdAt?:   any
+  createdAt?:   Timestamp
 }
 
 const COL = 'comportements'
