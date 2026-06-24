@@ -20,9 +20,10 @@ import AdminCalendarScreen from '../screens/admin/AdminCalendarScreen'
 import AdminAbsencesScreen from '../screens/admin/AdminAbsencesScreen'
 import AdminDevoirsScreen from '../screens/admin/AdminDevoirsScreen'
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen'
+import type { AdminTabsParamList, AdminStackParamList } from './types'
 
-const Tab = createBottomTabNavigator()
-const Stack = createNativeStackNavigator()
+const Tab = createBottomTabNavigator<AdminTabsParamList>()
+const Stack = createNativeStackNavigator<AdminStackParamList>()
 
 function TabIcon(props: { Icon: LucideIcon; color: string; focused: boolean; theme: Theme }) {
   return <AnimatedTabIcon {...props} bare />

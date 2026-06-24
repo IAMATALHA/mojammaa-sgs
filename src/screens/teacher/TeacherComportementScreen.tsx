@@ -10,6 +10,7 @@ import {
 } from 'react-native'
 import Animated, { FadeInDown, Layout } from 'react-native-reanimated'
 import { useRoute } from '@react-navigation/native'
+import type { TeacherRoute } from '../../navigation/types'
 import { Star, AlertTriangle, Trash2, SmilePlus } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import ScreenLayout from '../../components/ScreenLayout'
@@ -21,13 +22,11 @@ import {
 } from '../../services/comportementsService'
 import { localeFor } from '../../utils/format'
 
-interface RouteParams { classe: string }
-
 export default function TeacherComportementScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const route = useRoute()
-  const { classe } = (route.params || {}) as RouteParams
+  const route = useRoute<TeacherRoute<'TeacherComportement'>>()
+  const { classe } = route.params ?? { classe: '' }
   const { profile } = useAuth()
 
   const [entries, setEntries] = useState<ComportementDoc[]>([])

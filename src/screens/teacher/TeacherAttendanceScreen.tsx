@@ -18,6 +18,8 @@ import {
 import Animated, { FadeInDown, Layout } from 'react-native-reanimated'
 import * as Haptics from 'expo-haptics'
 import { useRoute, useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { TeacherStackParamList, TeacherRoute } from '../../navigation/types'
 import PressableScale from '../../components/PressableScale'
 import {
   collection, getDocs, query, where, writeBatch, doc, Timestamp,
@@ -26,6 +28,9 @@ import {
 import { sendMessage } from '../../services/messagesService'
 import { getSchedule } from '../../services/scheduleService'
 import { getAbsenceRequestsForClassDate, decideAbsenceRequest, type AbsenceRequestDoc } from '../../services/absenceRequestsService'
+import { toDoc } from '../../services/firestore'
+import type { EleveDoc } from '../../services/elevesService'
+import type { AbsenceDoc } from '../../services/absencesService'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
 import BehaviorSheet from '../../components/BehaviorSheet'
@@ -42,10 +47,6 @@ interface EleveLite {
   prenom: string
 }
 
-interface RouteParams {
-  classe:  string
-  seance?: string
-}
 
 function todayISO(): string {
   return new Date().toISOString().split('T')[0]
@@ -87,8 +88,8 @@ async function notifyParentsOfAbsents(
   )
   const eleveToParent = new Map<string, { parentUid: string; prenom: string; nom: string }>()
   elevesSnap.forEach(d => {
-    const data = d.data() as any
-    if (data?.parentUid) {
+    const data = toDoc<EleveDoc>(d)
+    if (data.parentUid) {
       eleveToParent.set(d.id, {
         parentUid: data.parentUid,
         prenom:    data.prenomLatin || data.prenom || '',
@@ -135,9 +136,9 @@ async function notifyParentsOfAbsents(
 export default function TeacherAttendanceScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const navigation = useNavigation<any>()
-  const route = useRoute()
-  const { classe, seance: initialSeance } = (route.params || {}) as RouteParams
+  const navigation = useNavigation<NativeStackNavigationProp<TeacherStackParamList>>()
+  const route = useRoute<TeacherRoute<'TeacherAttendance'>>()
+  const { classe, seance: initialSeance } = route.params ?? { classe: '' }
   const { profile } = useAuth()
 
   const [eleves,  setEleves]  = useState<EleveLite[]>([])
@@ -168,12 +169,12 @@ export default function TeacherAttendanceScreen() {
         )),
       ])
       const list: EleveLite[] = elevesSnap.docs.map(d => {
-        const data = d.data() as any
+        const data = toDoc<EleveDoc>(d)
         return { id: d.id, nom: data.nom || '', prenom: data.prenom || '' }
       }).sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
       setEleves(list)
       const set = new Set<string>()
-      absentsSnap.forEach(d => set.add((d.data() as any).eleveId))
+      absentsSnap.forEach(d => set.add(toDoc<AbsenceDoc>(d).eleveId))
       setAbsent(set)
       // Déclarations d'absence des parents pour cette date (best-effort)
       getAbsenceRequestsForClassDate(classe, date)

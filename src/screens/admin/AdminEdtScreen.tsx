@@ -13,6 +13,7 @@ import ScreenLayout from '../../components/ScreenLayout';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { db } from '../../config/firebase';
+import { toDocs } from '../../services/firestore';
 
 interface Cours {
   id:            string
@@ -38,7 +39,7 @@ export default function AdminEdtScreen() {
     setLoading(true); setError(null)
     try {
       const snap = await getDocs(collection(db, 'emploiDuTemps'))
-      const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Cours[]
+      const list = toDocs<Cours>(snap)
       setCours(list)
     } catch (e: any) {
       setError(e?.message || 'Impossible de charger l\'emploi du temps.')

@@ -8,7 +8,8 @@ import ScreenLayout from '../../components/ScreenLayout'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
-import type { RoleRaw } from '../../types'
+import { toDoc } from '../../services/firestore'
+import type { RoleRaw, UserProfile } from '../../types'
 
 interface UserRow {
   uid: string
@@ -39,7 +40,7 @@ export default function AdminUsersScreen() {
     try {
       const snap = await getDocs(collection(db, 'users'))
       const list: UserRow[] = snap.docs.map(d => {
-        const data = d.data() as any
+        const data = toDoc<UserProfile>(d)
         return {
           uid: d.id,
           nom: data.nom || '',

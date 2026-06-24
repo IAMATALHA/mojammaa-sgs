@@ -5,6 +5,8 @@ import {
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useNavigation, useRoute } from '@react-navigation/native'
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
+import type { StudentTabsParamList, StudentTabRoute } from '../../navigation/types'
 import { X, Search, Inbox, Send, PenSquare } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -27,8 +29,8 @@ export default function ParentMessagesScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
   const { profile } = useAuth()
-  const navigation = useNavigation<any>()
-  const route = useRoute<any>()
+  const navigation = useNavigation<BottomTabNavigationProp<StudentTabsParamList, 'StudentMessages'>>()
+  const route = useRoute<StudentTabRoute<'StudentMessages'>>()
   const [messages, setMessages] = useState<MessageDoc[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)

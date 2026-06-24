@@ -11,6 +11,7 @@ import {
 } from 'react-native'
 import Animated, { FadeInDown, Layout } from 'react-native-reanimated'
 import { useRoute } from '@react-navigation/native'
+import type { TeacherRoute } from '../../navigation/types'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
@@ -29,13 +30,11 @@ import { uploadAttachment, type Attachment } from '../../services/StorageService
 import { formatTimestamp } from '../../utils/format'
 import { dirStyle } from '../../utils/arabicText'
 
-interface RouteParams { classe: string }
-
 export default function TeacherRessourcesScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const route = useRoute()
-  const { classe } = (route.params || {}) as RouteParams
+  const route = useRoute<TeacherRoute<'TeacherRessources'>>()
+  const { classe } = route.params ?? { classe: '' }
   const { profile } = useAuth()
 
   const [ressources, setRessources] = useState<RessourceDoc[]>([])

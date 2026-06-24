@@ -14,7 +14,9 @@ import { useCallback, useState } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { toDoc } from '../services/firestore'
 import type { WeeklySlot } from '../services/scheduleService'
+import type { AbsenceDoc } from '../services/absencesService'
 
 export interface DayCompletion {
   /** clés `${classe}|${seance}` dont l'appel est enregistré aujourd'hui */
@@ -54,8 +56,8 @@ export function useTeacherDayCompletion(
           where('date', '==', date),
         ))
         snap.forEach(d => {
-          const data = d.data() as any
-          if (data?.classe && data?.seance) attendance.add(`${data.classe}|${data.seance}`)
+          const data = toDoc<AbsenceDoc>(d)
+          if (data.classe && data.seance) attendance.add(`${data.classe}|${data.seance}`)
         })
       }
       setAttendanceDone(attendance)
@@ -67,9 +69,9 @@ export function useTeacherDayCompletion(
       ))
       const posted = new Set<string>()
       devoirsSnap.forEach(d => {
-        const data = d.data() as any
-        const created = data?.createdAt?.toDate?.()
-        if (!created || !data?.classeId) return
+        const data = toDoc<{ createdAt?: { toDate?: () => Date }; classeId?: string }>(d)
+        const created = data.createdAt?.toDate?.()
+        if (!created || !data.classeId) return
         if (created.toISOString().split('T')[0] === date) posted.add(data.classeId)
       })
       setHomeworkPosted(posted)

@@ -27,9 +27,10 @@ import TeacherComportementScreen from '../screens/teacher/TeacherComportementScr
 import TeacherRessourcesScreen from '../screens/teacher/TeacherRessourcesScreen'
 import TeacherStatsScreen from '../screens/teacher/TeacherStatsScreen'
 import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen'
+import type { TeacherTabsParamList, TeacherStackParamList } from './types'
 
-const Tab = createBottomTabNavigator()
-const Stack = createNativeStackNavigator()
+const Tab = createBottomTabNavigator<TeacherTabsParamList>()
+const Stack = createNativeStackNavigator<TeacherStackParamList>()
 
 function TabIcon(props: { Icon: LucideIcon; color: string; focused: boolean; theme: Theme }) {
   return <AnimatedTabIcon {...props} bare />

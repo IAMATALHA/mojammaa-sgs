@@ -18,6 +18,7 @@ import {
   subscribeSchedule, type ScheduleDoc, type WeeklySlot, type WeekDay,
 } from '../services/scheduleService'
 import { computeTeacherPresenceRate } from '../services/absencesService'
+import { toDoc } from '../services/firestore'
 import { db } from '../config/firebase'
 import type { ScheduleEntry, ScheduleStatus, ClassPerformance } from '../utils/dashboardTypes'
 
@@ -168,7 +169,7 @@ export function useTeacherData(): TeacherData {
       where('teacherId', '==', profile.uid),
     )).then(snap => {
       const count = snap.docs.filter(d => {
-        const dl = (d.data() as any).dateLimite
+        const dl = toDoc<{ dateLimite?: string }>(d).dateLimite
         return typeof dl === 'string' && dl >= today
       }).length
       setPendingCount(count)
@@ -183,7 +184,7 @@ export function useTeacherData(): TeacherData {
         const snap = await getDocs(query(collection(db, 'notes'), where('classe', '==', c)))
         const notes: number[] = []
         snap.forEach(d => {
-          const n = (d.data() as any).note
+          const n = toDoc<{ note?: number }>(d).note
           if (typeof n === 'number' && n >= 0 && n <= 20) notes.push(n)
         })
         if (notes.length === 0) return { classe: c, average: 0, topMark: 0, trend: 'flat' as const }

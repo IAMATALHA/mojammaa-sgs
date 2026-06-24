@@ -10,6 +10,7 @@ import {
   doc, onSnapshot, getDoc, type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { docData } from './firestore'
 
 export type WeekDay =
   | 'sunday' | 'monday' | 'tuesday' | 'wednesday'
@@ -36,7 +37,7 @@ const COL = 'schedules'
 
 export async function getSchedule(uid: string): Promise<ScheduleDoc | null> {
   const snap = await getDoc(doc(db, COL, uid))
-  return snap.exists() ? (snap.data() as ScheduleDoc) : null
+  return docData<ScheduleDoc>(snap)
 }
 
 export function subscribeSchedule(
@@ -46,7 +47,7 @@ export function subscribeSchedule(
 ): Unsubscribe {
   return onSnapshot(
     doc(db, COL, uid),
-    snap => onChange(snap.exists() ? (snap.data() as ScheduleDoc) : null),
+    snap => onChange(docData<ScheduleDoc>(snap)),
     err  => { onError?.(err) },
   )
 }

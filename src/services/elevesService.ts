@@ -10,6 +10,7 @@ import {
   collection, query, where, getDocs, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { toDoc, toDocs } from './firestore'
 
 export interface EleveDoc {
   id?:           string   // id du document Firestore (fallback de clé quand codeMassar manque)
@@ -23,6 +24,7 @@ export interface EleveDoc {
   classes?:      string[] // si l'élève est dans plusieurs classes
   niveau?:       string
   dateNaissance?:string   // YYYY-MM-DD
+  parentUid?:    string   // uid Auth du parent lié (indexé pour subscribeChildrenOfParent)
 }
 
 const COL = 'eleves'
@@ -35,7 +37,7 @@ const COL = 'eleves'
 export async function listEleves(filter?: { classes?: string[] }): Promise<EleveDoc[]> {
   if (!filter?.classes || filter.classes.length === 0) {
     const snap = await getDocs(collection(db, COL))
-    return snap.docs.map(d => ({ id: d.id, ...(d.data() as EleveDoc) }))
+    return toDocs<EleveDoc>(snap)
   }
 
   const chunks: string[][] = []
@@ -49,7 +51,7 @@ export async function listEleves(filter?: { classes?: string[] }): Promise<Eleve
     const q = query(collection(db, COL), where('classe', 'in', chunk))
     const snap = await getDocs(q)
     snap.docs.forEach(d => {
-      const data = { id: d.id, ...(d.data() as EleveDoc) }
+      const data = toDoc<EleveDoc>(d)
       const key = data.codeMassar || d.id
       if (!seen.has(key)) {
         seen.add(key)
@@ -79,7 +81,7 @@ export function subscribeEleves(
   const q = query(collection(db, COL), where('classe', 'in', safeClasses))
   return onSnapshot(
     q,
-    snap => onChange(snap.docs.map(d => ({ id: d.id, ...(d.data() as EleveDoc) }))),
+    snap => onChange(toDocs<EleveDoc>(snap)),
     err  => { onError?.(err) },
   )
 }
@@ -104,7 +106,7 @@ export function subscribeChildrenOfParent(
   const q = query(collection(db, COL), where('parentUid', '==', parentUid))
   return onSnapshot(
     q,
-    snap => onChange(snap.docs.map(d => ({ id: d.id, ...(d.data() as EleveDoc) }))),
+    snap => onChange(toDocs<EleveDoc>(snap)),
     err  => { onError?.(err) },
   )
 }

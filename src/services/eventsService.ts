@@ -15,6 +15,7 @@ import {
   collection, query, where, orderBy, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { toDoc } from './firestore'
 
 export interface EventDoc {
   id:        string
@@ -49,7 +50,7 @@ export function subscribeUpcomingEvents(
     snap => {
       const list = snap.docs
         .slice(0, limit)
-        .map(d => ({ id: d.id, ...(d.data() as Omit<EventDoc, 'id'>) }))
+        .map(d => toDoc<EventDoc>(d))
       onChange(list)
     },
     err => { onError?.(err) },

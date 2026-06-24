@@ -18,6 +18,9 @@ import {
   KeyboardAvoidingView, Platform, StatusBar,
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
+import type { TeacherRoute } from '../../navigation/types';
+import { toDoc } from '../../services/firestore';
+import type { EleveDoc } from '../../services/elevesService';
 import {
   collection, getDocs, query, where, setDoc, doc, serverTimestamp,
   writeBatch,
@@ -106,11 +109,11 @@ function parseGradeInput(value: string): number | null {
 export default function TeacherNotesScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const route = useRoute()
+  const route = useRoute<TeacherRoute<'TeacherNotes'>>()
   const { profile } = useAuth()
   // Si la classe est fournie via les params (drill-down depuis le folder),
   // on l'utilise — sinon on prend la classe assignée au profil du prof.
-  const routeClasse = (route.params as { classe?: string } | undefined)?.classe
+  const routeClasse = route.params?.classe
   const classe = (routeClasse || profile?.classe || '').trim()
 
   // Matière VERROUILLÉE sur celle du prof. S'il n'en a pas (ancien compte),
@@ -140,7 +143,7 @@ export default function TeacherNotesScreen() {
         query(collection(db, 'eleves'), where('classe', '==', classe))
       )
       const list: EleveLite[] = elevesSnap.docs.map(d => {
-        const data = d.data() as any
+        const data = toDoc<EleveDoc>(d)
         return {
           id:         d.id,
           nom:        data.nom        || '',
@@ -160,7 +163,15 @@ export default function TeacherNotesScreen() {
       ))
       const map = new Map<string, NoteEntry>()
       notesSnap.forEach(d => {
-        const data = d.data() as any
+        const data = toDoc<{
+          eleveId:            string
+          note?:              unknown
+          matiere:            string
+          semestre:           string
+          controlesCount?:    unknown
+          controlesExpected?: unknown
+          controlesIgnored?:  unknown
+        }>(d)
         const controles = readControlNotes(data)
         const note = asNumber(data.note) ?? (controles.length > 0 ? averageControlNotes(controles.map(item => item.note)) : '')
         map.set(data.eleveId, {
@@ -216,7 +227,7 @@ export default function TeacherNotesScreen() {
       // Charge les élèves de la classe pour le matching
       const elevesSnap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', classe)))
       const elevesData = elevesSnap.docs.map(d => {
-        const data = d.data() as any
+        const data = toDoc<EleveDoc>(d)
         return { id: d.id, nom: data.nom || '', prenom: data.prenom || '', codeMassar: data.codeMassar || '' }
       })
 

@@ -7,6 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { MotiView, AnimatePresence } from 'moti'
 import { useNavigation } from '@react-navigation/native'
+import type { AdminDashboardNav } from '../../navigation/types'
 import { useTranslation } from 'react-i18next'
 import {
   Users, GraduationCap, School, BookOpen, Send, Mail, CalendarClock, CalendarX, ChevronRight,
@@ -15,11 +16,19 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
+import { toDoc } from '../../services/firestore'
+import type { EleveDoc } from '../../services/elevesService'
+import type { AbsenceDoc } from '../../services/absencesService'
+import type { UserProfile } from '../../types'
 import { getTodayJour, getJoursScolaires, type JourScolaire } from '../../services/calendarService'
 import { useUnreadMessagesCount } from '../../hooks/useUnreadMessagesCount'
 import AnimatedCounter from '../../components/AnimatedCounter'
 import ProgressRing from '../../components/ProgressRing'
 import { greetingKey, formatDayMonth } from '../../utils/format'
+
+type AdminQuickRoute =
+  | 'AdminAbsences' | 'AdminUsers' | 'AdminDevoirs'
+  | 'AdminStatsTab' | 'AdminMessages' | 'AdminCalendarTab'
 
 function todayISO(): string {
   return new Date().toISOString().split('T')[0]
@@ -42,8 +51,8 @@ export default function AdminDashboardScreen() {
   const { t, i18n } = useTranslation()
   const isAr = i18n.language === 'ar'
   const { profile } = useAuth()
-  const nav = useNavigation<any>()
-  const goTo = (route: string) => nav.navigate(route)
+  const nav = useNavigation<AdminDashboardNav>()
+  const goTo = (route: AdminQuickRoute) => nav.navigate(route)
   const unread = useUnreadMessagesCount()
 
   const [state, setState] = useState<SchoolState | null>(null)
@@ -88,28 +97,28 @@ export default function AdminDashboardScreen() {
       setNextEvent(upcoming[0] ?? null)
 
       const totalEleves = elevesSnap.size
-      const profs = usersSnap.docs.filter(d => (d.data() as any).role === 'professeur')
+      const profs = usersSnap.docs.filter(d => toDoc<UserProfile>(d).role === 'professeur')
       const totalProfs = profs.length
 
       const uniqueAbsentEleves = new Set<string>()
-      absAbsentSnap.forEach(d => uniqueAbsentEleves.add((d.data() as any).eleveId))
+      absAbsentSnap.forEach(d => uniqueAbsentEleves.add(toDoc<AbsenceDoc>(d).eleveId))
 
       const uniqueRetardEleves = new Set<string>()
-      absRetardSnap.forEach(d => uniqueRetardEleves.add((d.data() as any).eleveId))
+      absRetardSnap.forEach(d => uniqueRetardEleves.add(toDoc<AbsenceDoc>(d).eleveId))
 
       const classeSet = new Set<string>()
       elevesSnap.forEach(d => {
-        const c = (d.data() as any).classe
+        const c = toDoc<EleveDoc>(d).classe
         if (c) classeSet.add(c)
       })
 
       const devoirsToday = devoirsSnap.docs.filter(d => {
-        const dl = (d.data() as any).dateLimite
+        const dl = toDoc<{ dateLimite?: string }>(d).dateLimite
         return typeof dl === 'string' && dl >= today
       }).length
 
       const todayMessages = msgsSnap.docs.filter(d => {
-        const ca = (d.data() as any).createdAt
+        const ca = toDoc<{ createdAt?: { toDate?: () => Date } }>(d).createdAt
         if (!ca?.toDate) return false
         return ca.toDate().toISOString().split('T')[0] === today
       })

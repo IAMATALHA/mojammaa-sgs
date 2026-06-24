@@ -13,6 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { StudentHomeStackParamList } from '../../navigation/types'
 import { ChevronLeft, CalendarClock, MapPin, User } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
@@ -29,7 +31,7 @@ const DAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'satu
 export default function ParentEdtScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const nav = useNavigation<any>()
+  const nav = useNavigation<NativeStackNavigationProp<StudentHomeStackParamList>>()
 
   const parent = useParentData()
   const [selectedChildId, setSelectedChildId] = useState<string>('')

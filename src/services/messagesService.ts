@@ -27,9 +27,12 @@
 import {
   collection, query, where, addDoc, onSnapshot, updateDoc, doc,
   serverTimestamp, getDocs, arrayUnion,
-  type Unsubscribe,
+  type Unsubscribe, type Query, type DocumentData,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { toDoc, toDocs } from './firestore'
+import type { EleveDoc } from './elevesService'
+import type { UserProfile } from '../types'
 import type { Attachment } from './StorageService'
 
 export type MessageType = 'announcement' | 'direct' | 'attendance' | 'behavior'
@@ -117,12 +120,12 @@ export function subscribeMessages(
     onError?.(err)
   }
 
-  const listen = (q: any, label: string) => {
+  const listen = (q: Query<DocumentData>, label: string) => {
     const bucketId = nextBucketId++
     buckets.set(bucketId, new Map())
-    return onSnapshot(q, (snap: any) => {
+    return onSnapshot(q, snap => {
       const next = new Map<string, MessageDoc>()
-      snap.docs.forEach((d: any) => next.set(d.id, { id: d.id, ...(d.data() as MessageDoc) }))
+      snap.docs.forEach(d => next.set(d.id, toDoc<MessageDoc>(d)))
       buckets.set(bucketId, next)
       apply()
     }, handleErr(label))
@@ -168,8 +171,7 @@ export function subscribeSentMessages(
   return onSnapshot(
     query(collection(db, COL), where('fromId', '==', uid)),
     snap => onChange(
-      snap.docs
-        .map(d => ({ id: d.id, ...(d.data() as MessageDoc) }))
+      toDocs<MessageDoc>(snap)
         .filter(message => !(message.deletedBy || []).includes(uid))
         .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)),
     ),
@@ -183,8 +185,8 @@ async function getParentUidsForClasses(classes: string[]): Promise<string[]> {
     const chunk = classes.slice(i, i + 10)
     const snap = await getDocs(query(collection(db, 'eleves'), where('classe', 'in', chunk)))
     snap.forEach(d => {
-      const data = d.data() as any
-      if (data?.parentUid) parentUids.add(data.parentUid)
+      const data = toDoc<EleveDoc>(d)
+      if (data.parentUid) parentUids.add(data.parentUid)
     })
   }
   return [...parentUids]
@@ -385,7 +387,7 @@ export async function getRecipientsList(): Promise<{
   const childrenByParent = new Map<string, string[]>()
   const classSet = new Set<string>()
   elevesSnap.forEach(d => {
-    const data = d.data() as any
+    const data = toDoc<EleveDoc>(d)
     if (data.classe) classSet.add(data.classe)
     if (data.parentUid) {
       const arr = childrenByParent.get(data.parentUid) || []
@@ -394,11 +396,13 @@ export async function getRecipientsList(): Promise<{
     }
   })
 
-  const parents: any[] = []
-  const teachers: any[] = []
+  type ParentRow  = { uid: string; nom: string; prenom: string; email: string; children: string[] }
+  type TeacherRow = { uid: string; nom: string; prenom: string; email: string; classes: string[] }
+  const parents: ParentRow[] = []
+  const teachers: TeacherRow[] = []
 
   usersSnap.forEach(d => {
-    const data = d.data() as any
+    const data = toDoc<UserProfile>(d)
     if (data.role === 'parent') {
       parents.push({
         uid: d.id,
@@ -418,8 +422,8 @@ export async function getRecipientsList(): Promise<{
     }
   })
 
-  parents.sort((a: any, b: any) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
-  teachers.sort((a: any, b: any) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
+  parents.sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
+  teachers.sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
 
   return { parents, teachers, classes: [...classSet].sort() }
 }

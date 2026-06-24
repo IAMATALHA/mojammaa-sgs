@@ -13,6 +13,7 @@ import {
   collection, query, where, getDocs, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { toDoc, toDocs } from './firestore'
 
 export interface AbsenceDoc {
   id?:           string
@@ -72,8 +73,8 @@ export async function computeTeacherPresenceRate(
     // Compte unique par eleveId (un élève peut être absent à plusieurs séances le même jour)
     const seen = new Set<string>()
     snap.forEach(d => {
-      const data = d.data() as any
-      if (data?.eleveId) seen.add(data.eleveId)
+      const data = toDoc<AbsenceDoc>(d)
+      if (data.eleveId) seen.add(data.eleveId)
     })
     totalAbsents += seen.size
   }
@@ -103,9 +104,7 @@ export function subscribeAbsencesForEleves(
   )
   return onSnapshot(
     q,
-    snap => onChange(snap.docs.map(d => ({
-      id: d.id, ...(d.data() as Omit<AbsenceDoc, 'id'>),
-    }))),
+    snap => onChange(toDocs<AbsenceDoc>(snap)),
     err => { onError?.(err) },
   )
 }

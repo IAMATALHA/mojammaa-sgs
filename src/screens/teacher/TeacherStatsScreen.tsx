@@ -4,6 +4,7 @@ import {
 } from 'react-native'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTranslation } from 'react-i18next'
 import {
   Users, TrendingUp, Award, TrendingDown, Target,
@@ -13,6 +14,9 @@ import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTeacherData } from '../../hooks/useTeacherData'
 import { db } from '../../config/firebase'
+import { toDoc } from '../../services/firestore'
+import type { AbsenceDoc } from '../../services/absencesService'
+import type { TeacherStackParamList } from '../../navigation/types'
 
 const CLASS_COLORS = [
   { bg: '#1D3557', fg: '#FFFFFF', accent: '#FFD23F' },  // navy (brand)
@@ -41,7 +45,7 @@ function monthStart(): string {
 export default function TeacherStatsScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const navigation = useNavigation<any>()
+  const navigation = useNavigation<NativeStackNavigationProp<TeacherStackParamList>>()
   const { profile } = useAuth()
   const teacher = useTeacherData()
   const [classStats, setClassStats] = useState<ClassStats[]>([])
@@ -65,7 +69,7 @@ export default function TeacherStatsScreen() {
 
         const notesByEleve = new Map<string, number[]>()
         notesSnap.forEach(d => {
-          const data = d.data() as any
+          const data = toDoc<{ note?: number; eleveId?: string }>(d)
           const n = data.note
           const eId = data.eleveId
           if (typeof n === 'number' && n >= 0 && n <= 20 && eId) {
@@ -84,7 +88,7 @@ export default function TeacherStatsScreen() {
         })
 
         const absencesMonth = absMonthSnap.docs.filter(d => {
-          const date = (d.data() as any).date
+          const date = toDoc<AbsenceDoc>(d).date
           return typeof date === 'string' && date >= mStart
         }).length
 

@@ -3,6 +3,7 @@ import {
   query, where, getDocs, serverTimestamp, type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { docData, toDocs } from './firestore'
 
 export type JourType = 'normal' | 'vacances' | 'evenement' | 'examen'
 
@@ -18,7 +19,7 @@ const COL = 'joursScolaires'
 
 export async function getJourScolaire(date: string): Promise<JourScolaire | null> {
   const snap = await getDoc(doc(db, COL, date))
-  return snap.exists() ? (snap.data() as JourScolaire) : null
+  return docData<JourScolaire>(snap)
 }
 
 export async function getTodayJour(): Promise<JourScolaire | null> {
@@ -33,7 +34,7 @@ export function subscribeTodayJour(
   const today = new Date().toISOString().split('T')[0]
   return onSnapshot(
     doc(db, COL, today),
-    snap => onChange(snap.exists() ? (snap.data() as JourScolaire) : null),
+    snap => onChange(docData<JourScolaire>(snap)),
     err => onError?.(err),
   )
 }
@@ -59,7 +60,6 @@ export async function getJoursScolaires(fromDate: string, toDate: string): Promi
     where('date', '>=', fromDate),
     where('date', '<=', toDate),
   ))
-  return snap.docs
-    .map(d => d.data() as JourScolaire)
+  return toDocs<JourScolaire>(snap)
     .sort((a, b) => a.date.localeCompare(b.date))
 }

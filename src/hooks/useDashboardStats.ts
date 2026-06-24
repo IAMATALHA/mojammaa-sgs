@@ -13,6 +13,9 @@ import {
   collection, getCountFromServer, getDocs, query, where,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { toDoc } from '../services/firestore'
+import type { EleveDoc } from '../services/elevesService'
+import type { AbsenceDoc } from '../services/absencesService'
 
 export interface DashboardStats {
   totalEleves:    number
@@ -45,7 +48,7 @@ export function useDashboardStats() {
       const totalProfs  = profsCount.data().count
       const classeSet   = new Set<string>()
       elevesSnap.forEach(d => {
-        const c = (d.data() as any).classe
+        const c = toDoc<EleveDoc>(d).classe
         if (c) classeSet.add(String(c))
       })
 
@@ -53,8 +56,8 @@ export function useDashboardStats() {
       // compte si l'élève est absent à plusieurs séances).
       const absentEleves = new Set<string>()
       absencesSnap.forEach(d => {
-        const data = d.data() as any
-        if (data?.statut === 'absent' && data?.eleveId) {
+        const data = toDoc<AbsenceDoc>(d)
+        if (data.statut === 'absent' && data.eleveId) {
           absentEleves.add(String(data.eleveId))
         }
       })

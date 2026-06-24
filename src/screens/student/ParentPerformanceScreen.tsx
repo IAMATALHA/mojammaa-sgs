@@ -13,6 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { StudentHomeStackParamList } from '../../navigation/types'
 import {
   ChevronLeft, Award, Trophy, FileText,
   TrendingUp, TrendingDown, Minus, Star, AlertTriangle, Smile,
@@ -32,7 +34,7 @@ import { dirStyle } from '../../utils/arabicText'
 export default function ParentPerformanceScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const nav = useNavigation<any>()
+  const nav = useNavigation<NativeStackNavigationProp<StudentHomeStackParamList>>()
 
   const HONOR_LABEL: Record<string, { label: string; tint: 'success' | 'info' | 'warning' }> = {
     felicitations:  { label: t('parent.felicitations'),  tint: 'success' },

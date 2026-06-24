@@ -6,6 +6,8 @@ import {
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useNavigation, useRoute } from '@react-navigation/native'
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
+import type { TeacherTabsParamList, TeacherTabRoute } from '../../navigation/types'
 import { X, Send, Inbox, PenSquare, AlertCircle, Users, CalendarDays, Check, Lock } from 'lucide-react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ScreenLayout from '../../components/ScreenLayout'
@@ -34,8 +36,8 @@ export default function TeacherMessagesScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language as 'fr' | 'ar' | 'en'
   const { profile } = useAuth()
-  const navigation = useNavigation<any>()
-  const route = useRoute<any>()
+  const navigation = useNavigation<BottomTabNavigationProp<TeacherTabsParamList, 'TeacherMessages'>>()
+  const route = useRoute<TeacherTabRoute<'TeacherMessages'>>()
   const [tab, setTab] = useState<Tab>('inbox')
   const [inboxMsgs, setInboxMsgs] = useState<MessageDoc[]>([])
   const [sentMsgs, setSentMsgs] = useState<MessageDoc[]>([])

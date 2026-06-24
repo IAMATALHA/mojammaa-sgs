@@ -14,6 +14,7 @@ import {
   serverTimestamp, type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { toDocs } from './firestore'
 
 export type AbsenceRequestStatus = 'pending' | 'approved' | 'declined'
 
@@ -54,8 +55,7 @@ export function subscribeAbsenceRequestsForParent(
   return onSnapshot(
     query(collection(db, COL), where('parentUid', '==', parentUid)),
     snap => onChange(
-      snap.docs
-        .map(d => ({ id: d.id, ...(d.data() as Omit<AbsenceRequestDoc, 'id'>) }))
+      toDocs<AbsenceRequestDoc>(snap)
         .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)),
     ),
     err => onError?.(err),
@@ -72,7 +72,7 @@ export async function getAbsenceRequestsForClassDate(
     where('classe', '==', classe),
     where('date', '==', date),
   ))
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<AbsenceRequestDoc, 'id'>) }))
+  return toDocs<AbsenceRequestDoc>(snap)
 }
 
 export async function decideAbsenceRequest(

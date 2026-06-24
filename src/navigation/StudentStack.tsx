@@ -33,9 +33,10 @@ import ParentComportementScreen from '../screens/student/ParentComportementScree
 import ParentRessourcesScreen from '../screens/student/ParentRessourcesScreen'
 import ParentPerformanceScreen from '../screens/student/ParentPerformanceScreen'
 import ParentEdtScreen from '../screens/student/ParentEdtScreen'
+import type { StudentTabsParamList, StudentHomeStackParamList } from './types'
 
-const Tab = createBottomTabNavigator()
-const HomeStackNav = createNativeStackNavigator()
+const Tab = createBottomTabNavigator<StudentTabsParamList>()
+const HomeStackNav = createNativeStackNavigator<StudentHomeStackParamList>()
 
 function TabIcon(props: { Icon: LucideIcon; color: string; focused: boolean; theme: Theme }) {
   return <AnimatedTabIcon {...props} bare />

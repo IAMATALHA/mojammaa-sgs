@@ -21,7 +21,9 @@ import {
 } from 'firebase/firestore'
 import i18n from '../i18n'
 import { db } from '../config/firebase'
+import { docData, toDocs } from './firestore'
 import { sendMessage } from './messagesService'
+import type { EleveDoc } from './elevesService'
 import type { BehaviorKind } from '../utils/behaviorTaxonomy'
 
 export interface ComportementDoc {
@@ -83,7 +85,7 @@ export async function recordComportement(input: RecordComportementInput): Promis
 
   // ── Notification parent (best-effort : le doc est déjà sauvegardé) ──
   const eleveSnap = await getDoc(doc(db, 'eleves', eleve.id))
-  const parentUid = (eleveSnap.data() as any)?.parentUid
+  const parentUid = docData<EleveDoc>(eleveSnap)?.parentUid
   if (!parentUid) return false
 
   const childName = `${eleve.prenom} ${eleve.nom}`.trim()
@@ -133,7 +135,7 @@ export function subscribeComportementsForEleves(
   const q = query(collection(db, COL), where('eleveId', 'in', eleveIds.slice(0, 10)))
   return onSnapshot(
     q,
-    snap => onChange(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<ComportementDoc, 'id'>) }))),
+    snap => onChange(toDocs<ComportementDoc>(snap)),
     err => { onError?.(err) },
   )
 }
@@ -147,7 +149,7 @@ export function subscribeComportementsForClasse(
   const q = query(collection(db, COL), where('classe', '==', classe))
   return onSnapshot(
     q,
-    snap => onChange(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<ComportementDoc, 'id'>) }))),
+    snap => onChange(toDocs<ComportementDoc>(snap)),
     err => { onError?.(err) },
   )
 }

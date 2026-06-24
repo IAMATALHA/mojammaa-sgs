@@ -19,6 +19,7 @@ import {
   Timestamp, updateDoc, where, type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { toDocs } from './firestore'
 import type { Attachment } from './StorageService'
 
 export interface RessourceDoc {
@@ -61,8 +62,7 @@ export function subscribeRessourcesForClasses(
   return onSnapshot(
     q,
     snap => onChange(
-      snap.docs
-        .map(d => ({ id: d.id, ...(d.data() as Omit<RessourceDoc, 'id'>) }))
+      toDocs<RessourceDoc>(snap)
         .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)),
     ),
     err => { onError?.(err) },

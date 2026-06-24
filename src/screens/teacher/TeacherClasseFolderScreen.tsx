@@ -10,25 +10,21 @@ import {
   ActivityIndicator,
 } from 'react-native'
 import { useRoute, useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
-
-interface RouteParams {
-  classe:          string
-  seance?:         string  // si on arrive depuis Today
-  openAttendance?: boolean // auto-naviguer vers l'attendance
-}
+import type { TeacherStackParamList, TeacherRoute } from '../../navigation/types'
 
 export default function TeacherClasseFolderScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const navigation = useNavigation<any>()
-  const route = useRoute()
-  const { classe, seance, openAttendance } = (route.params || {}) as RouteParams
+  const navigation = useNavigation<NativeStackNavigationProp<TeacherStackParamList>>()
+  const route = useRoute<TeacherRoute<'TeacherClasseFolder'>>()
+  const { classe, seance, openAttendance } = route.params ?? { classe: '' }
 
   const [eleveCount,   setEleveCount]   = useState<number | null>(null)
   const [devoirsCount, setDevoirsCount] = useState<number | null>(null)

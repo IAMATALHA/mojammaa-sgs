@@ -14,6 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { MotiView, AnimatePresence } from 'moti'
 import { useNavigation } from '@react-navigation/native'
+import type { TeacherDashboardNav } from '../../navigation/types'
 import { CalendarClock } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -34,7 +35,9 @@ const TEACHER_QUICK_ACTIONS: QuickAction[] = [
   { id: 'qa5', label: 'Performance',     labelKey: 'actions.performance',    icon: 'bar-chart-3',  tint: 'accent'  },
 ]
 
-const QUICK_ACTION_ROUTES: Record<string, string> = {
+type TeacherQuickRoute = 'TeacherEdt' | 'TeacherDevoirs' | 'TeacherMessages' | 'TeacherStats'
+
+const QUICK_ACTION_ROUTES: Record<string, TeacherQuickRoute> = {
   qa3: 'TeacherDevoirs',   // Nouveau devoir
   qa4: 'TeacherMessages',  // Envoyer message
   qa5: 'TeacherStats',     // Performance
@@ -56,7 +59,7 @@ export default function TeacherDashboardScreen() {
   const isAr = i18n.language === 'ar'
   const { profile } = useAuth()
   const teacher = useTeacherData()
-  const nav = useNavigation<any>()
+  const nav = useNavigation<TeacherDashboardNav>()
   const [refreshing, setRefreshing] = useState(false)
   const [showGreeting, setShowGreeting] = useState(true)
   const loading = teacher.loading
@@ -76,7 +79,7 @@ export default function TeacherDashboardScreen() {
     setTimeout(() => setRefreshing(false), 700)
   }, [])
 
-  const goTo = (route: string) => nav.navigate(route)
+  const goTo = (route: TeacherQuickRoute) => nav.navigate(route)
 
   const handleQuickAction = (action: QuickAction) => {
     // Cas spécial : "Faire l'appel" cible directement le cours en cours

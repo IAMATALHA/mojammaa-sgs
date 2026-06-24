@@ -6,6 +6,8 @@ import {
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useNavigation, useRoute } from '@react-navigation/native'
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
+import type { AdminTabsParamList, AdminTabRoute } from '../../navigation/types'
 import {
   X, Send, Inbox, PenSquare, AlertCircle, Users,
   GraduationCap, Search, CalendarDays, Check, Languages, ImagePlus,
@@ -45,8 +47,8 @@ export default function AdminMessagesScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language as 'fr' | 'ar' | 'en'
   const { profile } = useAuth()
-  const navigation = useNavigation<any>()
-  const route = useRoute<any>()
+  const navigation = useNavigation<BottomTabNavigationProp<AdminTabsParamList, 'AdminMessages'>>()
+  const route = useRoute<AdminTabRoute<'AdminMessages'>>()
   const [tab, setTab] = useState<Tab>('inbox')
   const [inboxMsgs, setInboxMsgs] = useState<MessageDoc[]>([])
   const [sentMsgs, setSentMsgs] = useState<MessageDoc[]>([])

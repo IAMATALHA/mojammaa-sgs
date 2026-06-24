@@ -7,6 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { MotiView, AnimatePresence } from 'moti'
 import { useNavigation } from '@react-navigation/native'
+import type { StudentDashboardNav } from '../../navigation/types'
 import {
   Users, Clock,
   ChevronRight, Star, AlertTriangle, Smile,
@@ -32,7 +33,11 @@ import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 const { width: SCREEN_W } = Dimensions.get('window')
 const CAROUSEL_CARD_W = SCREEN_W - 42
 
-const QUICK_ACTION_ROUTES: Record<string, string> = {
+type StudentQuickRoute =
+  | 'StudentPerformance' | 'StudentRessources' | 'StudentEdt' | 'StudentComportement'
+  | 'StudentAbsences' | 'StudentDevoirs' | 'StudentMessages' | 'StudentNotes'
+
+const QUICK_ACTION_ROUTES: Record<string, StudentQuickRoute> = {
   pqa1: 'StudentPerformance',
   pqa2: 'StudentAbsences',
   pqa3: 'StudentDevoirs',
@@ -213,7 +218,7 @@ export default function ParentDashboardScreen() {
   const { profile } = useAuth()
   const parent = useParentData()
   const { entries: comportements } = useParentComportements()
-  const nav = useNavigation<any>()
+  const nav = useNavigation<StudentDashboardNav>()
   const [refreshing, setRefreshing] = useState(false)
   const [selectedChildId, setSelectedChildId] = useState<string>('')
 
@@ -245,7 +250,7 @@ export default function ParentDashboardScreen() {
     [parent.children, selectedChildId],
   )
 
-  const goTo = (route: string) => nav.navigate(route)
+  const goTo = (route: StudentQuickRoute) => nav.navigate(route)
 
   const handleQuickAction = (action: QuickAction) => {
     const route = QUICK_ACTION_ROUTES[action.id]

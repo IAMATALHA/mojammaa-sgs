@@ -10,6 +10,7 @@ import {
   collection, onSnapshot, query, where, type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { toDocs } from './firestore'
 import type { CourseSlot } from '../utils/courseSchedule'
 
 export interface EmploiSlot extends CourseSlot {
@@ -32,7 +33,7 @@ export function subscribeClassSchedule(
   const q = query(collection(db, COL), where('classeId', '==', classeId))
   return onSnapshot(
     q,
-    snap => onChange(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<EmploiSlot, 'id'>) }))),
+    snap => onChange(toDocs<EmploiSlot>(snap)),
     err => { onError?.(err) },
   )
 }

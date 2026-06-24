@@ -4,6 +4,7 @@ import {
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ClipboardCheck, BookOpenCheck, CheckCircle2 } from 'lucide-react-native';
 import ScreenLayout from '../../components/ScreenLayout';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +14,7 @@ import {
   subscribeSchedule, type ScheduleDoc, type WeeklySlot, type WeekDay,
 } from '../../services/scheduleService';
 import { useTeacherDayCompletion } from '../../hooks/useTeacherDayCompletion';
+import type { TeacherStackParamList } from '../../navigation/types';
 
 const DAY_ORDER: WeekDay[] = [
   'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
@@ -52,7 +54,7 @@ export default function TeacherEdtScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { profile } = useAuth();
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<NativeStackNavigationProp<TeacherStackParamList>>();
   const [schedule, setSchedule] = useState<ScheduleDoc | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

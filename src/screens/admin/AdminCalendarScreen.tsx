@@ -18,6 +18,7 @@ import {
   type JourScolaire, type JourType,
 } from '../../services/calendarService'
 import type { Attachment } from '../../services/StorageService'
+import { toDoc } from '../../services/firestore'
 import * as Haptics from 'expo-haptics'
 
 const JOUR_TYPES: { value: JourType; labelKey: string; color: string }[] = [
@@ -158,7 +159,10 @@ export default function AdminCalendarScreen() {
   useEffect(() => {
     const unsub: Unsubscribe = onSnapshot(collection(db, 'devoirs'), snap => {
       setTasks(snap.docs.map(d => {
-        const data = d.data() as any
+        const data = toDoc<{
+          titre?: string; classeId?: string; teacherNom?: string; description?: string
+          dateLimite?: string; type?: string; attachments?: Attachment[]
+        }>(d)
         return {
           id: d.id,
           title: data.titre || '',

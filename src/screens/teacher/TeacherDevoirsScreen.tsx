@@ -15,6 +15,8 @@ import {
   KeyboardAvoidingView, Platform, Image, StatusBar,
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
+import type { TeacherRoute } from '../../navigation/types';
+import { toDocs } from '../../services/firestore';
 import {
   collection, getDocs, query, where, addDoc, serverTimestamp,
   Timestamp,
@@ -55,9 +57,9 @@ function formatDate(iso: string): string {
 export default function TeacherDevoirsScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const route = useRoute();
+  const route = useRoute<TeacherRoute<'TeacherDevoirsDetail'>>();
   const { profile } = useAuth();
-  const routeClasse = (route.params as { classe?: string } | undefined)?.classe
+  const routeClasse = route.params?.classe
   const [devoirs, setDevoirs] = useState<Devoir[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -69,7 +71,7 @@ export default function TeacherDevoirsScreen() {
     setLoading(true); setError(null)
     try {
       const snap = await getDocs(query(collection(db, 'devoirs'), where('teacherId', '==', profile.uid)))
-      let list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Devoir[]
+      let list = toDocs<Devoir>(snap)
       if (routeClasse) list = list.filter(x => x.classeId === routeClasse)
       list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
       setDevoirs(list)

@@ -4,6 +4,7 @@ import {
   ActivityIndicator, RefreshControl,
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
@@ -12,6 +13,7 @@ import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
 import { subscribeSchedule, type ScheduleDoc, type WeeklySlot } from '../../services/scheduleService'
+import type { TeacherStackParamList } from '../../navigation/types'
 
 interface ClasseRow {
   name:         string
@@ -29,7 +31,7 @@ function getClassesFromProfile(profile: any): string[] {
 export default function TeacherClassesScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const navigation = useNavigation<any>()
+  const navigation = useNavigation<NativeStackNavigationProp<TeacherStackParamList>>()
   const { profile } = useAuth()
   const [classes, setClasses] = useState<ClasseRow[]>([])
   const [loading, setLoading] = useState(true)

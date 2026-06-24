@@ -7,6 +7,7 @@ import {
   type AbsenceDoc,
 } from '../services/absencesService'
 import { subscribeNotesForEleve, type NoteDoc } from '../services/notesService'
+import { toDoc } from '../services/firestore'
 import { db } from '../config/firebase'
 import type { Child } from '../utils/dashboardTypes'
 
@@ -81,7 +82,7 @@ export function useParentData(): ParentData {
         snap => {
           chunk.forEach(c => counts.set(c, 0))
           snap.docs.forEach(d => {
-            const data = d.data() as any
+            const data = toDoc<{ dateLimite?: string; classeId: string }>(d)
             const dl = data.dateLimite
             if (typeof dl === 'string' && dl >= today) {
               const cls = data.classeId

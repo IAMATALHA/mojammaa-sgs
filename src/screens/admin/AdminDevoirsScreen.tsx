@@ -8,6 +8,7 @@ import { BookOpen, Clock, Users } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
+import { toDoc } from '../../services/firestore'
 
 interface DevoirRow {
   id: string
@@ -40,7 +41,10 @@ export default function AdminDevoirsScreen() {
     try {
       const snap = await getDocs(collection(db, 'devoirs'))
       const list: DevoirRow[] = snap.docs.map(d => {
-        const data = d.data() as any
+        const data = toDoc<{
+          titre?: string; classeId?: string; teacherNom?: string
+          dateLimite?: string; type?: string; createdAt?: Timestamp
+        }>(d)
         return {
           id: d.id,
           titre: data.titre || '',

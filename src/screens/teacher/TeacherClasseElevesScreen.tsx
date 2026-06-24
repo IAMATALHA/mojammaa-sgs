@@ -3,11 +3,14 @@ import {
   View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl,
 } from 'react-native'
 import { useRoute } from '@react-navigation/native'
+import type { TeacherRoute } from '../../navigation/types'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
+import { toDoc } from '../../services/firestore'
+import type { EleveDoc } from '../../services/elevesService'
 
 interface Eleve {
   id:         string
@@ -19,8 +22,8 @@ interface Eleve {
 export default function TeacherClasseElevesScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const route = useRoute()
-  const { classe } = (route.params || {}) as { classe: string }
+  const route = useRoute<TeacherRoute<'TeacherClasseEleves'>>()
+  const { classe } = route.params ?? { classe: '' }
   const [eleves,  setEleves]  = useState<Eleve[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -30,7 +33,7 @@ export default function TeacherClasseElevesScreen() {
     try {
       const snap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', classe)))
       const list = snap.docs.map(d => {
-        const data = d.data() as any
+        const data = toDoc<EleveDoc>(d)
         return {
           id:         d.id,
           nom:        data.nom        || '',
