@@ -208,8 +208,10 @@ const softShadow = (radius: number, opacity: number, y = 2) =>
       shadowOffset: { width: 0, height: y },
     },
     android: {
-      // pas d'elevation : on s'appuie sur boxShadow (Fabric) pour éviter le gris.
-      boxShadow: `0px ${y}px ${radius}px rgba(${NAVY}, ${opacity})`,
+      // Pas d'elevation (= gris dur). On utilise boxShadow (Fabric), MAIS Android
+      // le rend plus dense/sombre qu'iOS → on allège : opacité ~moitié, flou
+      // élargi et décalage réduit pour une ombre douce et discrète, non grise.
+      boxShadow: `0px ${Math.round(y * 0.6)}px ${Math.round(radius * 1.3)}px rgba(${NAVY}, ${+(opacity * 0.45).toFixed(3)})`,
     },
     default: {},
   }) as object
