@@ -28,20 +28,19 @@ export default function TeacherClasseFolderScreen() {
 
   const [eleveCount,   setEleveCount]   = useState<number | null>(null)
   const [devoirsCount, setDevoirsCount] = useState<number | null>(null)
-  const [notesCount,   setNotesCount]   = useState<number | null>(null)
   const [loading,      setLoading]      = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [elevesSnap, devoirsSnap, notesSnap] = await Promise.all([
+      // Pas de comptage de notes ici : un prof ne lit que les notes de SA
+      // matière (règle Firestore), une requête classe tous-sujets serait refusée.
+      const [elevesSnap, devoirsSnap] = await Promise.all([
         getDocs(query(collection(db, 'eleves'),  where('classe',   '==', classe))),
         getDocs(query(collection(db, 'devoirs'), where('classeId', '==', classe))),
-        getDocs(query(collection(db, 'notes'),   where('classe',   '==', classe))),
       ])
       setEleveCount(elevesSnap.size)
       setDevoirsCount(devoirsSnap.size)
-      setNotesCount(notesSnap.size)
     } catch {
       // Une rule qui rate ne doit pas casser l'écran.
     } finally {
@@ -92,7 +91,7 @@ export default function TeacherClasseFolderScreen() {
             <ActivityIndicator color="#fff" style={{ marginTop: 8 }} />
           ) : (
             <Text style={styles.headerMeta}>
-              {t('teacher.studentsCount', { count: eleveCount ?? 0 })} · {devoirsCount ?? 0} {t('tabs.homework').toLowerCase()} · {notesCount ?? 0} {t('tabs.grades').toLowerCase()}
+              {t('teacher.studentsCount', { count: eleveCount ?? 0 })} · {devoirsCount ?? 0} {t('tabs.homework').toLowerCase()}
             </Text>
           )}
         </View>
@@ -123,7 +122,7 @@ export default function TeacherClasseFolderScreen() {
         <Action
           icon="document-text-outline"
           label={t('tabs.grades')}
-          sub={notesCount != null ? `${notesCount} note(s)` : t('teacher.notesSeeEnter')}
+          sub={t('teacher.notesSeeEnter')}
           onPress={() => navigation.navigate('TeacherNotes', { classe })}
         />
         <Action

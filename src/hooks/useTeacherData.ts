@@ -21,7 +21,7 @@ import { computeTeacherPresenceRate } from '../services/absencesService'
 import { toDoc } from '../services/firestore'
 import { db } from '../config/firebase'
 import type { UserProfile } from '../types'
-import type { ScheduleEntry, ScheduleStatus, ClassPerformance } from '../utils/dashboardTypes'
+import type { ScheduleEntry, ScheduleStatus } from '../utils/dashboardTypes'
 
 export interface TeacherKpis {
   classes:    number
@@ -39,7 +39,6 @@ export interface TeacherData {
   kpis:             TeacherKpis
   schedule:         ScheduleDoc | null
   todaySlots:       ScheduleEntry[]
-  classPerformance: ClassPerformance[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -100,7 +99,6 @@ export function useTeacherData(): TeacherData {
   const [schedule,         setSchedule]        = useState<ScheduleDoc | null>(null)
   const [presence,         setPresence]        = useState<number>(100)
   const [pendingCount,     setPendingCount]    = useState<number>(0)
-  const [classPerformance, setClassPerformance] = useState<ClassPerformance[]>([])
   const [loading,          setLoading]         = useState(true)
   const [error,            setError]           = useState<string | null>(null)
   const [tick,             setTick]            = useState(0)
@@ -177,27 +175,6 @@ export function useTeacherData(): TeacherData {
     }).catch(() => setPendingCount(0))
   }, [profile?.uid])
 
-  // Class performance from real notes
-  useEffect(() => {
-    if (classes.length === 0) { setClassPerformance([]); return }
-    Promise.all(
-      classes.map(async (c) => {
-        const snap = await getDocs(query(collection(db, 'notes'), where('classe', '==', c)))
-        const notes: number[] = []
-        snap.forEach(d => {
-          const n = toDoc<{ note?: number }>(d).note
-          if (typeof n === 'number' && n >= 0 && n <= 20) notes.push(n)
-        })
-        if (notes.length === 0) return { classe: c, average: 0, topMark: 0, trend: 'flat' as const }
-        const avg = notes.reduce((s, v) => s + v, 0) / notes.length
-        const top = Math.max(...notes)
-        return { classe: c, average: Math.round(avg * 10) / 10, topMark: top, trend: 'flat' as const }
-      }),
-    )
-      .then(results => setClassPerformance(results.filter(r => r.average > 0)))
-      .catch(() => setClassPerformance([]))
-  }, [classes.join('|')])
-
   const byClasse = useMemo(() => groupByClasse(eleves), [eleves])
 
   const subject = profile?.matiere || 'Mathématiques'
@@ -230,6 +207,5 @@ export function useTeacherData(): TeacherData {
     kpis,
     schedule,
     todaySlots,
-    classPerformance,
   }
 }

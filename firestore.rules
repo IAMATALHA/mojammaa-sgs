@@ -97,8 +97,16 @@ service cloud.firestore {
       // live vérifiées 2026-06-22 : 100% des notes.eleveId == ID doc eleves,
       // donc eleveParentUid(eleveId) résout. (Ancien getClassNotes() supprimé
       // depuis v1.0.4 ; builds < 1.0.4 verraient leur requête classe refusée.)
+      //
+      // PROF restreint à SA matière (2026-06-25) — un prof ne lit QUE les notes
+      // de SES classes ET de SA matière (parité avec la règle d'écriture). Les
+      // lectures inter-matières (stats classe tous-sujets) ont été retirées du
+      // client : TeacherNotesScreen interroge `where matiere == profile.matiere`,
+      // donc reste autorisé. Un prof sans `matiere` (ancien compte) ne lit/écrit
+      // aucune note — il ne peut de toute façon pas en saisir (règle write).
       allow read: if isAdmin()
-                  || teacherTeaches(resource.data.classe)
+                  || (teacherTeaches(resource.data.classe)
+                      && resource.data.matiere == myDoc().matiere)
                   || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
       // Prof : uniquement SA classe ET SA matière. Admin : tout.
       allow create, update: if isAdmin() || (

@@ -6,9 +6,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTranslation } from 'react-i18next'
-import {
-  Users, TrendingUp, Award, TrendingDown, Target,
-} from 'lucide-react-native'
+import { Users, CalendarX } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -30,10 +28,6 @@ const CLASS_COLORS = [
 interface ClassStats {
   name: string
   studentCount: number
-  avgNote: number | null
-  topNote: number | null
-  minNote: number | null
-  successRate: number | null
   absencesMonth: number
 }
 
@@ -62,30 +56,14 @@ export default function TeacherStatsScreen() {
       const results: ClassStats[] = []
 
       for (const c of teacher.classes) {
-        const [notesSnap, absMonthSnap] = await Promise.all([
-          getDocs(query(collection(db, 'notes'), where('classe', '==', c))),
-          getDocs(query(collection(db, 'absences'), where('classe', '==', c), where('statut', '==', 'absent'))),
-        ])
-
-        const notesByEleve = new Map<string, number[]>()
-        notesSnap.forEach(d => {
-          const data = toDoc<{ note?: number; eleveId?: string }>(d)
-          const n = data.note
-          const eId = data.eleveId
-          if (typeof n === 'number' && n >= 0 && n <= 20 && eId) {
-            const arr = notesByEleve.get(eId) || []
-            arr.push(n)
-            notesByEleve.set(eId, arr)
-          }
-        })
-
-        const allNotes: number[] = []
-        notesByEleve.forEach(ns => allNotes.push(...ns))
-
-        const eleveAvgs: number[] = []
-        notesByEleve.forEach(ns => {
-          eleveAvgs.push(ns.reduce((s, v) => s + v, 0) / ns.length)
-        })
+        // Note: les stats de notes inter-matières ont été retirées (2026-06-25) —
+        // un prof ne lit que les notes de SA matière, donc pas de moyenne classe
+        // tous-sujets ici. On garde l'effectif et les absences du mois.
+        const absMonthSnap = await getDocs(query(
+          collection(db, 'absences'),
+          where('classe', '==', c),
+          where('statut', '==', 'absent'),
+        ))
 
         const absencesMonth = absMonthSnap.docs.filter(d => {
           const date = toDoc<AbsenceDoc>(d).date
@@ -94,15 +72,7 @@ export default function TeacherStatsScreen() {
 
         const studentCount = teacher.byClasse[c]?.length ?? 0
 
-        results.push({
-          name: c,
-          studentCount,
-          avgNote: allNotes.length > 0 ? Math.round((allNotes.reduce((s, v) => s + v, 0) / allNotes.length) * 10) / 10 : null,
-          topNote: allNotes.length > 0 ? Math.max(...allNotes) : null,
-          minNote: allNotes.length > 0 ? Math.min(...allNotes) : null,
-          successRate: eleveAvgs.length > 0 ? Math.round((eleveAvgs.filter(a => a >= 10).length / eleveAvgs.length) * 100) : null,
-          absencesMonth,
-        })
+        results.push({ name: c, studentCount, absencesMonth })
       }
 
       results.sort((a, b) => a.name.localeCompare(b.name, 'fr'))
@@ -149,51 +119,26 @@ export default function TeacherStatsScreen() {
                   </View>
                 </View>
 
-                {/* 4 KPIs */}
+                {/* KPIs (notes retirées — prof limité à sa matière) */}
                 <View style={styles.kpiRow}>
                   <View style={[styles.kpiBox, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
-                    <TrendingUp size={14} color={palette.accent} strokeWidth={2} />
+                    <Users size={14} color={palette.accent} strokeWidth={2} />
                     <Text style={[styles.kpiValue, { color: palette.fg }]}>
-                      {cs.avgNote != null ? `${cs.avgNote}` : '—'}
+                      {cs.studentCount}
                     </Text>
                     <Text style={[styles.kpiLabel, { color: 'rgba(255,255,255,0.7)' }]}>
-                      {t('teacher.avgLabel')}
+                      {t('teacher.studentList')}
                     </Text>
                   </View>
                   <View style={[styles.kpiBox, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
-                    <Award size={14} color={palette.accent} strokeWidth={2} />
+                    <CalendarX size={14} color={palette.accent} strokeWidth={2} />
                     <Text style={[styles.kpiValue, { color: palette.fg }]}>
-                      {cs.topNote != null ? `${cs.topNote}` : '—'}
+                      {cs.absencesMonth}
                     </Text>
                     <Text style={[styles.kpiLabel, { color: 'rgba(255,255,255,0.7)' }]}>
-                      {t('teacher.statTop')}
+                      {t('tabs.absences')}
                     </Text>
                   </View>
-                  <View style={[styles.kpiBox, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
-                    <TrendingDown size={14} color={palette.accent} strokeWidth={2} />
-                    <Text style={[styles.kpiValue, { color: palette.fg }]}>
-                      {cs.minNote != null ? `${cs.minNote}` : '—'}
-                    </Text>
-                    <Text style={[styles.kpiLabel, { color: 'rgba(255,255,255,0.7)' }]}>
-                      {t('teacher.statMin')}
-                    </Text>
-                  </View>
-                  <View style={[styles.kpiBox, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
-                    <Target size={14} color={palette.accent} strokeWidth={2} />
-                    <Text style={[styles.kpiValue, { color: palette.fg }]}>
-                      {cs.successRate != null ? `${cs.successRate}%` : '—'}
-                    </Text>
-                    <Text style={[styles.kpiLabel, { color: 'rgba(255,255,255,0.7)' }]}>
-                      {t('teacher.statPass')}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Bottom detail */}
-                <View style={styles.detailRow}>
-                  <Text style={{ color: palette.fg, fontSize: 12, opacity: 0.75 }}>
-                    {cs.absencesMonth} {t('tabs.absences').toLowerCase()} · {t('parent.history').toLowerCase()}
-                  </Text>
                 </View>
               </Pressable>
             )
@@ -256,10 +201,5 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.3,
     marginTop: 2,
-  },
-
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
   },
 })
