@@ -14,9 +14,11 @@ import i18n from '../i18n'
 
 // Morocco-flavoured locales: Arabic → Moroccan, English → day/month ordering
 // that matches the French layout the rest of the UI assumes.
+// `-u-nu-latn` force le système de chiffres latin (2026, 25) au lieu des
+// chiffres arabes (٢٠٢٦) — les mois/jours restent en arabe et le RTL inchangé.
 const LOCALE: Record<string, string> = {
   fr: 'fr-FR',
-  ar: 'ar-MA',
+  ar: 'ar-MA-u-nu-latn',
   en: 'en-GB',
 }
 
