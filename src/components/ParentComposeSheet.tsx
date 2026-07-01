@@ -107,7 +107,8 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
 
   return (
     <BottomSheet visible={visible} onClose={() => { reset(); onClose() }}>
-      {/* L'évitement clavier est géré par BottomSheet (KAV à la racine du Modal). */}
+      {/* L'évitement clavier est géré par BottomSheet (suivi de la hauteur
+          du clavier + zone de contenu défilable). */}
       <View>
         <Text style={{ color: theme.text, fontWeight: '800', fontSize: 17 }}>
           {t('parentCompose.title')}
@@ -122,7 +123,7 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
             {t('parentCompose.empty')}
           </Text>
         ) : (
-          <ScrollView style={{ maxHeight: 190 }} showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ maxHeight: 190 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
             <Pressable
               onPress={() => setRecipient({ kind: 'school' })}
               accessibilityRole="button"
