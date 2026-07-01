@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 import type { TeacherTabsParamList, TeacherTabRoute } from '../../navigation/types'
-import { X, Send, Inbox, PenSquare, AlertCircle, Users, CalendarDays, Check, Lock } from 'lucide-react-native'
+import { X, Send, Inbox, PenSquare, AlertCircle, Users, CalendarDays, Check, Lock, Search } from 'lucide-react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
@@ -305,7 +305,8 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
   // Load students whenever the class set changes; default = all selected.
   useEffect(() => {
     let cancelled = false
-    if (selectedClasses.length === 0) { setEleves([]); setSelectedEleveIds(new Set()); return }
+    if (selectedClasses.length === 0) { setEleves([]); setSelectedEleveIds(new Set()); setEleveSearch(''); return }
+    setEleveSearch('')
     setLoadingEleves(true)
     listEleves({ classes: selectedClasses })
       .then(list => {
@@ -325,7 +326,31 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
     return map
   }, [eleves])
 
+  // ── Recherche élève : la liste complète n'est plus déroulée d'office. ──
+  // Par défaut on ne montre que les élèves déjà sélectionnés ; taper une
+  // lettre déplie les noms dont un mot commence par la saisie.
+  const [eleveSearch, setEleveSearch] = useState('')
+  const normName = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const filteredByClasse = useMemo(() => {
+    const nq = normName(eleveSearch.trim())
+    if (!nq) return null
+    const map: Record<string, EleveDoc[]> = {}
+    Object.entries(elevesByClasse).forEach(([classe, list]) => {
+      const hits = list.filter(e => normName(eleveName(e)).split(/\s+/).some(tok => tok.startsWith(nq)))
+      if (hits.length) map[classe] = hits
+    })
+    return map
+  }, [elevesByClasse, eleveSearch])
+
   const selectedEleves = useMemo(() => eleves.filter(e => selectedEleveIds.has(eleveKey(e))), [eleves, selectedEleveIds])
+  const selectedByClasse = useMemo(() => {
+    const map: Record<string, EleveDoc[]> = {}
+    Object.entries(elevesByClasse).forEach(([classe, list]) => {
+      const sel = list.filter(e => selectedEleveIds.has(eleveKey(e)))
+      if (sel.length) map[classe] = sel
+    })
+    return map
+  }, [elevesByClasse, selectedEleveIds])
   const parentUids = useMemo(
     () => [...new Set(selectedEleves.map(e => e.parentUid).filter(Boolean) as string[])],
     [selectedEleves],
@@ -489,12 +514,45 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
                   {allSelected && <Check size={16} color="#fff" strokeWidth={3} />}
                 </TouchableOpacity>
 
-                {Object.keys(elevesByClasse).sort().map(classe => (
+                {/* Recherche : une lettre suffit pour déplier les noms qui commencent par la saisie. */}
+                <View style={[cs.eleveSearchRow, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                  <Search size={15} color={theme.textSoft} strokeWidth={2} />
+                  <TextInput
+                    value={eleveSearch} onChangeText={setEleveSearch}
+                    accessibilityLabel={lang === 'ar' ? 'ابحث عن تلميذ' : lang === 'en' ? 'Search a student' : 'Chercher un élève'}
+                    placeholder={lang === 'ar' ? 'ابحث عن تلميذ…' : lang === 'en' ? 'Search a student…' : 'Chercher un élève…'}
+                    placeholderTextColor={theme.textMuted}
+                    style={{ flex: 1, marginStart: 8, color: theme.text, fontSize: 13, paddingVertical: 0 }} />
+                  {eleveSearch !== '' && (
+                    <Pressable onPress={() => setEleveSearch('')} hitSlop={8}
+                      accessibilityRole="button" accessibilityLabel={t('common.close')}>
+                      <X size={14} color={theme.textSoft} strokeWidth={2} />
+                    </Pressable>
+                  )}
+                </View>
+
+                {(() => {
+                  // Sans recherche : seulement la sélection en cours (liste repliée) ;
+                  // « toute la classe » cochée → rien à lister, un résumé suffit.
+                  const searching = filteredByClasse !== null
+                  const displayed = searching ? filteredByClasse! : (allSelected ? {} : selectedByClasse)
+                  if (Object.keys(displayed).length === 0) {
+                    return (
+                      <Text style={{ color: theme.textSoft, fontSize: 12, marginTop: 4 }}>
+                        {searching
+                          ? (lang === 'ar' ? 'لا يوجد تلميذ بهذا الاسم' : lang === 'en' ? 'No student matches' : 'Aucun élève ne correspond')
+                          : allSelected
+                            ? (lang === 'ar' ? 'كل القسم محدد' : lang === 'en' ? 'Whole class selected' : 'Toute la classe est sélectionnée')
+                            : (lang === 'ar' ? 'اكتب حرفاً للبحث عن تلميذ' : lang === 'en' ? 'Type a letter to search a student' : 'Tapez une lettre pour chercher un élève')}
+                      </Text>
+                    )
+                  }
+                  return Object.keys(displayed).sort().map(classe => (
                   <View key={classe} style={{ marginTop: 8 }}>
                     {selectedClasses.length > 1 && (
                       <Text style={{ color: theme.textMuted, fontWeight: '800', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, marginVertical: 6 }}>{classe}</Text>
                     )}
-                    {elevesByClasse[classe].map(e => {
+                    {displayed[classe].map(e => {
                       const id = eleveKey(e)
                       const on = selectedEleveIds.has(id)
                       const hasParent = !!e.parentUid
@@ -517,7 +575,8 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
                       )
                     })}
                   </View>
-                ))}
+                  ))
+                })()}
               </>
             )}
 
@@ -682,6 +741,7 @@ const cs = StyleSheet.create({
 
   studentsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, marginBottom: 8 },
   wholeClassBtn: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1.5, marginBottom: 4 },
+  eleveSearchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, marginTop: 6, marginBottom: 4 },
   eleveRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 10, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, marginBottom: 5 },
   checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   lockedRow: { flexDirection: 'row', alignItems: 'center', padding: 11, borderRadius: 12, borderWidth: 1, marginBottom: 12 },

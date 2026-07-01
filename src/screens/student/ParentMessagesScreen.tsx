@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, Pressable, Modal, ScrollView,
   ActivityIndicator, TextInput, TouchableOpacity, Alert, Image,
+  useWindowDimensions,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -29,6 +30,7 @@ export default function ParentMessagesScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
   const { profile } = useAuth()
+  const { height: winH } = useWindowDimensions()
   const navigation = useNavigation<BottomTabNavigationProp<StudentTabsParamList, 'StudentMessages'>>()
   const route = useRoute<StudentTabRoute<'StudentMessages'>>()
   const [messages, setMessages] = useState<MessageDoc[]>([])
@@ -230,7 +232,7 @@ export default function ParentMessagesScreen() {
       {/* Detail + Reply — bottom sheet à ressort */}
       <BottomSheet visible={!!detail} onClose={() => setDetail(null)}>
         {detail && (
-          /* L'évitement clavier est géré par BottomSheet (KAV à la racine du Modal). */
+          /* L'évitement clavier est géré par BottomSheet (suivi hauteur clavier). */
           <View>
             <View style={styles.sheetHeader}>
               <View style={{ flex: 1 }}>
@@ -241,7 +243,9 @@ export default function ParentMessagesScreen() {
               </View>
               <Pressable onPress={() => setDetail(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')}><X size={20} color={theme.text} strokeWidth={2} /></Pressable>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 300 }}>
+            {/* Lecture confortable : la feuille occupe une vraie hauteur d'écran
+                (~45–65%) au lieu d'un petit encart de 300px collé en bas. */}
+            <ScrollView showsVerticalScrollIndicator={false} style={{ minHeight: winH * 0.42, maxHeight: winH * 0.62 }}>
               {detail.priority === 'urgent' && (
                 <View style={[styles.urgentBadge, { backgroundColor: theme.dangerSurface }]}>
                   <Text style={{ color: theme.danger, fontWeight: '800', fontSize: 11 }}>🚨 {t('compose.urgent')}</Text>
