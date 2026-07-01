@@ -125,6 +125,11 @@ exports.onMessageCreated = onDocumentCreated('messages/{messageId}', async (even
     sound: 'default',
     title,
     body: data.body || '',
+    // priority high : réveille l'appareil même en Doze (sinon FCM « normal »
+    // peut retenir la notif jusqu'à la prochaine ouverture de l'app).
+    // channelId : canal Android créé par l'app (importance MAX).
+    priority: 'high',
+    channelId: 'default',
     data: { messageId: event.params.messageId, type: data.category || 'announcement' },
   }))
 

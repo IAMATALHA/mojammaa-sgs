@@ -52,9 +52,18 @@ export async function registerForPushNotificationsAsync(userId: string) {
 
   // EAS project ID (UUID from app.json extra.eas.projectId).
   // Required since Expo SDK 53+ — push notifications fail silently without it.
-  token = (await Notifications.getExpoPushTokenAsync({
-    projectId: '6ff4e5d9-040f-45df-ac65-5cf941ad8627',
-  })).data;
+  // ⚠️ Dans EXPO GO (npx expo start), les push distants n'existent plus depuis
+  // SDK 53 : cet appel échoue → AUCUN token enregistré → le téléphone ne sera
+  // jamais notifié. Tester les push sur un build EAS ou la version Play Store.
+  try {
+    token = (await Notifications.getExpoPushTokenAsync({
+      projectId: '6ff4e5d9-040f-45df-ac65-5cf941ad8627',
+    })).data;
+  } catch (e) {
+    console.warn('[push] getExpoPushTokenAsync a échoué — push indisponibles ' +
+      '(Expo Go ne les supporte plus ; utiliser un build EAS/Play Store).', e);
+    return;
+  }
   
   // Save token to Firestore — setDoc(merge) au lieu d'updateDoc, sinon
   // le 1er login d'un user dont le doc users/{uid} n'existe pas encore
