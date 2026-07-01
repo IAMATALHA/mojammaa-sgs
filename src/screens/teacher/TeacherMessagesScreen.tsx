@@ -329,14 +329,23 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
   // ── Recherche élève : la liste complète n'est plus déroulée d'office. ──
   // Par défaut on ne montre que les élèves déjà sélectionnés ; taper une
   // lettre déplie les noms dont un mot commence par la saisie.
+  // ⚠️ Beaucoup d'élèves n'ont un nom QU'EN ARABE : on cherche donc dans TOUS
+  // les champs de nom (latin + arabe), avec pliage des deux écritures
+  // (accents latins ; tachkil, formes de hamza, ta marbouta, alif maqsoura).
   const [eleveSearch, setEleveSearch] = useState('')
-  const normName = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const normName = (s: string) => s
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[ً-ْٰ]/g, '')
+    .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+  const eleveHaystack = (e: EleveDoc) =>
+    normName([e.prenomLatin, e.nomLatin, e.prenom, e.nom, e.nomComplet].filter(Boolean).join(' '))
   const filteredByClasse = useMemo(() => {
     const nq = normName(eleveSearch.trim())
     if (!nq) return null
     const map: Record<string, EleveDoc[]> = {}
     Object.entries(elevesByClasse).forEach(([classe, list]) => {
-      const hits = list.filter(e => normName(eleveName(e)).split(/\s+/).some(tok => tok.startsWith(nq)))
+      const hits = list.filter(e => eleveHaystack(e).split(/\s+/).some(tok => tok.startsWith(nq)))
       if (hits.length) map[classe] = hits
     })
     return map
