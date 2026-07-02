@@ -47,8 +47,25 @@ export function usePushTapNavigation(role: RoleLogic | null, enabled: boolean) {
     }
   }, [])
 
-  const handleResponse = useCallback((response: Notifications.NotificationResponse | null) => {
+  // Une même notification ne doit jamais être traitée deux fois : sur Android,
+  // l'intent de lancement reste attaché à la tâche et
+  // getLastNotificationResponseAsync() RE-RENVOIE le vieux tap à chaque
+  // démarrage à froid (clearLastNotificationResponseAsync ne purge que le
+  // cache JS) → l'app « retombait » sur Messages après chaque login.
+  const handledId = useRef<string | null>(null)
+
+  const handleResponse = useCallback((response: Notifications.NotificationResponse | null, coldStart = false) => {
     if (!response) return
+    const id = response.notification?.request?.identifier || null
+    if (id && handledId.current === id) return
+    if (coldStart) {
+      // Démarrage à froid : n'honorer qu'un tap FRAIS (< 2 min) — au-delà,
+      // c'est l'intent recyclé d'une vieille notification, pas une intention.
+      const raw = response.notification?.date
+      const ms = typeof raw === 'number' ? (raw < 1e12 ? raw * 1000 : raw) : 0
+      if (!ms || Date.now() - ms > 2 * 60_000) return
+    }
+    handledId.current = id
     const data = response.notification?.request?.content?.data as Record<string, unknown> | undefined
     const messageId = typeof data?.messageId === 'string' ? data.messageId : undefined
     pending.current = { messageId }
@@ -66,7 +83,7 @@ export function usePushTapNavigation(role: RoleLogic | null, enabled: boolean) {
     Notifications.getLastNotificationResponseAsync()
       .then(resp => {
         if (!resp) return
-        handleResponse(resp)
+        handleResponse(resp, true)
         // Effacer pour ne pas re-déclencher au prochain mount/refresh.
         Notifications.clearLastNotificationResponseAsync().catch(() => {})
       })
