@@ -28,6 +28,14 @@ const db = getFirestore()
 setGlobalOptions({ maxInstances: 10, region: 'europe-west1' })
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
+const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts'
+const EXPO_PUSH_TOKEN_RE = /^(Expo|Exponent)PushToken\[[^\]]+\]$/
+const RECEIPT_CHECK_DELAY_MS = 15 * 60 * 1000
+const RECEIPT_MAX_AGE_MS = 24 * 60 * 60 * 1000
+
+function isValidExpoPushToken(token) {
+  return typeof token === 'string' && EXPO_PUSH_TOKEN_RE.test(token)
+}
 
 /** Resolve the set of recipient UIDs for a message document. */
 async function resolveRecipientUids(data) {
@@ -68,22 +76,34 @@ async function resolveRecipientUids(data) {
 
 /** Read Expo push tokens for a list of UIDs (Admin SDK → bypasses rules). */
 async function tokensForUids(uids) {
-  const tokens = []
+  const tokens = new Set()
+  let invalid = 0
   // getAll is efficient and avoids the `in`-query 10-item limit.
   for (let i = 0; i < uids.length; i += 100) {
     const refs = uids.slice(i, i + 100).map((u) => db.collection('users').doc(u))
     const docs = await db.getAll(...refs)
     docs.forEach((d) => {
       const tok = d.exists ? d.get('expoPushToken') : null
-      if (typeof tok === 'string' && tok.startsWith('ExponentPushToken')) tokens.push(tok)
+      if (!tok) return
+      if (isValidExpoPushToken(tok)) tokens.add(tok)
+      else invalid++
     })
   }
-  return tokens
+  return { tokens: [...tokens], invalid }
 }
 
-/** Send to the Expo Push API in batches of 100. Returns count accepted. */
+function summarizeExpoTicketError(ticket) {
+  return {
+    message: ticket?.message || null,
+    error: ticket?.details?.error || null,
+  }
+}
+
+/** Send to the Expo Push API in batches of 100. Returns ticket counts. */
 async function sendExpoPush(messages) {
   let sent = 0
+  let errors = 0
+  const ticketIds = []
   for (let i = 0; i < messages.length; i += 100) {
     const chunk = messages.slice(i, i + 100)
     try {
@@ -91,18 +111,99 @@ async function sendExpoPush(messages) {
         method: 'POST',
         headers: {
           Accept: 'application/json',
+          'Accept-Encoding': 'gzip, deflate',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(chunk),
       })
       const json = await res.json().catch(() => null)
-      if (res.ok) sent += chunk.length
-      else logger.warn('Expo push non-OK', { status: res.status, json })
+      if (!res.ok) {
+        errors += chunk.length
+        logger.warn('Expo push non-OK', { status: res.status, json })
+        continue
+      }
+
+      const tickets = Array.isArray(json?.data) ? json.data : []
+      if (tickets.length === 0 && chunk.length > 0) {
+        errors += chunk.length
+        logger.warn('Expo push response missing tickets', { json })
+        continue
+      }
+
+      const ticketErrors = []
+      tickets.forEach((ticket) => {
+        if (ticket?.status === 'ok') {
+          sent++
+          if (typeof ticket.id === 'string') ticketIds.push(ticket.id)
+        }
+        else {
+          errors++
+          ticketErrors.push(summarizeExpoTicketError(ticket))
+        }
+      })
+      if (ticketErrors.length > 0) {
+        logger.warn('Expo push ticket errors', {
+          count: ticketErrors.length,
+          sample: ticketErrors.slice(0, 3),
+        })
+      }
     } catch (e) {
+      errors += chunk.length
       logger.error('Expo push failed', e)
     }
   }
-  return sent
+  return { sent, errors, ticketIds }
+}
+
+async function fetchExpoPushReceipts(ids) {
+  const receipts = {}
+  let requestErrors = 0
+  for (let i = 0; i < ids.length; i += 1000) {
+    const chunk = ids.slice(i, i + 1000)
+    try {
+      const res = await fetch(EXPO_RECEIPTS_URL, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Accept-Encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ids: chunk }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        requestErrors += chunk.length
+        logger.warn('Expo receipt non-OK', { status: res.status, json })
+        continue
+      }
+      if (json?.data && typeof json.data === 'object') Object.assign(receipts, json.data)
+    } catch (e) {
+      requestErrors += chunk.length
+      logger.error('Expo receipt fetch failed', e)
+    }
+  }
+  return { receipts, requestErrors }
+}
+
+function summarizeExpoReceipts(ticketIds, receipts) {
+  const summary = { ok: 0, error: 0, missing: 0 }
+  const errors = []
+  ticketIds.forEach((id) => {
+    const receipt = receipts[id]
+    if (!receipt) {
+      summary.missing++
+    } else if (receipt.status === 'ok') {
+      summary.ok++
+    } else {
+      summary.error++
+      errors.push({
+        id,
+        message: receipt.message || null,
+        error: receipt.details?.error || null,
+      })
+    }
+  })
+  return { summary, errors }
 }
 
 // Name MUST stay `onMessageCreated` and region `europe-west1` to REPLACE the
@@ -118,13 +219,13 @@ exports.onMessageCreated = onDocumentCreated('messages/{messageId}', async (even
     return
   }
 
-  const tokens = await tokensForUids(uids)
-  const title = (data.priority === 'urgent' ? '🚨 ' : '') + (data.subject || '')
+  const { tokens, invalid: invalidTokens } = await tokensForUids(uids)
+  const title = (data.priority === 'urgent' ? '🚨 ' : '') + (data.subject || data.subjectAr || 'Nouveau message')
   const messages = tokens.map((to) => ({
     to,
     sound: 'default',
     title,
-    body: data.body || '',
+    body: data.body || data.bodyAr || "Ouvrez l'application pour le detail.",
     // priority high : réveille l'appareil même en Doze (sinon FCM « normal »
     // peut retenir la notif jusqu'à la prochaine ouverture de l'app).
     // channelId : canal Android créé par l'app (importance MAX).
@@ -133,12 +234,88 @@ exports.onMessageCreated = onDocumentCreated('messages/{messageId}', async (even
     data: { messageId: event.params.messageId, type: data.category || 'announcement' },
   }))
 
-  const sent = await sendExpoPush(messages)
-  logger.info('push processed', { messageId: event.params.messageId, recipients: uids.length, tokens: tokens.length, sent })
+  const pushResult = await sendExpoPush(messages)
+  const receiptReadyAt = pushResult.ticketIds.length > 0
+    ? new Date(Date.now() + RECEIPT_CHECK_DELAY_MS)
+    : null
+  logger.info('push processed', {
+    messageId: event.params.messageId,
+    recipients: uids.length,
+    tokens: tokens.length,
+    invalidTokens,
+    sent: pushResult.sent,
+    errors: pushResult.errors,
+    ticketIds: pushResult.ticketIds.length,
+  })
 
   // Record outcome for observability (does not re-trigger onCreate).
-  await snap.ref.set({ push: { sent, recipients: uids.length, tokens: tokens.length, at: new Date() } }, { merge: true })
+  await snap.ref.set({
+    push: {
+      sent: pushResult.sent,
+      errors: pushResult.errors,
+      recipients: uids.length,
+      tokens: tokens.length,
+      invalidTokens,
+      ticketIds: pushResult.ticketIds,
+      receiptReadyAt,
+      at: new Date(),
+    },
+  }, { merge: true })
 })
+
+// Expo tickets only mean "accepted by Expo". Receipts reveal provider errors
+// such as InvalidCredentials, MismatchSenderId, or DeviceNotRegistered.
+exports.checkPushReceipts = onSchedule(
+  { schedule: 'every 15 minutes', timeZone: 'Africa/Casablanca' },
+  async () => {
+    const snap = await db
+      .collection('messages')
+      .where('push.receiptReadyAt', '<=', new Date())
+      .limit(50)
+      .get()
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data() || {}
+      const push = data.push || {}
+      const ticketIds = Array.isArray(push.ticketIds)
+        ? push.ticketIds.filter((id) => typeof id === 'string')
+        : []
+      if (ticketIds.length === 0) {
+        await docSnap.ref.set({ push: { receiptReadyAt: null } }, { merge: true })
+        continue
+      }
+
+      const { receipts, requestErrors } = await fetchExpoPushReceipts(ticketIds)
+      const { summary, errors } = summarizeExpoReceipts(ticketIds, receipts)
+      if (requestErrors > 0) summary.requestErrors = requestErrors
+
+      const pushAt = typeof push.at?.toDate === 'function' ? push.at.toDate() : null
+      const tooOld = pushAt ? Date.now() - pushAt.getTime() > RECEIPT_MAX_AGE_MS : false
+      const receiptReadyAt = summary.missing > 0 && !tooOld
+        ? new Date(Date.now() + RECEIPT_CHECK_DELAY_MS)
+        : null
+
+      await docSnap.ref.set({
+        push: {
+          receipts: summary,
+          receiptErrors: errors.slice(0, 10),
+          receiptCheckedAt: new Date(),
+          receiptReadyAt,
+        },
+      }, { merge: true })
+
+      if (summary.error > 0 || requestErrors > 0) {
+        logger.warn('push receipt errors', {
+          messageId: docSnap.id,
+          receipts: summary,
+          sample: errors.slice(0, 3),
+        })
+      } else {
+        logger.info('push receipts checked', { messageId: docSnap.id, receipts: summary })
+      }
+    }
+  },
+)
 
 // ── classStats : agrégats anonymes par (classe, semestre) ──────────────────
 //

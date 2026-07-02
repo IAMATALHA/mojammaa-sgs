@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -11,6 +12,18 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+function getExpoProjectId(): string | undefined {
+  const configuredProjectId = Constants.expoConfig?.extra?.eas?.projectId;
+  const easProjectId = Constants.easConfig?.projectId;
+  if (typeof configuredProjectId === 'string' && configuredProjectId.length > 0) {
+    return configuredProjectId;
+  }
+  if (typeof easProjectId === 'string' && easProjectId.length > 0) {
+    return easProjectId;
+  }
+  return undefined;
+}
 
 export async function clearPushToken(userId: string) {
   if (!userId) return;
@@ -56,8 +69,13 @@ export async function registerForPushNotificationsAsync(userId: string) {
   // SDK 53 : cet appel échoue → AUCUN token enregistré → le téléphone ne sera
   // jamais notifié. Tester les push sur un build EAS ou la version Play Store.
   try {
+    const projectId = getExpoProjectId();
+    if (!projectId) {
+      console.warn('[push] projectId EAS introuvable — impossible de créer un ExpoPushToken.');
+      return;
+    }
     token = (await Notifications.getExpoPushTokenAsync({
-      projectId: '6ff4e5d9-040f-45df-ac65-5cf941ad8627',
+      projectId,
     })).data;
   } catch (e) {
     console.warn('[push] getExpoPushTokenAsync a échoué — push indisponibles ' +
