@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { subscribeNotesForEleve, getClassStats, type NoteDoc, type ClassStatsDoc } from '../services/notesService'
+import {
+  subscribeNotesForEleve,
+  getClassStats,
+  type NoteDoc,
+  type ClassStatsDoc,
+  type CompetenceValue,
+} from '../services/notesService'
 
 export interface SubjectGradeReal {
   subject: string
@@ -18,6 +24,23 @@ export interface ChildReportReal {
   bareme: 10 | 20   // système marocain : primaire /10, collège /20
 }
 
+export interface SubjectCompetenceReal {
+  subject: string
+  s1: CompetenceValue | null
+  s2: CompetenceValue | null
+  trend: 'up' | 'down' | 'flat' | 'new'
+}
+
+export interface ChildCompetenceReportReal {
+  title: string
+  subjects: SubjectCompetenceReal[]
+  summary: {
+    acquis: number
+    encours: number
+    nonAcquis: number
+  }
+}
+
 function round1(v: number): number { return Math.round(v * 10) / 10 }
 
 function computeHonor(avg: number, bareme: number): ChildReportReal['honor'] {
@@ -26,6 +49,25 @@ function computeHonor(avg: number, bareme: number): ChildReportReal['honor'] {
   if (v >= 14) return 'encouragements'
   if (v < 10) return 'avertissement'
   return null
+}
+
+function isPrescolaireClasse(classe: string | undefined): boolean {
+  return /(^|[^a-z])(ps|gs)([^a-z]|$)/i.test(classe || '')
+}
+
+function competenceRank(value: CompetenceValue | null): number | null {
+  if (value === 'Acquis') return 3
+  if (value === 'En cours') return 2
+  if (value === 'Non acquis') return 1
+  return null
+}
+
+function competenceTrend(s1: CompetenceValue | null, s2: CompetenceValue | null): SubjectCompetenceReal['trend'] {
+  if (!s1 && s2) return 'new'
+  const a = competenceRank(s1)
+  const b = competenceRank(s2)
+  if (a == null || b == null || a === b) return 'flat'
+  return b > a ? 'up' : 'down'
 }
 
 export function useParentNotes(eleveId: string | undefined, classe: string | undefined) {
@@ -65,15 +107,15 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
   const report: ChildReportReal | null = useMemo(() => {
     if (!latestSemestre || notes.length === 0) return null
 
-    const currentNotes = notes.filter(n => n.semestre === latestSemestre)
-    const prevNotes = prevSemestre ? notes.filter(n => n.semestre === prevSemestre) : []
+    const currentNotes = notes.filter(n => n.semestre === latestSemestre && typeof n.note === 'number')
+    const prevNotes = prevSemestre ? notes.filter(n => n.semestre === prevSemestre && typeof n.note === 'number') : []
     if (currentNotes.length === 0) return null
 
     const bySubject = new Map<string, number[]>()
     const ctrlBySubject = new Map<string, number[]>()
     currentNotes.forEach(n => {
       const list = bySubject.get(n.matiere) || []
-      list.push(n.note)
+      list.push(n.note as number)
       bySubject.set(n.matiere, list)
       if (Array.isArray(n.controles) && n.controles.length > 0) {
         // ControlNote peut être un nombre brut ou un objet { note, … }
@@ -87,7 +129,7 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
     const prevBySubject = new Map<string, number[]>()
     prevNotes.forEach(n => {
       const list = prevBySubject.get(n.matiere) || []
-      list.push(n.note)
+      list.push(n.note as number)
       prevBySubject.set(n.matiere, list)
     })
 
@@ -121,7 +163,7 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
     }
 
     // Barème : primaire (…AEP) noté /10, le reste /20. Déduit de la classe.
-    const bareme: 10 | 20 = /aep/i.test(classe || '') ? 10 : 20
+    const bareme: 10 | 20 = classStats?.bareme || (/aep/i.test(classe || '') ? 10 : 20)
 
     return {
       semestre: latestSemestre,
@@ -133,5 +175,46 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
     }
   }, [notes, classStats, latestSemestre, prevSemestre, classe])
 
-  return { loading, error, notes, semestres, report }
+  const competenceReport: ChildCompetenceReportReal | null = useMemo(() => {
+    const competenceNotes = notes.filter(n => n.competence)
+    if (competenceNotes.length === 0) return null
+    if (!isPrescolaireClasse(classe) && notes.some(n => typeof n.note === 'number')) return null
+
+    const bySubject = new Map<string, { subject: string; s1: CompetenceValue | null; s2: CompetenceValue | null }>()
+    competenceNotes.forEach(n => {
+      const competence = n.competence
+      if (!competence) return
+      const key = n.matiere || n.matiereLabel
+      if (!key) return
+      if (!bySubject.has(key)) bySubject.set(key, { subject: n.matiereLabel || key, s1: null, s2: null })
+      const row = bySubject.get(key)!
+      if (n.semestre === 'S1') row.s1 = competence
+      if (n.semestre === 'S2') row.s2 = competence
+    })
+
+    const subjects = [...bySubject.values()]
+      .map(row => ({
+        ...row,
+        trend: competenceTrend(row.s1, row.s2),
+      }))
+      .sort((a, b) => a.subject.localeCompare(b.subject, 'fr'))
+
+    if (subjects.length === 0) return null
+
+    const currentValues = subjects
+      .map(item => item.s2 || item.s1)
+      .filter((item): item is CompetenceValue => item != null)
+
+    return {
+      title: 'Compétences — S1 / S2',
+      subjects,
+      summary: {
+        acquis: currentValues.filter(value => value === 'Acquis').length,
+        encours: currentValues.filter(value => value === 'En cours').length,
+        nonAcquis: currentValues.filter(value => value === 'Non acquis').length,
+      },
+    }
+  }, [notes, classe])
+
+  return { loading, error, notes, semestres, report, competenceReport }
 }

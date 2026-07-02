@@ -5,6 +5,8 @@ import {
 import { db } from '../config/firebase'
 import { averageControlNotes, type ControlNote } from './notesRules'
 
+export type CompetenceValue = 'Acquis' | 'En cours' | 'Non acquis'
+
 export interface NoteDoc {
   id: string
   eleveId: string
@@ -13,7 +15,10 @@ export interface NoteDoc {
   semestre: string
   matiere: string
   matiereLabel: string
-  note: number
+  note: number | null
+  competence: CompetenceValue | null
+  cycle: 'prescolaire' | 'primaire' | 'college' | ''
+  bareme: 10 | 20 | null
   controles: ControlNote[]
   controlesCount: number
   controlesExpected: number | null
@@ -30,12 +35,29 @@ function asNumber(v: unknown): number | null {
   return null
 }
 
+function asCompetence(v: unknown): CompetenceValue | null {
+  const value = asString(v)
+  if (value === 'Acquis' || value === 'En cours' || value === 'Non acquis') return value
+  return null
+}
+
+function asCycle(v: unknown): NoteDoc['cycle'] {
+  const value = asString(v).toLowerCase()
+  if (value === 'prescolaire' || value === 'primaire' || value === 'college') return value
+  return ''
+}
+
+function asBareme(v: unknown): 10 | 20 | null {
+  const n = asNumber(v)
+  return n === 10 || n === 20 ? n : null
+}
+
 function asControlNotes(v: unknown): ControlNote[] {
   if (!Array.isArray(v)) return []
   return v
     .map((item, index) => {
       const row = item && typeof item === 'object' ? item as Record<string, unknown> : {}
-      const note = asNumber(row.note)
+      const note = asNumber(row.note) ?? asNumber(item)
       if (note == null || note < 0 || note > 20) return null
       const numero = asNumber(row.numero) ?? index + 1
       return {
@@ -48,9 +70,11 @@ function asControlNotes(v: unknown): ControlNote[] {
 }
 
 function docToNote(id: string, data: Record<string, unknown>): NoteDoc | null {
-  const controles = asControlNotes(data.controles)
+  const controles = asControlNotes(data.controles ?? data.controls)
   const note = asNumber(data.note) ?? (controles.length > 0 ? averageControlNotes(controles.map(item => item.note)) : null)
-  if (note == null || note < 0 || note > 20) return null
+  const competence = asCompetence(data.note)
+  const hasValidNote = note != null && note >= 0 && note <= 20
+  if (!hasValidNote && !competence) return null
   return {
     id,
     eleveId: asString(data.eleveId),
@@ -59,7 +83,10 @@ function docToNote(id: string, data: Record<string, unknown>): NoteDoc | null {
     semestre: asString(data.semestre),
     matiere: asString(data.matiereLabel) || asString(data.matiere),
     matiereLabel: asString(data.matiereLabel) || asString(data.matiere),
-    note,
+    note: hasValidNote ? note : null,
+    competence,
+    cycle: asCycle(data.cycle),
+    bareme: asBareme(data.bareme),
     controles,
     controlesCount: asNumber(data.controlesCount) ?? controles.length,
     controlesExpected: asNumber(data.controlesExpected),
@@ -99,6 +126,7 @@ export interface ClassStatsDoc {
   studentAvgs: number[]                // moyennes d'élèves, triées desc, anonymes
   students:    number
   notesCount:  number
+  bareme:      10 | 20 | null
 }
 
 export async function getClassStats(classe: string, semestre: string): Promise<ClassStatsDoc | null> {
@@ -115,5 +143,6 @@ export async function getClassStats(classe: string, semestre: string): Promise<C
       ? data.studentAvgs.filter((v): v is number => typeof v === 'number') : [],
     students:    asNumber(data.students) ?? 0,
     notesCount:  asNumber(data.notesCount) ?? 0,
+    bareme:      asBareme(data.bareme),
   }
 }

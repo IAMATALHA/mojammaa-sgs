@@ -100,8 +100,9 @@ export function useParentData(): ParentData {
   const children = useMemo(
     () => eleves.map(e => {
       const childNotes = notesByEleve.get(e.codeMassar) || []
-      const avgGrade = childNotes.length > 0
-        ? round1(childNotes.reduce((s, n) => s + n.note, 0) / childNotes.length)
+      const numericNotes = childNotes.filter((n): n is NoteDoc & { note: number } => typeof n.note === 'number')
+      const avgGrade = numericNotes.length > 0
+        ? round1(numericNotes.reduce((s, n) => s + n.note, 0) / numericNotes.length)
         : 0
       return {
         id: e.codeMassar,

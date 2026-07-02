@@ -1,4 +1,5 @@
 export { default as Card }              from './Card'
+export { default as AcademicReportCard } from './AcademicReportCard'
 export { default as DashboardHeader }   from './DashboardHeader'
 export { default as SectionHeader }     from './SectionHeader'
 export { default as StatCard }          from './StatCard'
