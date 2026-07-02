@@ -14,11 +14,12 @@ const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const { setGlobalOptions } = require('firebase-functions/v2')
 const { initializeApp } = require('firebase-admin/app')
-const { getFirestore, FieldPath } = require('firebase-admin/firestore')
+const { getFirestore, FieldPath, FieldValue } = require('firebase-admin/firestore')
 const { getAuth } = require('firebase-admin/auth')
 const logger = require('firebase-functions/logger')
 const { computeClassStats, statsDocId } = require('./classStats')
 const { computeSchoolStats } = require('./schoolStats')
+const { buildSlotDocs } = require('./emploiDuTempsSync')
 
 initializeApp()
 const db = getFirestore()
@@ -416,6 +417,42 @@ exports.onNoteWritten = onDocumentWritten('notes/{noteId}', async (event) => {
     await refreshClassStats(classe, semestre)
     logger.info('classStats refreshed', { classe, semestre })
   }
+})
+
+// ── onScheduleWritten : emploiDuTemps toujours synchro avec schedules ───────
+//
+// Avant : un admin éditait schedules/{teacherUid} puis devait lancer À LA MAIN
+// `node scripts/syncEmploiDuTemps.js --commit` pour que la vue par classe
+// (emploiDuTemps, lue par parents/profs/admin mobile) se mette à jour — un
+// oubli = EDT mobile périmé. Ce trigger fait le rebuild CIBLÉ (ce prof
+// seulement) automatiquement à chaque écriture, y compris suppression du
+// doc (weeklySlots vidé → tous les créneaux de ce prof disparaissent).
+exports.onScheduleWritten = onDocumentWritten('schedules/{teacherUid}', async (event) => {
+  const teacherUid = event.params.teacherUid
+  const after = event.data?.after?.exists ? event.data.after.data() : null
+
+  const old = await db.collection('emploiDuTemps').where('teacherUid', '==', teacherUid).get()
+  const batch = db.batch()
+  old.forEach((d) => batch.delete(d.ref))
+
+  let slotsCount = 0
+  if (after) {
+    const teacherDoc = await db.collection('users').doc(teacherUid).get()
+    const t = teacherDoc.exists ? teacherDoc.data() : {}
+    const teacherInfo = {
+      matiere: t.matiere || null,
+      professeurNom: `${t.prenom || ''} ${t.nom || ''}`.trim() || null,
+    }
+    const docs = buildSlotDocs(teacherUid, after.weeklySlots || [], teacherInfo)
+    docs.forEach((d) => batch.set(db.collection('emploiDuTemps').doc(d.id), {
+      ...d.body,
+      updatedAt: FieldValue.serverTimestamp(),
+    }))
+    slotsCount = docs.length
+  }
+
+  await batch.commit()
+  logger.info('emploiDuTemps synced', { teacherUid, slots: slotsCount })
 })
 
 // ── weeklyDigest : récapitulatif hebdo par parent ───────────────────────────

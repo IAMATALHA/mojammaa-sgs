@@ -1,7 +1,14 @@
 /**
- * syncEmploiDuTemps — reconstruit la collection `emploiDuTemps` (EDT indexé par
- * classe, lisible par tous les connectés) à partir des `schedules/{teacherUid}`
- * (source de vérité, lisible prof/admin seulement).
+ * syncEmploiDuTemps — OUTIL DE SECOURS / BACKFILL.
+ *
+ * Depuis l'ajout de la Cloud Function `onScheduleWritten` (functions/index.js,
+ * juillet 2026), `emploiDuTemps` se resynchronise TOUT SEUL à chaque écriture
+ * de `schedules/{teacherUid}` (via l'admin web /emploi-du-temps ou un script
+ * comme importSchedule.js) — plus besoin de lancer ce script après une
+ * modification normale.
+ *
+ * Reste utile pour : un rebuild complet après une migration, une correction
+ * en masse, ou si la CF a été désactivée temporairement.
  *
  * Chaque créneau d'un prof devient un doc `emploiDuTemps` :
  *   id = `${classeId}__${day}__${startTime}`   (idempotent)
@@ -11,13 +18,14 @@
  * matiere / professeurNom sont résolus depuis users/{teacherUid}
  * (champ `matiere` global du prof + prenom/nom).
  *
- * Rebuild complet : on supprime d'abord les docs `emploiDuTemps` existants,
- * puis on réécrit. Relance ce script quand un prof met à jour son EDT.
+ * Rebuild complet : on supprime d'abord TOUS les docs `emploiDuTemps`
+ * existants, puis on réécrit depuis `schedules/*`.
  *
  *   node scripts/syncEmploiDuTemps.js            → dry-run (affiche)
  *   node scripts/syncEmploiDuTemps.js --commit   → écrit dans Firestore
  */
 const path = require('path')
+const { buildSlotDocs } = require('./../functions/emploiDuTempsSync')
 const admin = require('firebase-admin')
 
 const COMMIT = process.argv.includes('--commit')
@@ -26,11 +34,6 @@ admin.initializeApp({
   credential: admin.credential.cert(require(path.join(__dirname, '..', '.secrets', 'firebase-admin.json'))),
 })
 const db = admin.firestore()
-
-// `${classeId}__${day}__${startTime}` → doc id stable (idempotent)
-function slotId(classe, day, startTime) {
-  return `${classe}__${day}__${startTime}`.replace(/[/#?]/g, '-')
-}
 
 async function main() {
   const schedSnap = await db.collection('schedules').get()
@@ -50,30 +53,14 @@ async function main() {
     return info
   }
 
-  // Construire les nouveaux docs.
+  // Construire les nouveaux docs (même logique que la CF onScheduleWritten).
   const docs = []
   for (const sched of schedSnap.docs) {
     const data = sched.data()
     const teacherUid = data.teacherUid || sched.id
     const info = await teacherInfo(teacherUid)
-    for (const s of data.weeklySlots || []) {
-      if (!s.classe || !s.day || !s.startTime) continue
-      docs.push({
-        id: slotId(s.classe, s.day, s.startTime),
-        body: {
-          classeId: s.classe,
-          day: s.day,
-          startTime: s.startTime,
-          endTime: s.endTime || null,
-          durationMin: s.durationMin || null,
-          seance: s.seance || null,
-          matiere: s.subject || info.matiere || null,
-          salle: s.room || null,
-          professeurNom: info.professeurNom,
-          teacherUid,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-      })
+    for (const d of buildSlotDocs(teacherUid, data.weeklySlots || [], info)) {
+      docs.push({ id: d.id, body: { ...d.body, updatedAt: admin.firestore.FieldValue.serverTimestamp() } })
     }
   }
 
