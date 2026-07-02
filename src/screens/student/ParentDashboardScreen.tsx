@@ -240,7 +240,10 @@ export default function ParentDashboardScreen() {
   }, [])
 
   useEffect(() => {
-    if (parent.children.length > 0 && !selectedChildId) {
+    // Sélection invalide (enfant délié/retiré en cours de session) → rabat sur
+    // le premier enfant, sinon la requête notes devient interdite (rules) et
+    // l'écran affiche à tort « erreur de connexion / pas de notes ».
+    if (parent.children.length > 0 && (!selectedChildId || !parent.children.some(c => c.id === selectedChildId))) {
       setSelectedChildId(parent.children[0].id)
     }
   }, [parent.children, selectedChildId])
