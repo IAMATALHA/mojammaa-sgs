@@ -23,7 +23,7 @@ export interface AbsenceDoc {
   classe:        string
   date:          string   // ISO 'YYYY-MM-DD'
   seance:        string   // 'S1'..'S6'
-  statut:        'present' | 'absent'
+  statut:        'present' | 'absent' | 'retard'
   professorId?:  string
   justified?:    boolean
   raison?:       string
