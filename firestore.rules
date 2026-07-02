@@ -281,6 +281,20 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── suivis (journal de suivi élève — back-office Statistiques) ──
+    // Registre des actions de suivi (contact parent, entretien, convocation,
+    // plan d'accompagnement). Contenu nominatif et sensible : personnel
+    // uniquement — les PARENTS n'y ont PAS accès (ce sont des notes internes).
+    // Création signée (createdBy == auteur) ; un prof ne modifie que les
+    // siennes, l'admin gère tout.
+    match /suivis/{suiviId} {
+      allow read:   if isAdmin() || isTeacher();
+      allow create: if (isAdmin() || isTeacher())
+        && request.resource.data.createdBy == myUid();
+      allow update: if isAdmin() || (isTeacher() && resource.data.createdBy == myUid());
+      allow delete: if isAdmin();
+    }
+
     // ── schedules (EDT prof) ─────────────────────────────────
     match /schedules/{teacherUid} {
       allow read:  if isSignedIn() && (teacherUid == myUid() || isAdmin());
