@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, query, where, onSnapshot, type Unsubscribe } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { useParentData } from './useParentData'
+import type { Attachment } from '../services/StorageService'
 
 export interface ParentDevoir {
   id: string
@@ -12,6 +13,7 @@ export interface ParentDevoir {
   teacherNom: string
   dateLimite: string
   isPast: boolean
+  attachments: Attachment[]
 }
 
 function asString(v: unknown): string {
@@ -70,6 +72,7 @@ export function useParentDevoirs() {
               teacherNom: asString(data.teacherNom),
               dateLimite,
               isPast: dateLimite < today,
+              attachments: Array.isArray(data.attachments) ? (data.attachments as Attachment[]) : [],
             })
           })
           buckets.set(bucketId, next)

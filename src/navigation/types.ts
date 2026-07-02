@@ -19,6 +19,21 @@ export type AuthStackParamList = {
   Login: undefined
 }
 
+// ── Partagé ────────────────────────────────────────────────────────────────
+/** Devoir sérialisé passé à l'écran de détail (page entière, tous rôles). */
+export type DevoirDetailParams = {
+  devoir: {
+    id: string
+    titre: string
+    description?: string
+    type?: string
+    classeId?: string
+    teacherNom?: string
+    dateLimite?: string
+    attachments?: { url: string; name: string; mime: string; size?: number }[]
+  }
+}
+
 // ── Teacher ────────────────────────────────────────────────────────────────
 export type TeacherTabsParamList = {
   TeacherHome:     undefined
@@ -38,6 +53,7 @@ export type TeacherStackParamList = {
   TeacherComportement:  { classe: string }
   TeacherRessources:    { classe: string }
   TeacherDevoirsDetail: { classe?: string }
+  TeacherDevoirView:    DevoirDetailParams
   TeacherStats:         undefined
 }
 
@@ -56,9 +72,15 @@ export type StudentHomeStackParamList = {
   StudentEdt:          undefined
 }
 
+/** Onglet Devoirs = mini-pile : liste + détail plein écran (tab bar visible). */
+export type StudentDevoirsStackParamList = {
+  StudentDevoirsList: undefined
+  StudentDevoirView:  DevoirDetailParams
+}
+
 export type StudentTabsParamList = {
   HomeTab:          NavigatorScreenParams<StudentHomeStackParamList> | undefined
-  StudentDevoirs:   undefined
+  StudentDevoirs:   NavigatorScreenParams<StudentDevoirsStackParamList> | undefined
   StudentNotes:     undefined
   StudentAbsences:  undefined
   StudentMessages:  { messageId?: string } | undefined
@@ -87,6 +109,7 @@ export type AdminStackParamList = {
   AdminCalendar:  undefined
   AdminAbsences:  undefined
   AdminDevoirs:   undefined
+  AdminDevoirView: DevoirDetailParams
   AdminUsers:     undefined
 }
 

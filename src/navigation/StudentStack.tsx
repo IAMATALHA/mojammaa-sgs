@@ -33,10 +33,12 @@ import ParentComportementScreen from '../screens/student/ParentComportementScree
 import ParentRessourcesScreen from '../screens/student/ParentRessourcesScreen'
 import ParentPerformanceScreen from '../screens/student/ParentPerformanceScreen'
 import ParentEdtScreen from '../screens/student/ParentEdtScreen'
-import type { StudentTabsParamList, StudentHomeStackParamList } from './types'
+import DevoirDetailScreen from '../screens/shared/DevoirDetailScreen'
+import type { StudentTabsParamList, StudentHomeStackParamList, StudentDevoirsStackParamList } from './types'
 
 const Tab = createBottomTabNavigator<StudentTabsParamList>()
 const HomeStackNav = createNativeStackNavigator<StudentHomeStackParamList>()
+const DevoirsStackNav = createNativeStackNavigator<StudentDevoirsStackParamList>()
 
 function TabIcon(props: { Icon: LucideIcon; color: string; focused: boolean; theme: Theme }) {
   return <AnimatedTabIcon {...props} bare />
@@ -67,6 +69,16 @@ function HomeStack() {
   )
 }
 
+/** Onglet Devoirs : liste + détail PLEIN ÉCRAN (même pilotage que HomeStack). */
+function DevoirsStack() {
+  return (
+    <DevoirsStackNav.Navigator screenOptions={{ headerShown: false, animation: 'none', gestureEnabled: false }}>
+      <DevoirsStackNav.Screen name="StudentDevoirsList" component={ParentDevoirsScreen} />
+      <DevoirsStackNav.Screen name="StudentDevoirView" component={DevoirDetailScreen} />
+    </DevoirsStackNav.Navigator>
+  )
+}
+
 export default function StudentStack() {
   const theme = useTheme()
   const { t } = useTranslation()
@@ -90,7 +102,7 @@ export default function StudentStack() {
       />
       <Tab.Screen
         name="StudentDevoirs"
-        component={ParentDevoirsScreen}
+        component={DevoirsStack}
         options={{
           title: t('tabs.homework'),
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={BookOpen} color={color} focused={focused} theme={theme} />,

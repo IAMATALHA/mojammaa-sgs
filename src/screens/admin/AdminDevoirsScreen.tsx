@@ -1,22 +1,29 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl,
+  TouchableOpacity,
 } from 'react-native'
 import { collection, getDocs, Timestamp } from 'firebase/firestore'
 import { useTranslation } from 'react-i18next'
-import { BookOpen, Clock, Users } from 'lucide-react-native'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { BookOpen, Clock, Users, Paperclip } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 import { toDoc } from '../../services/firestore'
+import type { Attachment } from '../../services/StorageService'
+import type { AdminStackParamList } from '../../navigation/types'
 
 interface DevoirRow {
   id: string
   titre: string
+  description: string
   classeId: string
   teacherNom: string
   dateLimite: string
   type: string
+  attachments: Attachment[]
   createdAt?: Timestamp
 }
 
@@ -31,6 +38,7 @@ function formatDate(iso: string): string {
 export default function AdminDevoirsScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
+  const navigation = useNavigation<NativeStackNavigationProp<AdminStackParamList>>()
   const [devoirs, setDevoirs] = useState<DevoirRow[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -42,16 +50,18 @@ export default function AdminDevoirsScreen() {
       const snap = await getDocs(collection(db, 'devoirs'))
       const list: DevoirRow[] = snap.docs.map(d => {
         const data = toDoc<{
-          titre?: string; classeId?: string; teacherNom?: string
-          dateLimite?: string; type?: string; createdAt?: Timestamp
+          titre?: string; description?: string; classeId?: string; teacherNom?: string
+          dateLimite?: string; type?: string; attachments?: Attachment[]; createdAt?: Timestamp
         }>(d)
         return {
           id: d.id,
           titre: data.titre || '',
+          description: data.description || '',
           classeId: data.classeId || '',
           teacherNom: data.teacherNom || '',
           dateLimite: data.dateLimite || '',
           type: data.type || '',
+          attachments: Array.isArray(data.attachments) ? data.attachments : [],
           createdAt: data.createdAt,
         }
       })
@@ -66,12 +76,25 @@ export default function AdminDevoirsScreen() {
   const active = devoirs.filter(d => d.dateLimite >= today)
   const past = devoirs.filter(d => d.dateLimite < today)
 
+  // Tap → page entière (description complète + pièces jointes consultables).
+  const openView = (d: DevoirRow) => {
+    navigation.navigate('AdminDevoirView', {
+      devoir: {
+        id: d.id, titre: d.titre, description: d.description, type: d.type,
+        classeId: d.classeId, teacherNom: d.teacherNom, dateLimite: d.dateLimite,
+        attachments: d.attachments,
+      },
+    })
+  }
+
   const renderItem = ({ item }: { item: DevoirRow }) => {
     const isActive = item.dateLimite >= today
     return (
-      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <TouchableOpacity activeOpacity={0.75} onPress={() => openView(item)}
+        style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <View style={styles.cardTop}>
           <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14, flex: 1 }} numberOfLines={1}>{item.titre}</Text>
+          {item.attachments.length > 0 && <Paperclip size={12} color={theme.textSoft} strokeWidth={2} style={{ marginEnd: 6 }} />}
           <View style={[styles.typeBadge, { backgroundColor: isActive ? theme.primarySurface : theme.surfaceAlt }]}>
             <Text style={{ color: isActive ? theme.primary : theme.textSoft, fontSize: 10, fontWeight: '800' }}>{item.type.toUpperCase()}</Text>
           </View>
@@ -88,7 +111,7 @@ export default function AdminDevoirsScreen() {
             {formatDate(item.dateLimite)}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     )
   }
 

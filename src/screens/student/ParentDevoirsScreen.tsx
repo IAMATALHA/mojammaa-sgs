@@ -1,25 +1,39 @@
 import React, { useMemo, useState } from 'react'
 import {
-  View, Text, ScrollView, Pressable, Modal, StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { BookOpen, X, Check, Clock, AlertCircle } from 'lucide-react-native'
+import { Check, Paperclip } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { Card, EmptyState, SectionHeader } from '../../components/dashboard'
 import { useParentData } from '../../hooks/useParentData'
 import { useParentDevoirs, type ParentDevoir } from '../../hooks/useParentDevoirs'
 import ScreenBackground from '../../components/ScreenBackground'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
+import type { StudentDevoirsStackParamList } from '../../navigation/types'
 
 export default function ParentDevoirsScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
   const parent = useParentData()
   const { loading, error, devoirs } = useParentDevoirs()
+  const navigation = useNavigation<NativeStackNavigationProp<StudentDevoirsStackParamList, 'StudentDevoirsList'>>()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
-  const [detail, setDetail] = useState<ParentDevoir | null>(null)
+
+  // Page ENTIÈRE de détail (remplace l'ancienne popup sans pièces jointes).
+  const openDetail = (d: ParentDevoir) => {
+    navigation.navigate('StudentDevoirView', {
+      devoir: {
+        id: d.id, titre: d.title, description: d.description, type: d.type,
+        classeId: d.classeId, teacherNom: d.teacherNom, dateLimite: d.dateLimite,
+        attachments: d.attachments,
+      },
+    })
+  }
 
   const filtered = useMemo(() => {
     if (selectedChildId === 'all') return devoirs
@@ -74,7 +88,7 @@ export default function ParentDevoirsScreen() {
                   <EmptyState icon={Check} title={t('parent.noHomework')} message={t('parent.allDone')} />
                 ) : (
                   pending.map((d, idx) => (
-                    <DevoirRow key={d.id} item={d} childName={childName(d.childId)} isLast={idx === pending.length - 1} onPress={() => setDetail(d)} theme={theme} />
+                    <DevoirRow key={d.id} item={d} childName={childName(d.childId)} isLast={idx === pending.length - 1} onPress={() => openDetail(d)} theme={theme} />
                   ))
                 )}
               </Card>
@@ -85,7 +99,7 @@ export default function ParentDevoirsScreen() {
                 <SectionHeader title={t('parent.submitted')} subtitle={t('parent.archived', { count: past.length })} />
                 <Card padding={12}>
                   {past.map((d, idx) => (
-                    <DevoirRow key={d.id} item={d} childName={childName(d.childId)} isLast={idx === past.length - 1} onPress={() => setDetail(d)} theme={theme} />
+                    <DevoirRow key={d.id} item={d} childName={childName(d.childId)} isLast={idx === past.length - 1} onPress={() => openDetail(d)} theme={theme} />
                   ))}
                 </Card>
               </View>
@@ -94,59 +108,6 @@ export default function ParentDevoirsScreen() {
         )}
       </ScrollView>
 
-      {detail && (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setDetail(null)}>
-          <Pressable style={styles.backdrop} onPress={() => setDetail(null)}>
-            <Pressable style={[styles.sheet, { backgroundColor: theme.card }]}>
-              <View style={styles.sheetHeader}>
-                <View style={[styles.subjPill, { backgroundColor: theme.primarySurface }]}>
-                  <BookOpen size={12} color={theme.primary} strokeWidth={2.4} />
-                  <Text style={{ color: theme.primary, fontFamily: theme.fonts.bold, fontSize: 11, letterSpacing: 0.4, marginStart: 5 }}>
-                    {detail.type.toUpperCase()}
-                  </Text>
-                </View>
-                <Pressable onPress={() => setDetail(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
-                  <X size={18} color={theme.text} strokeWidth={2} />
-                </Pressable>
-              </View>
-              <Text style={{ color: theme.text, fontFamily: theme.fonts.bold, fontSize: theme.fontSize.h3, marginTop: 12, letterSpacing: -0.3 }}>
-                {detail.title}
-              </Text>
-              {detail.description ? (
-                <Text style={{ color: theme.textSoft, fontSize: 13, lineHeight: 20, marginTop: 8 }}>{detail.description}</Text>
-              ) : null}
-              <View style={[styles.metaRow, { backgroundColor: theme.surface }]}>
-                <Clock size={14} color={theme.textSoft} strokeWidth={2} />
-                <Text style={{ color: theme.text, fontFamily: theme.fonts.medium, fontSize: 13, marginStart: 8 }}>
-                  {detail.dateLimite.split('-').reverse().join('/')}
-                </Text>
-              </View>
-              <View style={[styles.metaRow, { backgroundColor: theme.surface }]}>
-                <View style={[styles.dot, { backgroundColor: detail.isPast ? theme.success : theme.warning }]} />
-                <Text style={{ color: theme.text, fontFamily: theme.fonts.medium, fontSize: 13, marginStart: 8 }}>
-                  {detail.isPast ? t('parent.statusSubmitted') : t('parent.statusPending')}
-                </Text>
-              </View>
-              {detail.classeId ? (
-                <View style={[styles.metaRow, { backgroundColor: theme.surface }]}>
-                  <View style={[styles.dot, { backgroundColor: theme.info }]} />
-                  <Text style={{ color: theme.text, fontFamily: theme.fonts.medium, fontSize: 13, marginStart: 8 }}>
-                    {detail.classeId}{detail.teacherNom ? ` · ${detail.teacherNom}` : ''}
-                  </Text>
-                </View>
-              ) : null}
-              {!detail.isPast && (
-                <View style={[styles.cta, { backgroundColor: theme.primarySurface }]}>
-                  <AlertCircle size={14} color={theme.primary} strokeWidth={2.2} />
-                  <Text style={{ color: theme.primary, fontFamily: theme.fonts.semibold, fontSize: 12.5, marginStart: 8, flex: 1 }}>
-                    {t('parent.remindChild')}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          </Pressable>
-        </Modal>
-      )}
     </SafeAreaView>
   )
 }
@@ -173,6 +134,7 @@ function DevoirRow({ item, childName, isLast, onPress, theme }: { item: ParentDe
           {item.classeId}{childName ? ` · ${childName}` : ''} · {item.dateLimite.split('-').reverse().join('/')}
         </Text>
       </View>
+      {item.attachments.length > 0 && <Paperclip size={13} color={theme.textSoft} strokeWidth={2} style={{ marginEnd: 6 }} />}
       <Text style={{ color: theme.textSoft, fontFamily: theme.fonts.medium, fontSize: 11 }}>{item.type}</Text>
     </Pressable>
   )
@@ -187,12 +149,4 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: 20, marginTop: 6, marginBottom: 4 },
   devoirRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   devoirDot: { width: 8, height: 8, borderRadius: 4 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', paddingHorizontal: 20 },
-  sheet: { padding: 20, borderRadius: 22, maxHeight: '85%' },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  subjPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  metaRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, marginTop: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  cta: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, marginTop: 14 },
 })

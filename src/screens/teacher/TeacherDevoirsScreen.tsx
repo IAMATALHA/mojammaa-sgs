@@ -14,8 +14,9 @@ import {
   TextInput, ScrollView, Alert, ActivityIndicator, RefreshControl,
   KeyboardAvoidingView, Platform, Image, StatusBar,
 } from 'react-native';
-import { useRoute } from '@react-navigation/native';
-import type { TeacherRoute } from '../../navigation/types';
+import { useRoute, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { TeacherRoute, TeacherStackParamList } from '../../navigation/types';
 import { toDocs } from '../../services/firestore';
 import {
   collection, getDocs, query, where, addDoc, serverTimestamp,
@@ -40,6 +41,7 @@ interface Devoir {
   type:         string
   classeId:     string
   teacherId:    string
+  teacherNom?:  string
   dateLimite:   string
   attachments?: Attachment[]
   createdAt?:   Timestamp
@@ -59,6 +61,7 @@ export default function TeacherDevoirsScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
   const route = useRoute<TeacherRoute<'TeacherDevoirsDetail'>>();
+  const navigation = useNavigation<NativeStackNavigationProp<TeacherStackParamList>>();
   const { profile } = useAuth();
   const routeClasse = route.params?.classe
   const [devoirs, setDevoirs] = useState<Devoir[]>([])
@@ -88,8 +91,21 @@ export default function TeacherDevoirsScreen() {
   const openCreate    = () => { setPrefill(null); setModalOpen(true) }
   const openWithReuse = (d: Devoir) => { setPrefill(d); setModalOpen(true) }
 
+  // Tap sur la carte → page entière (description complète + pièces jointes
+  // consultables). Le chip « Réutiliser » garde la priorité (bouton imbriqué).
+  const openView = (d: Devoir) => {
+    navigation.navigate('TeacherDevoirView', {
+      devoir: {
+        id: d.id, titre: d.titre, description: d.description, type: d.type,
+        classeId: d.classeId, teacherNom: d.teacherNom, dateLimite: d.dateLimite,
+        attachments: d.attachments,
+      },
+    })
+  }
+
   const renderItem = ({ item }: { item: Devoir }) => (
-    <View style={[styles.card, { backgroundColor: theme.white, borderColor: theme.border }]}>
+    <TouchableOpacity activeOpacity={0.75} onPress={() => openView(item)}
+      style={[styles.card, { backgroundColor: theme.white, borderColor: theme.border }]}>
       <View style={styles.cardHeader}>
         <Text style={[styles.title, { color: theme.primary }]} numberOfLines={1}>{item.titre}</Text>
         <View style={[styles.typeTag, { backgroundColor: theme.primarySurface }]}>
@@ -117,7 +133,7 @@ export default function TeacherDevoirsScreen() {
           {t('teacher.reuse')}
         </Text>
       </TouchableOpacity>
-    </View>
+    </TouchableOpacity>
   );
 
   return (

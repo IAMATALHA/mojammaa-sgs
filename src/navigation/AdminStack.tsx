@@ -20,6 +20,7 @@ import AdminCalendarScreen from '../screens/admin/AdminCalendarScreen'
 import AdminAbsencesScreen from '../screens/admin/AdminAbsencesScreen'
 import AdminDevoirsScreen from '../screens/admin/AdminDevoirsScreen'
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen'
+import DevoirDetailScreen from '../screens/shared/DevoirDetailScreen'
 import type { AdminTabsParamList, AdminStackParamList } from './types'
 
 const Tab = createBottomTabNavigator<AdminTabsParamList>()
@@ -84,6 +85,7 @@ export default function AdminStack() {
       <Stack.Screen name="AdminCalendar" component={AdminCalendarScreen} />
       <Stack.Screen name="AdminAbsences" component={AdminAbsencesScreen} />
       <Stack.Screen name="AdminDevoirs" component={AdminDevoirsScreen} />
+      <Stack.Screen name="AdminDevoirView" component={DevoirDetailScreen} />
       <Stack.Screen name="AdminUsers" component={AdminUsersScreen} />
     </Stack.Navigator>
   )

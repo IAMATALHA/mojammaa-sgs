@@ -27,6 +27,7 @@ import TeacherComportementScreen from '../screens/teacher/TeacherComportementScr
 import TeacherRessourcesScreen from '../screens/teacher/TeacherRessourcesScreen'
 import TeacherStatsScreen from '../screens/teacher/TeacherStatsScreen'
 import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen'
+import DevoirDetailScreen from '../screens/shared/DevoirDetailScreen'
 import type { TeacherTabsParamList, TeacherStackParamList } from './types'
 
 const Tab = createBottomTabNavigator<TeacherTabsParamList>()
@@ -113,6 +114,7 @@ export default function TeacherStack() {
       <Stack.Screen name="TeacherComportement" component={TeacherComportementScreen} />
       <Stack.Screen name="TeacherRessources" component={TeacherRessourcesScreen} />
       <Stack.Screen name="TeacherDevoirsDetail" component={TeacherDevoirsScreen} />
+      <Stack.Screen name="TeacherDevoirView" component={DevoirDetailScreen} />
       <Stack.Screen name="TeacherStats" component={TeacherStatsScreen} />
     </Stack.Navigator>
   )
