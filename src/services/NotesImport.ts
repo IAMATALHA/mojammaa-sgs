@@ -2,7 +2,7 @@
  * Parse Excel/CSV pour importer les notes d'une classe.
  *
  * Format attendu (1 ligne par élève) :
- *   codeMassar | nom | prenom | note(s) (sur 20)
+ *   codeMassar | nom | prenom | note(s) (sur le barème de la classe)
  *
  * En format MASSAR, on lit uniquement les colonnes officielles "النقطة"
  * associées aux contrôles, puis on applique le plafond matière/niveau fourni
@@ -30,6 +30,7 @@ export interface ParsedNoteRow {
 
 export interface ParseNotesOptions {
   maxControls?: number | null
+  maxGrade?: number
 }
 
 interface ControlSlot {
@@ -51,9 +52,9 @@ function parseNote(v: any): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function parseGrade(v: any): number | null {
+function parseGrade(v: any, maxGrade = 20): number | null {
   const n = parseNote(v)
-  return n != null && n >= 0 && n <= 20 ? n : null
+  return n != null && n >= 0 && n <= maxGrade ? n : null
 }
 
 function asText(v: any): string {
@@ -108,7 +109,7 @@ function findMassarSubHeaderRow(rows: any[][]): number {
   )
 }
 
-function parseMassarRows(rows: any[][], maxControls?: number | null): ParsedNoteRow[] {
+function parseMassarRows(rows: any[][], maxControls?: number | null, maxGrade = 20): ParsedNoteRow[] {
   const subHeaderIdx = findMassarSubHeaderRow(rows)
   if (subHeaderIdx < 1) return []
 
@@ -134,7 +135,7 @@ function parseMassarRows(rows: any[][], maxControls?: number | null): ParsedNote
     const nameParts = splitName(asText(row[massarIdx + 1]))
     const slots = noteColumns.map(column => ({
       label: column.label,
-      note: parseGrade(row[column.col]),
+      note: parseGrade(row[column.col], maxGrade),
     }))
     const parsedRow = buildParsedRow({
       codeMassar,
@@ -161,7 +162,7 @@ function isNoteHeader(value: string): boolean {
   )
 }
 
-function parseGenericHeaderRows(rows: any[][], maxControls?: number | null): ParsedNoteRow[] {
+function parseGenericHeaderRows(rows: any[][], maxControls?: number | null, maxGrade = 20): ParsedNoteRow[] {
   const headerIdx = rows.findIndex(row =>
     Array.isArray(row) && row.filter(cell => isNoteHeader(asText(cell))).length > 0,
   )
@@ -188,12 +189,12 @@ function parseGenericHeaderRows(rows: any[][], maxControls?: number | null): Par
       .map((cell, idx) => ({ text: asText(cell), idx }))
       .filter(item => item.text && !noteColSet.has(item.idx))
       .filter(item => !isMassarCode(item.text))
-      .filter(item => parseGrade(item.text) == null)
+      .filter(item => parseGrade(item.text, maxGrade) == null)
       .map(item => item.text)
 
     const slots = noteColumns.map((column, idx) => ({
       label: controlLabel(column.label, idx),
-      note: parseGrade(row[column.col]),
+      note: parseGrade(row[column.col], maxGrade),
     }))
     const parsedRow = buildParsedRow({
       codeMassar,
@@ -207,7 +208,7 @@ function parseGenericHeaderRows(rows: any[][], maxControls?: number | null): Par
   return parsed
 }
 
-function parseLooseRows(rows: any[][], maxControls?: number | null): ParsedNoteRow[] {
+function parseLooseRows(rows: any[][], maxControls?: number | null, maxGrade = 20): ParsedNoteRow[] {
   const parsed: ParsedNoteRow[] = []
   rows.forEach((row, idx) => {
     if (!Array.isArray(row) || row.length === 0) return
@@ -222,7 +223,7 @@ function parseLooseRows(rows: any[][], maxControls?: number | null): ParsedNoteR
         codeMassar = txt.toUpperCase()
         continue
       }
-      const n = parseGrade(cell)
+      const n = parseGrade(cell, maxGrade)
       if (n != null) {
         values.push(n)
       } else if (txt) {
@@ -260,14 +261,15 @@ export async function parseNotesFile(uri: string, mime: string, options: ParseNo
   if (!sheet) return []
   const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, raw: true, defval: '' })
   const maxControls = options.maxControls
+  const maxGrade = options.maxGrade ?? 20
 
-  const massarRows = parseMassarRows(rows, maxControls)
+  const massarRows = parseMassarRows(rows, maxControls, maxGrade)
   if (massarRows.length > 0) return massarRows
 
-  const genericHeaderRows = parseGenericHeaderRows(rows, maxControls)
+  const genericHeaderRows = parseGenericHeaderRows(rows, maxControls, maxGrade)
   if (genericHeaderRows.length > 0) return genericHeaderRows
 
-  return parseLooseRows(rows, maxControls)
+  return parseLooseRows(rows, maxControls, maxGrade)
 }
 
 export function matchToEleve<E extends { id: string; nom: string; prenom: string; codeMassar?: string }>(

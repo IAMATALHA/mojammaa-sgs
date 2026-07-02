@@ -29,7 +29,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenLayout from '../../components/ScreenLayout';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 import { parseNotesFile, matchToEleve, type ParsedNoteRow } from '../../services/NotesImport'
@@ -78,17 +78,50 @@ function asNumber(v: unknown): number | null {
   return null
 }
 
-function readControlNotes(data: any): ControlNote[] {
+function baremeFromClasse(classe?: string): 10 | 20 {
+  return /aep/i.test(classe || '') ? 10 : 20
+}
+
+function cycleFromClasse(classe?: string): 'prescolaire' | 'primaire' | 'college' {
+  const value = classe || ''
+  if (/(^|[^a-z])(ps|gs)([^a-z]|$)/i.test(value)) return 'prescolaire'
+  if (/aep/i.test(value)) return 'primaire'
+  return 'college'
+}
+
+function normalizedOn20(note: number, bareme: number): number {
+  return note * (20 / bareme)
+}
+
+function gradeTone(note: number, bareme: number, theme: Theme) {
+  const value = normalizedOn20(note, bareme)
+  if (value >= 14) return { bg: theme.successSurface, border: theme.successSurface, fg: theme.success }
+  if (value >= 10) return { bg: theme.primarySurface, border: theme.primaryBorder, fg: theme.primary }
+  if (value >= 8) return { bg: theme.warningSurface, border: theme.warningSurface, fg: theme.warning }
+  return { bg: theme.dangerSurface, border: theme.dangerSurface, fg: theme.danger }
+}
+
+function labelWithBareme(label: string, bareme: number): string {
+  return label.replace(/\b20\b/g, String(bareme))
+}
+
+function placeholderWithBareme(label: string, bareme: number): string {
+  return bareme === 10 ? label.replace('14.5', '8.5') : label
+}
+
+function readControlNotes(data: any, bareme: number): ControlNote[] {
   const raw = Array.isArray(data?.controles) ? data.controles : Array.isArray(data?.controls) ? data.controls : []
   if (raw.length === 0) return []
   if (typeof raw[0] === 'number') {
-    const values = raw.map((n: unknown) => asNumber(n)).filter((n: number | null): n is number => n != null)
+    const values = raw
+      .map((n: unknown) => asNumber(n))
+      .filter((n: number | null): n is number => n != null && n >= 0 && n <= bareme)
     return makeControlNotes(values)
   }
   return raw
     .map((item: any, index: number) => {
       const note = asNumber(item?.note)
-      if (note == null || note < 0 || note > 20) return null
+      if (note == null || note < 0 || note > bareme) return null
       const numero = asNumber(item?.numero) ?? index + 1
       return {
         numero,
@@ -99,11 +132,11 @@ function readControlNotes(data: any): ControlNote[] {
     .filter((item: ControlNote | null): item is ControlNote => item != null)
 }
 
-function parseGradeInput(value: string): number | null {
+function parseGradeInput(value: string, bareme: number): number | null {
   const trimmed = value.trim()
   if (!trimmed) return null
   const n = Number(trimmed.replace(',', '.'))
-  return Number.isFinite(n) && n >= 0 && n <= 20 ? n : null
+  return Number.isFinite(n) && n >= 0 && n <= bareme ? n : null
 }
 
 export default function TeacherNotesScreen() {
@@ -115,6 +148,8 @@ export default function TeacherNotesScreen() {
   // on l'utilise — sinon on prend la classe assignée au profil du prof.
   const routeClasse = route.params?.classe
   const classe = (routeClasse || profile?.classe || '').trim()
+  const bareme = useMemo(() => baremeFromClasse(classe), [classe])
+  const cycle = useMemo(() => cycleFromClasse(classe), [classe])
 
   // Matière VERROUILLÉE sur celle du prof. S'il n'en a pas (ancien compte),
   // on retombe sur le sélecteur libre (compat).
@@ -172,8 +207,11 @@ export default function TeacherNotesScreen() {
           controlesExpected?: unknown
           controlesIgnored?:  unknown
         }>(d)
-        const controles = readControlNotes(data)
-        const note = asNumber(data.note) ?? (controles.length > 0 ? averageControlNotes(controles.map(item => item.note)) : '')
+        const controles = readControlNotes(data, bareme)
+        const rawNote = asNumber(data.note)
+        const note = rawNote != null && rawNote >= 0 && rawNote <= bareme
+          ? rawNote
+          : (controles.length > 0 ? averageControlNotes(controles.map(item => item.note)) : '')
         map.set(data.eleveId, {
           id:       d.id,
           eleveId:  data.eleveId,
@@ -192,7 +230,7 @@ export default function TeacherNotesScreen() {
     } finally {
       setLoading(false)
     }
-  }, [classe, matiere, semestre])
+  }, [bareme, classe, matiere, semestre])
 
   useEffect(() => { load() }, [load])
 
@@ -217,6 +255,7 @@ export default function TeacherNotesScreen() {
       const a = res.assets[0]
       const parsed: ParsedNoteRow[] = await parseNotesFile(a.uri, a.mimeType || '', {
         maxControls: expectedControls,
+        maxGrade: bareme,
       })
 
       if (parsed.length === 0) {
@@ -270,10 +309,12 @@ export default function TeacherNotesScreen() {
                     elevePrenom:  eleve.prenom,
                     codeMassar:   eleve.codeMassar || row.codeMassar || '',
                     classe,
+                    cycle,
                     semestre,
                     matiere,
                     matiereLabel: matiere,
                     note:         row.note,
+                    bareme,
                     controles:    row.controles,
                     controlesCount: row.controles.length,
                     controlesExpected: expectedControls ?? row.detectedControlsCount,
@@ -295,7 +336,7 @@ export default function TeacherNotesScreen() {
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || t('teacher.readFailed'))
     }
-  }, [profile, classe, matiere, semestre, expectedControls, t, load])
+  }, [profile, classe, cycle, bareme, matiere, semestre, expectedControls, t, load])
 
   const Chip = ({ value, active, onPress }: { value: string; active: boolean; onPress: () => void }) => (
     <TouchableOpacity onPress={onPress}
@@ -311,6 +352,7 @@ export default function TeacherNotesScreen() {
     const noteEntry = notes.get(item.id)
     const noteValue = asNumber(noteEntry?.note)
     const hasNote = noteValue != null
+    const tone = hasNote ? gradeTone(noteValue, bareme, theme) : null
     const controlCount = noteEntry?.controlesCount || noteEntry?.controles.length || (hasNote ? 1 : 0)
     const expected = noteEntry?.controlesExpected ?? expectedControls
     const controlsLabel = expected != null
@@ -333,9 +375,9 @@ export default function TeacherNotesScreen() {
           ) : null}
         </View>
         {hasNote ? (
-          <View style={[styles.noteBox, { backgroundColor: theme.primarySurface, borderColor: theme.primaryBorder }]}>
-            <Text style={[styles.noteValue, { color: theme.primary }]}>
-              {formatGrade(noteValue)}<Text style={{ fontSize: 11, fontWeight: '600' }}>/20</Text>
+          <View style={[styles.noteBox, { backgroundColor: tone!.bg, borderColor: tone!.border }]}>
+            <Text style={[styles.noteValue, { color: tone!.fg }]}>
+              {formatGrade(noteValue)}<Text style={{ fontSize: 11, fontWeight: '600' }}>/{bareme}</Text>
             </Text>
           </View>
         ) : (
@@ -387,6 +429,7 @@ export default function TeacherNotesScreen() {
         <View style={[styles.context, { backgroundColor: theme.surfaceAlt }]}>
           <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700' }}>
             Classe {classe} · {matiere} · {semestre}
+            {` · /${bareme}`}
             {expectedControls != null ? ` · ${t('teacher.controlsCount', { count: expectedControls })}` : ''}
           </Text>
         </View>
@@ -428,6 +471,8 @@ export default function TeacherNotesScreen() {
         matiere={matiere}
         semestre={semestre}
         classe={classe}
+        bareme={bareme}
+        cycle={cycle}
         teacherUid={profile?.uid || ''}
         expectedControls={expectedControls}
         onClose={() => setEditEleve(null)}
@@ -439,7 +484,7 @@ export default function TeacherNotesScreen() {
 
 // ─── Edit note modal ─────────────────────────────────────────────────────────
 function EditNoteModal({
-  visible, eleve, existing, matiere, semestre, classe, teacherUid, onClose, onSaved,
+  visible, eleve, existing, matiere, semestre, classe, bareme, cycle, teacherUid, expectedControls, onClose, onSaved,
 }: {
   visible:    boolean
   eleve:      EleveLite | null
@@ -447,6 +492,8 @@ function EditNoteModal({
   matiere:    string
   semestre:   string
   classe:     string
+  bareme:     10 | 20
+  cycle:      'prescolaire' | 'primaire' | 'college'
   teacherUid: string
   expectedControls?: number | null
   onClose:    () => void
@@ -466,9 +513,9 @@ function EditNoteModal({
 
   const submit = async () => {
     if (!eleve) return
-    const num = parseFloat(value.replace(',', '.'))
-    if (Number.isNaN(num) || num < 0 || num > 20) {
-      setErr(t('teacher.invalidNote'))
+    const num = parseGradeInput(value, bareme)
+    if (num == null) {
+      setErr(labelWithBareme(t('teacher.invalidNote'), bareme))
       return
     }
     setSaving(true); setErr('')
@@ -480,10 +527,20 @@ function EditNoteModal({
         elevePrenom: eleve.prenom,
         codeMassar:  eleve.codeMassar,
         classe,
+        cycle,
         semestre,
         matiere,
         matiereLabel: matiere,
         note: num,
+        bareme,
+        controles: [{
+          numero: 1,
+          label: 'Contrôle 1',
+          note: num,
+        }],
+        controlesCount: 1,
+        controlesExpected: expectedControls ?? 1,
+        controlesIgnored: 0,
         controls: [num],
         importedAt: serverTimestamp(),
         importedBy: teacherUid,
@@ -530,12 +587,12 @@ function EditNoteModal({
             </View>
           ) : null}
 
-          <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.noteLabel')}</Text>
+          <Text style={[styles.label, { color: theme.textSoft }]}>{labelWithBareme(t('teacher.noteLabel'), bareme)}</Text>
           <TextInput
             value={value}
             onChangeText={setValue}
-            accessibilityLabel={t('teacher.noteLabel')}
-            placeholder={t('teacher.notePlaceholder')}
+            accessibilityLabel={labelWithBareme(t('teacher.noteLabel'), bareme)}
+            placeholder={placeholderWithBareme(t('teacher.notePlaceholder'), bareme)}
             placeholderTextColor={theme.textSoft}
             style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white, fontSize: 28, textAlign: 'center', fontWeight: '700' }]}
             keyboardType="numeric"
