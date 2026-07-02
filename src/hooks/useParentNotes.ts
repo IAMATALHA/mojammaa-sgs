@@ -6,6 +6,7 @@ export interface SubjectGradeReal {
   average: number
   classAvg: number
   trend: 'up' | 'down' | 'flat'
+  controles: number[]   // notes des contrôles du semestre (détail dépliable)
 }
 
 export interface ChildReportReal {
@@ -14,14 +15,16 @@ export interface ChildReportReal {
   rank: string
   honor: 'felicitations' | 'encouragements' | 'avertissement' | null
   subjects: SubjectGradeReal[]
+  bareme: 10 | 20   // système marocain : primaire /10, collège /20
 }
 
 function round1(v: number): number { return Math.round(v * 10) / 10 }
 
-function computeHonor(avg: number): ChildReportReal['honor'] {
-  if (avg >= 16) return 'felicitations'
-  if (avg >= 14) return 'encouragements'
-  if (avg < 10) return 'avertissement'
+function computeHonor(avg: number, bareme: number): ChildReportReal['honor'] {
+  const v = avg * (20 / bareme)   // seuils calibrés /20
+  if (v >= 16) return 'felicitations'
+  if (v >= 14) return 'encouragements'
+  if (v < 10) return 'avertissement'
   return null
 }
 
@@ -67,10 +70,18 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
     if (currentNotes.length === 0) return null
 
     const bySubject = new Map<string, number[]>()
+    const ctrlBySubject = new Map<string, number[]>()
     currentNotes.forEach(n => {
       const list = bySubject.get(n.matiere) || []
       list.push(n.note)
       bySubject.set(n.matiere, list)
+      if (Array.isArray(n.controles) && n.controles.length > 0) {
+        // ControlNote peut être un nombre brut ou un objet { note, … }
+        const vals = n.controles
+          .map(c => (typeof c === 'number' ? c : (c as { note?: number }).note))
+          .filter((v): v is number => typeof v === 'number')
+        ctrlBySubject.set(n.matiere, [...(ctrlBySubject.get(n.matiere) || []), ...vals])
+      }
     })
 
     const prevBySubject = new Map<string, number[]>()
@@ -97,7 +108,7 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
         if (avg - prevAvg > 0.5) trend = 'up'
         else if (prevAvg - avg > 0.5) trend = 'down'
       }
-      return { subject: subj, average: avg, classAvg, trend }
+      return { subject: subj, average: avg, classAvg, trend, controles: ctrlBySubject.get(subj) || [] }
     }).sort((a, b) => a.subject.localeCompare(b.subject, 'fr'))
 
     const generalAvg = round1(subjects.reduce((s, sub) => s + sub.average, 0) / subjects.length)
@@ -109,14 +120,18 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
       rank = `${pos || sorted.length} / ${sorted.length}`
     }
 
+    // Barème : primaire (…AEP) noté /10, le reste /20. Déduit de la classe.
+    const bareme: 10 | 20 = /aep/i.test(classe || '') ? 10 : 20
+
     return {
       semestre: latestSemestre,
       generalAvg,
       rank,
-      honor: computeHonor(generalAvg),
+      honor: computeHonor(generalAvg, bareme),
       subjects,
+      bareme,
     }
-  }, [notes, classStats, latestSemestre, prevSemestre])
+  }, [notes, classStats, latestSemestre, prevSemestre, classe])
 
   return { loading, error, notes, semestres, report }
 }
