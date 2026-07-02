@@ -157,7 +157,9 @@ export default function ParentAbsencesScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0 }}
+          // flexShrink: 0 — sinon Yoga écrase cette rangée (hors du scroll
+          // vertical) et les noms des enfants sont coupés à mi-hauteur.
+          style={{ flexGrow: 0, flexShrink: 0 }}
           contentContainerStyle={styles.chips}
         >
           <Chip
