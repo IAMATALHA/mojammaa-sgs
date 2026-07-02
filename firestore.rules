@@ -337,6 +337,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── settings (paramètres pédagogiques — ex. coefficients des matières) ──
+    // Distinct de config/ (verrouillé, superadmins) : ici l'ADMIN peut écrire
+    // depuis le back-office ; lisible par tout connecté (l'app mobile pourra
+    // pondérer les moyennes avec les mêmes coefficients).
+    match /settings/{docId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     // ── config (liste des superadmins, etc.) ────────────────
     // Lecture ADMIN uniquement (l'app mobile ne lit jamais config/ — vérifié
     // 2026-06-10 ; inutile d'exposer la liste des superadmins aux parents).
