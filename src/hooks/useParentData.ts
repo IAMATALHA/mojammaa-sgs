@@ -28,6 +28,19 @@ function hashOf(s: string): number {
 
 function round1(v: number): number { return Math.round(v * 10) / 10 }
 
+function noteBareme(note: NoteDoc, classe?: string): 10 | 20 {
+  if (note.bareme === 10 || note.bareme === 20) return note.bareme
+  if (note.cycle === 'primaire') return 10
+  return /aep/i.test(note.classe || classe || '') ? 10 : 20
+}
+
+function noteOn20(note: NoteDoc, classe?: string): number | null {
+  if (typeof note.note !== 'number') return null
+  const bareme = noteBareme(note, classe)
+  if (note.note < 0 || note.note > bareme) return null
+  return note.note * (20 / bareme)
+}
+
 export function useParentData(): ParentData {
   const { profile } = useAuth()
   const [eleves, setEleves] = useState<EleveDoc[]>([])
@@ -100,9 +113,11 @@ export function useParentData(): ParentData {
   const children = useMemo(
     () => eleves.map(e => {
       const childNotes = notesByEleve.get(e.codeMassar) || []
-      const numericNotes = childNotes.filter((n): n is NoteDoc & { note: number } => typeof n.note === 'number')
-      const avgGrade = numericNotes.length > 0
-        ? round1(numericNotes.reduce((s, n) => s + n.note, 0) / numericNotes.length)
+      const notesOn20 = childNotes
+        .map(note => noteOn20(note, e.classe))
+        .filter((note): note is number => note != null)
+      const avgGrade = notesOn20.length > 0
+        ? round1(notesOn20.reduce((s, n) => s + n, 0) / notesOn20.length)
         : 0
       return {
         id: e.codeMassar,

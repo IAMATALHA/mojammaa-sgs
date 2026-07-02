@@ -21,6 +21,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { AcademicReportCard, Card, EmptyState, SectionHeader } from '../../components/dashboard'
+import CompetenceReportCard from '../../components/dashboard/CompetenceReportCard'
 import { useParentData } from '../../hooks/useParentData'
 import { useParentNotes } from '../../hooks/useParentNotes'
 import { useParentComportements } from '../../hooks/useParentComportements'
@@ -50,7 +51,7 @@ export default function ParentPerformanceScreen() {
     [parent.eleves, selectedChildId],
   )
 
-  const { loading, error, report } = useParentNotes(selectedChildId, selectedEleve?.classe)
+  const { loading, error, report, competenceReport } = useParentNotes(selectedChildId, selectedEleve?.classe)
 
   const childComportements = useMemo(
     () => entries.filter(e => e.eleveId === selectedChildId),
@@ -104,7 +105,7 @@ export default function ParentPerformanceScreen() {
           showsHorizontalScrollIndicator={false}
           // flexShrink: 0 — sinon Yoga écrase cette rangée (hors du scroll
           // vertical) et les noms des enfants sont coupés à mi-hauteur.
-          style={{ flexGrow: 0, flexShrink: 0 }}
+          style={styles.chipScroll}
           contentContainerStyle={styles.chips}
         >
           {parent.children.map(c => (
@@ -132,7 +133,7 @@ export default function ParentPerformanceScreen() {
       ) : null}
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {(error || parent.error) && !report ? (
+        {(error || parent.error) && !report && !competenceReport ? (
           <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
             <MessagesErrorBanner messageKey="common.dataLoadError" />
           </View>
@@ -143,7 +144,7 @@ export default function ParentPerformanceScreen() {
           <View style={{ paddingVertical: 40, alignItems: 'center' }}>
             <ActivityIndicator color={theme.primary} />
           </View>
-        ) : !report ? (
+        ) : !report && !competenceReport ? (
           <View style={{ paddingHorizontal: 20 }}>
             <Card>
               <EmptyState
@@ -153,8 +154,10 @@ export default function ParentPerformanceScreen() {
               />
             </Card>
           </View>
+        ) : competenceReport && !report ? (
+          <CompetenceReportCard report={competenceReport} />
         ) : (
-          <AcademicReportCard report={report} />
+          <AcademicReportCard report={report!} />
         )}
 
         {/* ── Comportement ──────────────────────────────── */}
@@ -252,8 +255,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center', justifyContent: 'center',
   },
-  chips: { paddingHorizontal: 20, paddingBottom: 16, gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, marginEnd: 6 },
+  chipScroll: { flexGrow: 0, flexShrink: 0, minHeight: 58 },
+  chips: { paddingHorizontal: 20, paddingTop: 2, paddingBottom: 14, gap: 8, alignItems: 'center' },
+  chip: { minHeight: 38, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 999, borderWidth: 1, marginEnd: 6 },
   scroll: { paddingBottom: 32 },
   section: { paddingHorizontal: 20, marginTop: 22 },
   kpiRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
