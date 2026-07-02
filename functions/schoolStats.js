@@ -10,9 +10,10 @@
  * heatScore, niveauGroup, tendances 5/7 jours, bandes de notes…).
  *
  * Normalisation des notes alignée sur le mapping onSnapshot du client :
- *   note    = asNumber(note)   ← volontairement PAS la moyenne des `controles`
- *                                (contrairement à classStats.js) pour rester
- *                                identique à ce que l'écran calculait avant.
+ *   note    = asNumber(note), convertie en équivalent /20 pour les agrégats
+ *             école entière. Une note primaire /10 compte donc x2.
+ *             Volontairement PAS la moyenne des `controles`
+ *             (contrairement à classStats.js) pour rester identique au client.
  *   subject = matiereLabel || matiere || subject.
  */
 
@@ -31,6 +32,23 @@ function asNumber(v) {
 
 const round1 = (v) => Math.round(v * 10) / 10
 const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v))
+
+function baremeFromData(data) {
+  const explicit = asNumber(data.bareme)
+  if (explicit === 10 || explicit === 20) return explicit
+  const cycle = asString(data.cycle).toLowerCase()
+  if (cycle === 'primaire') return 10
+  if (/aep/i.test(asString(data.classe))) return 10
+  return 20
+}
+
+function normalizedNote20(data) {
+  const note = asNumber(data.note)
+  if (note == null) return null
+  const bareme = baremeFromData(data)
+  if (note < 0 || note > bareme) return null
+  return note * (20 / bareme)
+}
 
 function todayISO() {
   return new Date().toISOString().split('T')[0]
@@ -85,7 +103,7 @@ function computeSchoolStats(cache) {
     eleveId: asString(d.eleveId),
     classe: asString(d.classe),
     subject: asString(d.matiereLabel) || asString(d.matiere) || asString(d.subject),
-    note: asNumber(d.note),
+    note: normalizedNote20(d),
   }))
   const absences = (cache.absences || []).map((d) => ({
     id: d.id, eleveId: asString(d.eleveId), classe: asString(d.classe),

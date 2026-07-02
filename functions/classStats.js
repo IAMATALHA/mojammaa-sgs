@@ -6,7 +6,7 @@
  * docToNote) et des formules de useParentNotes : garder les trois en
  * phase si l'un change.
  *  - note : champ `note` (number ou string à virgule), sinon moyenne des
- *    `controles` valides (arrondie 2 déc.) ; rejet hors [0, 20].
+ *    `controles` valides (arrondie 2 déc.) ; rejet hors barème de la classe.
  *  - clé matière : `matiereLabel` sinon `matiere` (trim).
  *  - moyennes : moyenne des valeurs brutes, arrondi 1 décimale.
  */
@@ -27,18 +27,32 @@ function asString(v) {
 const round1 = (v) => Math.round(v * 10) / 10
 const round2 = (v) => Math.round(v * 100) / 100
 
+function baremeFromData(data) {
+  const explicit = asNumber(data.bareme)
+  if (explicit === 10 || explicit === 20) return explicit
+  const cycle = asString(data.cycle).toLowerCase()
+  if (cycle === 'primaire') return 10
+  if (/aep/i.test(asString(data.classe))) return 10
+  return 20
+}
+
+function inferBareme(noteDocs) {
+  const primary = noteDocs.some((data) => baremeFromData(data) === 10)
+  return primary ? 10 : 20
+}
+
 /** Valeur de note d'un doc `notes`, ou null si invalide. */
-function noteValue(data) {
+function noteValue(data, bareme) {
   const controles = Array.isArray(data.controles)
     ? data.controles
         .map((c) => asNumber(c && c.note))
-        .filter((n) => n != null && n >= 0 && n <= 20)
+        .filter((n) => n != null && n >= 0 && n <= bareme)
     : []
   let note = asNumber(data.note)
   if (note == null && controles.length > 0) {
     note = round2(controles.reduce((s, v) => s + v, 0) / controles.length)
   }
-  if (note == null || note < 0 || note > 20) return null
+  if (note == null || note < 0 || note > bareme) return null
   return note
 }
 
@@ -56,9 +70,10 @@ function computeClassStats(noteDocs) {
   const bySubject = new Map()
   const byStudent = new Map()
   let notesCount = 0
+  const bareme = inferBareme(noteDocs)
 
   for (const data of noteDocs) {
-    const note = noteValue(data)
+    const note = noteValue(data, bareme)
     const subject = subjectKey(data)
     const eleveId = asString(data.eleveId)
     if (note == null || !subject || !eleveId) continue
@@ -77,7 +92,7 @@ function computeClassStats(noteDocs) {
     .map((vals) => round1(vals.reduce((a, b) => a + b, 0) / vals.length))
     .sort((a, b) => b - a)
 
-  return { subjectAvgs, studentAvgs, students: studentAvgs.length, notesCount }
+  return { subjectAvgs, studentAvgs, students: studentAvgs.length, notesCount, bareme }
 }
 
 function statsDocId(classe, semestre) {

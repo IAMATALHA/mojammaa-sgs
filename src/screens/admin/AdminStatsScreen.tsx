@@ -36,6 +36,8 @@ interface NoteRow {
   classe: string
   subject: string
   note: number | null
+  cycle: string
+  bareme: number | null
   importedBy: string
 }
 
@@ -199,7 +201,20 @@ function isActiveHomework(row: DevoirRow, today: string): boolean {
 }
 
 function formatNote(value: number | null): string {
-  return value == null ? '—' : `${value}/20`
+  return value == null ? '—' : `${value}/20 éq.`
+}
+
+function baremeFromNote(row: Pick<NoteRow, 'bareme' | 'cycle' | 'classe'>): 10 | 20 {
+  if (row.bareme === 10 || row.bareme === 20) return row.bareme
+  if (row.cycle.toLowerCase() === 'primaire') return 10
+  return /aep/i.test(row.classe) ? 10 : 20
+}
+
+function normalizeNoteOn20(row: NoteRow): NoteRow | null {
+  if (row.note == null) return null
+  const bareme = baremeFromNote(row)
+  if (row.note < 0 || row.note > bareme) return null
+  return { ...row, note: row.note * (20 / bareme), bareme: 20 }
 }
 
 function compactSubject(value: string): string {
@@ -247,7 +262,9 @@ function noteTextColor(note: number | null, theme: Theme): string {
 function buildDashboardData(cache: SnapshotCache): DashboardData {
   const today = todayISO()
   const monthStart = monthStartISO()
-  const validNotes = cache.notes.filter(row => row.note != null && row.note >= 0 && row.note <= 20)
+  const validNotes = cache.notes
+    .map(normalizeNoteOn20)
+    .filter((row): row is NoteRow => row != null && row.note != null && row.note >= 0 && row.note <= 20)
   const classStudents = new Map<string, EleveRow[]>()
   const notesByEleve = new Map<string, number[]>()
   const notesByClass = new Map<string, NoteRow[]>()
@@ -585,6 +602,8 @@ export default function AdminStatsScreen() {
             classe: asString(row.classe),
             subject: asString(row.matiereLabel) || asString(row.matiere) || asString(row.subject),
             note: asNumber(row.note),
+            cycle: asString(row.cycle),
+            bareme: asNumber(row.bareme),
             importedBy: asString(row.importedBy),
           }
         })
@@ -1098,7 +1117,7 @@ function ClassMap({ classes, theme, t }: { classes: ClassStats[]; theme: Theme; 
       </View>
       <View style={styles.axisRow}>
         <Text style={[styles.axisText, { color: theme.textSoft }]}>0</Text>
-        <Text style={[styles.axisText, { color: theme.textSoft }]}>{t('admin.avgGrade')}</Text>
+        <Text style={[styles.axisText, { color: theme.textSoft }]}>{t('admin.avgGrade')} /20 éq.</Text>
         <Text style={[styles.axisText, { color: theme.textSoft }]}>20</Text>
       </View>
     </View>
