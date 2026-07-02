@@ -53,14 +53,20 @@ export function usePushTapNavigation(role: RoleLogic | null, enabled: boolean) {
   // démarrage à froid (clearLastNotificationResponseAsync ne purge que le
   // cache JS) → l'app « retombait » sur Messages après chaque login.
   const handledId = useRef<string | null>(null)
+  // Fenêtre de lancement : sur Android, le listener PEUT aussi re-recevoir la
+  // réponse de l'intent recyclé dans les premières secondes du démarrage.
+  const startedAt = useRef(Date.now())
 
   const handleResponse = useCallback((response: Notifications.NotificationResponse | null, coldStart = false) => {
     if (!response) return
     const id = response.notification?.request?.identifier || null
     if (id && handledId.current === id) return
-    if (coldStart) {
-      // Démarrage à froid : n'honorer qu'un tap FRAIS (< 2 min) — au-delà,
-      // c'est l'intent recyclé d'une vieille notification, pas une intention.
+    const inLaunchWindow = Date.now() - startedAt.current < 8000
+    if (coldStart || inLaunchWindow) {
+      // Au démarrage : n'honorer qu'un tap FRAIS (< 2 min) — au-delà, c'est
+      // l'intent recyclé d'une vieille notification, pas une intention.
+      // (Un vrai tap sur une vieille notification, app déjà ouverte, passe
+      // par le listener HORS fenêtre de lancement → toujours honoré.)
       const raw = response.notification?.date
       const ms = typeof raw === 'number' ? (raw < 1e12 ? raw * 1000 : raw) : 0
       if (!ms || Date.now() - ms > 2 * 60_000) return
