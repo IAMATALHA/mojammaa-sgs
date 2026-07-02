@@ -115,7 +115,7 @@ export default function ParentRessourcesScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={{ flexGrow: 0 }}
+            style={{ flexGrow: 0, flexShrink: 0 }}
             contentContainerStyle={styles.chips}
           >
             <Chip label={t('parent.allFilter')} active={selectedClasse === 'all'}
