@@ -108,8 +108,10 @@ export type AdminStackParamList = {
   AdminEdt:       undefined
   AdminCalendar:  undefined
   AdminAbsences:  undefined
+  AdminRollCalls: undefined
   AdminDevoirs:   undefined
   AdminDevoirView: DevoirDetailParams
+  AdminMatiereDetail: { matiere?: string; classe?: string } | undefined
   AdminUsers:     undefined
 }
 

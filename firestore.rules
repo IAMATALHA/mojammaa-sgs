@@ -242,12 +242,20 @@ service cloud.firestore {
       // par ||). Les statements étant évalués indépendamment, chacun couvre
       // l'angle mort de l'autre.
       allow read: if isSignedIn() && myUid() in resource.data.toIds;
+      // Statement dédié pour la même raison que ci-dessus (requête
+      // where('classe','==',X) du prof, cf. mojammaa-admin/Messages.tsx
+      // subscribeClasse) : un prof lit les diffusions ADRESSÉES à SA classe
+      // (champ `classe`, écrit par le compose web/app sur les messages
+      // toType:'user'/toIds ciblant une classe). Ne concerne QUE les profs —
+      // les parents reçoivent déjà ces messages via toIds (leur uid y figure).
+      allow read: if isSignedIn() && teacherTeaches(resource.data.get('classe', ''));
       allow read: if isSignedIn() && (
         resource.data.fromId == myUid()
         || (resource.data.toIds is list && myUid() in resource.data.toIds)
         || resource.data.toType == 'all'
         || (resource.data.toType == 'parents'  && isParent())
         || (resource.data.toType == 'teachers' && isTeacher())
+        || teacherTeaches(resource.data.get('classe', ''))
         // Compat ancien format (champ `toId` string) — cf. messagesService legacy.
         || resource.data.toId == myUid()
         || resource.data.toId == 'all'

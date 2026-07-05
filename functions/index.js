@@ -482,12 +482,13 @@ exports.weeklyDigest = onSchedule(
 
 /** Recalcule l'agrégat complet depuis les 5 collections et l'écrit (Admin SDK). */
 async function refreshSchoolStats() {
-  const [eleves, users, notes, absences, devoirs] = await Promise.all([
+  const [eleves, users, notes, absences, devoirs, coefDoc] = await Promise.all([
     db.collection('eleves').get(),
     db.collection('users').get(),
     db.collection('notes').get(),
     db.collection('absences').get(),
     db.collection('devoirs').get(),
+    db.collection('settings').doc('coefficients').get(),
   ])
   const toRows = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }))
   const summary = computeSchoolStats({
@@ -496,6 +497,7 @@ async function refreshSchoolStats() {
     notes: toRows(notes),
     absences: toRows(absences),
     devoirs: toRows(devoirs),
+    coefficients: coefDoc.exists ? coefDoc.data() : null,
   })
   await db.collection('stats').doc('summary').set({ ...summary, updatedAt: new Date() })
   return summary

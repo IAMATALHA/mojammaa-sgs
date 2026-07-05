@@ -17,6 +17,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation } from '@react-navigation/native'
 import type { AdminDashboardNav } from '../../navigation/types'
 import { useTranslation } from 'react-i18next'
@@ -26,21 +27,36 @@ import {
 } from 'lucide-react-native'
 import { collection, doc, getDoc, getDocs, query, where, Timestamp } from 'firebase/firestore'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
-import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
-import { toDoc } from '../../services/firestore'
+import { toDoc, toDocs } from '../../services/firestore'
 import type { EleveDoc } from '../../services/elevesService'
 import type { AbsenceDoc } from '../../services/absencesService'
 import type { UserProfile } from '../../types'
 import { getTodayJour, getJoursScolaires, type JourScolaire } from '../../services/calendarService'
 import { useUnreadMessagesCount } from '../../hooks/useUnreadMessagesCount'
 import AnimatedCounter from '../../components/AnimatedCounter'
-import ProgressRing from '../../components/ProgressRing'
-import { greetingKey, formatDayMonth } from '../../utils/format'
+import { formatDayMonth, hexWithAlpha } from '../../utils/format'
+import {
+  buildTodayRollCallSessions,
+  rollCallSessionKey,
+  summarizeRollCallSessions,
+  type RollCallSlot,
+} from '../../utils/rollCalls'
 
 type AdminQuickRoute =
   | 'AdminAbsences' | 'AdminUsers' | 'AdminDevoirs'
   | 'AdminStatsTab' | 'AdminMessages' | 'AdminCalendarTab'
+  | 'AdminRollCalls'
+
+function compactLabels(lang: string) {
+  if (lang === 'ar') {
+    return { calls: 'النداء' }
+  }
+  if (lang.startsWith('en')) {
+    return { calls: 'Calls' }
+  }
+  return { calls: 'Appels' }
+}
 
 function isoDaysAgo(n: number): string {
   const d = new Date(); d.setDate(d.getDate() - n)
@@ -67,7 +83,6 @@ export default function AdminDashboardScreen() {
   const theme = useTheme()
   const { t, i18n } = useTranslation()
   const isAr = i18n.language === 'ar'
-  const { profile } = useAuth()
   const nav = useNavigation<AdminDashboardNav>()
   const goTo = (route: AdminQuickRoute) => nav.navigate(route)
   const unread = useUnreadMessagesCount()
@@ -78,7 +93,7 @@ export default function AdminDashboardScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
-  const fullName = profile ? `${profile.prenom} ${profile.nom}`.trim() : 'Direction'
+  const labels = compactLabels(i18n.language)
 
   const load = useCallback(async () => {
     try {
@@ -88,13 +103,14 @@ export default function AdminDashboardScreen() {
       const horizonISO = horizon.toISOString().split('T')[0]
       const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0)
 
-      const [jour, jours, summarySnap, absTodaySnap, absWeekSnap, msgsTodaySnap] = await Promise.all([
+      const [jour, jours, summarySnap, absTodaySnap, absWeekSnap, msgsTodaySnap, edtSnap] = await Promise.all([
         getTodayJour(),
         getJoursScolaires(today, horizonISO),
         getDoc(doc(db, 'stats', 'summary')),
         getDocs(query(collection(db, 'absences'), where('date', '==', today))),
         getDocs(query(collection(db, 'absences'), where('date', '>=', weekAgo), where('date', '<', today))),
         getDocs(query(collection(db, 'messages'), where('createdAt', '>=', Timestamp.fromDate(startOfDay)))),
+        getDocs(collection(db, 'emploiDuTemps')),
       ])
       setTodayJour(jour)
 
@@ -105,16 +121,12 @@ export default function AdminDashboardScreen() {
 
       // ── Structure école : agrégat serveur, repli scan complet ──
       let totalEleves = 0, totalProfs = 0, totalClasses = 0, devoirsActifs = 0
-      let expectedClasses: string[] = []
       if (summarySnap.exists()) {
         const s = summarySnap.data() as Record<string, any>
         totalEleves = s.totalEleves || 0
         totalProfs = s.totalTeachers || 0
         totalClasses = s.totalClasses || 0
         devoirsActifs = s.activeHomework || 0
-        expectedClasses = Array.isArray(s.classStats)
-          ? s.classStats.map((c: any) => c?.name).filter(Boolean)
-          : []
       } else {
         const [elevesSnap, usersSnap, devoirsSnap] = await Promise.all([
           getDocs(collection(db, 'eleves')),
@@ -126,7 +138,6 @@ export default function AdminDashboardScreen() {
         const classeSet = new Set<string>()
         elevesSnap.forEach(d => { const c = toDoc<EleveDoc>(d).classe; if (c) classeSet.add(c) })
         totalClasses = classeSet.size
-        expectedClasses = [...classeSet]
         devoirsActifs = devoirsSnap.size
       }
 
@@ -134,11 +145,11 @@ export default function AdminDashboardScreen() {
       const absents = new Set<string>()
       const retards = new Set<string>()
       const pointed = new Set<string>()
-      const classesPointees = new Set<string>()
+      const completedRollCalls = new Set<string>()
       absTodaySnap.forEach(d => {
         const a = toDoc<AbsenceDoc>(d)
         if (a.eleveId) pointed.add(a.eleveId)
-        if (a.classe) classesPointees.add(a.classe)
+        if (a.classe && a.seance) completedRollCalls.add(rollCallSessionKey(a.classe, a.seance))
         if (a.statut === 'absent' && a.eleveId) absents.add(a.eleveId)
         if (a.statut === 'retard' && a.eleveId) retards.add(a.eleveId)
       })
@@ -148,10 +159,16 @@ export default function AdminDashboardScreen() {
         ? Math.round(((pointed.size - absents.size) / pointed.size) * 100)
         : null
       const coursToday = !(jour?.annuleCours)
+      const todayRollCalls = buildTodayRollCallSessions(
+        toDocs<RollCallSlot>(edtSnap),
+        completedRollCalls,
+      )
+      const rollCallSummary = summarizeRollCallSessions(todayRollCalls)
       const classesSansAppel = coursToday
-        ? expectedClasses.filter(c => !classesPointees.has(c))
-            .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        ? rollCallSummary.missingClasses
         : []
+      const callsDone = coursToday ? rollCallSummary.callsDone : 0
+      const callsExpected = coursToday ? rollCallSummary.callsExpected : 0
 
       // ── Tendance : présence confirmée moyenne des 7 derniers jours ──
       const byDay = new Map<string, { pointed: Set<string>; absent: Set<string> }>()
@@ -175,8 +192,8 @@ export default function AdminDashboardScreen() {
         absentsToday: absents.size,
         retardsToday: retards.size,
         presenceConfirmed,
-        callsDone: classesPointees.size,
-        callsExpected: expectedClasses.length,
+        callsDone,
+        callsExpected,
         classesSansAppel,
         trendDelta,
         devoirsActifs,
@@ -201,7 +218,7 @@ export default function AdminDashboardScreen() {
         key: 'calls', icon: <ClipboardCheck size={16} color={theme.warning} strokeWidth={2} />,
         label: `${state.classesSansAppel.length} ${t('admin.classesNoCall').toLowerCase()}`,
         detail: state.classesSansAppel.slice(0, 5).join(' · ') + (state.classesSansAppel.length > 5 ? ' …' : ''),
-        route: 'AdminAbsences', color: theme.warning, bg: theme.warningSurface,
+        route: 'AdminRollCalls', color: theme.warning, bg: theme.warningSurface,
       })
     }
     if (state.absentsToday > 0) {
@@ -220,12 +237,6 @@ export default function AdminDashboardScreen() {
     }
   }
 
-  const presenceColor = state?.presenceConfirmed == null
-    ? theme.textMuted
-    : state.presenceConfirmed >= 95 ? theme.success : state.presenceConfirmed >= 85 ? theme.warning : theme.danger
-
-  const dateLabel = new Date().toLocaleDateString(isAr ? 'ar-MA-u-nu-latn' : 'fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
-
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
       <StatusBar style="dark" />
@@ -242,27 +253,82 @@ export default function AdminDashboardScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
-        {/* ── En-tête stable : qui, quand, signal principal ── */}
-        <View style={styles.header}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text numberOfLines={1} style={{ color: theme.text, fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.black, fontSize: 20, letterSpacing: -0.4, writingDirection: isAr ? 'rtl' : 'ltr' }}>
-              {t(greetingKey())}, {fullName.split(' ')[0] || 'Admin'}
-            </Text>
-            <Text style={{ color: theme.textSoft, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium, fontSize: 12.5, marginTop: 2, textTransform: 'capitalize' }}>
-              {dateLabel} · {t('roles.admin')}
-            </Text>
-          </View>
-          {state && (
-            <View style={[styles.statusPill, { backgroundColor: priorities.length === 0 ? theme.successSurface : theme.warningSurface }]}>
-              {priorities.length === 0
-                ? <CheckCircle2 size={14} color={theme.success} strokeWidth={2.2} />
-                : <AlertTriangle size={14} color={theme.warning} strokeWidth={2.2} />}
-              <Text style={{ color: priorities.length === 0 ? theme.success : theme.warning, fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold, fontSize: 12, marginStart: 5 }}>
-                {priorities.length === 0 ? t('admin.allGood') : `${priorities.length} ${t('admin.toHandle').toLowerCase()}`}
-              </Text>
+        <LinearGradient
+          colors={[theme.primaryDark, theme.primary, '#2F8A72']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.heroCard, theme.shadows.clay]}
+        >
+          <View pointerEvents="none" style={styles.heroGlowA} />
+          <View pointerEvents="none" style={styles.heroGlowB} />
+          <View pointerEvents="none" style={styles.heroSheen} />
+
+          {state ? (
+            <>
+              <View style={[styles.heroSignal, isAr && styles.rowReverse]}>
+                <View style={[styles.heroSignalText, isAr && styles.rtlBlock]}>
+                  <Text style={[styles.heroMetricLabel, { fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold }]}>
+                    {t('admin.confirmedPresence')}
+                  </Text>
+                  {state.presenceConfirmed !== null ? (
+                    <>
+                      <Text style={[styles.heroPresenceValue, { fontFamily: theme.fonts.black }]}>
+                        <AnimatedCounter value={state.presenceConfirmed} />
+                        <Text style={styles.heroPresenceUnit}>%</Text>
+                      </Text>
+                      {state.trendDelta !== null ? (
+                        <View style={[styles.heroTrendPill, isAr && styles.rowReverse]}>
+                          {state.trendDelta >= 0
+                            ? <TrendingUp size={13} color="#fff" strokeWidth={2.3} />
+                            : <TrendingDown size={13} color="#fff" strokeWidth={2.3} />}
+                          <Text style={[styles.heroTrendText, { fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.bold }]}>
+                            {state.trendDelta > 0 ? '+' : ''}{state.trendDelta} pt · {t('admin.vs7d')}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </>
+                  ) : (
+                    <Text style={[styles.heroNoCall, { fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold }]}>
+                      {t('admin.noCallYet')}
+                    </Text>
+                  )}
+                </View>
+
+              </View>
+
+              <View style={[styles.heroMetricsRow, isAr && styles.rowReverse]}>
+                <HeroMetric
+                  icon={<ClipboardCheck size={14} color="#fff" strokeWidth={2.3} />}
+                  value={`${state.callsDone}/${state.callsExpected}`}
+                  label={labels.calls}
+                  onPress={() => goTo('AdminRollCalls')}
+                  isAr={isAr}
+                  theme={theme}
+                />
+                <HeroMetric
+                  icon={<CalendarX size={14} color="#fff" strokeWidth={2.3} />}
+                  value={String(state.absentsToday)}
+                  label={t('tabs.absences')}
+                  onPress={() => goTo('AdminAbsences')}
+                  isAr={isAr}
+                  theme={theme}
+                />
+                <HeroMetric
+                  icon={<Mail size={14} color="#fff" strokeWidth={2.3} />}
+                  value={String(unread)}
+                  label={t('admin.unreadShort')}
+                  onPress={() => goTo('AdminMessages')}
+                  isAr={isAr}
+                  theme={theme}
+                />
+              </View>
+            </>
+          ) : (
+            <View style={styles.heroLoading}>
+              <ActivityIndicator color="#fff" />
             </View>
           )}
-        </View>
+        </LinearGradient>
 
         {/* Bannière jour spécial */}
         {todayJour && todayJour.annuleCours ? (
@@ -275,77 +341,39 @@ export default function AdminDashboardScreen() {
           </View>
         ) : null}
 
-        {loading && !state ? (
-          <View style={styles.loadingBox}><ActivityIndicator color={theme.primary} /></View>
-        ) : state ? (
+        {loading && !state ? null : state ? (
           <>
-            {/* ── 1. État du jour : présence CONFIRMÉE + fiabilité de l'appel ── */}
-            <View style={styles.bentoRow}>
-              <View style={[styles.tile, styles.presenceTile, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.clay]}>
-                {state.presenceConfirmed !== null ? (
-                  <>
-                    <ProgressRing
-                      progress={state.presenceConfirmed / 100}
-                      size={92} strokeWidth={9}
-                      color={presenceColor} trackColor={theme.surfaceAlt} textColor={presenceColor}
-                    />
-                    {state.trendDelta !== null && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
-                        {state.trendDelta >= 0
-                          ? <TrendingUp size={12} color={theme.success} strokeWidth={2.2} />
-                          : <TrendingDown size={12} color={theme.danger} strokeWidth={2.2} />}
-                        <Text style={{ color: state.trendDelta >= 0 ? theme.success : theme.danger, fontFamily: theme.fonts.bold, fontSize: 11.5, marginStart: 4 }}>
-                          {state.trendDelta > 0 ? '+' : ''}{state.trendDelta} pt · {t('admin.vs7d')}
-                        </Text>
-                      </View>
-                    )}
-                  </>
-                ) : (
-                  <Text style={{ color: theme.textMuted, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold, fontSize: 13, textAlign: 'center', paddingVertical: 26 }}>
-                    {t('admin.noCallYet')}
-                  </Text>
-                )}
-                <Text style={[styles.tileLabel, { color: theme.textMuted, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold, marginTop: 8 }]}>
-                  {t('admin.confirmedPresence')}
-                </Text>
-              </View>
-              <View style={styles.bentoCol}>
-                <BentoMini
-                  value={state.callsDone} total={state.callsExpected}
-                  label={t('admin.callsDone')}
-                  color={state.callsDone >= state.callsExpected ? theme.success : theme.warning}
-                  bg={theme.card}
-                  border={state.callsDone >= state.callsExpected ? theme.border : theme.warning}
-                  onPress={() => goTo('AdminAbsences')}
-                  theme={theme} isAr={isAr}
-                />
-                <BentoMini
-                  value={state.absentsToday}
-                  label={t('tabs.absences')}
-                  color={state.absentsToday > 0 ? theme.danger : theme.success}
-                  bg={state.absentsToday > 0 ? theme.dangerSurface : theme.card}
-                  border={state.absentsToday > 0 ? theme.danger : theme.border}
-                  onPress={() => goTo('AdminAbsences')}
-                  theme={theme} isAr={isAr}
-                />
-              </View>
-            </View>
-
             {/* ── 2. À traiter (couche action) ── */}
-            <View style={styles.bentoWideGroup}>
+            <View style={styles.sectionBlock}>
+              <SectionTitle
+                title={t('admin.toHandle')}
+                detail={priorities.length === 0 ? t('admin.allGood') : `${priorities.length}`}
+                theme={theme}
+                isAr={isAr}
+              />
               {priorities.length === 0 ? (
-                <View style={[styles.tile, styles.wideTile, { backgroundColor: theme.successSurface, borderColor: theme.success }]}>
-                  <CheckCircle2 size={17} color={theme.success} strokeWidth={2.2} />
-                  <Text style={{ flex: 1, color: theme.success, fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold, fontSize: 13.5, marginStart: 10, writingDirection: isAr ? 'rtl' : 'ltr' }}>
-                    {t('admin.allGood')}
-                  </Text>
+                <View style={[styles.priorityOkCard, { backgroundColor: theme.successSurface, borderColor: hexWithAlpha(theme.success, 0.22) }]}>
+                  <View style={[styles.priorityIconBox, { backgroundColor: hexWithAlpha(theme.success, 0.14) }]}>
+                    <CheckCircle2 size={17} color={theme.success} strokeWidth={2.3} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.success, fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold, fontSize: 13.5, writingDirection: isAr ? 'rtl' : 'ltr' }}>
+                      {t('admin.allGood')}
+                    </Text>
+                    <Text style={{ color: theme.textSoft, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium, fontSize: 11.5, marginTop: 2 }}>
+                      {t('admin.confirmedPresence')} · {state.presenceConfirmed ?? 0}%
+                    </Text>
+                  </View>
                 </View>
               ) : priorities.map(p => (
                 <Pressable key={p.key} onPress={() => goTo(p.route)}
-                  style={({ pressed }) => [styles.tile, styles.wideTile, { backgroundColor: p.bg, borderColor: p.color }, pressed && styles.pressed]}>
-                  {p.icon}
-                  <View style={{ flex: 1, marginStart: 10, minWidth: 0 }}>
-                    <Text style={{ color: p.color, fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold, fontSize: 13.5, writingDirection: isAr ? 'rtl' : 'ltr' }}>
+                  style={({ pressed }) => [styles.priorityCard, { backgroundColor: p.bg, borderColor: hexWithAlpha(p.color, 0.24) }, theme.shadows.xs, pressed && styles.pressed]}>
+                  <View style={[styles.priorityRail, { backgroundColor: p.color }]} />
+                  <View style={[styles.priorityIconBox, { backgroundColor: hexWithAlpha(p.color, 0.14) }]}>
+                    {p.icon}
+                  </View>
+                  <View style={{ flex: 1, marginStart: 11, minWidth: 0 }}>
+                    <Text numberOfLines={2} style={{ color: p.color, fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold, fontSize: 13.5, lineHeight: 17, writingDirection: isAr ? 'rtl' : 'ltr' }}>
                       {p.label}
                     </Text>
                     {p.detail ? (
@@ -354,23 +382,29 @@ export default function AdminDashboardScreen() {
                       </Text>
                     ) : null}
                   </View>
-                  <ChevronRight size={15} color={p.color} strokeWidth={2} />
+                  <View style={[styles.priorityChevron, { backgroundColor: hexWithAlpha(p.color, 0.12) }]}>
+                    <ChevronRight size={15} color={p.color} strokeWidth={2.3} />
+                  </View>
                 </Pressable>
               ))}
             </View>
 
             {/* ── 3. Activité ── */}
-            <View style={styles.bentoRow3}>
-              <BentoSmall icon={<BookOpen size={15} color={theme.accent} strokeWidth={2} />} value={state.devoirsActifs} label={t('admin.activeHomework')} iconBg={theme.accentSurface} onPress={() => goTo('AdminDevoirs')} theme={theme} isAr={isAr} />
-              <BentoSmall icon={<Send size={15} color={theme.primary} strokeWidth={2} />} value={state.messagesToday} label={t('admin.messagesSent')} iconBg={theme.primarySurface} onPress={() => goTo('AdminMessages')} theme={theme} isAr={isAr} />
-              <BentoSmall icon={<Mail size={15} color={unread > 0 ? theme.warning : theme.info} strokeWidth={2} />} value={unread} label={t('admin.unreadShort')} iconBg={unread > 0 ? theme.warningSurface : theme.infoSurface} onPress={() => goTo('AdminMessages')} theme={theme} isAr={isAr} />
+            <View style={styles.sectionBlock}>
+              <View style={styles.bentoRow3}>
+                <BentoSmall icon={<BookOpen size={15} color={theme.accent} strokeWidth={2} />} value={state.devoirsActifs} label={t('admin.activeHomework')} iconBg={theme.accentSurface} onPress={() => goTo('AdminDevoirs')} theme={theme} isAr={isAr} />
+                <BentoSmall icon={<Send size={15} color={theme.primary} strokeWidth={2} />} value={state.messagesToday} label={t('admin.messagesSent')} iconBg={theme.primarySurface} onPress={() => goTo('AdminMessages')} theme={theme} isAr={isAr} />
+                <BentoSmall icon={<Mail size={15} color={unread > 0 ? theme.warning : theme.info} strokeWidth={2} />} value={unread} label={t('admin.unreadShort')} iconBg={unread > 0 ? theme.warningSurface : theme.infoSurface} onPress={() => goTo('AdminMessages')} theme={theme} isAr={isAr} />
+              </View>
             </View>
 
             {/* ── 4. Structure école ── */}
-            <View style={styles.bentoRow3}>
-              <BentoSmall icon={<GraduationCap size={15} color={theme.primary} strokeWidth={2} />} value={state.totalEleves} label={t('admin.eleves')} iconBg={theme.primarySurface} onPress={() => goTo('AdminStatsTab')} theme={theme} isAr={isAr} />
-              <BentoSmall icon={<Users size={15} color={theme.info} strokeWidth={2} />} value={state.totalProfs} label={t('admin.profs')} iconBg={theme.infoSurface} onPress={() => goTo('AdminUsers')} theme={theme} isAr={isAr} />
-              <BentoSmall icon={<School size={15} color={theme.accent} strokeWidth={2} />} value={state.totalClasses} label={t('tabs.classes')} iconBg={theme.accentSurface} onPress={() => goTo('AdminStatsTab')} theme={theme} isAr={isAr} />
+            <View style={styles.sectionBlock}>
+              <View style={styles.bentoRow3}>
+                <BentoSmall icon={<GraduationCap size={15} color={theme.primary} strokeWidth={2} />} value={state.totalEleves} label={t('admin.eleves')} iconBg={theme.primarySurface} onPress={() => goTo('AdminStatsTab')} theme={theme} isAr={isAr} />
+                <BentoSmall icon={<Users size={15} color={theme.info} strokeWidth={2} />} value={state.totalProfs} label={t('admin.profs')} iconBg={theme.infoSurface} onPress={() => goTo('AdminUsers')} theme={theme} isAr={isAr} />
+                <BentoSmall icon={<School size={15} color={theme.accent} strokeWidth={2} />} value={state.totalClasses} label={t('tabs.classes')} iconBg={theme.accentSurface} onPress={() => goTo('AdminStatsTab')} theme={theme} isAr={isAr} />
+              </View>
             </View>
 
             {/* ── Prochain événement ── */}
@@ -397,21 +431,45 @@ export default function AdminDashboardScreen() {
   )
 }
 
-function BentoMini({ value, total, label, color, bg, border, onPress, theme, isAr }: {
-  value: number; total?: number; label: string; color: string; bg: string; border: string
-  onPress?: () => void; theme: Theme; isAr: boolean
+function HeroMetric({ icon, value, label, onPress, theme, isAr }: {
+  icon: React.ReactNode
+  value: string
+  label: string
+  onPress: () => void
+  theme: Theme
+  isAr: boolean
 }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.tile, styles.miniTile, { backgroundColor: bg, borderColor: border }, theme.shadows.sm, pressed && styles.pressed]}>
-      <ChevronRight size={14} color={theme.textMuted} strokeWidth={2} style={styles.miniChevron} />
-      <Text style={{ color, fontFamily: theme.fonts.black, fontSize: 24, letterSpacing: -0.8 }}>
-        <AnimatedCounter value={value} />
-        {total !== undefined ? <Text style={{ fontSize: 15, color: theme.textMuted }}>/{total}</Text> : null}
-      </Text>
-      <Text style={[styles.tileLabel, { color: theme.textMuted, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold }]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.heroMetric, pressed && styles.heroMetricPressed]}
+    >
+      <View style={styles.heroMetricIcon}>{icon}</View>
+      <Text numberOfLines={1} style={[styles.heroMetricValue, { fontFamily: theme.fonts.black }]}>{value}</Text>
+      <Text numberOfLines={1} style={[styles.heroMetricText, { fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold }]}>
         {label}
       </Text>
     </Pressable>
+  )
+}
+
+function SectionTitle({ title, detail, theme, isAr }: {
+  title: string
+  detail?: string
+  theme: Theme
+  isAr: boolean
+}) {
+  return (
+    <View style={[styles.sectionTitleRow, isAr && styles.rowReverse]}>
+      <Text numberOfLines={1} style={[styles.sectionTitle, { color: theme.text, fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold }]}>
+        {title}
+      </Text>
+      {detail ? (
+        <Text numberOfLines={1} style={[styles.sectionDetail, { color: theme.textSoft, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold }]}>
+          {detail}
+        </Text>
+      ) : null}
+    </View>
   )
 }
 
@@ -466,20 +524,137 @@ const styles = StyleSheet.create({
   blobB: { width: 88, height: 88, top: 120, left: -24 },
   blobC: { width: 128, height: 128, bottom: 36, right: -40 },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  heroCard: {
     marginHorizontal: 20,
     marginTop: 14,
+    borderRadius: 30,
+    padding: 18,
+    overflow: 'hidden',
   },
-  statusPill: {
+  heroGlowA: {
+    position: 'absolute',
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    top: -76,
+    right: -44,
+    backgroundColor: 'rgba(255, 255, 255, 0.13)',
+  },
+  heroGlowB: {
+    position: 'absolute',
+    width: 128,
+    height: 128,
+    borderRadius: 64,
+    bottom: -52,
+    left: -34,
+    backgroundColor: 'rgba(255, 210, 63, 0.18)',
+  },
+  heroSheen: {
+    position: 'absolute',
+    width: 78,
+    height: 260,
+    top: -46,
+    right: 88,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    transform: [{ rotate: '24deg' }],
+  },
+  heroSignal: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 11,
-    paddingVertical: 7,
+    gap: 14,
+    marginTop: 18,
+  },
+  heroSignalText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  heroMetricLabel: {
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 12,
+  },
+  heroPresenceValue: {
+    color: '#fff',
+    fontSize: 48,
+    lineHeight: 56,
+    letterSpacing: 0,
+    fontVariant: ['tabular-nums'],
+  },
+  heroPresenceUnit: {
+    fontSize: 21,
+    fontWeight: '800',
+  },
+  heroNoCall: {
+    color: '#fff',
+    fontSize: 21,
+    lineHeight: 28,
+    marginTop: 8,
+  },
+  heroTrendPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 999,
-    flexShrink: 0,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  heroTrendText: {
+    color: '#fff',
+    fontSize: 11,
+  },
+  heroMetricsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 16,
+  },
+  heroMetric: {
+    flex: 1,
+    minHeight: 74,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  heroMetricPressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.97 }],
+  },
+  heroMetricIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.13)',
+  },
+  heroMetricValue: {
+    color: '#fff',
+    fontSize: 17,
+    lineHeight: 22,
+    marginTop: 7,
+    fontVariant: ['tabular-nums'],
+  },
+  heroMetricText: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 10.5,
+    marginTop: 1,
+  },
+  heroLoading: {
+    minHeight: 176,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowReverse: {
+    flexDirection: 'row-reverse',
+  },
+  rtlBlock: {
+    alignItems: 'flex-end',
   },
 
   tile: {
@@ -494,32 +669,9 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  bentoRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginHorizontal: 20,
-    marginTop: 16,
-  },
-  presenceTile: {
-    flex: 1,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 18,
-  },
-  bentoCol: { flex: 1, gap: 12 },
-  miniTile: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  miniChevron: { position: 'absolute', top: 14, right: 12 },
-
   bentoRow3: {
     flexDirection: 'row',
     gap: 12,
-    marginHorizontal: 20,
-    marginTop: 12,
   },
   smallTile: {
     flex: 1,
@@ -543,6 +695,68 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
+  sectionBlock: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    gap: 10,
+  },
+  sectionTitleRow: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  sectionTitle: {
+    flex: 1,
+    fontSize: 17,
+    lineHeight: 22,
+  },
+  sectionDetail: {
+    fontSize: 12,
+  },
+  priorityOkCard: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    gap: 11,
+  },
+  priorityCard: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    overflow: 'hidden',
+  },
+  priorityRail: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+  },
+  priorityIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  priorityChevron: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginStart: 8,
+  },
 
   specialBanner: {
     flexDirection: 'row',
@@ -552,6 +766,5 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 16,
   },
-  loadingBox: { paddingVertical: 60, alignItems: 'center' },
   footer: { alignItems: 'center', justifyContent: 'center', marginTop: 28 },
 })

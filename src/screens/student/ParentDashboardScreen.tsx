@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, ScrollView, RefreshControl, StyleSheet, Pressable, Text, Image,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -10,7 +10,7 @@ import { useNavigation } from '@react-navigation/native'
 import type { StudentDashboardNav } from '../../navigation/types'
 import {
   Users, Clock,
-  ChevronRight, Star, AlertTriangle, Smile,
+  ChevronRight, Star, AlertTriangle, Smile, TrendingUp, CheckCircle2, BookOpen,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
@@ -30,9 +30,6 @@ import { useClassLiveCourse } from '../../hooks/useClassLiveCourse'
 import { greetingKey, hexWithAlpha, localeFor } from '../../utils/format'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 
-const { width: SCREEN_W } = Dimensions.get('window')
-const CAROUSEL_CARD_W = SCREEN_W - 42
-
 type StudentQuickRoute =
   | 'StudentPerformance' | 'StudentRessources' | 'StudentEdt' | 'StudentComportement'
   | 'StudentAbsences' | 'StudentDevoirs' | 'StudentMessages' | 'StudentNotes'
@@ -51,22 +48,23 @@ const QUICK_ACTION_ROUTES: Record<string, StudentQuickRoute> = {
 // ────────────────────────────────────────────────────────────────────────
 
 function ChildSlide({
-  child, isActive, onPress, theme,
-}: { child: Child; isActive: boolean; onPress: () => void; theme: Theme }) {
+  child, isActive, onPress, theme, cardWidth,
+}: { child: Child; isActive: boolean; onPress: () => void; theme: Theme; cardWidth: number }) {
   const { t } = useTranslation()
+  const isPreschool = /(^|[^a-z])(ps|gs)([^a-z]|$)/i.test(child.classe)
+  const attendanceTone = child.attendance >= 90 ? theme.success : child.attendance >= 75 ? theme.warning : theme.danger
   return (
-    <Pressable onPress={onPress} android_ripple={{ color: theme.border }} style={styles.carouselSlot}>
+    <Pressable onPress={onPress} android_ripple={{ color: theme.border }} style={[styles.carouselSlot, { width: cardWidth }]}>
       {({ pressed }) => (
         <MotiView
           animate={{
-            scale: pressed ? 0.94 : isActive ? 1 : 0.96,
-            opacity: isActive ? 1 : 0.72,
+            scale: pressed ? 0.96 : isActive ? 1 : 0.98,
+            opacity: isActive ? 1 : 0.82,
           }}
           transition={{ type: 'spring', damping: 15, stiffness: 240, mass: 0.7 }}
           style={[
             styles.carouselCard,
-            { backgroundColor: theme.card },
-            isActive && { backgroundColor: hexWithAlpha(child.avatarColor, 0.08) },
+            { backgroundColor: theme.card, borderColor: isActive ? hexWithAlpha(child.avatarColor, 0.42) : theme.border },
             theme.shadows.clay,
           ]}
         >
@@ -103,10 +101,48 @@ function ChildSlide({
             <ChevronRight size={20} color={theme.textMuted} strokeWidth={1.75} />
           </View>
 
+          <View style={styles.childMetrics}>
+            <ChildMetric
+              icon={<CheckCircle2 size={14} color={attendanceTone} strokeWidth={2.4} />}
+              label={t('parent.attendance')}
+              value={`${Math.round(child.attendance)}%`}
+              color={attendanceTone}
+              bg={hexWithAlpha(attendanceTone, 0.12)}
+            />
+            <ChildMetric
+              icon={<TrendingUp size={14} color={theme.primary} strokeWidth={2.4} />}
+              label={t('parent.average')}
+              value={isPreschool ? 'Compétences' : `${child.averageGrade.toFixed(1)}/20`}
+              color={theme.primary}
+              bg={theme.primarySurface}
+            />
+            <ChildMetric
+              icon={<BookOpen size={14} color={theme.warning} strokeWidth={2.4} />}
+              label={t('actions.homework')}
+              value={String(child.pendingHomework)}
+              color={theme.warning}
+              bg={theme.warningSurface}
+            />
+          </View>
+
           <LiveCourseStrip classe={child.classe} theme={theme} />
         </MotiView>
       )}
     </Pressable>
+  )
+}
+
+function ChildMetric({
+  icon, label, value, color, bg,
+}: { icon: React.ReactNode; label: string; value: string; color: string; bg: string }) {
+  return (
+    <View style={[styles.metricPill, { backgroundColor: bg }]}>
+      {icon}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={[styles.metricValue, { color }]}>{value}</Text>
+        <Text numberOfLines={1} style={styles.metricLabel}>{label}</Text>
+      </View>
+    </View>
   )
 }
 
@@ -213,6 +249,7 @@ function AnimatedSection({
 export default function ParentDashboardScreen() {
   const theme = useTheme()
   const insets = useSafeAreaInsets()
+  const { width } = useWindowDimensions()
   const { t, i18n } = useTranslation()
   const isAr = i18n.language === 'ar'
   const { profile } = useAuth()
@@ -225,6 +262,8 @@ export default function ParentDashboardScreen() {
   const fullName = profile
     ? `${profile.prenom} ${profile.nom}`.trim()
     : 'Parent'
+  const firstName = fullName.split(' ')[0] || 'Parent'
+  const carouselCardWidth = Math.max(302, width - 42)
 
   const [showGreeting, setShowGreeting] = useState(true)
 
@@ -252,6 +291,10 @@ export default function ParentDashboardScreen() {
     () => parent.children.find(c => c.id === selectedChildId) ?? parent.children[0],
     [parent.children, selectedChildId],
   )
+  const behaviorStats = useMemo(() => ({
+    merites: comportements.filter(e => e.kind === 'merite').length,
+    avertissements: comportements.filter(e => e.kind === 'avertissement').length,
+  }), [comportements])
 
   const goTo = (route: StudentQuickRoute) => nav.navigate(route)
 
@@ -289,6 +332,11 @@ export default function ParentDashboardScreen() {
         ) : null}
         {/* ── Mes enfants ──────────────────────────────────── */}
         <View style={styles.section}>
+          <DashboardSectionHeader
+            title={t('parent.myChildren')}
+            subtitle={selectedChild ? `${selectedChild.classe} · ${selectedChild.firstName}` : t('parent.noChildren')}
+            theme={theme}
+          />
           {parent.children.length === 0 ? (
             <Card>
               <EmptyState
@@ -301,7 +349,7 @@ export default function ParentDashboardScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              snapToInterval={CAROUSEL_CARD_W + 12}
+              snapToInterval={carouselCardWidth + 12}
               decelerationRate="fast"
               style={{ flexGrow: 0 }}
               contentContainerStyle={[
@@ -317,6 +365,7 @@ export default function ParentDashboardScreen() {
                     // 1er tap : sélectionne (filtre les devoirs en dessous) ;
                     // tap sur la carte active (toujours le cas avec un seul
                     // enfant) : ouvre le détail — le chevron le promet.
+                    cardWidth={carouselCardWidth}
                     onPress={() => {
                       if (c.id === selectedChild?.id) goTo('StudentNotes')
                       else setSelectedChildId(c.id)
@@ -333,6 +382,11 @@ export default function ParentDashboardScreen() {
         {/* Juste sous les enfants : c'est la section la plus utilisée. */}
         <AnimatedSection delay={100}>
           <View style={styles.section}>
+            <DashboardSectionHeader
+              title={t('parent.quickAccess')}
+              subtitle={selectedChild ? t('parent.forChild', { name: selectedChild.firstName }) : t('parent.accountParent')}
+              theme={theme}
+            />
             <QuickActions actions={PARENT_QUICK_ACTIONS} onPress={handleQuickAction} />
           </View>
         </AnimatedSection>
@@ -340,6 +394,11 @@ export default function ParentDashboardScreen() {
         {/* ── Comportement (mérites / avertissements) ─────── */}
         <AnimatedSection delay={160}>
           <View style={styles.section}>
+            <DashboardSectionHeader
+              title={t('behavior.parentTitle')}
+              subtitle={t('behavior.parentSubtitle')}
+              theme={theme}
+            />
             <Card padding={12}>
               {comportements.length === 0 ? (
                 <EmptyState
@@ -348,36 +407,42 @@ export default function ParentDashboardScreen() {
                   message={t('behavior.noEntriesMsg')}
                 />
               ) : (
-                comportements.slice(0, 3).map((e, idx) => {
-                  const merite = e.kind === 'merite'
-                  const tint = merite ? theme.success : theme.danger
-                  const Icon = merite ? Star : AlertTriangle
-                  return (
-                    <Pressable
-                      key={e.id}
-                      onPress={() => goTo('StudentComportement')}
-                      android_ripple={{ color: theme.border }}
-                      style={[
-                        styles.behaviorRow,
-                        idx < Math.min(comportements.length, 3) - 1 &&
-                          { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
-                      ]}
-                    >
-                      <View style={[styles.behaviorIcon, { backgroundColor: hexWithAlpha(tint, 0.12) }]}>
-                        <Icon size={15} color={tint} strokeWidth={2.2} />
-                      </View>
-                      <View style={{ flex: 1, marginStart: 10 }}>
-                        <Text numberOfLines={1} style={{ color: theme.text, fontFamily: theme.fonts.semibold, fontSize: 13 }}>
-                          {t(`behavior.reasons.${e.reason}`)}
-                        </Text>
-                        <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: theme.fonts.regular, fontSize: 11, marginTop: 2 }}>
-                          {e.elevePrenom} · {new Date(e.date).toLocaleDateString(localeFor(), { day: '2-digit', month: 'short' })}
-                        </Text>
-                      </View>
-                      <ChevronRight size={16} color={theme.textMuted} strokeWidth={1.75} />
-                    </Pressable>
-                  )
-                })
+                <>
+                  <View style={styles.behaviorSummary}>
+                    <BehaviorSummaryPill icon={<Star size={15} color={theme.success} />} value={behaviorStats.merites} label={t('behavior.merites')} color={theme.success} bg={theme.successSurface} />
+                    <BehaviorSummaryPill icon={<AlertTriangle size={15} color={theme.danger} />} value={behaviorStats.avertissements} label={t('behavior.avertissements')} color={theme.danger} bg={theme.dangerSurface} />
+                  </View>
+                  {comportements.slice(0, 3).map((e, idx) => {
+                    const merite = e.kind === 'merite'
+                    const tint = merite ? theme.success : theme.danger
+                    const Icon = merite ? Star : AlertTriangle
+                    return (
+                      <Pressable
+                        key={e.id}
+                        onPress={() => goTo('StudentComportement')}
+                        android_ripple={{ color: theme.border }}
+                        style={[
+                          styles.behaviorRow,
+                          idx < Math.min(comportements.length, 3) - 1 &&
+                            { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+                        ]}
+                      >
+                        <View style={[styles.behaviorIcon, { backgroundColor: hexWithAlpha(tint, 0.12) }]}>
+                          <Icon size={15} color={tint} strokeWidth={2.2} />
+                        </View>
+                        <View style={{ flex: 1, marginStart: 10 }}>
+                          <Text numberOfLines={1} style={{ color: theme.text, fontFamily: theme.fonts.semibold, fontSize: 13 }}>
+                            {t(`behavior.reasons.${e.reason}`)}
+                          </Text>
+                          <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: theme.fonts.regular, fontSize: 11, marginTop: 2 }}>
+                            {e.elevePrenom} · {new Date(e.date).toLocaleDateString(localeFor(), { day: '2-digit', month: 'short' })}
+                          </Text>
+                        </View>
+                        <ChevronRight size={16} color={theme.textMuted} strokeWidth={1.75} />
+                      </Pressable>
+                    )
+                  })}
+                </>
               )}
             </Card>
           </View>
@@ -419,7 +484,7 @@ export default function ParentDashboardScreen() {
                 writingDirection: isAr ? 'rtl' : 'ltr',
                 textAlign: 'center',
               }}>
-                {t(greetingKey())}, {fullName.split(' ')[0] || 'Parent'}
+                {t(greetingKey())}, {firstName}
               </Text>
               <Text style={{
                 color: theme.textSoft,
@@ -438,6 +503,29 @@ export default function ParentDashboardScreen() {
         )}
       </AnimatePresence>
     </SafeAreaView>
+  )
+}
+
+function DashboardSectionHeader({ title, subtitle, theme }: { title: string; subtitle?: string; theme: Theme }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>{title}</Text>
+      {subtitle ? (
+        <Text numberOfLines={1} style={[styles.sectionSubtitle, { color: theme.textSoft }]}>{subtitle}</Text>
+      ) : null}
+    </View>
+  )
+}
+
+function BehaviorSummaryPill({
+  icon, value, label, color, bg,
+}: { icon: React.ReactNode; value: number; label: string; color: string; bg: string }) {
+  return (
+    <View style={[styles.behaviorPill, { backgroundColor: bg }]}>
+      {icon}
+      <Text style={[styles.behaviorPillValue, { color }]}>{value}</Text>
+      <Text numberOfLines={1} style={[styles.behaviorPillLabel, { color }]}>{label}</Text>
+    </View>
   )
 }
 
@@ -470,17 +558,16 @@ const styles = StyleSheet.create({
 
   // Carousel enfants
   carouselScroll: {
-    paddingHorizontal: 20,
-    paddingTop: 4,
+    paddingTop: 2,
     paddingBottom: 8,
     gap: 12,
   },
-  carouselSlot: {
-    width: CAROUSEL_CARD_W,
-  },
+  carouselSlot: {},
   carouselCard: {
     borderRadius: 28,
     padding: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 196,
   },
   childAvatar: {
     width: 42, height: 42, borderRadius: 21,
@@ -494,6 +581,32 @@ const styles = StyleSheet.create({
   carouselRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  childMetrics: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 16,
+  },
+  metricPill: {
+    flex: 1,
+    minHeight: 58,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  metricValue: {
+    fontSize: 13,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  metricLabel: {
+    color: 'rgba(29, 53, 87, 0.64)',
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   liveStrip: {
     flexDirection: 'row',
@@ -515,8 +628,47 @@ const styles = StyleSheet.create({
 
   // Sections
   section: { paddingHorizontal: 20, marginTop: 22 },
+  sectionHeader: {
+    marginBottom: 10,
+    gap: 2,
+  },
+  sectionTitle: {
+    fontSize: 19,
+    fontWeight: '900',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
 
   // Comportement
+  behaviorSummary: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  behaviorPill: {
+    flex: 1,
+    minHeight: 54,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  behaviorPillValue: {
+    fontSize: 17,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  behaviorPillLabel: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+  },
   behaviorRow: {
     flexDirection: 'row',
     alignItems: 'center',

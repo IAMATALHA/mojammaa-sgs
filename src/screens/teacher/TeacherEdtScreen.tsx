@@ -5,10 +5,11 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ClipboardCheck, BookOpenCheck, CheckCircle2 } from 'lucide-react-native';
+import { ClipboardCheck, BookOpenCheck } from 'lucide-react-native';
 import ScreenLayout from '../../components/ScreenLayout';
+import { CompletionChip } from '../../components/dashboard';
 import { useTranslation } from 'react-i18next';
-import { useTheme, type Theme } from '../../contexts/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   subscribeSchedule, type ScheduleDoc, type WeeklySlot, type WeekDay,
@@ -25,29 +26,6 @@ function todayWeekDay(): WeekDay {
     'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
   ]
   return names[new Date().getDay()]
-}
-
-/**
- * Pastille d'avancement (inspirée des chips vertes de Suivi pédagogique) :
- * appel fait / devoir posté pour les séances du JOUR.
- */
-function CompletionChip({
-  Icon, label, done, theme,
-}: { Icon: typeof ClipboardCheck; label: string; done: boolean; theme: Theme }) {
-  const tint = done ? theme.success : theme.textMuted
-  return (
-    <View style={[
-      styles.completionChip,
-      {
-        backgroundColor: done ? theme.successSurface : theme.surfaceAlt,
-        borderColor: done ? theme.success + '55' : theme.border,
-      },
-    ]}>
-      <Icon size={12} color={tint} strokeWidth={2.2} />
-      <Text style={{ color: tint, fontSize: 10.5, fontWeight: '800' }}>{label}</Text>
-      {done ? <CheckCircle2 size={12} color={tint} strokeWidth={2.4} /> : null}
-    </View>
-  )
 }
 
 export default function TeacherEdtScreen() {
@@ -144,8 +122,8 @@ export default function TeacherEdtScreen() {
           </View>
           {isToday ? (
             <View style={styles.chipsRow}>
-              <CompletionChip Icon={ClipboardCheck} label={t('teacher.edtChipAppel')} done={appelFait} theme={theme} />
-              <CompletionChip Icon={BookOpenCheck} label={t('teacher.edtChipDevoir')} done={devoirPoste} theme={theme} />
+              <CompletionChip icon={ClipboardCheck} label={t('teacher.edtChipAppel')} done={appelFait} />
+              <CompletionChip icon={BookOpenCheck} label={t('teacher.edtChipDevoir')} done={devoirPoste} />
             </View>
           ) : null}
         </View>
@@ -251,7 +229,6 @@ const styles = StyleSheet.create({
   classe:    { fontSize: 13, fontWeight: '600' },
   salle:     { fontSize: 13 },
   chipsRow:  { flexDirection: 'row', gap: 6, marginTop: 10, flexWrap: 'wrap' },
-  completionChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
 
   loading:   { paddingVertical: 40, alignItems: 'center' },
   empty:     { paddingVertical: 60, alignItems: 'center', paddingHorizontal: 32 },

@@ -4,20 +4,24 @@ import {
 } from 'react-native'
 import { collection, doc, onSnapshot, query, where, type Unsubscribe } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
+import { useNavigation } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import {
-  AlertTriangle, Award, BarChart3, BookOpen, CalendarX, CheckCircle2,
-  ChevronLeft, ChevronRight, ClipboardCheck, TrendingUp, Users, type LucideIcon,
+  AlertTriangle, Award, BarChart3, BookOpen, CheckCircle2,
+  ChevronLeft, ChevronRight, TrendingUp, Users, type LucideIcon,
 } from 'lucide-react-native'
 import Svg, { Circle } from 'react-native-svg'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { palette, chartColors } from '../../theme/designTokens'
 import { db, functions } from '../../config/firebase'
+import type { AdminDashboardNav } from '../../navigation/types'
 
 type CollectionName = 'eleves' | 'users' | 'notes' | 'absences' | 'devoirs'
 type StatsView = 'niveaux' | 'subjects'
+type StatsAction = 'absences' | 'devoirs' | 'niveaux' | 'subjects'
+type NotesTarget = { matiere?: string; classe?: string }
 
 interface EleveRow {
   id: string
@@ -35,10 +39,17 @@ interface NoteRow {
   eleveId: string
   classe: string
   subject: string
+  matiere: string
   note: number | null
   cycle: string
   bareme: number | null
   importedBy: string
+}
+
+/** settings/coefficients — miroir de CoefConfig dans mojammaa-admin/src/pages/Statistiques.tsx. */
+interface CoefConfig {
+  matieres: Record<string, number>
+  parNiveau: Record<string, Record<string, number>>
 }
 
 interface AbsenceRow {
@@ -80,6 +91,9 @@ interface ClassStats {
   incidentsMonth: number
   activeHomework: number
   subjectsCovered: number
+  notesCount: number
+  gradedStudents: number
+  passingStudents: number
   healthScore: number
   trend: TrendPoint[]
 }
@@ -106,13 +120,6 @@ interface NiveauStats {
   incidentsMonth: number
 }
 
-interface MatrixCell {
-  className: string
-  subject: string
-  avgNote: number | null
-  notesCount: number
-}
-
 interface DashboardData {
   totalEleves: number
   totalClasses: number
@@ -129,9 +136,6 @@ interface DashboardData {
   gradeDistribution: GradeBand[]
   classStats: ClassStats[]
   subjectStats: SubjectStats[]
-  matrixClasses: string[]
-  matrixSubjects: string[]
-  classSubjectMatrix: MatrixCell[]
   niveauStats: NiveauStats[]
 }
 
@@ -141,6 +145,7 @@ interface SnapshotCache {
   notes: NoteRow[]
   absences: AbsenceRow[]
   devoirs: DevoirRow[]
+  coefficients: CoefConfig
 }
 
 const COLLECTIONS: CollectionName[] = ['eleves', 'users', 'notes', 'absences', 'devoirs']
@@ -201,7 +206,7 @@ function isActiveHomework(row: DevoirRow, today: string): boolean {
 }
 
 function formatNote(value: number | null): string {
-  return value == null ? '—' : `${value}/20 éq.`
+  return value == null ? '—' : `${value}/20`
 }
 
 function baremeFromNote(row: Pick<NoteRow, 'bareme' | 'cycle' | 'classe'>): 10 | 20 {
@@ -217,9 +222,25 @@ function normalizeNoteOn20(row: NoteRow): NoteRow | null {
   return { ...row, note: row.note * (20 / bareme), bareme: 20 }
 }
 
-function compactSubject(value: string): string {
-  if (value.length <= 6) return value
-  return value.split(/\s|-/).filter(Boolean).map(part => part[0]?.toUpperCase()).join('').slice(0, 4) || value.slice(0, 4)
+/**
+ * Coefficients marocains (settings/coefficients) — miroir exact de coefOf()
+ * dans mojammaa-admin/src/pages/Statistiques.tsx et de makeCoefOf() dans
+ * functions/schoolStats.js : parNiveau[niveau][matiere] > matieres[matiere] > 1.
+ */
+function makeCoefOf(coefficients: CoefConfig) {
+  return (matiere: string, niveau?: string): number => {
+    const n = niveau ? coefficients.parNiveau[niveau]?.[matiere] : undefined
+    if (n !== undefined && n > 0) return n
+    const g = coefficients.matieres[matiere]
+    return g > 0 ? g : 1
+  }
+}
+
+/** Moyenne pondérée Σ(note×coef)/Σ(coef) — replie sur la moyenne simple si aucun coef. */
+function weightedAvg(pairs: { v: number; c: number }[]): number {
+  const totalCoef = pairs.reduce((sum, p) => sum + p.c, 0)
+  if (totalCoef <= 0) return pairs.reduce((sum, p) => sum + p.v, 0) / pairs.length
+  return pairs.reduce((sum, p) => sum + p.v * p.c, 0) / totalCoef
 }
 
 function bubbleSize(count: number, minCount: number, maxCount: number): number {
@@ -265,8 +286,10 @@ function buildDashboardData(cache: SnapshotCache): DashboardData {
   const validNotes = cache.notes
     .map(normalizeNoteOn20)
     .filter((row): row is NoteRow => row != null && row.note != null && row.note >= 0 && row.note <= 20)
+  const eleveNiveauById = new Map(cache.eleves.map(e => [e.id, e.niveau]))
+  const coefOf = makeCoefOf(cache.coefficients)
   const classStudents = new Map<string, EleveRow[]>()
-  const notesByEleve = new Map<string, number[]>()
+  const notesByEleve = new Map<string, { v: number; c: number }[]>()
   const notesByClass = new Map<string, NoteRow[]>()
   const notesBySubject = new Map<string, NoteRow[]>()
   const todayAbsentEleves = new Set<string>()
@@ -285,7 +308,7 @@ function buildDashboardData(cache: SnapshotCache): DashboardData {
   validNotes.forEach(note => {
     if (note.eleveId) {
       const rows = notesByEleve.get(note.eleveId) || []
-      rows.push(note.note!)
+      rows.push({ v: note.note!, c: coefOf(note.matiere, eleveNiveauById.get(note.eleveId)) })
       notesByEleve.set(note.eleveId, rows)
     }
     if (note.classe) {
@@ -340,8 +363,12 @@ function buildDashboardData(cache: SnapshotCache): DashboardData {
     activeHomeworkByClass.set(devoir.classeId, (activeHomeworkByClass.get(devoir.classeId) || 0) + 1)
   })
 
-  const studentAverages = [...notesByEleve.values()].map(values => values.reduce((sum, value) => sum + value, 0) / values.length)
-  const avgNote = validNotes.length > 0 ? round1(validNotes.reduce((sum, row) => sum + row.note!, 0) / validNotes.length) : null
+  // Moyenne pondérée par élève (Σ note×coef / Σ coef sur toutes ses matières),
+  // puis moyennée entre élèves — coefficients marocains (settings/coefficients).
+  const studentAverages = [...notesByEleve.values()].map(pairs => weightedAvg(pairs))
+  const avgNote = studentAverages.length > 0
+    ? round1(studentAverages.reduce((sum, value) => sum + value, 0) / studentAverages.length)
+    : null
   const successRate = studentAverages.length > 0
     ? Math.round((studentAverages.filter(value => value >= 10).length / studentAverages.length) * 100)
     : null
@@ -349,23 +376,25 @@ function buildDashboardData(cache: SnapshotCache): DashboardData {
   const classStats: ClassStats[] = [...classStudents.entries()].map(([name, students]) => {
     const classNotes = notesByClass.get(name) || []
     const classNoteValues = classNotes.map(row => row.note!).filter(value => value >= 0 && value <= 20)
-    const classNotesByEleve = new Map<string, number[]>()
+    const classNotesByEleve = new Map<string, { v: number; c: number }[]>()
     const subjects = new Set<string>()
 
     classNotes.forEach(note => {
       if (note.subject) subjects.add(note.subject)
       if (!note.eleveId || note.note == null) return
       const rows = classNotesByEleve.get(note.eleveId) || []
-      rows.push(note.note)
+      rows.push({ v: note.note, c: coefOf(note.matiere, eleveNiveauById.get(note.eleveId)) })
       classNotesByEleve.set(note.eleveId, rows)
     })
 
-    const averages = [...classNotesByEleve.values()].map(values => values.reduce((sum, value) => sum + value, 0) / values.length)
+    // Moyenne pondérée par élève, puis moyennée sur la classe (miroir école-entière ci-dessus).
+    const averages = [...classNotesByEleve.values()].map(pairs => weightedAvg(pairs))
     const absencesToday = absentTodayByClass.get(name)?.size || 0
     const presenceRate = students.length > 0 ? Math.round(((students.length - absencesToday) / students.length) * 100) : 100
-    const classAvg = classNoteValues.length > 0 ? round1(classNoteValues.reduce((sum, value) => sum + value, 0) / classNoteValues.length) : null
+    const classAvg = averages.length > 0 ? round1(averages.reduce((sum, value) => sum + value, 0) / averages.length) : null
+    const passingStudents = averages.filter(value => value >= 10).length
     const classSuccess = averages.length > 0
-      ? Math.round((averages.filter(value => value >= 10).length / averages.length) * 100)
+      ? Math.round((passingStudents / averages.length) * 100)
       : null
     const noteScore = classAvg == null ? 55 : (classAvg / 20) * 100
     const successScore = classSuccess ?? 55
@@ -385,6 +414,9 @@ function buildDashboardData(cache: SnapshotCache): DashboardData {
       incidentsMonth: incidentsMonthByClass.get(name) || 0,
       activeHomework: activeHomeworkByClass.get(name) || 0,
       subjectsCovered: subjects.size,
+      notesCount: classNoteValues.length,
+      gradedStudents: averages.length,
+      passingStudents,
       healthScore: clamp(Math.round((presenceRate * 0.38) + (noteScore * 0.34) + (successScore * 0.18) + (coverageScore * 0.10) - incidentsPenalty)),
       trend: trendDays.map(day => ({ label: day.label, value: classTrend?.get(day.iso)?.size || 0 })),
     }
@@ -429,32 +461,12 @@ function buildDashboardData(cache: SnapshotCache): DashboardData {
       classesCount: byClass.size,
       avgNote: subjectAvg,
       successRate: subjectSuccess,
-      below10Count: values.filter(value => value < 10).length,
+      below10Count: averages.filter(value => value < 10).length,
       strongestClass: classAverages[classAverages.length - 1]?.className || '—',
       weakestClass: classAverages[0]?.className || '—',
       heatScore: clamp(Math.round((noteScore * 0.50) + (successScore * 0.35) + (coverageScore * 0.15))),
     }
   }).sort((a, b) => a.heatScore - b.heatScore || a.name.localeCompare(b.name, 'fr'))
-
-  const matrixClasses = classStats.slice(0, 6).map(row => row.name)
-  const matrixSubjects = subjectStats
-    .slice()
-    .sort((a, b) => b.notesCount - a.notesCount)
-    .slice(0, 5)
-    .map(row => row.name)
-  const classSubjectMatrix: MatrixCell[] = []
-
-  matrixClasses.forEach(className => {
-    matrixSubjects.forEach(subject => {
-      const rows = validNotes.filter(note => note.classe === className && note.subject === subject)
-      classSubjectMatrix.push({
-        className,
-        subject,
-        avgNote: rows.length > 0 ? round1(rows.reduce((sum, row) => sum + row.note!, 0) / rows.length) : null,
-        notesCount: rows.length,
-      })
-    })
-  })
 
   const trendSets = new Map<string, Set<string>>()
   const days = lastDays(7)
@@ -476,16 +488,18 @@ function buildDashboardData(cache: SnapshotCache): DashboardData {
   })
   const niveauStats: NiveauStats[] = [...niveauMap.entries()].map(([name, classes]) => {
     const totalStudents = classes.reduce((s, c) => s + c.studentCount, 0)
-    const allAvgs = classes.filter(c => c.avgNote != null).map(c => c.avgNote!)
-    const allSuccess = classes.filter(c => c.successRate != null).map(c => c.successRate!)
+    const totalGradedStudents = classes.reduce((s, c) => s + c.gradedStudents, 0)
+    const totalPassingStudents = classes.reduce((s, c) => s + c.passingStudents, 0)
+    const totalAbsencesToday = classes.reduce((s, c) => s + c.absencesToday, 0)
     const totalIncidents = classes.reduce((s, c) => s + c.incidentsMonth, 0)
-    const avgPresence = classes.length > 0 ? Math.round(classes.reduce((s, c) => s + c.presenceRate, 0) / classes.length) : 100
+    const avgPresence = totalStudents > 0 ? Math.round(((totalStudents - totalAbsencesToday) / totalStudents) * 100) : 100
     return {
       name,
       classCount: classes.length,
       studentCount: totalStudents,
-      avgNote: allAvgs.length > 0 ? round1(allAvgs.reduce((s, v) => s + v, 0) / allAvgs.length) : null,
-      successRate: allSuccess.length > 0 ? Math.round(allSuccess.reduce((s, v) => s + v, 0) / allSuccess.length) : null,
+      // Pondéré par élèves notés (pas par nb de notes) : avgNote est déjà une moyenne par élève.
+      avgNote: totalGradedStudents > 0 ? round1(classes.reduce((s, c) => s + ((c.avgNote ?? 0) * c.gradedStudents), 0) / totalGradedStudents) : null,
+      successRate: totalGradedStudents > 0 ? Math.round((totalPassingStudents / totalGradedStudents) * 100) : null,
       presenceRate: avgPresence,
       incidentsMonth: totalIncidents,
     }
@@ -507,9 +521,6 @@ function buildDashboardData(cache: SnapshotCache): DashboardData {
     gradeDistribution: gradeBands(validNotes),
     classStats,
     subjectStats,
-    matrixClasses,
-    matrixSubjects,
-    classSubjectMatrix,
     niveauStats,
   }
 }
@@ -517,12 +528,30 @@ function buildDashboardData(cache: SnapshotCache): DashboardData {
 export default function AdminStatsScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
+  const nav = useNavigation<AdminDashboardNav>()
   const [data, setData] = useState<DashboardData | null>(null)
   const [view, setView] = useState<StatsView>('niveaux')
   const [selectedNiveau, setSelectedNiveau] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+
+  const handleStatsAction = useCallback((action: StatsAction) => {
+    if (action === 'absences') {
+      nav.navigate('AdminAbsences')
+      return
+    }
+    if (action === 'devoirs') {
+      nav.navigate('AdminDevoirs')
+      return
+    }
+    setView(action)
+    setSelectedNiveau(null)
+  }, [nav])
+
+  const openNotes = useCallback((target?: NotesTarget) => {
+    nav.navigate('AdminMatiereDetail', target)
+  }, [nav])
 
   // Pull-to-refresh : force le recalcul serveur (callable admin-only). Le
   // listener stats/summary reçoit ensuite la MAJ tout seul. Si la CF n'est pas
@@ -545,6 +574,7 @@ export default function AdminStatsScreen() {
       notes: [],
       absences: [],
       devoirs: [],
+      coefficients: { matieres: {}, parNiveau: {} },
     }
     const ready = new Set<CollectionName>()
 
@@ -601,6 +631,7 @@ export default function AdminStatsScreen() {
             eleveId: asString(row.eleveId),
             classe: asString(row.classe),
             subject: asString(row.matiereLabel) || asString(row.matiere) || asString(row.subject),
+            matiere: asString(row.matiere),
             note: asNumber(row.note),
             cycle: asString(row.cycle),
             bareme: asNumber(row.bareme),
@@ -638,6 +669,16 @@ export default function AdminStatsScreen() {
         ready.add('devoirs')
         recompute()
       }, handleError),
+      // Coefficients marocains : pas de gating `ready` (doc optionnel — absent
+      // = tous les coef. à 1). Recalcule les moyennes pondérées si modifiés en direct.
+      onSnapshot(doc(db, 'settings', 'coefficients'), snap => {
+        const d = snap.data() as Record<string, unknown> | undefined
+        cache.coefficients = {
+          matieres: (d?.matieres as Record<string, number>) || {},
+          parNiveau: (d?.parNiveau as Record<string, Record<string, number>>) || {},
+        }
+        recompute()
+      }, () => { /* lecture refusée : coefficients tous à 1 */ }),
       ]
       return () => unsubs.forEach(unsub => unsub())
     }
@@ -684,12 +725,26 @@ export default function AdminStatsScreen() {
           </View>
         ) : data ? (
           <>
-            <VisualHero data={data} theme={theme} t={t} onSelectView={(v) => { setView(v); setSelectedNiveau(null) }} />
+            <VisualHero
+              data={data}
+              theme={theme}
+              t={t}
+              onAction={handleStatsAction}
+              onOpenNotes={openNotes}
+            />
             <ViewTabs value={view} onChange={(v) => { setView(v); setSelectedNiveau(null) }} theme={theme} t={t} />
-            {view === 'subjects' ? <SubjectsView data={data} theme={theme} t={t} /> : null}
+            {view === 'subjects' ? <SubjectsView data={data} onOpenNotes={openNotes} theme={theme} t={t} /> : null}
             {view === 'niveaux' ? (
               selectedNiveau != null ? (
-                <NiveauClassesView data={data} niveau={selectedNiveau} onBack={() => setSelectedNiveau(null)} theme={theme} t={t} />
+                <NiveauClassesView
+                  data={data}
+                  niveau={selectedNiveau}
+                  onBack={() => setSelectedNiveau(null)}
+                  onAction={handleStatsAction}
+                  onOpenNotes={openNotes}
+                  theme={theme}
+                  t={t}
+                />
               ) : (
                 <NiveauxView data={data} onSelectNiveau={setSelectedNiveau} theme={theme} t={t} />
               )
@@ -703,13 +758,18 @@ export default function AdminStatsScreen() {
   )
 }
 
-function VisualHero({ data, theme, t, onSelectView }: {
-  data: DashboardData; theme: Theme; t: TFunction; onSelectView: (view: StatsView) => void
+function VisualHero({ data, theme, t, onAction, onOpenNotes }: {
+  data: DashboardData; theme: Theme; t: TFunction; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void
 }) {
   const alerts = data.classStats.filter(item => item.healthScore < 58).length
   return (
     <View style={[styles.hero, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <View style={styles.heroMain}>
+      <Pressable
+        onPress={() => onAction('absences')}
+        accessibilityRole="button"
+        accessibilityLabel={t('admin.attendanceRate')}
+        style={({ pressed }) => [styles.heroMain, pressed && styles.pressed]}
+      >
         <View style={[styles.livePill, { backgroundColor: theme.successSurface }]}>
           <View style={[styles.liveDot, { backgroundColor: theme.info }]} />
           <Text style={[styles.liveText, { color: theme.text }]}>{t('admin.live')}</Text>
@@ -723,11 +783,11 @@ function VisualHero({ data, theme, t, onSelectView }: {
           size={RING}
           stroke={11}
         />
-      </View>
+      </Pressable>
       <View style={styles.heroTiles}>
-        <MiniTile icon={<TrendingUp size={18} color={theme.primary} />} value={formatNote(data.avgNote)} label={t('tabs.grades')} bg={theme.primarySurface} theme={theme} onPress={() => onSelectView('niveaux')} />
-        <MiniTile icon={<AlertTriangle size={18} color={alerts > 0 ? theme.danger : theme.info} />} value={String(alerts)} label={t('admin.alerts')} bg={alerts > 0 ? theme.dangerSurface : theme.infoSurface} theme={theme} onPress={() => onSelectView('niveaux')} />
-        <MiniTile icon={<BookOpen size={18} color={theme.warning} />} value={String(data.subjectStats.length)} label={t('admin.viewSubjects')} bg={theme.warningSurface} theme={theme} onPress={() => onSelectView('subjects')} />
+        <MiniTile icon={<TrendingUp size={18} color={theme.primary} />} value={formatNote(data.avgNote)} label={t('tabs.grades')} bg={theme.primarySurface} theme={theme} onPress={() => onOpenNotes()} />
+        <MiniTile icon={<AlertTriangle size={18} color={alerts > 0 ? theme.danger : theme.info} />} value={String(alerts)} label={t('admin.alerts')} bg={alerts > 0 ? theme.dangerSurface : theme.infoSurface} theme={theme} onPress={() => onAction('absences')} />
+        <MiniTile icon={<BookOpen size={18} color={theme.warning} />} value={String(data.subjectStats.length)} label={t('admin.viewSubjects')} bg={theme.warningSurface} theme={theme} onPress={() => onAction('subjects')} />
       </View>
     </View>
   )
@@ -802,8 +862,10 @@ function NiveauxView({ data, onSelectNiveau, theme, t }: { data: DashboardData; 
                   <Text style={{ color: theme.textSoft, fontWeight: '700', fontSize: 10, marginTop: 2 }}>{t('admin.successRate')}</Text>
                 </View>
                 <View style={[styles.niveauStat, { backgroundColor: niv.incidentsMonth > 5 ? theme.dangerSurface : theme.surface }]}>
-                  <Text style={{ color: niv.incidentsMonth > 5 ? theme.danger : theme.text, fontWeight: '900', fontSize: 18 }}>{niv.incidentsMonth}</Text>
-                  <Text style={{ color: theme.textSoft, fontWeight: '700', fontSize: 10, marginTop: 2 }}>{t('admin.monthIncidents')}</Text>
+                  <View style={styles.incidentOnly}>
+                    <AlertTriangle size={16} color={niv.incidentsMonth > 5 ? theme.danger : theme.textSoft} />
+                    <Text style={{ color: niv.incidentsMonth > 5 ? theme.danger : theme.text, fontWeight: '900', fontSize: 18, marginStart: 6 }}>{niv.incidentsMonth}</Text>
+                  </View>
                 </View>
               </View>
             </Pressable>
@@ -818,8 +880,8 @@ function NiveauxView({ data, onSelectNiveau, theme, t }: { data: DashboardData; 
   )
 }
 
-function NiveauClassesView({ data, niveau, onBack, theme, t }: {
-  data: DashboardData; niveau: string; onBack: () => void; theme: Theme; t: TFunction
+function NiveauClassesView({ data, niveau, onBack, onAction, onOpenNotes, theme, t }: {
+  data: DashboardData; niveau: string; onBack: () => void; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; theme: Theme; t: TFunction
 }) {
   const classes = data.classStats.filter(item => item.niveauGroup === niveau)
   const label = niveau === 'Autre' ? t('common.other') : niveau
@@ -834,14 +896,14 @@ function NiveauClassesView({ data, niveau, onBack, theme, t }: {
         {classes.length === 0 ? (
           <EmptyText theme={theme} text={t('common.noData')} />
         ) : (
-          classes.map(item => <ClassCardRich key={item.name} item={item} theme={theme} t={t} />)
+          classes.map(item => <ClassCardRich key={item.name} item={item} onAction={onAction} onOpenNotes={onOpenNotes} theme={theme} t={t} />)
         )}
       </View>
     </>
   )
 }
 
-function ClassCardRich({ item, theme, t }: { item: ClassStats; theme: Theme; t: TFunction }) {
+function ClassCardRich({ item, onAction, onOpenNotes, theme, t }: { item: ClassStats; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; theme: Theme; t: TFunction }) {
   const healthColor = item.healthScore >= 75 ? theme.info : item.healthScore >= 55 ? theme.warning : theme.danger
   return (
     <View style={[styles.classCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -857,11 +919,18 @@ function ClassCardRich({ item, theme, t }: { item: ClassStats; theme: Theme; t: 
       </View>
 
       <View style={styles.classCardBody}>
-        <RingGauge value={item.presenceRate} color={healthColor} trackColor={theme.surfaceAlt} textColor={theme.text} label={t('admin.attendanceRate')} size={RING_SM} stroke={8} />
+        <Pressable
+          onPress={() => onAction('absences')}
+          accessibilityRole="button"
+          accessibilityLabel={`${item.name} ${t('admin.attendanceRate')}`}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          <RingGauge value={item.presenceRate} color={healthColor} trackColor={theme.surfaceAlt} textColor={theme.text} label={t('admin.attendanceRate')} size={RING_SM} stroke={8} />
+        </Pressable>
         <View style={styles.classCardMetrics}>
-          <MetricLine icon={<TrendingUp size={14} color={theme.primary} />} label={t('admin.avgGrade')} value={formatNote(item.avgNote)} theme={theme} />
-          <MetricLine icon={<CheckCircle2 size={14} color={theme.info} />} label={t('admin.successRate')} value={item.successRate == null ? '—' : `${item.successRate}%`} theme={theme} />
-          <MetricLine icon={<BookOpen size={14} color={theme.warning} />} label={t('admin.homeworkShort')} value={String(item.activeHomework)} theme={theme} />
+          <MetricLine icon={<TrendingUp size={14} color={theme.primary} />} label={t('admin.avgGrade')} value={formatNote(item.avgNote)} theme={theme} onPress={() => onOpenNotes({ classe: item.name })} />
+          <MetricLine icon={<CheckCircle2 size={14} color={theme.info} />} label={t('admin.successRate')} value={item.successRate == null ? '—' : `${item.successRate}%`} theme={theme} onPress={() => onOpenNotes({ classe: item.name })} />
+          <MetricLine icon={<BookOpen size={14} color={theme.warning} />} label={t('admin.homeworkShort')} value={String(item.activeHomework)} theme={theme} onPress={() => onAction('devoirs')} />
         </View>
       </View>
 
@@ -874,38 +943,57 @@ function ClassCardRich({ item, theme, t }: { item: ClassStats; theme: Theme; t: 
       </View>
 
       <View style={styles.classCardFooter}>
-        <View style={[styles.incidentPill, { backgroundColor: theme.dangerSurface }]}>
-          <AlertTriangle size={11} color={theme.danger} />
-          <Text style={{ color: theme.danger, fontWeight: '900', fontSize: 10, marginStart: 4 }}>{item.incidentsMonth} {t('admin.monthIncidents')}</Text>
-        </View>
+        <Pressable
+          onPress={() => onAction('absences')}
+          accessibilityRole="button"
+          accessibilityLabel={`${item.incidentsMonth} ${t('tabs.absences')}`}
+          style={({ pressed }) => [styles.incidentPill, { backgroundColor: theme.dangerSurface }, pressed && styles.pressed]}
+        >
+          <AlertTriangle size={13} color={theme.danger} />
+          <Text style={{ color: theme.danger, fontWeight: '900', fontSize: 11, marginStart: 4 }}>{item.incidentsMonth}</Text>
+        </Pressable>
         <MiniTrend points={item.trend} color={theme.primary} mutedColor={theme.primarySurface} textColor={theme.textSoft} />
       </View>
     </View>
   )
 }
 
-function MetricLine({ icon, label, value, theme }: { icon: React.ReactNode; label: string; value: string; theme: Theme }) {
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 26 }}>
+function MetricLine({ icon, label, value, theme, onPress }: { icon: React.ReactNode; label: string; value: string; theme: Theme; onPress?: () => void }) {
+  const content = (
+    <>
       {icon}
       <Text numberOfLines={1} style={{ flex: 1, marginStart: 6, color: theme.textSoft, fontWeight: '700', fontSize: 11 }}>{label}</Text>
       <Text style={{ color: theme.text, fontWeight: '900', fontSize: 13 }}>{value}</Text>
+      {onPress ? <ChevronRight size={12} color={theme.textMuted} /> : null}
+    </>
+  )
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} ${value}`}
+        style={({ pressed }) => [styles.metricLine, pressed && styles.pressed]}
+      >
+        {content}
+      </Pressable>
+    )
+  }
+  return (
+    <View style={styles.metricLine}>
+      {content}
     </View>
   )
 }
 
-function SubjectsView({ data, theme, t }: { data: DashboardData; theme: Theme; t: TFunction }) {
+function SubjectsView({ data, onOpenNotes, theme, t }: { data: DashboardData; onOpenNotes: (target?: NotesTarget) => void; theme: Theme; t: TFunction }) {
   return (
     <>
-      <ChartCard title={t('admin.subjectHeatmap')} theme={theme}>
-        <SubjectHeatmap data={data} theme={theme} t={t} />
-      </ChartCard>
-
       <View style={styles.subjectList}>
         {data.subjectStats.length === 0 ? (
           <EmptyText theme={theme} text={t('admin.noSubjects')} />
         ) : (
-          data.subjectStats.map(item => <SubjectTile key={item.name} item={item} theme={theme} t={t} />)
+          data.subjectStats.map(item => <SubjectTile key={item.name} item={item} onPress={() => onOpenNotes({ matiere: item.name })} theme={theme} t={t} />)
         )}
       </View>
     </>
@@ -1117,7 +1205,7 @@ function ClassMap({ classes, theme, t }: { classes: ClassStats[]; theme: Theme; 
       </View>
       <View style={styles.axisRow}>
         <Text style={[styles.axisText, { color: theme.textSoft }]}>0</Text>
-        <Text style={[styles.axisText, { color: theme.textSoft }]}>{t('admin.avgGrade')} /20 éq.</Text>
+        <Text style={[styles.axisText, { color: theme.textSoft }]}>{t('admin.avgGrade')} /20</Text>
         <Text style={[styles.axisText, { color: theme.textSoft }]}>20</Text>
       </View>
     </View>
@@ -1133,51 +1221,22 @@ function IconStat({ icon, value, theme }: { icon: React.ReactNode; value: string
   )
 }
 
-function SubjectHeatmap({ data, theme, t }: { data: DashboardData; theme: Theme; t: TFunction }) {
-  if (data.matrixClasses.length === 0 || data.matrixSubjects.length === 0) {
-    return <EmptyText theme={theme} text={t('admin.noSubjects')} />
-  }
-  const cellFor = (className: string, subject: string) => data.classSubjectMatrix.find(cell => cell.className === className && cell.subject === subject)
-
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View>
-        <View style={styles.heatHeader}>
-          <View style={styles.heatClassCell} />
-          {data.matrixSubjects.map(subject => (
-            <Text key={subject} numberOfLines={1} style={[styles.heatSubject, { color: theme.textSoft }]}>{compactSubject(subject)}</Text>
-          ))}
-        </View>
-        {data.matrixClasses.map(className => (
-          <View key={className} style={styles.heatRow}>
-            <Text numberOfLines={1} style={[styles.heatClassCell, styles.heatClassText, { color: theme.text }]}>{className}</Text>
-            {data.matrixSubjects.map(subject => {
-              const cell = cellFor(className, subject)
-              return (
-                <View key={`${className}-${subject}`} style={[styles.heatCell, { backgroundColor: noteHeatColor(cell?.avgNote ?? null, theme) }]}>
-                  <Text style={[styles.heatCellText, { color: noteTextColor(cell?.avgNote ?? null, theme) }]}>
-                    {cell?.avgNote == null ? '—' : cell.avgNote}
-                  </Text>
-                </View>
-              )
-            })}
-          </View>
-        ))}
-      </View>
-    </ScrollView>
-  )
-}
-
-function SubjectTile({ item, theme, t }: { item: SubjectStats; theme: Theme; t: TFunction }) {
+function SubjectTile({ item, onPress, theme, t }: { item: SubjectStats; onPress: () => void; theme: Theme; t: TFunction }) {
   const color = scoreColor(item.heatScore, theme)
   return (
-    <View style={[styles.subjectTile, { backgroundColor: theme.card, borderColor: theme.border }]}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={item.name}
+      style={({ pressed }) => [styles.subjectTile, { backgroundColor: theme.card, borderColor: theme.border }, pressed && styles.pressed]}
+    >
       <View style={styles.subjectHead}>
         <View style={[styles.subjectIcon, { backgroundColor: noteHeatColor(item.avgNote, theme) }]}>
           <BookOpen size={17} color={noteTextColor(item.avgNote, theme)} />
         </View>
         <Text numberOfLines={1} style={[styles.subjectTitle, { color: theme.text }]}>{item.name}</Text>
         <Text style={[styles.subjectScore, { color }]}>{item.heatScore}%</Text>
+        <ChevronRight size={15} color={theme.textMuted} />
       </View>
       <View style={styles.subjectStats}>
         <IconStat icon={<TrendingUp size={15} color={theme.primary} />} value={formatNote(item.avgNote)} theme={theme} />
@@ -1189,7 +1248,7 @@ function SubjectTile({ item, theme, t }: { item: SubjectStats; theme: Theme; t: 
         <Text numberOfLines={1} style={[styles.subjectFootText, { color: theme.danger }]}>↓ {item.weakestClass}</Text>
         <Text numberOfLines={1} style={[styles.subjectFootText, { color: theme.info }]}>↑ {item.strongestClass}</Text>
       </View>
-    </View>
+    </Pressable>
   )
 }
 
@@ -1208,6 +1267,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
   errorBox: { padding: 12, borderRadius: 8, marginBottom: 12 },
   errorText: { fontSize: 13, fontWeight: '700' },
+  pressed: { opacity: 0.68, transform: [{ scale: 0.98 }] },
 
   hero: { borderWidth: 1, borderRadius: 8, padding: 14, marginBottom: 12, flexDirection: 'row', gap: 12 },
   heroMain: { width: 138, alignItems: 'center', justifyContent: 'center' },
@@ -1270,6 +1330,7 @@ const styles = StyleSheet.create({
   niveauBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   niveauGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   niveauStat: { width: '48%', borderRadius: 10, padding: 10, alignItems: 'center' },
+  incidentOnly: { minHeight: 35, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
 
   classSummary: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   summaryPill: { flex: 1, borderRadius: 12, padding: 10, alignItems: 'center' },
@@ -1279,6 +1340,7 @@ const styles = StyleSheet.create({
   countBadge: { flexDirection: 'row', alignItems: 'center', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   classCardBody: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   classCardMetrics: { flex: 1, gap: 4 },
+  metricLine: { flexDirection: 'row', alignItems: 'center', minHeight: 26, borderRadius: 8 },
   healthRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
   healthTrack: { flex: 1, height: 8, borderRadius: 999, overflow: 'hidden' },
   healthFill: { height: 8, borderRadius: 999 },
@@ -1291,14 +1353,6 @@ const styles = StyleSheet.create({
   trendLabel: { fontSize: 8, fontWeight: '700', marginTop: 2 },
   iconStat: { minWidth: '47%', flex: 1, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
   iconStatText: { flex: 1, fontSize: 12, fontWeight: '900', fontVariant: ['tabular-nums'] },
-
-  heatHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  heatRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  heatClassCell: { width: 82, marginEnd: 6 },
-  heatClassText: { fontSize: 11, fontWeight: '900' },
-  heatSubject: { width: 64, marginEnd: 6, fontSize: 10, fontWeight: '900', textAlign: 'center' },
-  heatCell: { width: 64, height: 38, borderRadius: 8, marginEnd: 6, alignItems: 'center', justifyContent: 'center' },
-  heatCellText: { fontSize: 12, fontWeight: '900', fontVariant: ['tabular-nums'] },
 
   subjectList: { gap: 10 },
   subjectTile: { borderWidth: 1, borderRadius: 8, padding: 12 },

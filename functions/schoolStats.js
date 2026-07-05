@@ -15,6 +15,14 @@
  *             Volontairement PAS la moyenne des `controles`
  *             (contrairement à classStats.js) pour rester identique au client.
  *   subject = matiereLabel || matiere || subject.
+ *
+ * Coefficients marocains (cache.coefficients = settings/coefficients, même
+ * doc que mojammaa-admin/src/pages/Statistiques.tsx) : les moyennes par
+ * élève (avgNote classe/niveau/école) sont pondérées Σ(note×coef)/Σ(coef)
+ * sur les matières de l'élève — miroir de coefOf() côté web. Les stats
+ * PAR MATIÈRE (subjectStats, classSubjectMatrix) restent des moyennes
+ * simples : un coefficient ne compare que des matières entre elles, il n'a
+ * pas de sens en isolant une seule matière.
  */
 
 function asString(v) {
@@ -32,6 +40,30 @@ function asNumber(v) {
 
 const round1 = (v) => Math.round(v * 10) / 10
 const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v))
+
+/**
+ * Coefficients marocains (settings/coefficients : { matieres: {matiere: coef},
+ * parNiveau: {niveau: {matiere: coef}} }). Résolution PAR ÉLÈVE, miroir exact
+ * de coefOf dans mojammaa-admin/src/pages/Statistiques.tsx : parNiveau[niveau]
+ * > matieres (global) > 1. Clé = `matiere` brute (pas matiereLabel).
+ */
+function makeCoefOf(coefficients) {
+  const matieres = (coefficients && coefficients.matieres) || {}
+  const parNiveau = (coefficients && coefficients.parNiveau) || {}
+  return (matiere, niveau) => {
+    const n = niveau ? parNiveau[niveau] && parNiveau[niveau][matiere] : undefined
+    if (n !== undefined && n > 0) return n
+    const g = matieres[matiere]
+    return g > 0 ? g : 1
+  }
+}
+
+/** Moyenne pondérée Σ(note×coef)/Σ(coef) — replie sur la moyenne simple si aucun coef. */
+function weightedAvg(pairs) {
+  const totalCoef = pairs.reduce((s, p) => s + p.c, 0)
+  if (totalCoef <= 0) return pairs.reduce((s, p) => s + p.v, 0) / pairs.length
+  return pairs.reduce((s, p) => s + p.v * p.c, 0) / totalCoef
+}
 
 function baremeFromData(data) {
   const explicit = asNumber(data.bareme)
@@ -97,14 +129,21 @@ function computeSchoolStats(cache) {
   const eleves = (cache.eleves || []).map((d) => ({
     id: d.id, classe: asString(d.classe), niveau: asString(d.niveau),
   }))
+  const eleveNiveauById = new Map(eleves.map((e) => [e.id, e.niveau]))
   const users = (cache.users || []).map((d) => ({ id: d.id, role: asString(d.role) || 'parent' }))
-  const notes = (cache.notes || []).map((d) => ({
-    id: d.id,
-    eleveId: asString(d.eleveId),
-    classe: asString(d.classe),
-    subject: asString(d.matiereLabel) || asString(d.matiere) || asString(d.subject),
-    note: normalizedNote20(d),
-  }))
+  const coefOf = makeCoefOf(cache.coefficients)
+  const notes = (cache.notes || []).map((d) => {
+    const eleveId = asString(d.eleveId)
+    const matiere = asString(d.matiere)
+    return {
+      id: d.id,
+      eleveId,
+      classe: asString(d.classe),
+      subject: asString(d.matiereLabel) || matiere || asString(d.subject),
+      note: normalizedNote20(d),
+      coef: coefOf(matiere, eleveNiveauById.get(eleveId)),
+    }
+  })
   const absences = (cache.absences || []).map((d) => ({
     id: d.id, eleveId: asString(d.eleveId), classe: asString(d.classe),
     date: asString(d.date), statut: asString(d.statut),
@@ -134,7 +173,7 @@ function computeSchoolStats(cache) {
   validNotes.forEach((note) => {
     if (note.eleveId) {
       const rows = notesByEleve.get(note.eleveId) || []
-      rows.push(note.note)
+      rows.push({ v: note.note, c: note.coef })
       notesByEleve.set(note.eleveId, rows)
     }
     if (note.classe) {
@@ -189,8 +228,12 @@ function computeSchoolStats(cache) {
     activeHomeworkByClass.set(devoir.classeId, (activeHomeworkByClass.get(devoir.classeId) || 0) + 1)
   })
 
-  const studentAverages = [...notesByEleve.values()].map((vals) => vals.reduce((s, v) => s + v, 0) / vals.length)
-  const avgNote = validNotes.length > 0 ? round1(validNotes.reduce((s, r) => s + r.note, 0) / validNotes.length) : null
+  // Moyenne pondérée par élève (Σ note×coef / Σ coef sur toutes ses matières),
+  // puis moyennée entre élèves — coefficients marocains (settings/coefficients).
+  const studentAverages = [...notesByEleve.values()].map((pairs) => weightedAvg(pairs))
+  const avgNote = studentAverages.length > 0
+    ? round1(studentAverages.reduce((s, v) => s + v, 0) / studentAverages.length)
+    : null
   const successRate = studentAverages.length > 0
     ? Math.round((studentAverages.filter((v) => v >= 10).length / studentAverages.length) * 100)
     : null
@@ -205,16 +248,18 @@ function computeSchoolStats(cache) {
       if (note.subject) subjects.add(note.subject)
       if (!note.eleveId || note.note == null) return
       const rows = classNotesByEleve.get(note.eleveId) || []
-      rows.push(note.note)
+      rows.push({ v: note.note, c: note.coef })
       classNotesByEleve.set(note.eleveId, rows)
     })
 
-    const averages = [...classNotesByEleve.values()].map((vals) => vals.reduce((s, v) => s + v, 0) / vals.length)
+    // Moyenne pondérée par élève, puis moyennée sur la classe (miroir école-entière ci-dessus).
+    const averages = [...classNotesByEleve.values()].map((pairs) => weightedAvg(pairs))
     const absencesToday = absentTodayByClass.get(name)?.size || 0
     const presenceRate = students.length > 0 ? Math.round(((students.length - absencesToday) / students.length) * 100) : 100
-    const classAvg = classNoteValues.length > 0 ? round1(classNoteValues.reduce((s, v) => s + v, 0) / classNoteValues.length) : null
+    const classAvg = averages.length > 0 ? round1(averages.reduce((s, v) => s + v, 0) / averages.length) : null
+    const passingStudents = averages.filter((v) => v >= 10).length
     const classSuccess = averages.length > 0
-      ? Math.round((averages.filter((v) => v >= 10).length / averages.length) * 100)
+      ? Math.round((passingStudents / averages.length) * 100)
       : null
     const noteScore = classAvg == null ? 55 : (classAvg / 20) * 100
     const successScore = classSuccess ?? 55
@@ -235,6 +280,9 @@ function computeSchoolStats(cache) {
       incidentsMonth: incidentsMonthByClass.get(name) || 0,
       activeHomework: activeHomeworkByClass.get(name) || 0,
       subjectsCovered: subjects.size,
+      notesCount: classNoteValues.length,
+      gradedStudents: averages.length,
+      passingStudents,
       healthScore: clamp(Math.round((presenceRate * 0.38) + (noteScore * 0.34) + (successScore * 0.18) + (coverageScore * 0.10) - incidentsPenalty)),
       trend: trendDays.map((day) => ({ label: day.label, value: classTrend?.get(day.iso)?.size || 0 })),
     }
@@ -276,7 +324,7 @@ function computeSchoolStats(cache) {
       classesCount: byClass.size,
       avgNote: subjectAvg,
       successRate: subjectSuccess,
-      below10Count: values.filter((v) => v < 10).length,
+      below10Count: averages.filter((v) => v < 10).length,
       strongestClass: classAverages[classAverages.length - 1]?.className || '—',
       weakestClass: classAverages[0]?.className || '—',
       heatScore: clamp(Math.round((noteScore * 0.50) + (successScore * 0.35) + (coverageScore * 0.15))),
@@ -318,16 +366,18 @@ function computeSchoolStats(cache) {
   })
   const niveauStats = [...niveauMap.entries()].map(([name, classes]) => {
     const totalStudents = classes.reduce((s, c) => s + c.studentCount, 0)
-    const allAvgs = classes.filter((c) => c.avgNote != null).map((c) => c.avgNote)
-    const allSuccess = classes.filter((c) => c.successRate != null).map((c) => c.successRate)
+    const totalGradedStudents = classes.reduce((s, c) => s + c.gradedStudents, 0)
+    const totalPassingStudents = classes.reduce((s, c) => s + c.passingStudents, 0)
+    const totalAbsencesToday = classes.reduce((s, c) => s + c.absencesToday, 0)
     const totalIncidents = classes.reduce((s, c) => s + c.incidentsMonth, 0)
-    const avgPresence = classes.length > 0 ? Math.round(classes.reduce((s, c) => s + c.presenceRate, 0) / classes.length) : 100
+    const avgPresence = totalStudents > 0 ? Math.round(((totalStudents - totalAbsencesToday) / totalStudents) * 100) : 100
     return {
       name,
       classCount: classes.length,
       studentCount: totalStudents,
-      avgNote: allAvgs.length > 0 ? round1(allAvgs.reduce((s, v) => s + v, 0) / allAvgs.length) : null,
-      successRate: allSuccess.length > 0 ? Math.round(allSuccess.reduce((s, v) => s + v, 0) / allSuccess.length) : null,
+      // Pondéré par élèves notés (pas par nb de notes) : avgNote est déjà une moyenne par élève.
+      avgNote: totalGradedStudents > 0 ? round1(classes.reduce((s, c) => s + ((c.avgNote || 0) * c.gradedStudents), 0) / totalGradedStudents) : null,
+      successRate: totalGradedStudents > 0 ? Math.round((totalPassingStudents / totalGradedStudents) * 100) : null,
       presenceRate: avgPresence,
       incidentsMonth: totalIncidents,
     }

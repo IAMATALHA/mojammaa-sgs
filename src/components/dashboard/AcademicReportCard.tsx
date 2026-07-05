@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { MotiView } from 'moti'
 import Svg, { Circle } from 'react-native-svg'
 import {
-  Award, BookOpen, ChevronDown, CircleHelp, Sparkles, Target, TrendingDown, TrendingUp, Trophy,
+  Award, BookOpen, CheckCircle2, ChevronDown, CircleHelp, Target, TrendingDown, TrendingUp, Trophy,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
@@ -22,8 +22,75 @@ function gradeTint(value: number, theme: Theme, bareme = 20) {
   const v = value * (20 / bareme)   // seuils calibrés /20 quel que soit le barème
   if (v < 10) return theme.danger
   if (v < 12) return theme.warning
-  if (v >= 16) return theme.success
-  return theme.accent
+  return theme.success
+}
+
+type ReportTone = {
+  colors: [string, string, string]
+  locations: [number, number, number]
+  badgeBg: string
+  badgeBorder: string
+  glowA: string
+  glowB: string
+  pillBg: string
+  pillBorder: string
+  statBg: string
+  statBorder: string
+  ringTrack: string
+  ringStroke: string
+}
+
+function reportTone(score: number, bareme: number): ReportTone {
+  const v = score * (20 / bareme)
+
+  if (v < 10) {
+    return {
+      colors: ['#6D2638', '#B9404C', '#E66F54'],
+      locations: [0, 0.58, 1],
+      badgeBg: 'rgba(255,255,255,0.14)',
+      badgeBorder: 'rgba(255,255,255,0.22)',
+      glowA: 'rgba(255, 218, 205, 0.2)',
+      glowB: 'rgba(255, 255, 255, 0.13)',
+      pillBg: 'rgba(255,255,255,0.15)',
+      pillBorder: 'rgba(255,255,255,0.24)',
+      statBg: 'rgba(255,255,255,0.12)',
+      statBorder: 'rgba(255,255,255,0.2)',
+      ringTrack: 'rgba(255,255,255,0.2)',
+      ringStroke: '#FFF4F0',
+    }
+  }
+
+  if (v < 12) {
+    return {
+      colors: ['#72511C', '#BF7A24', '#E4B34B'],
+      locations: [0, 0.58, 1],
+      badgeBg: 'rgba(255,255,255,0.15)',
+      badgeBorder: 'rgba(255,255,255,0.24)',
+      glowA: 'rgba(255, 236, 180, 0.22)',
+      glowB: 'rgba(255, 255, 255, 0.13)',
+      pillBg: 'rgba(255,255,255,0.15)',
+      pillBorder: 'rgba(255,255,255,0.24)',
+      statBg: 'rgba(255,255,255,0.13)',
+      statBorder: 'rgba(255,255,255,0.22)',
+      ringTrack: 'rgba(255,255,255,0.22)',
+      ringStroke: '#FFF8E6',
+    }
+  }
+
+  return {
+    colors: ['#135C4A', '#21866E', '#7DBB61'],
+    locations: [0, 0.56, 1],
+    badgeBg: 'rgba(255,255,255,0.16)',
+    badgeBorder: 'rgba(255,255,255,0.25)',
+    glowA: 'rgba(221, 255, 224, 0.24)',
+    glowB: 'rgba(255, 255, 255, 0.14)',
+    pillBg: 'rgba(255,255,255,0.16)',
+    pillBorder: 'rgba(255,255,255,0.25)',
+    statBg: 'rgba(255,255,255,0.14)',
+    statBorder: 'rgba(255,255,255,0.24)',
+    ringTrack: 'rgba(255,255,255,0.24)',
+    ringStroke: '#F3FFF5',
+  }
 }
 
 export default function AcademicReportCard({ report }: AcademicReportCardProps) {
@@ -60,6 +127,7 @@ export default function AcademicReportCard({ report }: AcademicReportCardProps) 
   const deltaText = summary.classDelta === 0
     ? t(deltaKey)
     : t(deltaKey, { value: Math.abs(summary.classDelta).toFixed(1) })
+  const tone = useMemo(() => reportTone(report.generalAvg, report.bareme), [report.bareme, report.generalAvg])
 
   return (
     <MotiView
@@ -69,14 +137,24 @@ export default function AcademicReportCard({ report }: AcademicReportCardProps) 
       style={[styles.shell, { backgroundColor: theme.card }, theme.shadows.clay]}
     >
       <LinearGradient
-        colors={[theme.primaryDark, theme.primary, theme.accent]}
+        colors={tone.colors}
+        locations={tone.locations}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.hero}
       >
+        <View pointerEvents="none" style={[styles.heroGlowA, { backgroundColor: tone.glowA }]} />
+        <View pointerEvents="none" style={[styles.heroGlowB, { backgroundColor: tone.glowB }]} />
+        <View pointerEvents="none" style={styles.heroSheen} />
+
         <View style={[styles.heroTop, isAr && styles.rowReverse]}>
           <View style={[styles.heroCopy, isAr && styles.rtlBlock]}>
-            <View style={[styles.heroLabelRow, isAr && styles.rowReverse]}>
+            <View style={[
+              styles.heroLabelRow,
+              { backgroundColor: tone.badgeBg, borderColor: tone.badgeBorder },
+              isAr ? styles.selfEnd : styles.selfStart,
+              isAr && styles.rowReverse,
+            ]}>
               <BookOpen size={14} color="rgba(255,255,255,0.86)" strokeWidth={2.2} />
               <Text style={[styles.heroLabel, { fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold }]}>
                 {t('parent.reportSummary')}
@@ -91,7 +169,12 @@ export default function AcademicReportCard({ report }: AcademicReportCardProps) 
               </Text>
               <Text style={[styles.scoreMax, { fontFamily: theme.fonts.semibold }]}>/ {report.bareme}</Text>
             </View>
-            <View style={[styles.deltaPill, isAr && styles.rowReverse]}>
+            <View style={[
+              styles.deltaPill,
+              { backgroundColor: tone.pillBg, borderColor: tone.pillBorder },
+              isAr && styles.selfEnd,
+              isAr && styles.rowReverse,
+            ]}>
               {summary.classDelta >= 0 ? (
                 <TrendingUp size={13} color="#fff" strokeWidth={2.4} />
               ) : (
@@ -108,17 +191,19 @@ export default function AcademicReportCard({ report }: AcademicReportCardProps) 
             bareme={report.bareme}
             label={t('parent.scoreProgress', { value: Math.round((report.generalAvg / report.bareme) * 100) })}
             theme={theme}
+            tone={tone}
           />
         </View>
 
         <View style={[styles.heroStats, isAr && styles.rowReverse]}>
-          <HeroStat icon={Trophy} label={t('parent.rank')} value={report.rank} theme={theme} />
-          <HeroStat icon={CircleHelp} label={t('parent.semester')} value={report.semestre || '—'} theme={theme} />
+          <HeroStat icon={Trophy} label={t('parent.rank')} value={report.rank} theme={theme} tone={tone} />
+          <HeroStat icon={CircleHelp} label={t('parent.semester')} value={report.semestre || '—'} theme={theme} tone={tone} />
           <HeroStat
-            icon={Sparkles}
+            icon={CheckCircle2}
             label={t('parent.strongSubjects')}
             value={`${summary.strongSubjects}/${report.subjects.length}`}
             theme={theme}
+            tone={tone}
           />
         </View>
       </LinearGradient>
@@ -201,7 +286,9 @@ export default function AcademicReportCard({ report }: AcademicReportCardProps) 
   )
 }
 
-function ScoreRing({ score, bareme, label, theme }: { score: number; bareme: number; label: string; theme: Theme }) {
+function ScoreRing({
+  score, bareme, label, theme, tone,
+}: { score: number; bareme: number; label: string; theme: Theme; tone: ReportTone }) {
   const size = 112
   const stroke = 9
   const radius = (size - stroke) / 2
@@ -216,7 +303,7 @@ function ScoreRing({ score, bareme, label, theme }: { score: number; bareme: num
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="rgba(255,255,255,0.22)"
+          stroke={tone.ringTrack}
           strokeWidth={stroke}
           fill="transparent"
         />
@@ -224,7 +311,7 @@ function ScoreRing({ score, bareme, label, theme }: { score: number; bareme: num
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#FFFFFF"
+          stroke={tone.ringStroke}
           strokeWidth={stroke}
           fill="transparent"
           strokeLinecap="round"
@@ -242,15 +329,16 @@ function ScoreRing({ score, bareme, label, theme }: { score: number; bareme: num
 }
 
 function HeroStat({
-  icon: Icon, label, value, theme,
+  icon: Icon, label, value, theme, tone,
 }: {
   icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>
   label: string
   value: string
   theme: Theme
+  tone: ReportTone
 }) {
   return (
-    <View style={styles.heroStat}>
+    <View style={[styles.heroStat, { backgroundColor: tone.statBg, borderColor: tone.statBorder }]}>
       <Icon size={14} color="rgba(255,255,255,0.9)" strokeWidth={2.3} />
       <Text numberOfLines={1} style={[styles.heroStatValue, { fontFamily: theme.fonts.bold }]}>{value}</Text>
       <Text numberOfLines={1} style={[styles.heroStatLabel, { fontFamily: theme.fonts.medium }]}>{label}</Text>
@@ -384,6 +472,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 16,
+    overflow: 'hidden',
+  },
+  heroGlowA: {
+    position: 'absolute',
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    top: -72,
+    right: -44,
+  },
+  heroGlowB: {
+    position: 'absolute',
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    bottom: -48,
+    left: -28,
+  },
+  heroSheen: {
+    position: 'absolute',
+    width: 88,
+    height: 260,
+    top: -54,
+    right: 92,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    transform: [{ rotate: '23deg' }],
   },
   heroTop: {
     flexDirection: 'row',
@@ -398,6 +512,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   heroLabel: {
     color: 'rgba(255,255,255,0.86)',
@@ -436,9 +554,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.16)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.22)',
   },
   deltaText: {
     color: '#fff',
@@ -478,9 +594,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 10,
     paddingVertical: 10,
-    backgroundColor: 'rgba(255,255,255,0.13)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
   },
   heroStatValue: {
     color: '#fff',
@@ -627,6 +741,12 @@ const styles = StyleSheet.create({
   },
   rowReverse: {
     flexDirection: 'row-reverse',
+  },
+  selfStart: {
+    alignSelf: 'flex-start',
+  },
+  selfEnd: {
+    alignSelf: 'flex-end',
   },
   rtlBlock: {
     alignItems: 'flex-end',

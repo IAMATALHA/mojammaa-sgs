@@ -16,8 +16,8 @@ import { useTheme } from '../../contexts/ThemeContext'
 import type { ScheduleEntry } from '../../utils/dashboardTypes'
 
 export default function ScheduleItem({
-  item, onPress,
-}: { item: ScheduleEntry; onPress?: () => void }) {
+  item, onPress, chips,
+}: { item: ScheduleEntry; onPress?: () => void; chips?: React.ReactNode }) {
   const theme = useTheme()
   const { t } = useTranslation()
   const isNow  = item.status === 'now'
@@ -78,6 +78,7 @@ export default function ScheduleItem({
             {item.room}
           </Text>
         </View>
+        {chips ? <View style={styles.chipsRow}>{chips}</View> : null}
       </View>
 
       {isNow ? (
@@ -133,6 +134,7 @@ const styles = StyleSheet.create({
   time: { width: 54, alignItems: 'center' },
   body: { flex: 1, marginStart: 10 },
   meta: { flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 4 },
+  chipsRow: { flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' },
   metaText: { fontSize: 11 },
   dot:  { width: 3, height: 3, borderRadius: 2, marginHorizontal: 4 },
   pill: {
