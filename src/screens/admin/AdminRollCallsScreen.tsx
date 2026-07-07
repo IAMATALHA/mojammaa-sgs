@@ -32,21 +32,21 @@ function todayISO(): string {
 function copyFor(lang: string) {
   if (lang === 'ar') {
     return {
-      title: 'النداءات',
+      title: 'تسجيل الحضور',
       current: 'الحصص الجارية الآن',
-      missing: 'نداءات يجب إنجازها',
+      missing: 'تسجيلات حضور يجب إنجازها',
       all: 'كل الحصص',
       noCurrent: 'لا توجد حصة جارية الآن',
-      noMissing: 'كل النداءات المستحقة منجزة',
+      noMissing: 'كل تسجيلات الحضور المستحقة منجزة',
       noSessions: 'لا توجد حصص مبرمجة اليوم',
-      missingClasses: 'أقسام بدون نداء',
+      missingClasses: 'أقسام بدون تسجيل حضور',
       done: 'تم',
       todo: 'للانجاز',
       later: 'لاحقا',
       course: 'حصة',
-      calls: 'النداءات',
+      calls: 'تسجيلات الحضور',
       openAbsences: 'عرض الغيابات',
-      loadError: 'تعذر تحميل نداءات اليوم.',
+      loadError: 'تعذر تحميل تسجيلات الحضور اليوم.',
     }
   }
   if (lang.startsWith('en')) {

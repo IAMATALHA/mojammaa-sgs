@@ -47,6 +47,7 @@ const MATIERES = [
   'Mathématiques', 'Physique et Chimie', 'Sciences de la Vie et de la Terre',
   'Informatique', 'Arabe', 'Français', 'Anglais', 'Histoire Géographie',
   'Éducation Islamique', 'Activité scientifique', 'Éducation artistique',
+  'Éducation Physique et Sportive',
 ]
 const SEMESTRES = ['S1', 'S2']
 

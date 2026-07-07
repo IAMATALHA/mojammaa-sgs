@@ -7,10 +7,11 @@ import {
 import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated'
 import { MotiView } from 'moti'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { httpsCallable } from 'firebase/functions'
 import { useTranslation } from 'react-i18next'
 import { Globe, User, Lock } from 'lucide-react-native'
-import { auth } from '../../config/firebase'
+import { auth, functions } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
 import LanguagePicker from '../../components/LanguagePicker'
 
@@ -34,7 +35,8 @@ export default function LoginScreen() {
       return
     }
     try {
-      await sendPasswordResetEmail(auth, target)
+      const sendBrandedPasswordReset = httpsCallable(functions, 'sendBrandedPasswordReset')
+      await sendBrandedPasswordReset({ email: target })
       Alert.alert(
         t('login.resetSent'),
         t('login.resetSentBody', { email: target }),

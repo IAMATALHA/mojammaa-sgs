@@ -25,11 +25,24 @@
       {
         "source": "/privacy",
         "destination": "/privacy.html"
+      },
+      {
+        "source": "/reset-password",
+        "destination": "/reset-password.html"
       }
     ],
     "headers": [
       {
         "source": "/privacy.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=300"
+          }
+        ]
+      },
+      {
+        "source": "/reset-password.html",
         "headers": [
           {
             "key": "Cache-Control",

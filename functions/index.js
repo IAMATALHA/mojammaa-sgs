@@ -13,10 +13,12 @@ const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/
 const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const { setGlobalOptions } = require('firebase-functions/v2')
+const { defineSecret } = require('firebase-functions/params')
 const { initializeApp } = require('firebase-admin/app')
 const { getFirestore, FieldPath, FieldValue } = require('firebase-admin/firestore')
 const { getAuth } = require('firebase-admin/auth')
 const logger = require('firebase-functions/logger')
+const nodemailer = require('nodemailer')
 const { computeClassStats, statsDocId } = require('./classStats')
 const { computeSchoolStats } = require('./schoolStats')
 const { buildSlotDocs } = require('./emploiDuTempsSync')
@@ -523,3 +525,104 @@ exports.recomputeSchoolStats = onCall(async (request) => {
   logger.info('stats/summary refreshed (on-demand)', { by: uid, eleves: s.totalEleves })
   return { ok: true, updatedAt: Date.now(), totalEleves: s.totalEleves, totalClasses: s.totalClasses }
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// Reset de mot de passe brandé — contourne la page générique Firebase.
+//
+// Le project est bloqué par Google pour personnaliser le "action URL"
+// (Console + API renvoient EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED, testé et
+// confirmé). Contournement : on génère le lien nous-mêmes via Admin SDK
+// (generatePasswordResetLink), on en extrait le oobCode, et on reconstruit
+// une URL vers NOTRE page (mojammaa-sgs.web.app/reset-password — même
+// mécanisme confirmPasswordReset/verifyPasswordResetCode, seul le domaine
+// change), puis on envoie nous-mêmes l'email (brandé) via Gmail au lieu de
+// laisser Firebase envoyer son email générique par défaut.
+// ─────────────────────────────────────────────────────────────────────────
+const GMAIL_APP_PASSWORD = defineSecret('GMAIL_APP_PASSWORD')
+const GMAIL_USER = 'atalha.you@gmail.com'
+const RESET_PAGE_URL = 'https://mojammaa-sgs.web.app/reset-password'
+const RESET_COOLDOWN_MS = 60 * 1000
+
+function brandedResetEmailHtml(link) {
+  return `
+  <div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:auto;color:#1a1a1a">
+    <h2 style="margin:0 0 4px">Mojammaa Al Maarifa</h2>
+    <p style="color:#666;margin:0 0 20px">Préscolaire · Primaire · Collège</p>
+    <p>Bonjour,</p>
+    <p>Une demande de réinitialisation de mot de passe a été faite pour votre compte
+       <b>Mojammaa Connect</b>. Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe :</p>
+    <p style="text-align:center;margin:28px 0">
+      <a href="${link}" style="background:#1D3557;color:#fff;text-decoration:none;
+         padding:12px 24px;border-radius:8px;display:inline-block;font-weight:bold">
+        Réinitialiser mon mot de passe
+      </a>
+    </p>
+    <p style="font-size:13px;color:#666">Ce lien est à usage unique et expire après un délai.
+       Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet email.</p>
+    <p style="font-size:12px;word-break:break-all;color:#1D3557">${link}</p>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+    <p dir="rtl" style="font-size:13px;color:#444">
+      مرحباً، تم تلقي طلب لإعادة تعيين كلمة مرور حسابكم على تطبيق <b>Mojammaa Connect</b>.
+      اضغطوا على الزر أعلاه لتعيين كلمة مرور جديدة. إذا لم تكونوا أنتم من طلب ذلك، تجاهلوا هذا البريد.
+    </p>
+  </div>`
+}
+
+exports.sendBrandedPasswordReset = onCall(
+  { secrets: [GMAIL_APP_PASSWORD] },
+  async (request) => {
+    const email = String((request.data && request.data.email) || '').trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new HttpsError('invalid-argument', 'Email invalide.')
+    }
+
+    // Anti-spam : un envoi par email par minute max.
+    const cooldownRef = db.collection('passwordResetCooldowns').doc(email)
+    const cooldownSnap = await cooldownRef.get()
+    if (cooldownSnap.exists) {
+      const last = cooldownSnap.get('lastSentAt')
+      const lastMs = last && last.toMillis ? last.toMillis() : 0
+      if (Date.now() - lastMs < RESET_COOLDOWN_MS) {
+        // Ne révèle rien : même réponse que le cas "succès" côté client.
+        return { ok: true }
+      }
+    }
+
+    const auth = getAuth()
+    let link
+    try {
+      link = await auth.generatePasswordResetLink(email)
+    } catch (err) {
+      // Email inconnu → ne pas révéler que le compte n'existe pas (même
+      // comportement que sendPasswordResetEmail avec emailPrivacyConfig).
+      // Note : le Admin SDK renvoie 'auth/internal-error' (pas
+      // 'auth/user-not-found') pour ce cas précis — vérifié en local.
+      // On avale aussi ce cas générique : le pire scénario côté UX est un
+      // silence (comme un vrai email inconnu), jamais une fuite d'info.
+      if (err && (err.code === 'auth/user-not-found' || err.code === 'auth/internal-error')) {
+        logger.info('Password reset link generation failed (treated as unknown email)', { email, code: err.code })
+        return { ok: true }
+      }
+      logger.error('generatePasswordResetLink failed', { email, error: String(err) })
+      throw new HttpsError('internal', "Erreur lors de la génération du lien.")
+    }
+
+    const oobCode = new URL(link).searchParams.get('oobCode')
+    const brandedLink = `${RESET_PAGE_URL}?mode=resetPassword&oobCode=${encodeURIComponent(oobCode)}`
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD.value() },
+    })
+    await transporter.sendMail({
+      from: `"Mojammaa Al Maarifa" <${GMAIL_USER}>`,
+      to: email,
+      subject: 'Réinitialisation de mot de passe — Mojammaa Al Maarifa',
+      html: brandedResetEmailHtml(brandedLink),
+    })
+    await cooldownRef.set({ lastSentAt: FieldValue.serverTimestamp() })
+
+    logger.info('Branded password reset email sent', { email })
+    return { ok: true }
+  },
+)
