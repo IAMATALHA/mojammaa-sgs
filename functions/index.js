@@ -18,7 +18,6 @@ const { initializeApp } = require('firebase-admin/app')
 const { getFirestore, FieldPath, FieldValue } = require('firebase-admin/firestore')
 const { getAuth } = require('firebase-admin/auth')
 const logger = require('firebase-functions/logger')
-const nodemailer = require('nodemailer')
 const { computeClassStats, statsDocId } = require('./classStats')
 const { computeSchoolStats } = require('./schoolStats')
 const { buildSlotDocs } = require('./emploiDuTempsSync')
@@ -590,8 +589,8 @@ exports.recomputeSchoolStats = onCall(async (request) => {
 // change), puis on envoie nous-mêmes l'email (brandé) via Gmail au lieu de
 // laisser Firebase envoyer son email générique par défaut.
 // ─────────────────────────────────────────────────────────────────────────
-const GMAIL_APP_PASSWORD = defineSecret('GMAIL_APP_PASSWORD')
-const GMAIL_USER = 'atalha.you@gmail.com'
+const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
+const SENDER = 'Mojammaa Al Maarifa <contact@mojammaa.com>'
 const RESET_PAGE_URL = 'https://mojammaa.com/reset-password'
 const RESET_COOLDOWN_MS = 60 * 1000
 
@@ -621,7 +620,7 @@ function brandedResetEmailHtml(link) {
 }
 
 exports.sendBrandedPasswordReset = onCall(
-  { secrets: [GMAIL_APP_PASSWORD] },
+  { secrets: [RESEND_API_KEY] },
   async (request) => {
     const email = String((request.data && request.data.email) || '').trim().toLowerCase()
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -662,16 +661,24 @@ exports.sendBrandedPasswordReset = onCall(
     const oobCode = new URL(link).searchParams.get('oobCode')
     const brandedLink = `${RESET_PAGE_URL}?mode=resetPassword&oobCode=${encodeURIComponent(oobCode)}`
 
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD.value() },
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY.value()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: SENDER,
+        to: [email],
+        subject: 'Réinitialisation de mot de passe — Mojammaa Al Maarifa',
+        html: brandedResetEmailHtml(brandedLink),
+      }),
     })
-    await transporter.sendMail({
-      from: `"Mojammaa Al Maarifa" <${GMAIL_USER}>`,
-      to: email,
-      subject: 'Réinitialisation de mot de passe — Mojammaa Al Maarifa',
-      html: brandedResetEmailHtml(brandedLink),
-    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      logger.error('Resend send failed', { email, status: res.status, body })
+      throw new HttpsError('internal', "Erreur lors de l'envoi de l'email.")
+    }
     await cooldownRef.set({ lastSentAt: FieldValue.serverTimestamp() })
 
     logger.info('Branded password reset email sent', { email })
