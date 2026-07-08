@@ -505,8 +505,13 @@ async function refreshSchoolStats() {
   return summary
 }
 
+// Toutes les 2h (pas 30 min) : refreshSchoolStats() scanne INTÉGRALEMENT
+// eleves/users/notes/absences/devoirs à chaque exécution — coût en lectures
+// Firestore proportionnel à la taille de la base × fréquence. Un admin qui
+// veut des stats fraîches immédiatement peut forcer via recomputeSchoolStats
+// (pull-to-refresh), donc pas besoin d'un intervalle court par défaut.
 exports.aggregateSchoolStats = onSchedule(
-  { schedule: 'every 30 minutes', timeZone: 'Africa/Casablanca' },
+  { schedule: 'every 2 hours', timeZone: 'Africa/Casablanca' },
   async () => {
     const s = await refreshSchoolStats()
     logger.info('stats/summary refreshed (scheduled)', { eleves: s.totalEleves, classes: s.totalClasses })
@@ -540,7 +545,7 @@ exports.recomputeSchoolStats = onCall(async (request) => {
 // ─────────────────────────────────────────────────────────────────────────
 const GMAIL_APP_PASSWORD = defineSecret('GMAIL_APP_PASSWORD')
 const GMAIL_USER = 'atalha.you@gmail.com'
-const RESET_PAGE_URL = 'https://mojammaa-sgs.web.app/reset-password'
+const RESET_PAGE_URL = 'https://mojammaa.com/reset-password'
 const RESET_COOLDOWN_MS = 60 * 1000
 
 function brandedResetEmailHtml(link) {
