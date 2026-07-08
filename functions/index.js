@@ -345,6 +345,26 @@ async function refreshClassStats(classe, semestre) {
   await ref.set({ classe, semestre, ...stats, updatedAt: new Date() })
 }
 
+// ── classStatsDirty : coalescing du recalcul (voir onNoteWritten plus bas) ──
+//
+// Pourquoi : refreshClassStats() relit TOUT le groupe (classe, semestre) à
+// chaque appel. Le déclencher en direct depuis onNoteWritten fait un import
+// de N notes dans le même groupe coûter ~N × taille_du_groupe lectures
+// (quadratique) — un import de 900 notes a généré plusieurs millions de
+// lectures Firestore facturées en juillet 2026. onNoteWritten ne marque
+// désormais qu'un flag "dirty" (une petite écriture, pas de lecture) ;
+// flushClassStatsDirty (planifiée) fait UN SEUL refreshClassStats par
+// groupe touché, toutes les 2 minutes, peu importe le nombre d'écritures
+// reçues entretemps. Compromis : classStats a jusqu'à ~2 min de retard
+// après une note modifiée (imperceptible pour une moyenne de classe).
+async function markClassStatsDirty(classe, semestre) {
+  if (!classe || !semestre) return
+  await db.collection('classStatsDirty').doc(statsDocId(classe, semestre)).set(
+    { classe, semestre, touchedAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  )
+}
+
 // ── directory/staff : annuaire du personnel pour les clients parents ───────
 //
 // Pourquoi : les rules interdisent à un parent de lire users/ (données
@@ -410,16 +430,43 @@ exports.onNoteWritten = onDocumentWritten('notes/{noteId}', async (event) => {
   const before = event.data?.before?.exists ? event.data.before.data() : null
   const after = event.data?.after?.exists ? event.data.after.data() : null
 
+  // Champs qui influencent réellement computeClassStats() (cf. classStats.js) :
+  // le reste (eleveNom, codeMassar, demo, importedBy, importedAt, updatedAt…)
+  // n'a aucun effet sur l'agrégat — ignorer ces écritures évite de marquer
+  // "dirty" pour rien (ex: un script qui ne fait que retoucher updatedAt).
+  const pick = (n) => (n ? JSON.stringify([
+    n.note, n.controles, n.bareme, n.cycle, n.classe, n.semestre,
+    n.matiereLabel, n.matiere, n.eleveId,
+  ]) : '')
+  if (pick(before) === pick(after)) return
+
   // Une note déplacée de classe/semestre impacte DEUX agrégats (ancien + nouveau).
   const pairs = new Map()
   for (const d of [before, after]) {
     if (d && d.classe && d.semestre) pairs.set(`${d.classe}|${d.semestre}`, [d.classe, d.semestre])
   }
   for (const [classe, semestre] of pairs.values()) {
-    await refreshClassStats(classe, semestre)
-    logger.info('classStats refreshed', { classe, semestre })
+    await markClassStatsDirty(classe, semestre)
   }
 })
+
+// Coalescing : traite chaque groupe (classe, semestre) marqué dirty AU PLUS
+// UNE FOIS par passage, peu importe combien d'écritures de notes l'ont
+// touché entretemps. Un import massif de N notes dans le même groupe ne
+// coûte donc plus qu'UN SEUL refreshClassStats (pas N).
+exports.flushClassStatsDirty = onSchedule(
+  { schedule: 'every 2 minutes', timeZone: 'Africa/Casablanca' },
+  async () => {
+    const dirtySnap = await db.collection('classStatsDirty').get()
+    if (dirtySnap.empty) return
+    for (const doc of dirtySnap.docs) {
+      const { classe, semestre } = doc.data()
+      await refreshClassStats(classe, semestre)
+      await doc.ref.delete()
+    }
+    logger.info('classStats flushed', { groups: dirtySnap.size })
+  },
+)
 
 // ── onScheduleWritten : emploiDuTemps toujours synchro avec schedules ───────
 //
