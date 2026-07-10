@@ -38,6 +38,7 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
+import { academicPeriodForDate } from '../../utils/academicPeriod'
 
 const SEANCES = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'] as const
 
@@ -234,6 +235,7 @@ export default function TeacherAttendanceScreen() {
     setSaving(true); setError(null)
     try {
       const batch = writeBatch(db)
+      const period = academicPeriodForDate(date)
       // Pour chaque élève, on écrit son statut. Le docId est déterministe
       // pour qu'un rappel sur l'appel mette à jour l'enregistrement au lieu
       // de dupliquer.
@@ -250,6 +252,7 @@ export default function TeacherAttendanceScreen() {
           statut:      absent.has(e.id) ? 'absent' : 'present',
           professorId: profile.uid,
           createdAt:   Timestamp.now(),
+          ...period,
           // Absence déclarée par le parent → justifiée d'office avec son motif.
           ...(absent.has(e.id) && declaredFor(e.id)
             ? { justified: true, raison: declaredFor(e.id)!.reason }

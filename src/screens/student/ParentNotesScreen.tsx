@@ -22,6 +22,7 @@ export default function ParentNotesScreen() {
 
   const parent = useParentData()
   const [selectedChildId, setSelectedChildId] = useState<string>('')
+  const [scope, setScope] = useState<'semester' | 'academicYear'>('semester')
 
   useEffect(() => {
     // Sélection invalide (enfant délié/retiré en cours de session) → rabat sur
@@ -41,7 +42,7 @@ export default function ParentNotesScreen() {
     [parent.eleves, selectedChildId],
   )
 
-  const { loading, error, report, competenceReport } = useParentNotes(selectedChildId, selectedEleve?.classe)
+  const { loading, error, report, competenceReport } = useParentNotes(selectedChildId, selectedEleve?.classe, scope)
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
@@ -98,6 +99,29 @@ export default function ParentNotesScreen() {
         ))}
       </ScrollView>
 
+      <View style={styles.scopeRow}>
+        <Pressable
+          onPress={() => setScope('semester')}
+          accessibilityRole="button"
+          accessibilityState={{ selected: scope === 'semester' }}
+          style={[styles.scopeChip, { backgroundColor: scope === 'semester' ? theme.primary : theme.surface, borderColor: scope === 'semester' ? theme.primary : theme.border }]}
+        >
+          <Text style={{ color: scope === 'semester' ? '#fff' : theme.text, fontFamily: theme.fonts.semibold, fontSize: 12 }}>
+            {t('parent.currentSemester')}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setScope('academicYear')}
+          accessibilityRole="button"
+          accessibilityState={{ selected: scope === 'academicYear' }}
+          style={[styles.scopeChip, { backgroundColor: scope === 'academicYear' ? theme.primary : theme.surface, borderColor: scope === 'academicYear' ? theme.primary : theme.border }]}
+        >
+          <Text style={{ color: scope === 'academicYear' ? '#fff' : theme.text, fontFamily: theme.fonts.semibold, fontSize: 12 }}>
+            {t('parent.viewAcademicYear')}
+          </Text>
+        </Pressable>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {(error || parent.error) && !report && !competenceReport ? (
           <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
@@ -134,5 +158,7 @@ const styles = StyleSheet.create({
   chipScroll: { flexGrow: 0, flexShrink: 0, minHeight: 58 },
   chips: { paddingHorizontal: 20, paddingTop: 2, paddingBottom: 14, gap: 8, alignItems: 'center' },
   chip: { minHeight: 38, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 999, borderWidth: 1, marginEnd: 6 },
+  scopeRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 12 },
+  scopeChip: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 999, borderWidth: 1 },
   scroll: { paddingBottom: 32 },
 })

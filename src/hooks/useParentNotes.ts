@@ -6,6 +6,9 @@ import {
   type ClassStatsDoc,
   type CompetenceValue,
 } from '../services/notesService'
+import { currentAcademicPeriod } from '../utils/academicPeriod'
+
+export type ParentNotesScope = 'semester' | 'academicYear'
 
 export interface SubjectGradeReal {
   subject: string
@@ -17,6 +20,7 @@ export interface SubjectGradeReal {
 
 export interface ChildReportReal {
   semestre: string
+  hasClassComparison: boolean
   generalAvg: number
   rank: string
   honor: 'felicitations' | 'encouragements' | 'avertissement' | null
@@ -70,7 +74,12 @@ function competenceTrend(s1: CompetenceValue | null, s2: CompetenceValue | null)
   return b > a ? 'up' : 'down'
 }
 
-export function useParentNotes(eleveId: string | undefined, classe: string | undefined) {
+export function useParentNotes(
+  eleveId: string | undefined,
+  classe: string | undefined,
+  scope: ParentNotesScope = 'semester',
+) {
+  const period = currentAcademicPeriod()
   const [notes, setNotes] = useState<NoteDoc[]>([])
   const [classStats, setClassStats] = useState<ClassStatsDoc | null>(null)
   const [loading, setLoading] = useState(true)
@@ -82,11 +91,15 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
     setError(null)
     const unsub = subscribeNotesForEleve(
       eleveId,
+      {
+        academicYear: period.academicYear,
+        ...(scope === 'semester' ? { semestre: period.semestre } : {}),
+      },
       list => { setNotes(list); setError(null); setLoading(false) },
       err => { setError(err.message); setLoading(false) },
     )
     return unsub
-  }, [eleveId])
+  }, [eleveId, period.academicYear, period.semestre, scope])
 
   const semestres = useMemo(() => {
     const set = new Set<string>()
@@ -94,20 +107,24 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
     return [...set].sort()
   }, [notes])
 
-  const latestSemestre = semestres[semestres.length - 1] || ''
-  const prevSemestre = semestres.length >= 2 ? semestres[semestres.length - 2] : ''
+  const latestSemestre = scope === 'semester'
+    ? period.semestre
+    : semestres[semestres.length - 1] || ''
+  const prevSemestre = ''
 
   // Moyenne/rang de classe : agrégat serveur ANONYME (classStats) — plus
   // jamais les notes brutes des autres élèves (confidentialité).
   useEffect(() => {
-    if (!classe || !latestSemestre) { setClassStats(null); return }
-    getClassStats(classe, latestSemestre).then(setClassStats).catch(() => setClassStats(null))
-  }, [classe, latestSemestre])
+    if (scope !== 'semester' || !classe || !latestSemestre) { setClassStats(null); return }
+    getClassStats(classe, period.academicYear, latestSemestre).then(setClassStats).catch(() => setClassStats(null))
+  }, [classe, latestSemestre, period.academicYear, scope])
 
   const report: ChildReportReal | null = useMemo(() => {
     if (!latestSemestre || notes.length === 0) return null
 
-    const currentNotes = notes.filter(n => n.semestre === latestSemestre && typeof n.note === 'number')
+    const currentNotes = notes.filter(n =>
+      (scope === 'academicYear' || n.semestre === latestSemestre) && typeof n.note === 'number'
+    )
     const prevNotes = prevSemestre ? notes.filter(n => n.semestre === prevSemestre && typeof n.note === 'number') : []
     if (currentNotes.length === 0) return null
 
@@ -166,14 +183,15 @@ export function useParentNotes(eleveId: string | undefined, classe: string | und
     const bareme: 10 | 20 = classStats?.bareme || (/aep/i.test(classe || '') ? 10 : 20)
 
     return {
-      semestre: latestSemestre,
+      semestre: scope === 'academicYear' ? `Année ${period.academicYear}` : latestSemestre,
+      hasClassComparison: scope === 'semester' && classStats != null,
       generalAvg,
       rank,
       honor: computeHonor(generalAvg, bareme),
       subjects,
       bareme,
     }
-  }, [notes, classStats, latestSemestre, prevSemestre, classe])
+  }, [notes, classStats, latestSemestre, prevSemestre, classe, period.academicYear, scope])
 
   const competenceReport: ChildCompetenceReportReal | null = useMemo(() => {
     const competenceNotes = notes.filter(n => n.competence)

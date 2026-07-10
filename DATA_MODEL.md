@@ -154,6 +154,9 @@ Document ID auto-généré.
 | `templateId` | string | optionnel | Si généré depuis un template |
 | `templateVariables` | object | optionnel | Variables substitution |
 | `createdAt` | Timestamp | ✅ | |
+| `academicYear` | string | ✅ | Année scolaire, ex. `2025-2026` |
+| `semestre` | `'S1' \| 'S2'` | ✅ | Semestre scolaire de création |
+| `monthKey` | string | ✅ | Mois actif, ex. `2026-07` |
 | `readBy` | `string[]` | optionnel | UIDs ayant lu |
 
 **Indexes nécessaires** :
@@ -178,16 +181,17 @@ Document ID auto-généré.
 | `classe` | string | ✅ | Classe à la date de la note |
 | `matiere` | string | ✅ | Sujet (ex: `math`) |
 | `matiereLabel` | string | optionnel | Label affichage (ex: `Mathématiques`) |
-| `trimestre` | `1 \| 2 \| 3` | ✅ | Trimestre |
-| `valeur` | number | ✅ | Note 0-20 |
+| `academicYear` | string | ✅ | Année scolaire, ex. `2025-2026` |
+| `semestre` | `'S1' \| 'S2'` | ✅ | Semestre |
+| `note` | number | ✅ | Note 0-20 (ou moyenne des `controles`) |
 | `coef` | number | optionnel | Coefficient |
 | `professorId` | string | ✅ | UID du prof qui a saisi |
 | `commentaire` | string | optionnel | Annotation |
 | `createdAt` | Timestamp | ✅ | |
 
 **Indexes nécessaires** :
-- `(eleveId ASC, trimestre ASC, matiere ASC)` pour bulletin
-- `(classe ASC, matiere ASC, trimestre ASC)` pour stats classe
+- `(eleveId ASC, academicYear ASC, semestre ASC)` pour bulletin
+- `(classe ASC, academicYear ASC, semestre ASC, matiere ASC)` pour stats classe
 
 **Sécurité** :
 - Read : prof concerné, parent de l'élève (where `eleveId == eleve.codeMassar AND eleve.parentUid == request.auth.uid`), admin

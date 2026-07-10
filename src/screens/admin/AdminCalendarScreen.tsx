@@ -4,7 +4,7 @@ import {
   Pressable, Alert, Linking,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { collection, onSnapshot, type Unsubscribe } from 'firebase/firestore'
+import { collection, onSnapshot, query, where, type Unsubscribe } from 'firebase/firestore'
 import {
   ChevronLeft, ChevronRight, Plus, Trash2, X, BookOpen, FileText, Image as ImageIcon, Clock, Users,
 } from 'lucide-react-native'
@@ -20,6 +20,7 @@ import {
 import type { Attachment } from '../../services/StorageService'
 import { toDoc } from '../../services/firestore'
 import * as Haptics from 'expo-haptics'
+import { academicPeriodForDate } from '../../utils/academicPeriod'
 
 const JOUR_TYPES: { value: JourType; labelKey: string; color: string }[] = [
   { value: 'vacances', labelKey: 'calendar.vacances', color: '#52B788' },
@@ -157,7 +158,12 @@ export default function AdminCalendarScreen() {
   useEffect(() => { loadJours() }, [loadJours])
 
   useEffect(() => {
-    const unsub: Unsubscribe = onSnapshot(collection(db, 'devoirs'), snap => {
+    const period = academicPeriodForDate(monthDate)
+    const unsub: Unsubscribe = onSnapshot(query(
+      collection(db, 'devoirs'),
+      where('academicYear', '==', period.academicYear),
+      where('monthKey', '==', period.monthKey),
+    ), snap => {
       setTasks(snap.docs.map(d => {
         const data = toDoc<{
           titre?: string; classeId?: string; teacherNom?: string; description?: string
@@ -176,7 +182,7 @@ export default function AdminCalendarScreen() {
       }).filter(t => t.dateLimite >= visibleStart && t.dateLimite <= visibleEnd))
     }, () => {})
     return () => unsub()
-  }, [visibleStart, visibleEnd])
+  }, [monthDate, visibleStart, visibleEnd])
 
   const shiftMonth = (delta: number) => {
     Haptics.selectionAsync()

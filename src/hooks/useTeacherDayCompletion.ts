@@ -17,6 +17,7 @@ import { db } from '../config/firebase'
 import { toDoc } from '../services/firestore'
 import type { WeeklySlot } from '../services/scheduleService'
 import type { AbsenceDoc } from '../services/absencesService'
+import { currentAcademicPeriod, localISODate } from '../utils/academicPeriod'
 
 export interface DayCompletion {
   /** clés `${classe}|${seance}` dont l'appel est enregistré aujourd'hui */
@@ -26,13 +27,14 @@ export interface DayCompletion {
 }
 
 function todayISO(): string {
-  return new Date().toISOString().split('T')[0]
+  return localISODate()
 }
 
 export function useTeacherDayCompletion(
   todaySlots: WeeklySlot[],
   teacherUid: string | undefined,
 ): DayCompletion {
+  const period = currentAcademicPeriod()
   const [attendanceDone, setAttendanceDone] = useState<Set<string>>(new Set())
   const [homeworkPosted, setHomeworkPosted] = useState<Set<string>>(new Set())
 
@@ -66,6 +68,8 @@ export function useTeacherDayCompletion(
       const devoirsSnap = await getDocs(query(
         collection(db, 'devoirs'),
         where('teacherId', '==', teacherUid),
+        where('academicYear', '==', period.academicYear),
+        where('monthKey', '==', period.monthKey),
       ))
       const posted = new Set<string>()
       devoirsSnap.forEach(d => {
@@ -78,7 +82,7 @@ export function useTeacherDayCompletion(
     } catch {
       // Best-effort : des chips absentes ne doivent pas casser l'EDT.
     }
-  }, [teacherUid, classesKey])
+  }, [teacherUid, classesKey, period.academicYear, period.monthKey])
 
   // Au focus : le prof revient de l'appel / de la création d'un devoir.
   useFocusEffect(useCallback(() => { load() }, [load]))

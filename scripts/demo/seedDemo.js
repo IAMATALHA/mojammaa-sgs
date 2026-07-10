@@ -21,7 +21,20 @@ const fs = require('fs')
 
 const COMMIT = process.argv.includes('--commit')
 const TODAY = '2026-06-20'
+const ACADEMIC_YEAR = '2025-2026'
 const DEMO_PASSWORD = 'demo1234'
+
+function periodForISO(iso) {
+  const [year, month] = iso.split('-').map(Number)
+  const schoolYearStart = month >= 9 ? year : year - 1
+  return {
+    academicYear: `${schoolYearStart}-${schoolYearStart + 1}`,
+    semestre: month >= 9 || month <= 1 ? 'S1' : 'S2',
+    monthKey: `${year}-${String(month).padStart(2, '0')}`,
+  }
+}
+
+const CURRENT_PERIOD = periodForISO(new Date().toISOString().slice(0, 10))
 
 // ─────────────────────────────────────────────────────────────────────────
 // PRNG déterministe (mulberry32) — même graine ⇒ mêmes données.
@@ -217,9 +230,9 @@ function buildNotes(students) {
         const subjOffset = (rng(`so:${st.codeMassar}:${subj.key}:${sem}`)() - 0.5) * 4
         const note = clamp(round2(classBase.get(st.classe) + studentOffset + subjOffset), 3, 19.5)
         notes.push({
-          id: `${st.codeMassar}_${sem}_${subj.key}`,
+          id: `${st.codeMassar}_${ACADEMIC_YEAR}_${sem}_${subj.key}`,
           eleveId: st.codeMassar, eleveNom: st.nom, elevePrenom: st.prenom, codeMassar: st.codeMassar,
-          classe: st.classe, cycle: st.cycle, semestre: sem,
+          classe: st.classe, cycle: st.cycle, academicYear: ACADEMIC_YEAR, semestre: sem,
           matiere: subj.key, matiereLabel: subj.label, note,
         })
       }
@@ -404,7 +417,7 @@ async function main() {
   // ── 5. notes ──
   const noteDocs = notes.map(n => ({ ref: db.collection('notes').doc(n.id), data: {
     eleveId: n.eleveId, eleveNom: n.eleveNom, elevePrenom: n.elevePrenom, codeMassar: n.codeMassar,
-    classe: n.classe, cycle: n.cycle, semestre: n.semestre, matiere: n.matiere, matiereLabel: n.matiereLabel,
+    classe: n.classe, cycle: n.cycle, academicYear: n.academicYear, semestre: n.semestre, matiere: n.matiere, matiereLabel: n.matiereLabel,
     note: n.note, demo: true, importedBy: 'demo-seed', importedAt: TS(),
   } }))
   await commitDocs(noteDocs)
@@ -418,6 +431,7 @@ async function main() {
     return { ref: db.collection('absences').doc(id), data: {
       eleveId: a.st.codeMassar, eleveNom: a.st.nom, elevePrenom: a.st.prenom, classe: a.st.classe,
       date: a.date, seance: a.seance, statut: a.statut,
+      ...periodForISO(a.date),
       professorId: teacherUid, professorNom: `${demoTeacherLocal.prenom} ${demoTeacherLocal.nom}`, createdAt: TS(),
     } }
   })
@@ -450,11 +464,14 @@ async function main() {
   // Garde-fou : n'émettre que des devoirs pour des classes réellement enseignées
   // par le prof démo (évite toute régression si la liste ci-dessus dérive).
   const teacherClasses = new Set(demoTeacherLocal.classes)
-  const devoirDocs = devoirsSeed.filter(x => teacherClasses.has(x.classeId)).map(x => ({ ref: db.collection('devoirs').doc(), data: {
-    titre: x.titre, description: x.description, type: x.type, classeId: x.classeId,
-    teacherId: teacherUid, teacherNom: `${demoTeacherLocal.prenom} ${demoTeacherLocal.nom}`,
-    dateLimite: future(x.d), attachments: [], createdAt: TS(),
-  } }))
+  const devoirDocs = devoirsSeed.filter(x => teacherClasses.has(x.classeId)).map(x => {
+    const dateLimite = future(x.d)
+    return { ref: db.collection('devoirs').doc(), data: {
+      titre: x.titre, description: x.description, type: x.type, classeId: x.classeId,
+      teacherId: teacherUid, teacherNom: `${demoTeacherLocal.prenom} ${demoTeacherLocal.nom}`,
+      dateLimite, ...periodForISO(dateLimite), attachments: [], createdAt: TS(),
+    } }
+  })
   await commitDocs(devoirDocs)
   console.log(`   ✓ devoirs         ${devoirDocs.length}`)
 
@@ -466,7 +483,7 @@ async function main() {
   ]
   const ressDocs = ressSeed.map(x => ({ ref: db.collection('ressources').doc(), data: {
     titre: x.titre, matiere: x.matiere, classeId: x.classeId, attachments: [],
-    teacherId: teacherUid, teacherNom: `${demoTeacherLocal.prenom} ${demoTeacherLocal.nom}`, viewedBy: [], createdAt: TS(),
+    teacherId: teacherUid, teacherNom: `${demoTeacherLocal.prenom} ${demoTeacherLocal.nom}`, viewedBy: [], ...CURRENT_PERIOD, createdAt: TS(),
   } }))
   await commitDocs(ressDocs)
   console.log(`   ✓ ressources      ${ressDocs.length}`)
@@ -496,7 +513,7 @@ async function main() {
     type: 'announcement', category: 'announcement', priority: 'normal', status: 'sent',
     toType: m.toType, toIds: m.toIds || [], toLabel: m.toLabel || null, classe: m.classe || null,
     subject: m.subject, body: m.body, fromId: m.fromId, fromNom: m.fromNom, fromRole: m.fromRole,
-    readBy: [], deletedBy: [], createdAt: TS(),
+    readBy: [], deletedBy: [], ...CURRENT_PERIOD, createdAt: TS(),
   } }))
   await commitDocs(msgDocs)
   console.log(`   ✓ messages        ${msgDocs.length}`)
@@ -515,14 +532,14 @@ async function main() {
   const { computeSchoolStats } = require('../../functions/schoolStats')
   const groups = new Map()
   for (const n of notes) {
-    const k = `${n.classe}|${n.semestre}`
+    const k = `${n.academicYear}|${n.classe}|${n.semestre}`
     if (!groups.has(k)) groups.set(k, [])
     groups.get(k).push({ note: n.note, matiereLabel: n.matiereLabel, matiere: n.matiere, eleveId: n.eleveId })
   }
   const csDocs = []
   for (const [k, arr] of groups.entries()) {
-    const [classe, semestre] = k.split('|')
-    csDocs.push({ ref: db.collection('classStats').doc(statsDocId(classe, semestre)), data: { classe, semestre, ...computeClassStats(arr), updatedAt: TS() } })
+    const [academicYear, classe, semestre] = k.split('|')
+    csDocs.push({ ref: db.collection('classStats').doc(statsDocId(academicYear, classe, semestre)), data: { academicYear, classe, semestre, ...computeClassStats(arr), updatedAt: TS() } })
   }
   await commitDocs(csDocs)
   console.log(`   ✓ classStats      ${csDocs.length}`)

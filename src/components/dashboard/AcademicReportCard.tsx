@@ -169,21 +169,23 @@ export default function AcademicReportCard({ report }: AcademicReportCardProps) 
               </Text>
               <Text style={[styles.scoreMax, { fontFamily: theme.fonts.semibold }]}>/ {report.bareme}</Text>
             </View>
-            <View style={[
-              styles.deltaPill,
-              { backgroundColor: tone.pillBg, borderColor: tone.pillBorder },
-              isAr && styles.selfEnd,
-              isAr && styles.rowReverse,
-            ]}>
-              {summary.classDelta >= 0 ? (
-                <TrendingUp size={13} color="#fff" strokeWidth={2.4} />
-              ) : (
-                <TrendingDown size={13} color="#fff" strokeWidth={2.4} />
-              )}
-              <Text style={[styles.deltaText, { fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold }]}>
-                {deltaText}
-              </Text>
-            </View>
+            {report.hasClassComparison ? (
+              <View style={[
+                styles.deltaPill,
+                { backgroundColor: tone.pillBg, borderColor: tone.pillBorder },
+                isAr && styles.selfEnd,
+                isAr && styles.rowReverse,
+              ]}>
+                {summary.classDelta >= 0 ? (
+                  <TrendingUp size={13} color="#fff" strokeWidth={2.4} />
+                ) : (
+                  <TrendingDown size={13} color="#fff" strokeWidth={2.4} />
+                )}
+                <Text style={[styles.deltaText, { fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold }]}>
+                  {deltaText}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <ScoreRing
@@ -200,8 +202,8 @@ export default function AcademicReportCard({ report }: AcademicReportCardProps) 
           <HeroStat icon={CircleHelp} label={t('parent.semester')} value={report.semestre || '—'} theme={theme} tone={tone} />
           <HeroStat
             icon={CheckCircle2}
-            label={t('parent.strongSubjects')}
-            value={`${summary.strongSubjects}/${report.subjects.length}`}
+            label={report.hasClassComparison ? t('parent.strongSubjects') : t('parent.subjectDetail')}
+            value={report.hasClassComparison ? `${summary.strongSubjects}/${report.subjects.length}` : String(report.subjects.length)}
             theme={theme}
             tone={tone}
           />
@@ -261,12 +263,14 @@ export default function AcademicReportCard({ report }: AcademicReportCardProps) 
               {t('parent.subjectCount', { count: report.subjects.length })}
             </Text>
           </View>
-          <View style={[styles.benchmarkBadge, { backgroundColor: theme.primarySurface }, isAr && styles.rowReverse]}>
-            <Target size={13} color={theme.primary} strokeWidth={2.3} />
-            <Text style={[styles.benchmarkText, { color: theme.primary, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold }]}>
-              {t('parent.classComparison')}
-            </Text>
-          </View>
+          {report.hasClassComparison ? (
+            <View style={[styles.benchmarkBadge, { backgroundColor: theme.primarySurface }, isAr && styles.rowReverse]}>
+              <Target size={13} color={theme.primary} strokeWidth={2.3} />
+              <Text style={[styles.benchmarkText, { color: theme.primary, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.semibold }]}>
+                {t('parent.classComparison')}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.subjectList}>
@@ -278,6 +282,7 @@ export default function AcademicReportCard({ report }: AcademicReportCardProps) 
               isLast={index === report.subjects.length - 1}
               theme={theme}
               isAr={isAr}
+              hasClassComparison={report.hasClassComparison}
             />
           ))}
         </View>
@@ -390,13 +395,14 @@ function InsightTile({
 }
 
 function SubjectGradeRow({
-  grade, bareme, isLast, theme, isAr,
+  grade, bareme, isLast, theme, isAr, hasClassComparison,
 }: {
   grade: SubjectGradeReal
   bareme: number
   isLast: boolean
   theme: Theme
   isAr: boolean
+  hasClassComparison: boolean
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -421,20 +427,24 @@ function SubjectGradeRow({
           >
             {grade.subject}
           </Text>
-          <Text
-            numberOfLines={1}
-            style={[styles.subjectMeta, { color: theme.textSoft, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.regular }]}
-          >
-            {t('parent.classAvg', { avg: grade.classAvg.toFixed(1) })}
-          </Text>
+          {hasClassComparison ? (
+            <Text
+              numberOfLines={1}
+              style={[styles.subjectMeta, { color: theme.textSoft, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.regular }]}
+            >
+              {t('parent.classAvg', { avg: grade.classAvg.toFixed(1) })}
+            </Text>
+          ) : null}
         </View>
         <View style={[styles.gradeBlock, isAr && { alignItems: 'flex-start', marginStart: 0, marginEnd: 12 }]}>
           <Text style={[styles.gradeValue, { color: tint, fontFamily: theme.fonts.black }]}>
             {grade.average.toFixed(1)}
           </Text>
-          <Text style={[styles.gradeDiff, { color: diffColor, fontFamily: theme.fonts.semibold }]}>
-            {diff > 0 ? '+' : ''}{diff.toFixed(1)}
-          </Text>
+          {hasClassComparison ? (
+            <Text style={[styles.gradeDiff, { color: diffColor, fontFamily: theme.fonts.semibold }]}>
+              {diff > 0 ? '+' : ''}{diff.toFixed(1)}
+            </Text>
+          ) : null}
         </View>
         {expandable && (
           <ChevronDown

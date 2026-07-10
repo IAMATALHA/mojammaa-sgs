@@ -157,6 +157,8 @@ const fr = {
     generalAvg: 'Moyenne générale',
     reportSummary: 'Lecture du bulletin',
     semester: 'Semestre',
+    currentSemester: 'Semestre en cours',
+    viewAcademicYear: "Voir l'année",
     classComparison: 'Comparaison classe',
     aboveClassShort: '+{{value}} vs classe',
     belowClassShort: '-{{value}} vs classe',

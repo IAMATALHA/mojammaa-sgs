@@ -21,6 +21,7 @@ import {
 import { db } from '../config/firebase'
 import { toDocs } from './firestore'
 import type { Attachment } from './StorageService'
+import { currentAcademicPeriod } from '../utils/academicPeriod'
 
 export interface RessourceDoc {
   id?:          string
@@ -33,6 +34,9 @@ export interface RessourceDoc {
   teacherNom:   string
   viewedBy?:    string[]
   createdAt?:   Timestamp
+  academicYear?: string
+  semestre?:     string
+  monthKey?:     string
 }
 
 const COL = 'ressources'
@@ -44,6 +48,7 @@ export async function createRessource(
   Object.entries(input).forEach(([k, v]) => { if (v !== undefined) clean[k] = v })
   clean.viewedBy = []
   clean.createdAt = Timestamp.now()
+  Object.assign(clean, currentAcademicPeriod())
   const ref = await addDoc(collection(db, COL), clean)
   return ref.id
 }
@@ -58,7 +63,13 @@ export function subscribeRessourcesForClasses(
     onChange([])
     return () => {}
   }
-  const q = query(collection(db, COL), where('classeId', 'in', classes.slice(0, 10)))
+  const period = currentAcademicPeriod()
+  const q = query(
+    collection(db, COL),
+    where('classeId', 'in', classes.slice(0, 10)),
+    where('academicYear', '==', period.academicYear),
+    where('monthKey', '==', period.monthKey),
+  )
   return onSnapshot(
     q,
     snap => onChange(

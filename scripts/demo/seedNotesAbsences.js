@@ -16,6 +16,18 @@ const admin = require('firebase-admin')
 
 const COMMIT = process.argv.includes('--commit')
 
+function periodForISO(iso) {
+  const [year, month] = iso.split('-').map(Number)
+  const schoolYearStart = month >= 9 ? year : year - 1
+  return {
+    academicYear: `${schoolYearStart}-${schoolYearStart + 1}`,
+    semestre: month >= 9 || month <= 1 ? 'S1' : 'S2',
+    monthKey: `${year}-${String(month).padStart(2, '0')}`,
+  }
+}
+
+const CURRENT_PERIOD = periodForISO(new Date().toISOString().slice(0, 10))
+
 const SUBJECTS = {
   primaire: [
     { key: 'arabe', label: 'Arabe' }, { key: 'francais', label: 'Français' }, { key: 'maths', label: 'Maths' },
@@ -80,9 +92,9 @@ function buildNotes(students) {
         const proportion = clamp(classBase.get(st.classe) + studentOffset + subjOffset, 0.15, 0.98)
         const note = round2(proportion * bareme)
         notes.push({
-          id: `${st.codeMassar}_${sem}_${subj.key}`,
+          id: `${st.codeMassar}_${CURRENT_PERIOD.academicYear}_${sem}_${subj.key}`,
           eleveId: st.codeMassar, eleveNom: st.nom, elevePrenom: st.prenom, codeMassar: st.codeMassar,
-          classe: st.classe, cycle: st.cycle, semestre: sem,
+          classe: st.classe, cycle: st.cycle, academicYear: CURRENT_PERIOD.academicYear, semestre: sem,
           matiere: subj.key, matiereLabel: subj.label, note, bareme,
         })
       }
@@ -152,7 +164,7 @@ async function main() {
 
   const noteDocs = notes.map(n => ({ ref: db.collection('notes').doc(n.id), data: {
     eleveId: n.eleveId, eleveNom: n.eleveNom, elevePrenom: n.elevePrenom, codeMassar: n.codeMassar,
-    classe: n.classe, cycle: n.cycle, semestre: n.semestre, matiere: n.matiere, matiereLabel: n.matiereLabel,
+    classe: n.classe, cycle: n.cycle, academicYear: n.academicYear, semestre: n.semestre, matiere: n.matiere, matiereLabel: n.matiereLabel,
     note: n.note, bareme: n.bareme, demo: true, importedBy: 'demo-seed', importedAt: TS(),
   } }))
   await commitDocs(db, noteDocs)
@@ -163,7 +175,7 @@ async function main() {
     const id = `${a.st.codeMassar}_${a.date}_${s1.replace(':', '')}_${s2.replace(':', '')}`
     return { ref: db.collection('absences').doc(id), data: {
       eleveId: a.st.codeMassar, eleveNom: a.st.nom, elevePrenom: a.st.prenom, classe: a.st.classe,
-      date: a.date, seance: a.seance, statut: a.statut, demo: true, createdAt: TS(),
+      date: a.date, seance: a.seance, statut: a.statut, ...periodForISO(a.date), demo: true, createdAt: TS(),
     } }
   })
   await commitDocs(db, absDocs)

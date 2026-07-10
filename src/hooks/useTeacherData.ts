@@ -22,6 +22,7 @@ import { toDoc } from '../services/firestore'
 import { db } from '../config/firebase'
 import type { UserProfile } from '../types'
 import type { ScheduleEntry, ScheduleStatus } from '../utils/dashboardTypes'
+import { currentAcademicPeriod, localISODate } from '../utils/academicPeriod'
 
 export interface TeacherKpis {
   classes:    number
@@ -94,6 +95,7 @@ function getClassesFromProfile(profile: UserProfile | null | undefined): string[
 // ── Hook ──────────────────────────────────────────────────────────────────
 
 export function useTeacherData(): TeacherData {
+  const period = currentAcademicPeriod()
   const { profile } = useAuth()
   const [eleves,           setEleves]          = useState<EleveDoc[]>([])
   const [schedule,         setSchedule]        = useState<ScheduleDoc | null>(null)
@@ -162,10 +164,12 @@ export function useTeacherData(): TeacherData {
   // Count pending devoirs (dateLimite >= today)
   useEffect(() => {
     if (!profile?.uid) { setPendingCount(0); return }
-    const today = new Date().toISOString().split('T')[0]
+    const today = localISODate()
     getDocs(query(
       collection(db, 'devoirs'),
       where('teacherId', '==', profile.uid),
+      where('academicYear', '==', period.academicYear),
+      where('monthKey', '==', period.monthKey),
     )).then(snap => {
       const count = snap.docs.filter(d => {
         const dl = toDoc<{ dateLimite?: string }>(d).dateLimite
@@ -173,7 +177,7 @@ export function useTeacherData(): TeacherData {
       }).length
       setPendingCount(count)
     }).catch(() => setPendingCount(0))
-  }, [profile?.uid])
+  }, [profile?.uid, period.academicYear, period.monthKey])
 
   const byClasse = useMemo(() => groupByClasse(eleves), [eleves])
 

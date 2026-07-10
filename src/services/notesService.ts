@@ -12,6 +12,7 @@ export interface NoteDoc {
   eleveId: string
   codeMassar: string
   classe: string
+  academicYear: string
   semestre: string
   matiere: string
   matiereLabel: string
@@ -80,6 +81,7 @@ function docToNote(id: string, data: Record<string, unknown>): NoteDoc | null {
     eleveId: asString(data.eleveId),
     codeMassar: asString(data.codeMassar) || asString(data.eleveId),
     classe: asString(data.classe),
+    academicYear: asString(data.academicYear),
     semestre: asString(data.semestre),
     matiere: asString(data.matiereLabel) || asString(data.matiere),
     matiereLabel: asString(data.matiereLabel) || asString(data.matiere),
@@ -96,11 +98,17 @@ function docToNote(id: string, data: Record<string, unknown>): NoteDoc | null {
 
 export function subscribeNotesForEleve(
   eleveId: string,
+  period: { academicYear: string; semestre?: string },
   onChange: (notes: NoteDoc[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
+  const constraints = [
+    where('eleveId', '==', eleveId),
+    where('academicYear', '==', period.academicYear),
+  ]
+  if (period.semestre) constraints.push(where('semestre', '==', period.semestre))
   return onSnapshot(
-    query(collection(db, 'notes'), where('eleveId', '==', eleveId)),
+    query(collection(db, 'notes'), ...constraints),
     snap => {
       const list: NoteDoc[] = []
       snap.docs.forEach(d => {
@@ -114,12 +122,13 @@ export function subscribeNotesForEleve(
 }
 
 /**
- * Agrégat ANONYME d'une (classe, semestre), maintenu côté serveur par la CF
+ * Agrégat ANONYME d'une (année scolaire, classe, semestre), maintenu côté serveur par la CF
  * `onNoteWritten` (functions/classStats.js). Remplace l'ancien getClassNotes()
  * qui téléchargeait les notes brutes de TOUTE la classe (confidentialité) —
  * ne pas réintroduire de lecture classe entière côté parent.
  */
 export interface ClassStatsDoc {
+  academicYear: string
   classe:      string
   semestre:    string
   subjectAvgs: Record<string, number>  // moyenne de classe par matiereLabel
@@ -129,12 +138,21 @@ export interface ClassStatsDoc {
   bareme:      10 | 20 | null
 }
 
-export async function getClassStats(classe: string, semestre: string): Promise<ClassStatsDoc | null> {
-  const id = `${classe}_${semestre}`.replace(/\//g, '_')
+function classStatsId(academicYear: string, classe: string, semestre: string): string {
+  return `${academicYear}__${classe}__${semestre}`.replace(/\//g, '_')
+}
+
+export async function getClassStats(
+  classe: string,
+  academicYear: string,
+  semestre: string,
+): Promise<ClassStatsDoc | null> {
+  const id = classStatsId(academicYear, classe, semestre)
   const snap = await getDoc(doc(db, 'classStats', id))
   if (!snap.exists()) return null
   const data = snap.data() as Record<string, unknown>
   return {
+    academicYear: asString(data.academicYear) || academicYear,
     classe:      asString(data.classe) || classe,
     semestre:    asString(data.semestre) || semestre,
     subjectAvgs: data.subjectAvgs && typeof data.subjectAvgs === 'object'

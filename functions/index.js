@@ -319,29 +319,30 @@ exports.checkPushReceipts = onSchedule(
   },
 )
 
-// ── classStats : agrégats anonymes par (classe, semestre) ──────────────────
+// ── classStats : agrégats anonymes par (année scolaire, classe, semestre) ──
 //
 // Pourquoi : l'écran Notes parent affiche moyenne de classe + rang. Avant, il
 // lisait TOUTES les notes brutes de la classe (trou de confidentialité — un
 // parent voyait les notes des autres enfants). Ce trigger maintient un agrégat
-// anonyme dans classStats/{classe}_{semestre} ; le client ne lit plus que ça,
+// anonyme dans classStats/{academicYear}__{classe}__{semestre} ; le client ne lit plus que ça,
 // ce qui permettra de durcir la règle de lecture sur `notes`.
 
-/** Recalcule (full recompute, idempotent) l'agrégat d'une (classe, semestre). */
-async function refreshClassStats(classe, semestre) {
-  if (!classe || !semestre) return
+/** Recalcule (full recompute, idempotent) l'agrégat d'une période de classe. */
+async function refreshClassStats(academicYear, classe, semestre) {
+  if (!academicYear || !classe || !semestre) return
   const snap = await db
     .collection('notes')
+    .where('academicYear', '==', academicYear)
     .where('classe', '==', classe)
     .where('semestre', '==', semestre)
     .get()
   const stats = computeClassStats(snap.docs.map((d) => d.data()))
-  const ref = db.collection('classStats').doc(statsDocId(classe, semestre))
+  const ref = db.collection('classStats').doc(statsDocId(academicYear, classe, semestre))
   if (stats.notesCount === 0) {
     await ref.delete()
     return
   }
-  await ref.set({ classe, semestre, ...stats, updatedAt: new Date() })
+  await ref.set({ academicYear, classe, semestre, ...stats, updatedAt: new Date() })
 }
 
 // ── classStatsDirty : coalescing du recalcul (voir onNoteWritten plus bas) ──
@@ -356,10 +357,10 @@ async function refreshClassStats(classe, semestre) {
 // groupe touché, toutes les 2 minutes, peu importe le nombre d'écritures
 // reçues entretemps. Compromis : classStats a jusqu'à ~2 min de retard
 // après une note modifiée (imperceptible pour une moyenne de classe).
-async function markClassStatsDirty(classe, semestre) {
-  if (!classe || !semestre) return
-  await db.collection('classStatsDirty').doc(statsDocId(classe, semestre)).set(
-    { classe, semestre, touchedAt: FieldValue.serverTimestamp() },
+async function markClassStatsDirty(academicYear, classe, semestre) {
+  if (!academicYear || !classe || !semestre) return
+  await db.collection('classStatsDirty').doc(statsDocId(academicYear, classe, semestre)).set(
+    { academicYear, classe, semestre, touchedAt: FieldValue.serverTimestamp() },
     { merge: true },
   )
 }
@@ -399,21 +400,19 @@ exports.onUserWritten = onDocumentWritten('users/{uid}', async (event) => {
   const before = event.data?.before?.exists ? event.data.before.data() : null
   const after = event.data?.after?.exists ? event.data.after.data() : null
 
-  // Offboarding (#2b) : supprimer users/{uid} ne révoque PAS la session Firebase
-  // Auth — le mot de passe resterait valide et le compte pourrait se reconnecter.
-  // À la suppression du doc, on DÉSACTIVE le compte Auth (révocation immédiate du
-  // credential). `disabled` plutôt que delete : réversible et auditable, et il
-  // suffit à bloquer toute connexion. Le garde onSnapshot côté client déconnecte
-  // déjà en cours de session ; ceci ferme la reconnexion ultérieure.
+  // Offboarding (#2b) : supprimer users/{uid} doit aussi supprimer définitivement
+  // le compte Firebase Auth, sinon l'email reste "pris" et bloque toute recréation
+  // (auth/email-already-in-use). Le garde onSnapshot côté client déconnecte déjà
+  // en cours de session ; ceci empêche toute reconnexion ultérieure.
   if (before && !after) {
     const uid = event.params.uid
     try {
-      await getAuth().updateUser(uid, { disabled: true })
-      logger.info('auth account disabled after user doc deletion', { uid })
+      await getAuth().deleteUser(uid)
+      logger.info('auth account deleted after user doc deletion', { uid })
     } catch (e) {
-      // Compte Auth déjà absent (supprimé séparément) : rien à révoquer.
-      if (e?.code === 'auth/user-not-found') logger.info('no auth account to disable', { uid })
-      else logger.error('failed to disable auth account', { uid, error: e?.message })
+      // Compte Auth déjà absent (supprimé séparément) : rien à faire.
+      if (e?.code === 'auth/user-not-found') logger.info('no auth account to delete', { uid })
+      else logger.error('failed to delete auth account', { uid, error: e?.message })
     }
   }
 
@@ -434,18 +433,20 @@ exports.onNoteWritten = onDocumentWritten('notes/{noteId}', async (event) => {
   // n'a aucun effet sur l'agrégat — ignorer ces écritures évite de marquer
   // "dirty" pour rien (ex: un script qui ne fait que retoucher updatedAt).
   const pick = (n) => (n ? JSON.stringify([
-    n.note, n.controles, n.bareme, n.cycle, n.classe, n.semestre,
+    n.note, n.controles, n.bareme, n.cycle, n.academicYear, n.classe, n.semestre,
     n.matiereLabel, n.matiere, n.eleveId,
   ]) : '')
   if (pick(before) === pick(after)) return
 
-  // Une note déplacée de classe/semestre impacte DEUX agrégats (ancien + nouveau).
+  // Une note déplacée de période/classe impacte DEUX agrégats (ancien + nouveau).
   const pairs = new Map()
   for (const d of [before, after]) {
-    if (d && d.classe && d.semestre) pairs.set(`${d.classe}|${d.semestre}`, [d.classe, d.semestre])
+    if (d && d.academicYear && d.classe && d.semestre) {
+      pairs.set(`${d.academicYear}|${d.classe}|${d.semestre}`, [d.academicYear, d.classe, d.semestre])
+    }
   }
-  for (const [classe, semestre] of pairs.values()) {
-    await markClassStatsDirty(classe, semestre)
+  for (const [academicYear, classe, semestre] of pairs.values()) {
+    await markClassStatsDirty(academicYear, classe, semestre)
   }
 })
 
@@ -459,8 +460,8 @@ exports.flushClassStatsDirty = onSchedule(
     const dirtySnap = await db.collection('classStatsDirty').get()
     if (dirtySnap.empty) return
     for (const doc of dirtySnap.docs) {
-      const { classe, semestre } = doc.data()
-      await refreshClassStats(classe, semestre)
+      const { academicYear, classe, semestre } = doc.data()
+      await refreshClassStats(academicYear, classe, semestre)
       await doc.ref.delete()
     }
     logger.info('classStats flushed', { groups: dirtySnap.size })
@@ -525,17 +526,33 @@ exports.weeklyDigest = onSchedule(
 // Pourquoi : l'écran Statistiques scannait 5 collections entières (notes,
 // absences… non bornées) à chaque ouverture → lent dès que les données
 // grossissent. On pré-calcule tout côté serveur dans UN document `stats/summary`
-// que le client lit en une lecture. Recalcul planifié (toutes les 30 min) +
-// callable à la demande (pull-to-refresh / amorçage initial).
+// que le client lit en une lecture. Le recalcul est déclenché explicitement
+// par un admin (pull-to-refresh), jamais en arrière-plan quand personne ne
+// consulte les statistiques.
 
-/** Recalcule l'agrégat complet depuis les 5 collections et l'écrit (Admin SDK). */
+function currentAcademicPeriod() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit',
+  }).formatToParts(new Date())
+  const year = Number(parts.find((part) => part.type === 'year')?.value)
+  const month = Number(parts.find((part) => part.type === 'month')?.value)
+  const schoolYearStart = month >= 9 ? year : year - 1
+  return {
+    academicYear: `${schoolYearStart}-${schoolYearStart + 1}`,
+    semestre: month >= 9 || month <= 1 ? 'S1' : 'S2',
+    monthKey: `${year}-${String(month).padStart(2, '0')}`,
+  }
+}
+
+/** Recalcule les statistiques de la période active et les écrit (Admin SDK). */
 async function refreshSchoolStats() {
+  const period = currentAcademicPeriod()
   const [eleves, users, notes, absences, devoirs, coefDoc] = await Promise.all([
     db.collection('eleves').get(),
     db.collection('users').get(),
-    db.collection('notes').get(),
-    db.collection('absences').get(),
-    db.collection('devoirs').get(),
+    db.collection('notes').where('academicYear', '==', period.academicYear).where('semestre', '==', period.semestre).get(),
+    db.collection('absences').where('academicYear', '==', period.academicYear).where('monthKey', '==', period.monthKey).get(),
+    db.collection('devoirs').where('academicYear', '==', period.academicYear).where('monthKey', '==', period.monthKey).get(),
     db.collection('settings').doc('coefficients').get(),
   ])
   const toRows = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }))
@@ -547,24 +564,12 @@ async function refreshSchoolStats() {
     devoirs: toRows(devoirs),
     coefficients: coefDoc.exists ? coefDoc.data() : null,
   })
-  await db.collection('stats').doc('summary').set({ ...summary, updatedAt: new Date() })
+  await db.collection('stats').doc('summary').set({ ...summary, ...period, updatedAt: new Date() })
   return summary
 }
 
-// Toutes les 2h (pas 30 min) : refreshSchoolStats() scanne INTÉGRALEMENT
-// eleves/users/notes/absences/devoirs à chaque exécution — coût en lectures
-// Firestore proportionnel à la taille de la base × fréquence. Un admin qui
-// veut des stats fraîches immédiatement peut forcer via recomputeSchoolStats
-// (pull-to-refresh), donc pas besoin d'un intervalle court par défaut.
-exports.aggregateSchoolStats = onSchedule(
-  { schedule: 'every 2 hours', timeZone: 'Africa/Casablanca' },
-  async () => {
-    const s = await refreshSchoolStats()
-    logger.info('stats/summary refreshed (scheduled)', { eleves: s.totalEleves, classes: s.totalClasses })
-  },
-)
-
-// Recalcul à la demande — réservé aux admins (pull-to-refresh + amorçage).
+// Recalcul à la demande — réservé aux admins (pull-to-refresh + amorçage
+// exceptionnel si stats/summary n'existe pas encore).
 exports.recomputeSchoolStats = onCall(async (request) => {
   const uid = request.auth && request.auth.uid
   if (!uid) throw new HttpsError('unauthenticated', 'Sign in required.')

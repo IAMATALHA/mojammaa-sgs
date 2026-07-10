@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, type Unsubscribe } from 'firebase
 import { db } from '../config/firebase'
 import { useParentData } from './useParentData'
 import type { Attachment } from '../services/StorageService'
+import { currentAcademicPeriod } from '../utils/academicPeriod'
 
 export interface ParentDevoir {
   id: string
@@ -21,6 +22,7 @@ function asString(v: unknown): string {
 }
 
 export function useParentDevoirs() {
+  const period = currentAcademicPeriod()
   const { eleves, children } = useParentData()
   const [devoirs, setDevoirs] = useState<ParentDevoir[]>([])
   const [loading, setLoading] = useState(true)
@@ -57,7 +59,12 @@ export function useParentDevoirs() {
       const bucketId = i / 10
       buckets.set(bucketId, new Map())
       unsubs.push(onSnapshot(
-        query(collection(db, 'devoirs'), where('classeId', 'in', chunk)),
+        query(
+          collection(db, 'devoirs'),
+          where('classeId', 'in', chunk),
+          where('academicYear', '==', period.academicYear),
+          where('monthKey', '==', period.monthKey),
+        ),
         snap => {
           const next = new Map<string, ParentDevoir>()
           snap.docs.forEach(d => {
@@ -85,7 +92,7 @@ export function useParentDevoirs() {
     }
 
     return () => unsubs.forEach(u => u())
-  }, [classes.join(',')])
+  }, [classes.join(','), period.academicYear, period.monthKey])
 
   const childClassMap = useMemo(() => {
     const map = new Map<string, string>()

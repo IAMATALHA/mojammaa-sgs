@@ -24,6 +24,7 @@ import type { AbsenceDoc } from '../../services/absencesService'
 import type { EleveDoc } from '../../services/elevesService'
 import type { TeacherStackParamList } from '../../navigation/types'
 import AnimatedCounter from '../../components/AnimatedCounter'
+import { currentAcademicPeriod } from '../../utils/academicPeriod'
 
 interface NoteRow {
   eleveId?: string
@@ -59,11 +60,6 @@ type ExpandedPanel = { classe: string; mode: 'score' | 'coverage' } | null
 
 const round1 = (value: number) => Math.round(value * 10) / 10
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value))
-
-function monthStart(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-}
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -190,6 +186,7 @@ export default function TeacherStatsScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedPanel, setExpandedPanel] = useState<ExpandedPanel>(null)
+  const period = currentAcademicPeriod()
 
   const subject = (profile?.matiere || '').trim()
 
@@ -202,12 +199,22 @@ export default function TeacherStatsScreen() {
     setLoading(true)
     setError(null)
     try {
-      const mStart = monthStart()
       const results = await Promise.all(teacher.classes.map(async (classe) => {
         const bareme = baremeFromClasse(classe)
-        const absQuery = query(collection(db, 'absences'), where('classe', '==', classe))
+        const absQuery = query(
+          collection(db, 'absences'),
+          where('classe', '==', classe),
+          where('academicYear', '==', period.academicYear),
+          where('monthKey', '==', period.monthKey),
+        )
         const notesQuery = subject
-          ? query(collection(db, 'notes'), where('classe', '==', classe), where('matiere', '==', subject))
+          ? query(
+            collection(db, 'notes'),
+            where('classe', '==', classe),
+            where('academicYear', '==', period.academicYear),
+            where('semestre', '==', period.semestre),
+            where('matiere', '==', subject),
+          )
           : null
 
         const [absSnap, notesSnap] = await Promise.all([
@@ -218,7 +225,7 @@ export default function TeacherStatsScreen() {
         const absences = new Set<string>()
         absSnap.docs.forEach((docSnap) => {
           const row = toDoc<AbsenceDoc>(docSnap)
-          if (typeof row.date !== 'string' || row.date < mStart) return
+          if (typeof row.date !== 'string') return
           if (row.statut === 'absent') absences.add(row.eleveId || docSnap.id)
         })
 
@@ -235,12 +242,7 @@ export default function TeacherStatsScreen() {
           })
         })
 
-        const hasS2 = validNotes.some(note => note.semestre === 'S2')
-        const hasS1 = validNotes.some(note => note.semestre === 'S1')
-        const currentSemestre = hasS2 ? 'S2' : hasS1 ? 'S1' : ''
-        const currentNotes = currentSemestre
-          ? validNotes.filter(note => note.semestre === currentSemestre)
-          : validNotes
+        const currentNotes = validNotes
         const gradedIds = [...new Set(currentNotes.map(note => note.eleveId))]
         const gradedStudents = gradedIds.length
         const studentCount = teacher.byClasse[classe]?.length ?? 0
@@ -292,7 +294,7 @@ export default function TeacherStatsScreen() {
     } finally {
       setLoading(false)
     }
-  }, [teacher.classes.join('|'), teacher.byClasse, profile?.uid, subject, t])
+  }, [teacher.classes.join('|'), teacher.byClasse, profile?.uid, period.academicYear, period.monthKey, period.semestre, subject, t])
 
   useEffect(() => { load() }, [load])
 

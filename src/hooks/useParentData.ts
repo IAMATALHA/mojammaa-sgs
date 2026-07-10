@@ -10,6 +10,7 @@ import { subscribeNotesForEleve, type NoteDoc } from '../services/notesService'
 import { toDoc } from '../services/firestore'
 import { db } from '../config/firebase'
 import type { Child } from '../utils/dashboardTypes'
+import { currentAcademicPeriod } from '../utils/academicPeriod'
 
 export interface ParentData {
   loading:  boolean
@@ -42,6 +43,7 @@ function noteOn20(note: NoteDoc, classe?: string): number | null {
 }
 
 export function useParentData(): ParentData {
+  const period = currentAcademicPeriod()
   const { profile } = useAuth()
   const [eleves, setEleves] = useState<EleveDoc[]>([])
   const [absences, setAbsences] = useState<AbsenceDoc[]>([])
@@ -64,22 +66,25 @@ export function useParentData(): ParentData {
   useEffect(() => {
     const ids = eleves.map(e => e.codeMassar)
     if (ids.length === 0) { setAbsences([]); return }
-    const unsub = subscribeAbsencesForEleves(ids, setAbsences)
+    const unsub = subscribeAbsencesForEleves(ids, period, setAbsences)
     return unsub
-  }, [eleves.map(e => e.codeMassar).join('|')])
+  }, [eleves.map(e => e.codeMassar).join('|'), period.academicYear, period.monthKey])
 
   useEffect(() => {
     if (eleves.length === 0) { setNotesByEleve(new Map()); return }
     const unsubs: Unsubscribe[] = []
     const map = new Map<string, NoteDoc[]>()
     eleves.forEach(e => {
-      unsubs.push(subscribeNotesForEleve(e.codeMassar, list => {
+      unsubs.push(subscribeNotesForEleve(e.codeMassar, {
+        academicYear: period.academicYear,
+        semestre: period.semestre,
+      }, list => {
         map.set(e.codeMassar, list)
         setNotesByEleve(new Map(map))
       }))
     })
     return () => unsubs.forEach(u => u())
-  }, [eleves.map(e => e.codeMassar).join('|')])
+  }, [eleves.map(e => e.codeMassar).join('|'), period.academicYear, period.semestre])
 
   useEffect(() => {
     const classes = [...new Set(eleves.map(e => e.classe).filter(Boolean))]
@@ -91,7 +96,12 @@ export function useParentData(): ParentData {
     for (let i = 0; i < classes.length; i += 10) {
       const chunk = classes.slice(i, i + 10)
       unsubs.push(onSnapshot(
-        query(collection(db, 'devoirs'), where('classeId', 'in', chunk)),
+        query(
+          collection(db, 'devoirs'),
+          where('classeId', 'in', chunk),
+          where('academicYear', '==', period.academicYear),
+          where('monthKey', '==', period.monthKey),
+        ),
         snap => {
           chunk.forEach(c => counts.set(c, 0))
           snap.docs.forEach(d => {
@@ -108,7 +118,7 @@ export function useParentData(): ParentData {
       ))
     }
     return () => unsubs.forEach(u => u())
-  }, [eleves.map(e => e.classe).join('|')])
+  }, [eleves.map(e => e.classe).join('|'), period.academicYear, period.monthKey])
 
   const children = useMemo(
     () => eleves.map(e => {

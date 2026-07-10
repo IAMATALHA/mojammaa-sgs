@@ -31,6 +31,7 @@ import { db } from '../../config/firebase'
 import { toDocs } from '../../services/firestore'
 import type { UserProfile } from '../../types'
 import type { AdminStackParamList } from '../../navigation/types'
+import { currentAcademicPeriod } from '../../utils/academicPeriod'
 
 interface NoteRow {
   id?: string
@@ -109,6 +110,7 @@ export default function AdminMatiereDetailScreen() {
   const matiere = route.params?.matiere?.trim() || ''
   const classeParam = route.params?.classe?.trim() || ''
   const title = matiere || classeParam || t('admin.notesAnalysis')
+  const period = currentAcademicPeriod()
 
   const [notes, setNotes] = useState<NoteRow[]>([])
   const [teachers, setTeachers] = useState<UserProfile[]>([])
@@ -122,12 +124,12 @@ export default function AdminMatiereDetailScreen() {
       const notesCol = collection(db, 'notes')
       const noteReads = matiere
         ? [
-          getDocs(query(notesCol, where('matiereLabel', '==', matiere))),
-          getDocs(query(notesCol, where('matiere', '==', matiere))),
+          getDocs(query(notesCol, where('matiereLabel', '==', matiere), where('academicYear', '==', period.academicYear), where('semestre', '==', period.semestre))),
+          getDocs(query(notesCol, where('matiere', '==', matiere), where('academicYear', '==', period.academicYear), where('semestre', '==', period.semestre))),
         ]
         : classeParam
-          ? [getDocs(query(notesCol, where('classe', '==', classeParam)))]
-          : [getDocs(notesCol)]
+          ? [getDocs(query(notesCol, where('classe', '==', classeParam), where('academicYear', '==', period.academicYear), where('semestre', '==', period.semestre)))]
+          : [getDocs(query(notesCol, where('academicYear', '==', period.academicYear), where('semestre', '==', period.semestre)))]
       const [noteSnaps, usersSnap] = await Promise.all([
         Promise.all(noteReads),
         getDocs(query(collection(db, 'users'), where('role', '==', 'professeur'))),
@@ -156,7 +158,7 @@ export default function AdminMatiereDetailScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [classeParam, matiere, t])
+  }, [classeParam, matiere, period.academicYear, period.semestre, t])
 
   useEffect(() => { load() }, [load])
   const onRefresh = () => { setRefreshing(true); load() }

@@ -145,7 +145,7 @@ service cloud.firestore {
         || (isTeacher() && resource.data.teacherId == myUid());
     }
 
-    // ── classStats (agrégats ANONYMES par classe/semestre) ──
+    // ── classStats (agrégats ANONYMES par année/classe/semestre) ──
     // Maintenus par la CF onNoteWritten (Admin SDK) : moyennes de classe par
     // matière + tableau TRIÉ de moyennes d'élèves sans identifiants. C'est ce
     // que lit l'écran Notes parent pour moyenne/rang (au lieu des notes brutes

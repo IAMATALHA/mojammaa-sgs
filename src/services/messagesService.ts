@@ -34,6 +34,7 @@ import { toDoc, toDocs } from './firestore'
 import type { EleveDoc } from './elevesService'
 import type { UserProfile } from '../types'
 import type { Attachment } from './StorageService'
+import { currentAcademicPeriod } from '../utils/academicPeriod'
 
 export type MessageType = 'announcement' | 'direct' | 'attendance' | 'behavior'
 export type MessageToType = 'all' | 'parents' | 'teachers' | 'class' | 'user'
@@ -61,6 +62,9 @@ export interface MessageDoc {
   deletedBy?: string[]
   status?:    string
   createdAt?: Timestamp
+  academicYear?: string
+  semestre?:     string
+  monthKey?:     string
 }
 
 const COL = 'messages'
@@ -74,6 +78,7 @@ export async function sendMessage(msg: Omit<MessageDoc, 'createdAt' | 'id'>): Pr
   })
   clean.readBy = clean.readBy ?? []
   clean.status = 'sent'
+  Object.assign(clean, currentAcademicPeriod())
   clean.createdAt = serverTimestamp()
   const ref = await addDoc(collection(db, COL), clean)
   return ref.id
@@ -99,6 +104,7 @@ export function subscribeMessages(
   onChange: (messages: MessageDoc[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
+  const period = currentAcademicPeriod()
   const buckets = new Map<number, Map<string, MessageDoc>>()
   const unsubs: Unsubscribe[] = []
   let nextBucketId = 0
@@ -133,7 +139,12 @@ export function subscribeMessages(
 
   // 1. Direct messages (new format: toIds array)
   unsubs.push(listen(
-    query(collection(db, COL), where('toIds', 'array-contains', uid)),
+    query(
+      collection(db, COL),
+      where('toIds', 'array-contains', uid),
+      where('academicYear', '==', period.academicYear),
+      where('monthKey', '==', period.monthKey),
+    ),
     'direct(toIds)',
   ))
 
@@ -143,7 +154,12 @@ export function subscribeMessages(
   else if (role === 'parent') toTypes.push('parents')
   else if (role === 'admin') toTypes.push('teachers', 'parents')
   unsubs.push(listen(
-    query(collection(db, COL), where('toType', 'in', toTypes)),
+    query(
+      collection(db, COL),
+      where('toType', 'in', toTypes),
+      where('academicYear', '==', period.academicYear),
+      where('monthKey', '==', period.monthKey),
+    ),
     'broadcasts(toType)',
   ))
 
@@ -152,7 +168,12 @@ export function subscribeMessages(
   if (role === 'professeur') oldToIds.push('teachers')
   else if (role === 'admin') oldToIds.push('admin', 'teachers')
   unsubs.push(listen(
-    query(collection(db, COL), where('toId', 'in', oldToIds)),
+    query(
+      collection(db, COL),
+      where('toId', 'in', oldToIds),
+      where('academicYear', '==', period.academicYear),
+      where('monthKey', '==', period.monthKey),
+    ),
     'legacy(toId)',
   ))
 
@@ -165,11 +186,17 @@ export function subscribeSentMessages(
   onChange: (messages: MessageDoc[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
+  const period = currentAcademicPeriod()
   // NB : pas de `orderBy` ici — `where(fromId) + orderBy(createdAt)` exigerait un
   // index composite (fromId, createdAt) non déclaré → la requête échouait. On
   // trie côté client (comme subscribeMessages), donc aucun index requis.
   return onSnapshot(
-    query(collection(db, COL), where('fromId', '==', uid)),
+    query(
+      collection(db, COL),
+      where('fromId', '==', uid),
+      where('academicYear', '==', period.academicYear),
+      where('monthKey', '==', period.monthKey),
+    ),
     snap => onChange(
       toDocs<MessageDoc>(snap)
         .filter(message => !(message.deletedBy || []).includes(uid))

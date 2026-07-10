@@ -157,6 +157,8 @@ const ar = {
     generalAvg: 'المعدل العام',
     reportSummary: 'قراءة بيان النقط',
     semester: 'الدورة',
+    currentSemester: 'الدورة الحالية',
+    viewAcademicYear: 'عرض السنة الدراسية',
     classComparison: 'مقارنة بالقسم',
     aboveClassShort: '+{{value}} مقارنة بالقسم',
     belowClassShort: '-{{value}} مقارنة بالقسم',

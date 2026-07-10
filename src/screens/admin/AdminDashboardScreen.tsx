@@ -6,9 +6,10 @@
  * sans appel) → 3) « À traiter » (couche action) → 4) activité (devoirs
  * ACTIFS, messages) → 5) structure école → tendance vs 7 jours.
  *
- * Perf : compteurs lourds lus depuis l'agrégat serveur `stats/summary`
- * (recalculé /30 min par la CF) ; seules les données du JOUR sont requêtées
- * en direct, bornées par date. Repli scan complet si l'agrégat n'existe pas.
+ * Perf : compteurs lourds lus depuis l'agrégat serveur `stats/summary` ; seules
+ * les données du JOUR sont requêtées en direct et sont bornées par date. Le
+ * résumé est recalculé uniquement lors d'un pull-to-refresh admin (ou une
+ * seule fois s'il n'existe pas encore), jamais via un scan client complet.
  */
 import React, { useCallback, useEffect, useState } from 'react'
 import {
@@ -26,12 +27,11 @@ import {
   ChevronRight, ClipboardCheck, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown,
 } from 'lucide-react-native'
 import { collection, doc, getDoc, getDocs, query, where, Timestamp } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
-import { db } from '../../config/firebase'
+import { db, functions } from '../../config/firebase'
 import { toDoc, toDocs } from '../../services/firestore'
-import type { EleveDoc } from '../../services/elevesService'
 import type { AbsenceDoc } from '../../services/absencesService'
-import type { UserProfile } from '../../types'
 import { getTodayJour, getJoursScolaires, type JourScolaire } from '../../services/calendarService'
 import { useUnreadMessagesCount } from '../../hooks/useUnreadMessagesCount'
 import AnimatedCounter from '../../components/AnimatedCounter'
@@ -119,27 +119,23 @@ export default function AdminDashboardScreen() {
         .sort((a, b) => a.date.localeCompare(b.date))
       setNextEvent(upcoming[0] ?? null)
 
-      // ── Structure école : agrégat serveur, repli scan complet ──
+      // ── Structure école : agrégat serveur uniquement ──
       let totalEleves = 0, totalProfs = 0, totalClasses = 0, devoirsActifs = 0
-      if (summarySnap.exists()) {
-        const s = summarySnap.data() as Record<string, any>
-        totalEleves = s.totalEleves || 0
-        totalProfs = s.totalTeachers || 0
-        totalClasses = s.totalClasses || 0
-        devoirsActifs = s.activeHomework || 0
-      } else {
-        const [elevesSnap, usersSnap, devoirsSnap] = await Promise.all([
-          getDocs(collection(db, 'eleves')),
-          getDocs(collection(db, 'users')),
-          getDocs(query(collection(db, 'devoirs'), where('dateLimite', '>=', today))),
-        ])
-        totalEleves = elevesSnap.size
-        totalProfs = usersSnap.docs.filter(d => toDoc<UserProfile>(d).role === 'professeur').length
-        const classeSet = new Set<string>()
-        elevesSnap.forEach(d => { const c = toDoc<EleveDoc>(d).classe; if (c) classeSet.add(c) })
-        totalClasses = classeSet.size
-        devoirsActifs = devoirsSnap.size
+      let effectiveSummarySnap = summarySnap
+      if (!effectiveSummarySnap.exists()) {
+        // Cas exceptionnel d'amorçage : on crée le résumé côté serveur au lieu
+        // de télécharger les collections brutes sur le téléphone de l'admin.
+        await httpsCallable(functions, 'recomputeSchoolStats')()
+        effectiveSummarySnap = await getDoc(doc(db, 'stats', 'summary'))
       }
+      if (!effectiveSummarySnap.exists()) {
+        throw new Error('Le résumé des statistiques est indisponible.')
+      }
+      const s = effectiveSummarySnap.data() as Record<string, any>
+      totalEleves = s.totalEleves || 0
+      totalProfs = s.totalTeachers || 0
+      totalClasses = s.totalClasses || 0
+      devoirsActifs = s.activeHomework || 0
 
       // ── État du jour : pointages d'aujourd'hui ──
       const absents = new Set<string>()
@@ -208,7 +204,15 @@ export default function AdminDashboardScreen() {
   }, [])
 
   useEffect(() => { load() }, [load])
-  const onRefresh = () => { setRefreshing(true); load() }
+  const onRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await httpsCallable(functions, 'recomputeSchoolStats')()
+    } catch (e: any) {
+      console.warn('[admin dashboard refresh]', e?.message)
+    }
+    await load()
+  }
 
   // ── Couche action : ce qui demande une intervention MAINTENANT ──
   const priorities: { key: string; icon: React.ReactNode; label: string; detail?: string; route: AdminQuickRoute; color: string; bg: string }[] = []

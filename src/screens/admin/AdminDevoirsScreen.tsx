@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl,
   TouchableOpacity,
 } from 'react-native'
-import { collection, getDocs, Timestamp } from 'firebase/firestore'
+import { collection, getDocs, query, Timestamp, where } from 'firebase/firestore'
 import { useTranslation } from 'react-i18next'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -14,6 +14,7 @@ import { db } from '../../config/firebase'
 import { toDoc } from '../../services/firestore'
 import type { Attachment } from '../../services/StorageService'
 import type { AdminStackParamList } from '../../navigation/types'
+import { currentAcademicPeriod, localISODate } from '../../utils/academicPeriod'
 
 interface DevoirRow {
   id: string
@@ -42,12 +43,17 @@ export default function AdminDevoirsScreen() {
   const [devoirs, setDevoirs] = useState<DevoirRow[]>([])
   const [loading, setLoading] = useState(true)
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = localISODate()
+  const period = currentAcademicPeriod()
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const snap = await getDocs(collection(db, 'devoirs'))
+      const snap = await getDocs(query(
+        collection(db, 'devoirs'),
+        where('academicYear', '==', period.academicYear),
+        where('monthKey', '==', period.monthKey),
+      ))
       const list: DevoirRow[] = snap.docs.map(d => {
         const data = toDoc<{
           titre?: string; description?: string; classeId?: string; teacherNom?: string
@@ -69,7 +75,7 @@ export default function AdminDevoirsScreen() {
       setDevoirs(list)
     } catch {}
     finally { setLoading(false) }
-  }, [])
+  }, [period.academicYear, period.monthKey])
 
   useEffect(() => { load() }, [load])
 

@@ -61,7 +61,7 @@ function subjectKey(data) {
 }
 
 /**
- * Agrégat ANONYME d'une (classe, semestre) :
+ * Agrégat ANONYME d'une (année scolaire, classe, semestre) :
  *  - subjectAvgs : { [matiereLabel]: moyenne de classe }
  *  - studentAvgs : moyennes par élève, triées desc, SANS identifiants
  *    (suffit au client pour calculer le rang de son enfant)
@@ -95,8 +95,8 @@ function computeClassStats(noteDocs) {
   return { subjectAvgs, studentAvgs, students: studentAvgs.length, notesCount, bareme }
 }
 
-function statsDocId(classe, semestre) {
-  return `${classe}_${semestre}`.replace(/\//g, '_')
+function statsDocId(academicYear, classe, semestre) {
+  return `${academicYear}__${classe}__${semestre}`.replace(/\//g, '_')
 }
 
 module.exports = { computeClassStats, statsDocId }

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator, Pressable,
 } from 'react-native'
-import { collection, doc, onSnapshot, type Unsubscribe } from 'firebase/firestore'
+import { collection, doc, onSnapshot, query, where, type Unsubscribe } from 'firebase/firestore'
 import { useNavigation } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
 import {
@@ -13,6 +13,7 @@ import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 import type { AdminDashboardNav } from '../../navigation/types'
+import { currentAcademicPeriod } from '../../utils/academicPeriod'
 
 type CollectionName = 'eleves' | 'notes' | 'absences' | 'devoirs'
 
@@ -281,6 +282,7 @@ export default function AdminClassesScreen() {
   const [classes, setClasses] = useState<ClasseStat[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const period = currentAcademicPeriod()
 
   useEffect(() => {
     const cache: SnapshotCache = {
@@ -317,7 +319,11 @@ export default function AdminClassesScreen() {
         ready.add('eleves')
         recompute()
       }, handleError),
-      onSnapshot(collection(db, 'notes'), snap => {
+      onSnapshot(query(
+        collection(db, 'notes'),
+        where('academicYear', '==', period.academicYear),
+        where('semestre', '==', period.semestre),
+      ), snap => {
         cache.notes = snap.docs.map(docSnap => {
           const row = docSnap.data() as Record<string, unknown>
           return {
@@ -333,7 +339,11 @@ export default function AdminClassesScreen() {
         ready.add('notes')
         recompute()
       }, handleError),
-      onSnapshot(collection(db, 'absences'), snap => {
+      onSnapshot(query(
+        collection(db, 'absences'),
+        where('academicYear', '==', period.academicYear),
+        where('monthKey', '==', period.monthKey),
+      ), snap => {
         cache.absences = snap.docs.map(docSnap => {
           const row = docSnap.data() as Record<string, unknown>
           return {
@@ -347,7 +357,11 @@ export default function AdminClassesScreen() {
         ready.add('absences')
         recompute()
       }, handleError),
-      onSnapshot(collection(db, 'devoirs'), snap => {
+      onSnapshot(query(
+        collection(db, 'devoirs'),
+        where('academicYear', '==', period.academicYear),
+        where('monthKey', '==', period.monthKey),
+      ), snap => {
         cache.devoirs = snap.docs.map(docSnap => {
           const row = docSnap.data() as Record<string, unknown>
           return {
@@ -372,7 +386,7 @@ export default function AdminClassesScreen() {
     ]
 
     return () => unsubs.forEach(unsub => unsub())
-  }, [t])
+  }, [period.academicYear, period.monthKey, period.semestre, t])
 
   const totalEleves = useMemo(() => classes.reduce((sum, item) => sum + item.eleveCount, 0), [classes])
   const averageSize = classes.length > 0 ? Math.round(totalEleves / classes.length) : 0

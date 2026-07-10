@@ -33,6 +33,7 @@ import { db } from '../../config/firebase';
 import { uploadAttachment, type Attachment } from '../../services/StorageService';
 import { broadcastToClasses } from '../../services/messagesService';
 import type { UserProfile } from '../../types';
+import { academicPeriodForDate } from '../../utils/academicPeriod'
 
 interface Devoir {
   id:           string
@@ -69,12 +70,18 @@ export default function TeacherDevoirsScreen() {
   const [error,   setError]   = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [prefill, setPrefill] = useState<Devoir | null>(null)
+  const period = academicPeriodForDate(new Date())
 
   const load = useCallback(async () => {
     if (!profile) return
     setLoading(true); setError(null)
     try {
-      const snap = await getDocs(query(collection(db, 'devoirs'), where('teacherId', '==', profile.uid)))
+      const snap = await getDocs(query(
+        collection(db, 'devoirs'),
+        where('teacherId', '==', profile.uid),
+        where('academicYear', '==', period.academicYear),
+        where('monthKey', '==', period.monthKey),
+      ))
       let list = toDocs<Devoir>(snap)
       if (routeClasse) list = list.filter(x => x.classeId === routeClasse)
       list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
@@ -84,7 +91,7 @@ export default function TeacherDevoirsScreen() {
     } finally {
       setLoading(false)
     }
-  }, [profile, routeClasse])
+  }, [profile, period.academicYear, period.monthKey, routeClasse])
 
   useEffect(() => { load() }, [load])
 
@@ -324,6 +331,7 @@ function CreateDevoirModal({
         teacherNom:  `${profile.prenom} ${profile.nom}`,
         dateLimite,
         attachments,
+        ...academicPeriodForDate(dateLimite),
         createdAt:   serverTimestamp(),
       })
 

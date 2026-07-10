@@ -6,9 +6,9 @@
  * permet d'ajouter / mettre à jour une note pour un élève via un modal.
  *
  * Schéma Firestore (cohérent avec mojammaa-admin) :
- *   notes/{docId}  où docId = `${eleveId}_${semestre}_${matiere}`
+ *   notes/{docId}  où docId = `${eleveId}_${academicYear}_${semestre}_${matiere}`
  *   fields: eleveId, eleveNom, elevePrenom, codeMassar, classe, cycle,
- *           semestre, matiere, matiereLabel, note, controles, importedAt,
+ *           academicYear, semestre, matiere, matiereLabel, note, controles, importedAt,
  *           importedBy
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -40,6 +40,7 @@ import {
   makeControlNotes,
   type ControlNote,
 } from '../../services/notesRules';
+import { currentAcademicPeriod } from '../../utils/academicPeriod'
 
 // Noms officiels de l'école (collège + primaire). Utilisé seulement comme
 // liste de secours : la matière du prof est verrouillée via profile.matiere.
@@ -63,6 +64,7 @@ interface NoteEntry {
   eleveId:   string
   note:      number | string
   matiere:   string
+  academicYear: string
   semestre:  string
   controles: ControlNote[]
   controlesCount: number
@@ -140,6 +142,10 @@ function parseGradeInput(value: string, bareme: number): number | null {
   return Number.isFinite(n) && n >= 0 && n <= bareme ? n : null
 }
 
+function noteDocId(eleveId: string, academicYear: string, semestre: string, matiere: string): string {
+  return `${eleveId}_${academicYear}_${semestre}_${matiere}`.replace(/\//g, '_')
+}
+
 export default function TeacherNotesScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
@@ -151,6 +157,7 @@ export default function TeacherNotesScreen() {
   const classe = (routeClasse || profile?.classe || '').trim()
   const bareme = useMemo(() => baremeFromClasse(classe), [classe])
   const cycle = useMemo(() => cycleFromClasse(classe), [classe])
+  const period = currentAcademicPeriod()
 
   // Matière VERROUILLÉE sur celle du prof. S'il n'en a pas (ancien compte),
   // on retombe sur le sélecteur libre (compat).
@@ -163,7 +170,7 @@ export default function TeacherNotesScreen() {
   const [error,     setError]     = useState<string | null>(null)
   const [pickedMatiere, setPickedMatiere] = useState(MATIERES[0])
   const matiere = matiereLocked ? teacherMatiere : pickedMatiere
-  const [semestre,  setSemestre]  = useState(SEMESTRES[0])
+  const [semestre,  setSemestre]  = useState<string>(period.semestre)
   const [editEleve, setEditEleve] = useState<EleveLite | null>(null)
   const expectedControls = useMemo(
     () => getExpectedControlsForSubject(matiere, classe),
@@ -194,6 +201,7 @@ export default function TeacherNotesScreen() {
       const notesSnap = await getDocs(query(
         collection(db, 'notes'),
         where('classe',   '==', classe),
+        where('academicYear', '==', period.academicYear),
         where('semestre', '==', semestre),
         where('matiere',  '==', matiere),
       ))
@@ -203,6 +211,7 @@ export default function TeacherNotesScreen() {
           eleveId:            string
           note?:              unknown
           matiere:            string
+          academicYear?:       string
           semestre:           string
           controlesCount?:    unknown
           controlesExpected?: unknown
@@ -218,6 +227,7 @@ export default function TeacherNotesScreen() {
           eleveId:  data.eleveId,
           note,
           matiere:  data.matiere,
+          academicYear: data.academicYear || period.academicYear,
           semestre: data.semestre,
           controles,
           controlesCount: asNumber(data.controlesCount) ?? controles.length,
@@ -231,7 +241,7 @@ export default function TeacherNotesScreen() {
     } finally {
       setLoading(false)
     }
-  }, [bareme, classe, matiere, semestre])
+  }, [bareme, classe, matiere, period.academicYear, semestre])
 
   useEffect(() => { load() }, [load])
 
@@ -303,7 +313,7 @@ export default function TeacherNotesScreen() {
               try {
                 const batch = writeBatch(db)
                 matched.forEach(({ row, eleve }) => {
-                  const docId = `${eleve.id}_${semestre}_${matiere}`
+                  const docId = notes.get(eleve.id)?.id || noteDocId(eleve.id, period.academicYear, semestre, matiere)
                   batch.set(doc(db, 'notes', docId), {
                     eleveId:      eleve.id,
                     eleveNom:     eleve.nom,
@@ -311,6 +321,7 @@ export default function TeacherNotesScreen() {
                     codeMassar:   eleve.codeMassar || row.codeMassar || '',
                     classe,
                     cycle,
+                    academicYear: period.academicYear,
                     semestre,
                     matiere,
                     matiereLabel: matiere,
@@ -337,7 +348,7 @@ export default function TeacherNotesScreen() {
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || t('teacher.readFailed'))
     }
-  }, [profile, classe, cycle, bareme, matiere, semestre, expectedControls, t, load])
+  }, [profile, classe, cycle, bareme, matiere, notes, period.academicYear, semestre, expectedControls, t, load])
 
   const Chip = ({ value, active, onPress }: { value: string; active: boolean; onPress: () => void }) => (
     <TouchableOpacity onPress={onPress}
@@ -470,6 +481,7 @@ export default function TeacherNotesScreen() {
         eleve={editEleve}
         existing={editEleve ? notes.get(editEleve.id) : undefined}
         matiere={matiere}
+        academicYear={period.academicYear}
         semestre={semestre}
         classe={classe}
         bareme={bareme}
@@ -485,12 +497,13 @@ export default function TeacherNotesScreen() {
 
 // ─── Edit note modal ─────────────────────────────────────────────────────────
 function EditNoteModal({
-  visible, eleve, existing, matiere, semestre, classe, bareme, cycle, teacherUid, expectedControls, onClose, onSaved,
+  visible, eleve, existing, matiere, academicYear, semestre, classe, bareme, cycle, teacherUid, expectedControls, onClose, onSaved,
 }: {
   visible:    boolean
   eleve:      EleveLite | null
   existing?:  NoteEntry
   matiere:    string
+  academicYear: string
   semestre:   string
   classe:     string
   bareme:     10 | 20
@@ -521,7 +534,7 @@ function EditNoteModal({
     }
     setSaving(true); setErr('')
     try {
-      const docId = `${eleve.id}_${semestre}_${matiere}`
+      const docId = existing?.id || noteDocId(eleve.id, academicYear, semestre, matiere)
       await setDoc(doc(db, 'notes', docId), {
         eleveId:     eleve.id,
         eleveNom:    eleve.nom,
@@ -529,6 +542,7 @@ function EditNoteModal({
         codeMassar:  eleve.codeMassar,
         classe,
         cycle,
+        academicYear,
         semestre,
         matiere,
         matiereLabel: matiere,

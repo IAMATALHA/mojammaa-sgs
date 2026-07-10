@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { subscribeChildrenOfParent, type EleveDoc } from '../services/elevesService'
 import { subscribeAbsencesForEleves, type AbsenceDoc } from '../services/absencesService'
 import type { AbsenceEntry } from '../utils/dashboardTypes'
+import { currentAcademicPeriod } from '../utils/academicPeriod'
 
 const SEANCE_TO_DURATION: Record<string, string> = {
   S1: '08:30-09:30',
@@ -37,6 +38,7 @@ export interface ParentAbsencesData {
 }
 
 export function useParentAbsences(): ParentAbsencesData {
+  const period = currentAcademicPeriod()
   const { profile } = useAuth()
   const [eleves,   setEleves]   = useState<EleveDoc[]>([])
   const [absences, setAbsences] = useState<AbsenceDoc[]>([])
@@ -59,6 +61,7 @@ export function useParentAbsences(): ParentAbsencesData {
     setLoading(true)
     const unsub = subscribeAbsencesForEleves(
       ids,
+      period,
       list => {
         setAbsences(list)
         setLoading(false)
@@ -70,7 +73,7 @@ export function useParentAbsences(): ParentAbsencesData {
       },
     )
     return unsub
-  }, [eleves.map(e => e.codeMassar).join('|')])
+  }, [eleves.map(e => e.codeMassar).join('|'), period.academicYear, period.monthKey])
 
   const entries = useMemo(
     () => absences

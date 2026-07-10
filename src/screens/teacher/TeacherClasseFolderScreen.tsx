@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 import type { TeacherStackParamList, TeacherRoute } from '../../navigation/types'
+import { currentAcademicPeriod } from '../../utils/academicPeriod'
 
 export default function TeacherClasseFolderScreen() {
   const theme = useTheme()
@@ -29,6 +30,7 @@ export default function TeacherClasseFolderScreen() {
   const [eleveCount,   setEleveCount]   = useState<number | null>(null)
   const [devoirsCount, setDevoirsCount] = useState<number | null>(null)
   const [loading,      setLoading]      = useState(true)
+  const period = currentAcademicPeriod()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -37,7 +39,12 @@ export default function TeacherClasseFolderScreen() {
       // matière (règle Firestore), une requête classe tous-sujets serait refusée.
       const [elevesSnap, devoirsSnap] = await Promise.all([
         getDocs(query(collection(db, 'eleves'),  where('classe',   '==', classe))),
-        getDocs(query(collection(db, 'devoirs'), where('classeId', '==', classe))),
+        getDocs(query(
+          collection(db, 'devoirs'),
+          where('classeId', '==', classe),
+          where('academicYear', '==', period.academicYear),
+          where('monthKey', '==', period.monthKey),
+        )),
       ])
       setEleveCount(elevesSnap.size)
       setDevoirsCount(devoirsSnap.size)
@@ -46,7 +53,7 @@ export default function TeacherClasseFolderScreen() {
     } finally {
       setLoading(false)
     }
-  }, [classe])
+  }, [classe, period.academicYear, period.monthKey])
 
   useEffect(() => { load() }, [load])
 

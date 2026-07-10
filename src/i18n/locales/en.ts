@@ -157,6 +157,8 @@ const en = {
     generalAvg: 'General average',
     reportSummary: 'Report readout',
     semester: 'Term',
+    currentSemester: 'Current term',
+    viewAcademicYear: 'View school year',
     classComparison: 'Class comparison',
     aboveClassShort: '+{{value}} vs class',
     belowClassShort: '-{{value}} vs class',

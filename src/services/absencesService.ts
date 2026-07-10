@@ -4,7 +4,7 @@
  * Format des docs (créé par TeacherAttendanceScreen) :
  *   {
  *     eleveId, eleveNom, elevePrenom, classe, date, seance,
- *     statut: 'present' | 'absent',
+ *     statut: 'present' | 'absent', academicYear, semestre, monthKey,
  *     professorId, createdAt
  *   }
  */
@@ -22,6 +22,9 @@ export interface AbsenceDoc {
   elevePrenom?:  string
   classe:        string
   date:          string   // ISO 'YYYY-MM-DD'
+  academicYear?: string
+  semestre?:     string
+  monthKey?:     string
   seance:        string   // 'S1'..'S6'
   statut:        'present' | 'absent' | 'retard'
   professorId?:  string
@@ -89,6 +92,7 @@ export async function computeTeacherPresenceRate(
  */
 export function subscribeAbsencesForEleves(
   eleveIds: string[],
+  period: { academicYear: string; monthKey: string },
   onChange: (list: AbsenceDoc[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
@@ -101,6 +105,8 @@ export function subscribeAbsencesForEleves(
   const q = query(
     collection(db, COL),
     where('eleveId', 'in', safe),
+    where('academicYear', '==', period.academicYear),
+    where('monthKey', '==', period.monthKey),
   )
   return onSnapshot(
     q,

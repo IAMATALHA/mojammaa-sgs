@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, RefreshControl,
 } from 'react-native'
-import { collection, doc, onSnapshot, query, where, type Unsubscribe } from 'firebase/firestore'
+import { doc, onSnapshot } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { useNavigation } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
@@ -554,140 +554,36 @@ export default function AdminStatsScreen() {
   }, [nav])
 
   // Pull-to-refresh : force le recalcul serveur (callable admin-only). Le
-  // listener stats/summary reçoit ensuite la MAJ tout seul. Si la CF n'est pas
-  // déployée, l'échec est silencieux et le fallback live reste affiché.
+  // listener stats/summary reçoit ensuite la MAJ tout seul.
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
       await httpsCallable(functions, 'recomputeSchoolStats')()
-    } catch {
-      /* no-op : fallback live déjà à l'écran */
+    } catch (err: any) {
+      setError(err?.message || t('common.error'))
     } finally {
       setRefreshing(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
-    const cache: SnapshotCache = {
-      eleves: [],
-      users: [],
-      notes: [],
-      absences: [],
-      devoirs: [],
-      coefficients: { matieres: {}, parNiveau: {} },
-    }
-    const ready = new Set<CollectionName>()
+    let cancelled = false
+    let seedRequested = false
 
-    const recompute = () => {
-      if (ready.size !== COLLECTIONS.length) return
-      setData(buildDashboardData(cache))
-      setLoading(false)
-      setError(null)
-    }
-
-    const handleError = (err: Error) => {
-      setError(err.message || t('common.error'))
-      setLoading(false)
-    }
-
-    // ── Fallback : calcul live à partir des 5 collections ──────────────────
-    // Utilisé UNIQUEMENT si l'agrégat serveur stats/summary n'existe pas encore
-    // (CF pas déployée / pas encore exécutée). Les absences sont bornées à la
-    // fenêtre réellement exploitée (aujourd'hui + mois courant + tendance 5 j).
-    const startLiveFallback = (): Unsubscribe => {
-      const monthStart = monthStartISO()
-      const trendStart = lastDays(5)[0].iso
-      const absencesSince = monthStart < trendStart ? monthStart : trendStart
-
-      const unsubs: Unsubscribe[] = [
-      onSnapshot(collection(db, 'eleves'), snap => {
-        cache.eleves = snap.docs.map(docSnap => {
-          const row = docSnap.data() as Record<string, unknown>
-          return {
-            id: docSnap.id,
-            classe: asString(row.classe),
-            niveau: asString(row.niveau),
-          }
-        })
-        ready.add('eleves')
-        recompute()
-      }, handleError),
-      onSnapshot(collection(db, 'users'), snap => {
-        cache.users = snap.docs.map(docSnap => {
-          const row = docSnap.data() as Record<string, unknown>
-          return {
-            id: docSnap.id,
-            role: asString(row.role) || 'parent',
-          }
-        })
-        ready.add('users')
-        recompute()
-      }, handleError),
-      onSnapshot(collection(db, 'notes'), snap => {
-        cache.notes = snap.docs.map(docSnap => {
-          const row = docSnap.data() as Record<string, unknown>
-          return {
-            id: docSnap.id,
-            eleveId: asString(row.eleveId),
-            classe: asString(row.classe),
-            subject: asString(row.matiereLabel) || asString(row.matiere) || asString(row.subject),
-            matiere: asString(row.matiere),
-            note: asNumber(row.note),
-            cycle: asString(row.cycle),
-            bareme: asNumber(row.bareme),
-            importedBy: asString(row.importedBy),
-          }
-        })
-        ready.add('notes')
-        recompute()
-      }, handleError),
-      onSnapshot(query(collection(db, 'absences'), where('date', '>=', absencesSince)), snap => {
-        cache.absences = snap.docs.map(docSnap => {
-          const row = docSnap.data() as Record<string, unknown>
-          return {
-            id: docSnap.id,
-            eleveId: asString(row.eleveId),
-            classe: asString(row.classe),
-            date: asString(row.date),
-            statut: asString(row.statut),
-            professorId: asString(row.professorId),
-          }
-        })
-        ready.add('absences')
-        recompute()
-      }, handleError),
-      onSnapshot(collection(db, 'devoirs'), snap => {
-        cache.devoirs = snap.docs.map(docSnap => {
-          const row = docSnap.data() as Record<string, unknown>
-          return {
-            id: docSnap.id,
-            classeId: asString(row.classeId) || asString(row.classe),
-            teacherId: asString(row.teacherId),
-            dateLimite: asString(row.dateLimite),
-          }
-        })
-        ready.add('devoirs')
-        recompute()
-      }, handleError),
-      // Coefficients marocains : pas de gating `ready` (doc optionnel — absent
-      // = tous les coef. à 1). Recalcule les moyennes pondérées si modifiés en direct.
-      onSnapshot(doc(db, 'settings', 'coefficients'), snap => {
-        const d = snap.data() as Record<string, unknown> | undefined
-        cache.coefficients = {
-          matieres: (d?.matieres as Record<string, number>) || {},
-          parNiveau: (d?.parNiveau as Record<string, Record<string, number>>) || {},
+    // Amorçage rare : s'il manque le document compact, un seul recalcul serveur
+    // le crée. On ne télécharge jamais les cinq collections brutes sur le client.
+    const seedSummary = async () => {
+      if (seedRequested) return
+      seedRequested = true
+      try {
+        await httpsCallable(functions, 'recomputeSchoolStats')()
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err?.message || t('common.error'))
+          setLoading(false)
         }
-        recompute()
-      }, () => { /* lecture refusée : coefficients tous à 1 */ }),
-      ]
-      return () => unsubs.forEach(unsub => unsub())
+      }
     }
-
-    // ── Chemin rapide : lire l'agrégat serveur en 1 document ───────────────
-    // Si stats/summary existe → affichage instantané (et live : la CF le
-    // réécrit toutes les 30 min). Sinon → bascule sur le calcul client.
-    let fallbackUnsub: Unsubscribe | null = null
-    const ensureFallback = () => { if (!fallbackUnsub) fallbackUnsub = startLiveFallback() }
 
     const summaryUnsub = onSnapshot(
       doc(db, 'stats', 'summary'),
@@ -696,17 +592,21 @@ export default function AdminStatsScreen() {
           setData(snap.data() as DashboardData)
           setLoading(false)
           setError(null)
-          if (fallbackUnsub) { fallbackUnsub(); fallbackUnsub = null }
         } else {
-          ensureFallback()
+          void seedSummary()
         }
       },
-      () => ensureFallback(),
+      err => {
+        if (!cancelled) {
+          setError(err.message || t('common.error'))
+          setLoading(false)
+        }
+      },
     )
 
     return () => {
+      cancelled = true
       summaryUnsub()
-      if (fallbackUnsub) fallbackUnsub()
     }
   }, [t])
 
