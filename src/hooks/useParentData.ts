@@ -100,7 +100,6 @@ export function useParentData(): ParentData {
           collection(db, 'devoirs'),
           where('classeId', 'in', chunk),
           where('academicYear', '==', period.academicYear),
-          where('monthKey', '==', period.monthKey),
         ),
         snap => {
           chunk.forEach(c => counts.set(c, 0))
@@ -118,7 +117,7 @@ export function useParentData(): ParentData {
       ))
     }
     return () => unsubs.forEach(u => u())
-  }, [eleves.map(e => e.classe).join('|'), period.academicYear, period.monthKey])
+  }, [eleves.map(e => e.classe).join('|'), period.academicYear])
 
   const children = useMemo(
     () => eleves.map(e => {

@@ -360,7 +360,6 @@ export default function AdminClassesScreen() {
       onSnapshot(query(
         collection(db, 'devoirs'),
         where('academicYear', '==', period.academicYear),
-        where('monthKey', '==', period.monthKey),
       ), snap => {
         cache.devoirs = snap.docs.map(docSnap => {
           const row = docSnap.data() as Record<string, unknown>

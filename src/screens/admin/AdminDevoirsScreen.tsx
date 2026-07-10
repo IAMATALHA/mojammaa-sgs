@@ -52,7 +52,6 @@ export default function AdminDevoirsScreen() {
       const snap = await getDocs(query(
         collection(db, 'devoirs'),
         where('academicYear', '==', period.academicYear),
-        where('monthKey', '==', period.monthKey),
       ))
       const list: DevoirRow[] = snap.docs.map(d => {
         const data = toDoc<{
@@ -75,7 +74,7 @@ export default function AdminDevoirsScreen() {
       setDevoirs(list)
     } catch {}
     finally { setLoading(false) }
-  }, [period.academicYear, period.monthKey])
+  }, [period.academicYear])
 
   useEffect(() => { load() }, [load])
 

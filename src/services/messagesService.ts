@@ -137,13 +137,15 @@ export function subscribeMessages(
     }, handleErr(label))
   }
 
+  // Filtre par ANNÉE scolaire uniquement — pas par monthKey : un filtre au
+  // mois ferait disparaître tout l'historique (même non lu) chaque 1er du
+  // mois. L'année borne déjà le volume ; la pagination viendra si besoin.
   // 1. Direct messages (new format: toIds array)
   unsubs.push(listen(
     query(
       collection(db, COL),
       where('toIds', 'array-contains', uid),
       where('academicYear', '==', period.academicYear),
-      where('monthKey', '==', period.monthKey),
     ),
     'direct(toIds)',
   ))
@@ -158,7 +160,6 @@ export function subscribeMessages(
       collection(db, COL),
       where('toType', 'in', toTypes),
       where('academicYear', '==', period.academicYear),
-      where('monthKey', '==', period.monthKey),
     ),
     'broadcasts(toType)',
   ))
@@ -172,7 +173,6 @@ export function subscribeMessages(
       collection(db, COL),
       where('toId', 'in', oldToIds),
       where('academicYear', '==', period.academicYear),
-      where('monthKey', '==', period.monthKey),
     ),
     'legacy(toId)',
   ))
@@ -195,7 +195,6 @@ export function subscribeSentMessages(
       collection(db, COL),
       where('fromId', '==', uid),
       where('academicYear', '==', period.academicYear),
-      where('monthKey', '==', period.monthKey),
     ),
     snap => onChange(
       toDocs<MessageDoc>(snap)

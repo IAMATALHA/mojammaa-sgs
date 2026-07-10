@@ -169,7 +169,6 @@ export function useTeacherData(): TeacherData {
       collection(db, 'devoirs'),
       where('teacherId', '==', profile.uid),
       where('academicYear', '==', period.academicYear),
-      where('monthKey', '==', period.monthKey),
     )).then(snap => {
       const count = snap.docs.filter(d => {
         const dl = toDoc<{ dateLimite?: string }>(d).dateLimite
@@ -177,7 +176,7 @@ export function useTeacherData(): TeacherData {
       }).length
       setPendingCount(count)
     }).catch(() => setPendingCount(0))
-  }, [profile?.uid, period.academicYear, period.monthKey])
+  }, [profile?.uid, period.academicYear])
 
   const byClasse = useMemo(() => groupByClasse(eleves), [eleves])
 

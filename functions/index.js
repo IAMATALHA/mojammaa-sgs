@@ -215,6 +215,10 @@ exports.onMessageCreated = onDocumentCreated('messages/{messageId}', async (even
   if (!snap) return
   const data = snap.data() || {}
 
+  // Filet de sécurité période (voir stampPeriodFields) — un message sans
+  // academicYear serait invisible dans toutes les boîtes de réception.
+  await stampPeriodFields(snap, data.createdAt)
+
   const uids = await resolveRecipientUids(data)
   if (uids.length === 0) {
     await snap.ref.set({ push: { sent: 0, recipients: 0, at: new Date() } }, { merge: true })
@@ -428,6 +432,12 @@ exports.onNoteWritten = onDocumentWritten('notes/{noteId}', async (event) => {
   const before = event.data?.before?.exists ? event.data.before.data() : null
   const after = event.data?.after?.exists ? event.data.after.data() : null
 
+  // Note écrite par un client sans les champs de période : tamponner d'abord
+  // (une note saisie en direct appartient à la période courante). La
+  // ré-écriture redéclenche ce trigger avec les champs présents, qui marquera
+  // alors le bon groupe dirty.
+  if (event.data?.after?.exists && await stampPeriodFields(event.data.after, null)) return
+
   // Champs qui influencent réellement computeClassStats() (cf. classStats.js) :
   // le reste (eleveNom, codeMassar, demo, importedBy, importedAt, updatedAt…)
   // n'a aucun effet sur l'agrégat — ignorer ces écritures évite de marquer
@@ -467,6 +477,30 @@ exports.flushClassStatsDirty = onSchedule(
     logger.info('classStats flushed', { groups: dirtySnap.size })
   },
 )
+
+// ── Filets de sécurité période (clients pas encore à jour) ──────────────────
+//
+// Les clients à jour écrivent academicYear/semestre/monthKey eux-mêmes ; ces
+// triggers ne patchent QUE les docs où les champs manquent. Dérivations
+// identiques à scripts/backfillAcademicPeriods.js : date métier d'abord
+// (date d'absence, échéance de devoir), date de création sinon.
+exports.onAbsenceCreated = onDocumentCreated('absences/{absenceId}', async (event) => {
+  if (!event.data) return
+  const data = event.data.data() || {}
+  await stampPeriodFields(event.data, data.date || data.createdAt)
+})
+
+exports.onDevoirCreated = onDocumentCreated('devoirs/{devoirId}', async (event) => {
+  if (!event.data) return
+  const data = event.data.data() || {}
+  await stampPeriodFields(event.data, data.dateLimite || data.createdAt)
+})
+
+exports.onRessourceCreated = onDocumentCreated('ressources/{ressourceId}', async (event) => {
+  if (!event.data) return
+  const data = event.data.data() || {}
+  await stampPeriodFields(event.data, data.createdAt)
+})
 
 // ── onScheduleWritten : emploiDuTemps toujours synchro avec schedules ───────
 //
@@ -530,18 +564,51 @@ exports.weeklyDigest = onSchedule(
 // par un admin (pull-to-refresh), jamais en arrière-plan quand personne ne
 // consulte les statistiques.
 
-function currentAcademicPeriod() {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit',
-  }).formatToParts(new Date())
-  const year = Number(parts.find((part) => part.type === 'year')?.value)
-  const month = Number(parts.find((part) => part.type === 'month')?.value)
+function academicPeriodOf(year, month) {
   const schoolYearStart = month >= 9 ? year : year - 1
   return {
     academicYear: `${schoolYearStart}-${schoolYearStart + 1}`,
     semestre: month >= 9 || month <= 1 ? 'S1' : 'S2',
     monthKey: `${year}-${String(month).padStart(2, '0')}`,
   }
+}
+
+// Accepte une date métier ('YYYY-MM-DD'), un Timestamp Firestore ou une Date.
+// Mêmes dérivations que src/utils/academicPeriod.ts et le script de backfill.
+function academicPeriodForValue(value) {
+  if (typeof value === 'string') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+    return m ? academicPeriodOf(Number(m[1]), Number(m[2])) : null
+  }
+  const date = value && typeof value.toDate === 'function' ? value.toDate() : value
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit',
+  }).formatToParts(date)
+  const year = Number(parts.find((part) => part.type === 'year')?.value)
+  const month = Number(parts.find((part) => part.type === 'month')?.value)
+  return academicPeriodOf(year, month)
+}
+
+function currentAcademicPeriod() {
+  return academicPeriodForValue(new Date())
+}
+
+// Complète academicYear/semestre/monthKey manquants sur un doc écrit par un
+// client pas encore à jour (OTA en attente ou runtime < 1.0.14). Sans ce
+// filet, le doc est invisible pour toutes les requêtes filtrées par période
+// et absent des agrégats — silencieusement. Retourne true si un patch a été écrit.
+const PERIOD_FIELDS = ['academicYear', 'semestre', 'monthKey']
+async function stampPeriodFields(snap, dateValue) {
+  const data = snap.data() || {}
+  const missing = PERIOD_FIELDS.filter((field) => typeof data[field] !== 'string' || !data[field])
+  if (missing.length === 0) return false
+  const period = academicPeriodForValue(dateValue) || currentAcademicPeriod()
+  const patch = {}
+  for (const field of missing) patch[field] = period[field]
+  await snap.ref.set(patch, { merge: true })
+  logger.info('period fields stamped', { path: snap.ref.path, ...patch })
+  return true
 }
 
 /** Recalcule les statistiques de la période active et les écrit (Admin SDK). */
@@ -552,7 +619,9 @@ async function refreshSchoolStats() {
     db.collection('users').get(),
     db.collection('notes').where('academicYear', '==', period.academicYear).where('semestre', '==', period.semestre).get(),
     db.collection('absences').where('academicYear', '==', period.academicYear).where('monthKey', '==', period.monthKey).get(),
-    db.collection('devoirs').where('academicYear', '==', period.academicYear).where('monthKey', '==', period.monthKey).get(),
+    // Devoirs : année entière, pas le mois de création — activeHomework se
+    // calcule sur dateLimite (un devoir créé fin juin dû début juillet doit compter).
+    db.collection('devoirs').where('academicYear', '==', period.academicYear).get(),
     db.collection('settings').doc('coefficients').get(),
   ])
   const toRows = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }))
@@ -567,6 +636,18 @@ async function refreshSchoolStats() {
   await db.collection('stats').doc('summary').set({ ...summary, ...period, updatedAt: new Date() })
   return summary
 }
+
+// Un seul recalcul planifié par jour, juste avant l'ouverture de l'école
+// (8h30–16h) : l'admin trouve des stats fraîches le matin sans dépendre du
+// pull-to-refresh, et on ne paie aucun scan pour une école fermée. Le scan
+// est borné à la période active (~quelques milliers de lectures).
+exports.aggregateSchoolStats = onSchedule(
+  { schedule: '30 7 * * *', timeZone: 'Africa/Casablanca' },
+  async () => {
+    const s = await refreshSchoolStats()
+    logger.info('stats/summary refreshed (scheduled)', { eleves: s.totalEleves, classes: s.totalClasses })
+  },
+)
 
 // Recalcul à la demande — réservé aux admins (pull-to-refresh + amorçage
 // exceptionnel si stats/summary n'existe pas encore).

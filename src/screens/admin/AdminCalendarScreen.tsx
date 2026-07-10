@@ -159,10 +159,12 @@ export default function AdminCalendarScreen() {
 
   useEffect(() => {
     const period = academicPeriodForDate(monthDate)
+    // Pas de monthKey : il indexe le mois de CRÉATION, or le calendrier place
+    // les devoirs par dateLimite (filtre client visibleStart/visibleEnd juste
+    // en dessous). Un devoir créé fin juin dû début juillet manquerait sinon.
     const unsub: Unsubscribe = onSnapshot(query(
       collection(db, 'devoirs'),
       where('academicYear', '==', period.academicYear),
-      where('monthKey', '==', period.monthKey),
     ), snap => {
       setTasks(snap.docs.map(d => {
         const data = toDoc<{

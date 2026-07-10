@@ -80,7 +80,6 @@ export default function TeacherDevoirsScreen() {
         collection(db, 'devoirs'),
         where('teacherId', '==', profile.uid),
         where('academicYear', '==', period.academicYear),
-        where('monthKey', '==', period.monthKey),
       ))
       let list = toDocs<Devoir>(snap)
       if (routeClasse) list = list.filter(x => x.classeId === routeClasse)
@@ -91,7 +90,7 @@ export default function TeacherDevoirsScreen() {
     } finally {
       setLoading(false)
     }
-  }, [profile, period.academicYear, period.monthKey, routeClasse])
+  }, [profile, period.academicYear, routeClasse])
 
   useEffect(() => { load() }, [load])
 

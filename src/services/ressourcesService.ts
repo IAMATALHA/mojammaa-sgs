@@ -63,12 +63,13 @@ export function subscribeRessourcesForClasses(
     onChange([])
     return () => {}
   }
+  // Année scolaire uniquement — un support de cours doit rester visible toute
+  // l'année, pas seulement le mois de sa publication.
   const period = currentAcademicPeriod()
   const q = query(
     collection(db, COL),
     where('classeId', 'in', classes.slice(0, 10)),
     where('academicYear', '==', period.academicYear),
-    where('monthKey', '==', period.monthKey),
   )
   return onSnapshot(
     q,

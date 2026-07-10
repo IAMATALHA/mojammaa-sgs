@@ -43,7 +43,6 @@ export default function TeacherClasseFolderScreen() {
           collection(db, 'devoirs'),
           where('classeId', '==', classe),
           where('academicYear', '==', period.academicYear),
-          where('monthKey', '==', period.monthKey),
         )),
       ])
       setEleveCount(elevesSnap.size)
@@ -53,7 +52,7 @@ export default function TeacherClasseFolderScreen() {
     } finally {
       setLoading(false)
     }
-  }, [classe, period.academicYear, period.monthKey])
+  }, [classe, period.academicYear])
 
   useEffect(() => { load() }, [load])
 

@@ -59,11 +59,12 @@ export function useParentDevoirs() {
       const bucketId = i / 10
       buckets.set(bucketId, new Map())
       unsubs.push(onSnapshot(
+        // Année scolaire uniquement — filtrer par mois de CRÉATION ferait
+        // disparaître un devoir avant sa date de rendu (créé le 28, dû le 5).
         query(
           collection(db, 'devoirs'),
           where('classeId', 'in', chunk),
           where('academicYear', '==', period.academicYear),
-          where('monthKey', '==', period.monthKey),
         ),
         snap => {
           const next = new Map<string, ParentDevoir>()
@@ -92,7 +93,7 @@ export function useParentDevoirs() {
     }
 
     return () => unsubs.forEach(u => u())
-  }, [classes.join(','), period.academicYear, period.monthKey])
+  }, [classes.join(','), period.academicYear])
 
   const childClassMap = useMemo(() => {
     const map = new Map<string, string>()
