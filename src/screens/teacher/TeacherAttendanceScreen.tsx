@@ -22,7 +22,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { TeacherStackParamList, TeacherRoute } from '../../navigation/types'
 import PressableScale from '../../components/PressableScale'
 import {
-  collection, getDocs, query, where, writeBatch, doc, Timestamp,
+  collection, getDocs, query, where, doc, Timestamp,
   documentId,
 } from 'firebase/firestore'
 import { sendMessage } from '../../services/messagesService'
@@ -39,6 +39,7 @@ import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
 import { academicPeriodForDate } from '../../utils/academicPeriod'
+import { commitInChunks } from '../../utils/firestoreBatch'
 
 const SEANCES = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'] as const
 
@@ -234,12 +235,13 @@ export default function TeacherAttendanceScreen() {
     if (!profile) { setError('Profil non chargé.'); return }
     setSaving(true); setError(null)
     try {
-      const batch = writeBatch(db)
       const period = academicPeriodForDate(date)
       // Pour chaque élève, on écrit son statut. Le docId est déterministe
       // pour qu'un rappel sur l'appel mette à jour l'enregistrement au lieu
-      // de dupliquer.
-      eleves.forEach(e => {
+      // de dupliquer. Commits par chunks : les règles font un get() par
+      // absence créée (cohérence élève/classe) et Firestore plafonne à 20
+      // accès règles par batch — une classe entière en un batch échouerait.
+      await commitInChunks(db, eleves, (batch, e) => {
         const docId = `${e.id}_${date}_${seance}`
         const ref = doc(db, 'absences', docId)
         batch.set(ref, {
@@ -259,7 +261,6 @@ export default function TeacherAttendanceScreen() {
             : {}),
         }, { merge: true })
       })
-      await batch.commit()
 
       // Les déclarations couvertes par cet appel passent à 'approved'.
       await Promise.all(

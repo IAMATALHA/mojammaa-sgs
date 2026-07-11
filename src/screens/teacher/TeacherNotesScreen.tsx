@@ -23,7 +23,6 @@ import { toDoc } from '../../services/firestore';
 import type { EleveDoc } from '../../services/elevesService';
 import {
   collection, getDocs, query, where, setDoc, doc, serverTimestamp,
-  writeBatch,
 } from 'firebase/firestore';
 import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,6 +40,7 @@ import {
   type ControlNote,
 } from '../../services/notesRules';
 import { currentAcademicPeriod } from '../../utils/academicPeriod'
+import { commitInChunks } from '../../utils/firestoreBatch'
 
 // Noms officiels de l'école (collège + primaire). Utilisé seulement comme
 // liste de secours : la matière du prof est verrouillée via profile.matiere.
@@ -311,8 +311,10 @@ export default function TeacherNotesScreen() {
             text: t('teacher.import'),
             onPress: async () => {
               try {
-                const batch = writeBatch(db)
-                matched.forEach(({ row, eleve }) => {
+                // Chunks obligatoires : les règles font un get() par note créée
+                // (cohérence élève/classe) et Firestore plafonne à 20 accès
+                // règles par batch — l'import d'une classe entière échouerait.
+                await commitInChunks(db, matched, (batch, { row, eleve }) => {
                   const docId = notes.get(eleve.id)?.id || noteDocId(eleve.id, period.academicYear, semestre, matiere)
                   batch.set(doc(db, 'notes', docId), {
                     eleveId:      eleve.id,
@@ -335,7 +337,6 @@ export default function TeacherNotesScreen() {
                     importedBy:   profile.uid,
                   }, { merge: true })
                 })
-                await batch.commit()
                 Alert.alert(t('teacher.importDone'), t('teacher.notesImported', { count: matched.length }))
                 load()
               } catch (e: any) {

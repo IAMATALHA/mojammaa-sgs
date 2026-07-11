@@ -3,5 +3,5 @@
   "compilerOptions": {
     "strict": true
   },
-  "exclude": ["functions", "node_modules"]
+  "exclude": ["functions", "node_modules", "dist"]
 }

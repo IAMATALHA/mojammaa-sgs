@@ -57,8 +57,11 @@ async function resolveRecipientUids(data) {
     snap.forEach((d) => uids.add(d.id))
   }
 
-  // Legacy `toId` string format
-  if (typeof data.toId === 'string') {
+  // Legacy `toId` string format — honoré UNIQUEMENT si le doc n'a pas le
+  // nouveau format (2026-07-11) : un doc mixte toType+toId élargissait le
+  // fan-out push (toId:'all' → toute l'école). Les règles interdisent
+  // désormais le mélange à la création ; ceci est la défense en profondeur.
+  if (data.toType == null && !Array.isArray(data.toIds) && typeof data.toId === 'string') {
     if (data.toId === 'all') {
       const snap = await db.collection('users').get()
       snap.forEach((d) => uids.add(d.id))

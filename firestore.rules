@@ -53,6 +53,21 @@ service cloud.firestore {
     function eleveParentUid(eleveId) {
       return get(/databases/$(database)/documents/eleves/$(eleveId)).data.parentUid;
     }
+    // Classe RÉELLE de l'élève ciblé (anti-injection 2026-07-11) : un prof ne
+    // peut créer une note/absence/comportement QUE si l'élève appartient bien
+    // à la classe déclarée dans le doc. Sans ce get(), un prof pouvait écrire
+    // `classe: sa-classe, eleveId: élève-d-ailleurs` et le parent de la victime
+    // voyait la donnée forgée (sa lecture ne filtre que sur eleveId).
+    // ⚠️ COÛT : 1 get() par doc écrit → les batchs client doivent rester ≤ 10
+    // docs (limite Firestore : 20 accès règles par batch). Les écrans appel &
+    // import de notes committent par chunks (src/utils/firestoreBatch.ts).
+    function eleveIsInClasse(eleveId, classe) {
+      return get(/databases/$(database)/documents/eleves/$(eleveId)).data.classe == classe;
+    }
+    // Champs non modifiés par cet update (immutabilité sélective).
+    function untouched(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
     // Un champ tableau ne peut évoluer qu'en AJOUTANT son propre uid
     // (ou rester inchangé). Utilisé pour readBy/deletedBy des messages :
     // pas de retrait, pas d'ajout d'un autre uid, pas de réécriture.
@@ -83,7 +98,17 @@ service cloud.firestore {
       allow read: if isAdmin()
                   || (isParent()  && resource.data.parentUid == myUid())
                   || teacherTeaches(resource.data.classe);
-      allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classe);
+      allow create: if isAdmin() || teacherTeaches(request.resource.data.classe);
+      // Durci 2026-07-11 : l'ancienne règle ne validait que la NOUVELLE classe —
+      // un prof pouvait cibler N'IMPORTE QUEL élève par ID (écriture aveugle,
+      // pas besoin du droit de lecture) et le "capturer" en posant sa classe.
+      // Désormais : ancienne ET nouvelle classe dans son périmètre, et
+      // `parentUid` intouchable (sinon rattachement de l'enfant d'autrui à un
+      // parent complice → fuite de toutes ses données).
+      allow update: if isAdmin()
+        || (teacherTeaches(resource.data.classe)
+            && teacherTeaches(request.resource.data.classe)
+            && untouched(['parentUid']));
       allow delete: if isSuperAdmin();
     }
 
@@ -109,9 +134,23 @@ service cloud.firestore {
                       && resource.data.matiere == myDoc().matiere)
                   || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
       // Prof : uniquement SA classe ET SA matière. Admin : tout.
-      allow create, update: if isAdmin() || (
-        teacherTeaches(request.resource.data.classe) &&
-        request.resource.data.matiere == myDoc().matiere
+      // Durci 2026-07-11 (anti-injection + anti-détournement) :
+      //  - create : l'élève doit RÉELLEMENT appartenir à la classe déclarée
+      //    (sinon note forgée visible par le parent d'un élève d'ailleurs) ;
+      //  - update : on valide la classe EXISTANTE (plus seulement la nouvelle)
+      //    et eleveId/classe/matiere deviennent immuables — un prof ne peut
+      //    plus s'approprier une note hors périmètre en réécrivant sa classe.
+      //    (L'app réécrit ces champs à l'identique via set+merge → inchangés,
+      //    donc hors affectedKeys : aucun flux existant n'est cassé.)
+      allow create: if isAdmin() || (
+        teacherTeaches(request.resource.data.classe)
+        && request.resource.data.matiere == myDoc().matiere
+        && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe)
+      );
+      allow update: if isAdmin() || (
+        teacherTeaches(resource.data.classe)
+        && resource.data.matiere == myDoc().matiere
+        && untouched(['eleveId', 'classe', 'matiere'])
       );
       allow delete: if isSuperAdmin();
     }
@@ -125,7 +164,18 @@ service cloud.firestore {
       allow read: if isAdmin()
                   || teacherTeaches(resource.data.classe)
                   || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
-      allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classe);
+      // Durci 2026-07-11 — même logique que `notes` : cohérence élève/classe au
+      // create, classe existante validée + eleveId/classe immuables à l'update.
+      // (L'écran d'appel réécrit le doc à l'identique via set+merge, docId
+      // déterministe → update autorisé, champs gelés inchangés.)
+      allow create: if isAdmin() || (
+        teacherTeaches(request.resource.data.classe)
+        && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe)
+      );
+      allow update: if isAdmin() || (
+        teacherTeaches(resource.data.classe)
+        && untouched(['eleveId', 'classe'])
+      );
       allow delete: if isSuperAdmin();
     }
 
@@ -139,7 +189,9 @@ service cloud.firestore {
                   || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
       allow create: if isAdmin()
         || (teacherTeaches(request.resource.data.classe)
-            && request.resource.data.teacherId == myUid());
+            && request.resource.data.teacherId == myUid()
+            // 2026-07-11 : cohérence élève/classe (même injection que notes).
+            && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe));
       allow update: if isAdmin();
       allow delete: if isAdmin()
         || (isTeacher() && resource.data.teacherId == myUid());
@@ -166,9 +218,14 @@ service cloud.firestore {
         || (isParent() && resource.data.parentUid == myUid())
         || teacherTeaches(resource.data.classe);
       // Décision : prof de la classe / admin — champs de décision uniquement.
+      // Durci 2026-07-11 : statut contraint aux valeurs réelles du client
+      // ('approved'/'declined' — cf. decideAbsenceRequest ; PAS 'rejected'),
+      // et décision signée (decidedBy == décideur réel).
       allow update: if (isAdmin() || teacherTeaches(resource.data.classe))
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['status', 'decidedBy', 'decidedAt']);
+             .hasOnly(['status', 'decidedBy', 'decidedAt'])
+        && request.resource.data.status in ['approved', 'declined']
+        && request.resource.data.decidedBy == myUid();
       // Le parent peut retirer une déclaration tant qu'elle est en attente.
       allow delete: if isAdmin()
         || (isParent() && resource.data.parentUid == myUid() && resource.data.status == 'pending');
@@ -268,20 +325,75 @@ service cloud.firestore {
       // Durci 23/06/2026 : `fromRole` ne peut pas mentir — s'il est présent il
       // DOIT valoir le rôle réel de l'auteur (sinon un parent pourrait poster un
       // message affiché comme « administration » → phishing in-app).
+      // Durci 2026-07-11 : un parent n'écrit qu'à un petit nombre de
+      // destinataires (compose parent réel = 1 prof OU les admins, reply = 1 ;
+      // borne 10 = marge). Sans borne, un parent pouvait spammer d'un coup
+      // tout le personnel listé dans directory/. Profs/admins non bornés
+      // (envois de classe légitimes ≈ 30 uids).
+      // Durci 2026-07-11 #3 : le PROF n'a plus AUCUNE diffusion générale
+      // ('all'/'parents'/'teachers' = admin uniquement). Ses envois sont tous
+      // toType:'user' (les helpers broadcastToParents/broadcastPersonalized/
+      // notifications le forcent déjà) et un envoi multi-destinataires doit
+      // être étiqueté d'une classe qu'il enseigne (le compose prof écrit
+      // classe = "1A" ou "1A, 2B" → chaque partie doit être une DE SES
+      // classes). L'envoi à 1 destinataire reste libre (réponse à un parent,
+      // notification d'absence/comportement, message à l'admin).
+      // Limite assumée : les règles ne peuvent pas vérifier uid par uid que
+      // toIds ⊂ parents de la classe (pas de requête dans les règles) — la
+      // borne réelle par destinataire viendra du refactor deliveries (CF).
       allow create: if isSignedIn()
         && request.resource.data.fromId == myUid()
-        && (request.resource.data.toType == 'user' || isTeacher() || isAdmin())
+        && (request.resource.data.toType == 'user' || isAdmin())
+        && (isTeacher() || isAdmin()
+            || (request.resource.data.toIds is list
+                && request.resource.data.toIds.size() <= 10))
+        && (!isTeacher()
+            || request.resource.data.get('toIds', []).size() <= 1
+            // classe non vide OBLIGATOIRE en multi-destinataires ('' absent
+            // matcherait le filler legacy vide du concat ci-dessous).
+            || (request.resource.data.get('classe', '') != ''
+                && request.resource.data.classe.split(', ')
+                     .hasOnly(myClasses().concat([myDoc().get('classe', '')]))))
+        // Schéma unique (durci 2026-07-11 #2) : interdiction de MÉLANGER le
+        // legacy `toId` avec le nouveau format — sinon un message 'user'
+        // autorisé embarquait un toId:'all' lisible par toute l'école via le
+        // chemin de lecture legacy (et fan-out push élargi côté CF). Les
+        // anciens documents restent lisibles ; un write 100% legacy (toId
+        // seul, sans toType/toIds) reste possible pour le staff.
+        && !(request.resource.data.keys().hasAny(['toId'])
+             && request.resource.data.keys().hasAny(['toType', 'toIds']))
         && (!request.resource.data.keys().hasAny(['fromRole'])
-            || request.resource.data.fromRole == myRole());
+            || request.resource.data.fromRole == myRole())
+        // Un parent ne signe pas d'un nom arbitraire (« Administration »… =
+        // même phishing que fromRole) : fromNom doit être SON nom réel
+        // (les deux ordres prénom/nom sont tolérés, cf. composes client).
+        && (!isParent()
+            || !request.resource.data.keys().hasAny(['fromNom'])
+            || request.resource.data.fromNom.trim() in [
+                 (myDoc().get('prenom', '') + ' ' + myDoc().get('nom', '')).trim(),
+                 (myDoc().get('nom', '') + ' ' + myDoc().get('prenom', '')).trim(),
+               ]);
       // MAJ : un destinataire ne touche QUE readBy/deletedBy, et seulement en
       // s'AJOUTANT lui-même (append-only). Intégrité requise : readBy devient
       // un accusé de lecture sur lequel l'école s'appuie — personne ne doit
       // pouvoir effacer/falsifier les lectures des autres (le client utilise
       // arrayUnion(uid), donc cette contrainte ne casse rien).
-      // L'expéditeur/admin peut éditer les AUTRES champs, mais pas readBy.
+      //
+      // ENVELOPPE IMMUABLE (durci 2026-07-11) : l'ancienne règle laissait
+      // l'EXPÉDITEUR modifier toType/toIds/fromRole après envoi → un parent
+      // créait un message 'user' autorisé puis le basculait en diffusion 'all'
+      // signée « admin » (le garde-fou fromRole du 23/06 n'existait qu'au
+      // create). Désormais :
+      //  - expéditeur & destinataires : readBy/deletedBy en self-append, RIEN
+      //    d'autre (aucun flux client n'édite un message après envoi — vérifié
+      //    messagesService 2026-07-11) ;
+      //  - admin : peut retoucher le CONTENU, jamais l'enveloppe
+      //    (expéditeur/ciblage/horodatage).
       allow update: if isSignedIn()
         && (
-          resource.data.fromId == myUid() || isAdmin()
+          (isAdmin() && untouched(['fromId', 'fromNom', 'fromRole',
+                                   'toType', 'toIds', 'toId', 'classe',
+                                   'eleveId', 'createdAt']))
           || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy'])
         )
         && selfAppendOnly('readBy')

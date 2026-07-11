@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "doctor": "npx expo-doctor",
     "verify:rules": "node scripts/verifyRulesLive.js",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-mojammaa-rules \"node tests/rules/firestore.rules.test.mjs\"",
     "db:import:eleves": "node scripts/importStudents.js",
     "db:import:eleves:commit": "node scripts/importStudents.js --commit",
     "db:reset:eleves": "node scripts/importStudents.js --commit --wipe",
@@ -53,6 +54,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@types/react": "~19.1.0",
     "babel-preset-expo": "~54.0.10",
     "firebase-admin": "^13.10.0",
