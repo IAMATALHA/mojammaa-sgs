@@ -13,7 +13,8 @@
  *   • Ligne 1 = en-têtes (ne pas modifier).
  *   • Lignes "EXEMPLE..." ignorées automatiquement.
  *   • Colonnes multiples (classes / enfants_codeMassar) : séparées par virgule.
- *   • password vide → "<email>1234".
+ *   • password vide → mot de passe ALÉATOIRE fort (imprimé une fois en fin
+ *     d'import ; le compte le réinitialise au 1er accès). Plus jamais "<email>1234".
  *   • dateNaissance : AAAA-MM-JJ.
  *   • EmploiDuTemps : day accepte monday..saturday ou lundi..samedi.
  */
@@ -21,6 +22,7 @@
 const path = require('path')
 const fs   = require('fs')
 const XLSX = require('xlsx')
+const { randomPassword } = require('./lib/password')
 
 const COMMIT  = process.argv.includes('--commit')
 const fileArg = process.argv.slice(2).find(a => !a.startsWith('--'))
@@ -144,7 +146,7 @@ function main() {
 
   const parents = readSheet(wb, 'Parents').map(r => ({
     email: clean(r.email),
-    password: clean(r.password) || (clean(r.email) + '1234'),
+    password: clean(r.password) || randomPassword(),
     nom: clean(r.nom),
     prenom: clean(r.prenom),
     children: splitList(r.enfants_codeMassar),
@@ -152,7 +154,7 @@ function main() {
 
   const teachers = readSheet(wb, 'Enseignants').map(r => ({
     email: clean(r.email),
-    password: clean(r.password) || (clean(r.email) + '1234'),
+    password: clean(r.password) || randomPassword(),
     nom: clean(r.nom),
     prenom: clean(r.prenom),
     matiere: clean(r.matiere),

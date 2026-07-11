@@ -18,13 +18,7 @@
 
 const path = require('path')
 const fs   = require('fs')
-
-function randomPassword() {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
-  let pwd = ''
-  for (let i = 0; i < 12; i++) pwd += chars[Math.floor(Math.random() * chars.length)]
-  return pwd + '!'
-}
+const { randomPassword } = require('./lib/password')
 
 async function main() {
   const [, , email, nom, prenom, codeMassarArg] = process.argv
@@ -77,7 +71,8 @@ async function main() {
     console.log(`   (existe déjà : ${user.uid})`)
   } catch (err) {
     if (err.code === 'auth/user-not-found') {
-      usedPwd = email + '1234'
+      // Défaut = mot de passe aléatoire fort (plus jamais `email + '1234'`).
+      usedPwd = randomPassword()
       user = await auth.createUser({
         email,
         password: usedPwd,
