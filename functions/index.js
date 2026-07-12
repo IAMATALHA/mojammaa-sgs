@@ -18,6 +18,7 @@ const { initializeApp } = require('firebase-admin/app')
 const { getFirestore, FieldPath, FieldValue } = require('firebase-admin/firestore')
 const { getAuth } = require('firebase-admin/auth')
 const logger = require('firebase-functions/logger')
+const { claimEmailSlot, claimGlobalSlot } = require('./resetThrottle')
 const { computeClassStats, statsDocId } = require('./classStats')
 const { computeSchoolStats } = require('./schoolStats')
 const { buildSlotDocs } = require('./emploiDuTempsSync')
@@ -682,6 +683,13 @@ const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
 const SENDER = 'Mojammaa Al Maarifa <contact@mojammaa.com>'
 const RESET_PAGE_URL = 'https://mojammaa.com/reset-password'
 const RESET_COOLDOWN_MS = 60 * 1000
+// Plafond global glissant (durci 2026-07-12) : borne le nombre TOTAL d'envois
+// tous emails confondus, pour qu'un attaquant ne puisse pas contourner le
+// cooldown par-email en faisant tourner des adresses différentes et vider le
+// quota Resend / spammer. 120/h couvre très largement l'usage légitime d'une
+// école (~136 familles, resets initiés un par un depuis l'écran de connexion).
+const RESET_GLOBAL_WINDOW_MS = 60 * 60 * 1000
+const RESET_GLOBAL_MAX = 120
 
 function brandedResetEmailHtml(link) {
   return `
@@ -716,16 +724,20 @@ exports.sendBrandedPasswordReset = onCall(
       throw new HttpsError('invalid-argument', 'Email invalide.')
     }
 
-    // Anti-spam : un envoi par email par minute max.
-    const cooldownRef = db.collection('passwordResetCooldowns').doc(email)
-    const cooldownSnap = await cooldownRef.get()
-    if (cooldownSnap.exists) {
-      const last = cooldownSnap.get('lastSentAt')
-      const lastMs = last && last.toMillis ? last.toMillis() : 0
-      if (Date.now() - lastMs < RESET_COOLDOWN_MS) {
-        // Ne révèle rien : même réponse que le cas "succès" côté client.
-        return { ok: true }
-      }
+    // Anti-spam TRANSACTIONNEL (durci 2026-07-12). L'ancien schéma
+    // get → (send) → set laissait passer des requêtes PARALLÈLES (toutes
+    // lisaient "pas de cooldown" avant que la première n'écrive) et ne bornait
+    // rien globalement (attaquant cyclant les emails → quota Resend vidé).
+    //
+    // 1) Cooldown PAR EMAIL réservé atomiquement AVANT tout envoi : deux appels
+    //    concurrents pour le même email ⇒ un seul gagne la transaction
+    //    (anti email-bomb d'une victime). Fail-closed : si la suite échoue, ce
+    //    compte est juste bloqué 1 min.
+    const claimedEmail = await claimEmailSlot(db, email, RESET_COOLDOWN_MS)
+    if (!claimedEmail) {
+      // Ne révèle rien : même réponse que le cas "succès" côté client.
+      logger.info('Password reset throttled (per-email cooldown)', { email })
+      return { ok: true }
     }
 
     const auth = getAuth()
@@ -745,6 +757,15 @@ exports.sendBrandedPasswordReset = onCall(
       }
       logger.error('generatePasswordResetLink failed', { email, error: String(err) })
       throw new HttpsError('internal', "Erreur lors de la génération du lien.")
+    }
+
+    // 2) Plafond GLOBAL glissant — décompté ICI (email valide connu), donc des
+    //    sondes d'emails inconnus ne peuvent PAS épuiser le budget et bloquer
+    //    les resets légitimes. Borne le quota Resend contre un spam de masse.
+    const underGlobalCap = await claimGlobalSlot(db, RESET_GLOBAL_WINDOW_MS, RESET_GLOBAL_MAX)
+    if (!underGlobalCap) {
+      logger.warn('Password reset global cap hit — send suppressed', { email })
+      return { ok: true }
     }
 
     const oobCode = new URL(link).searchParams.get('oobCode')
@@ -768,8 +789,7 @@ exports.sendBrandedPasswordReset = onCall(
       logger.error('Resend send failed', { email, status: res.status, body })
       throw new HttpsError('internal', "Erreur lors de l'envoi de l'email.")
     }
-    await cooldownRef.set({ lastSentAt: FieldValue.serverTimestamp() })
-
+    // Cooldown déjà réservé dans la transaction ci-dessus (avant l'envoi).
     logger.info('Branded password reset email sent', { email })
     return { ok: true }
   },
