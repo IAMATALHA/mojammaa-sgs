@@ -33,6 +33,22 @@ export interface ParseNotesOptions {
   maxGrade?: number
 }
 
+// Défense en profondeur (batch sécurité 6, 2026-07-12) : le fichier importé est
+// une entrée NON FIABLE parsée sur l'appareil. Même après passage à SheetJS
+// 0.20.3 (corrige les CVE prototype-pollution + ReDoS de xlsx@0.18.5), on borne
+// l'entrée AVANT parsing pour couper tout DoS mémoire/CPU par fichier gonflé ou
+// forgé. Un relevé de notes de classe réel = quelques Ko / des dizaines de
+// lignes ; ces plafonds sont très larges.
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024   // 5 Mo
+const MAX_IMPORT_ROWS   = 5000
+
+export class NotesImportError extends Error {
+  constructor(public readonly code: 'too_large' | 'too_many_rows', message: string) {
+    super(message)
+    this.name = 'NotesImportError'
+  }
+}
+
 interface ControlSlot {
   label: string
   note: number | null
@@ -253,6 +269,11 @@ function parseLooseRows(rows: any[][], maxControls?: number | null, maxGrade = 2
 export async function parseNotesFile(uri: string, mime: string, options: ParseNotesOptions = {}): Promise<ParsedNoteRow[]> {
   const res  = await fetch(uri)
   const buf  = await res.arrayBuffer()
+  // Plafond de taille AVANT de charger/parser le contenu (entrée non fiable).
+  if (buf.byteLength > MAX_IMPORT_BYTES) {
+    throw new NotesImportError('too_large',
+      `Fichier trop volumineux (${Math.round(buf.byteLength / 1024 / 1024)} Mo, max 5 Mo).`)
+  }
   const data = new Uint8Array(buf)
 
   const XLSX: typeof XLSXType = await import('xlsx')
@@ -260,6 +281,10 @@ export async function parseNotesFile(uri: string, mime: string, options: ParseNo
   const sheet = wb.Sheets[wb.SheetNames[0]]
   if (!sheet) return []
   const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, raw: true, defval: '' })
+  if (rows.length > MAX_IMPORT_ROWS) {
+    throw new NotesImportError('too_many_rows',
+      `Trop de lignes (${rows.length}, max ${MAX_IMPORT_ROWS}).`)
+  }
   const maxControls = options.maxControls
   const maxGrade = options.maxGrade ?? 20
 
