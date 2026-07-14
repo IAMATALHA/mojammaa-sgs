@@ -2,11 +2,11 @@
 
 ## Direction
 
-The dashboard visual language follows the Mojammaa logo through an iOS lens: warm cream canvas, near-black ink for structure, logo red for primary actions, and gold/orange identity accents. The goal is school-friendly warmth without turning the app into a decorative poster.
+The dashboard visual language follows the Mojammaa logo through an iOS lens: warm cream canvas, near-black ink for structure, a deeper interpretation of the logo red for primary actions, and gold/orange identity accents. The goal is school-friendly warmth without turning the app into a decorative poster.
 
 ## Color
 
-**Source de vérité = `src/theme/designTokens.ts`** (et non ce document). Valeurs réelles : surface `#FFFBEB` (crème), texte/structure `#120E09`, primaire rouge `#D00302`, or lumineux `#FCCC06`, orange `#FD7302`, `success` vert `#15803D` et `danger` `#B42318`. Le rouge porte les CTA et l'onglet actif. L'or et l'orange lumineux restent décoratifs ; pour du texte ou un fond avec texte blanc, utiliser leurs variantes accessibles `#8A5700` et `#B84F00`.
+**Source de vérité = `src/theme/designTokens.ts`** (et non ce document). Valeurs réelles : surface `#FFFBEB` (crème), texte/structure `#120E09`, primaire rouge profond `#A61B1B`, or lumineux `#FCCC06`, orange `#FD7302`, `success` vert `#15803D` et `danger` `#B42318`. Le rouge profond porte les CTA et l'onglet actif ; le rouge vif `#D00302` reste celui de l'image originale du logo. L'or et l'orange lumineux restent décoratifs ; pour du texte ou un fond avec texte blanc, utiliser leurs variantes accessibles `#8A5700` et `#B84F00`.
 
 > Les alias historiques `navy` et `coral` sont conservés uniquement pour la compatibilité des composants existants. Tout nouveau code doit utiliser les tokens `brand*` ou sémantiques.
 

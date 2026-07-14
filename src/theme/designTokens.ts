@@ -1,7 +1,7 @@
 /**
  * Design tokens dérivés du logo Mojammaa Al Maarifa.
  *
- * - rouge du logo pour les actions principales
+ * - rouge profond dérivé du logo pour les actions principales
  * - or et orange pour l'identité et les accents
  * - encre presque noire pour la lisibilité
  * - surfaces crème chaudes pour garder une interface calme
@@ -27,11 +27,11 @@ export const colors = {
     separator: 'rgba(18, 14, 9, 0.10)',
     separatorStrong: 'rgba(18, 14, 9, 0.18)',
     primary: {
-      value: '#D00302',
-      pressed: '#A71304',
-      surface: 'rgba(208, 3, 2, 0.08)',
-      surfaceStrong: 'rgba(208, 3, 2, 0.14)',
-      border: 'rgba(208, 3, 2, 0.20)',
+      value: '#A61B1B',
+      pressed: '#831515',
+      surface: 'rgba(166, 27, 27, 0.08)',
+      surfaceStrong: 'rgba(166, 27, 27, 0.14)',
+      border: 'rgba(166, 27, 27, 0.24)',
     },
     accent: {
       // Or assombri pour le texte et les boutons (6.1:1 sur blanc).
@@ -58,13 +58,13 @@ export const colors = {
     pastel: {
       green: '#52B788',
       greenSoft: 'rgba(82, 183, 136, 0.16)',
-      rose: '#D00302',
-      roseSoft: 'rgba(208, 3, 2, 0.08)',
+      rose: '#A61B1B',
+      roseSoft: 'rgba(166, 27, 27, 0.08)',
       violet: '#B84F00',
       violetSoft: 'rgba(253, 115, 2, 0.12)',
       cream: '#FFFBEB',
       watercolorA: 'rgba(252, 204, 6, 0.18)',
-      watercolorB: 'rgba(208, 3, 2, 0.07)',
+      watercolorB: 'rgba(166, 27, 27, 0.07)',
       watercolorC: 'rgba(253, 115, 2, 0.10)',
     },
   },
