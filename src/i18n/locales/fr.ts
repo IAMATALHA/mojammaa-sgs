@@ -453,6 +453,7 @@ const fr = {
     urgentPriority: '🚨 Urgent',
     sendAnnouncement: 'Envoyer l\'annonce',
     sent: 'Envoyé',
+    supervision: 'Supervision',
     sentTo: 'Annonce envoyée à : {{target}}.',
     scheduleTitle: 'Emploi du temps',
     allClasses: 'Toutes',

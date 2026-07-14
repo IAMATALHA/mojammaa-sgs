@@ -10,7 +10,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 import type { AdminTabsParamList, AdminTabRoute } from '../../navigation/types'
 import {
   X, Send, Inbox, PenSquare, AlertCircle, Users,
-  GraduationCap, Search, CalendarDays, Check, Languages, ImagePlus,
+  GraduationCap, Search, CalendarDays, Check, Languages, ImagePlus, Eye,
 } from 'lucide-react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -18,7 +18,7 @@ import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import {
-  subscribeMessages, subscribeSentMessages, markAsRead, deleteMessage,
+  subscribeMessages, subscribeSentMessages, subscribeTeacherMessages, markAsRead, deleteMessage,
   broadcast, broadcastToParents, broadcastPersonalized, getRecipientsList,
   type MessageDoc, type MessageToType,
 } from '../../services/messagesService'
@@ -36,7 +36,7 @@ import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import { dirStyle, localizedSubject, localizedBody } from '../../utils/arabicText'
 import ReadReceipts from '../../components/ReadReceipts'
 
-type Tab = 'inbox' | 'sent'
+type Tab = 'inbox' | 'sent' | 'supervision'
 // Audiences entières (all/parents/teachers) → un seul doc broadcast.
 // 'class'  → picker élève + perso {élève} (parité prof, sur n'importe quelle classe).
 // 'people' → multi-sélection de personnes nommées (profs et/ou parents).
@@ -54,6 +54,7 @@ export default function AdminMessagesScreen() {
   const [tab, setTab] = useState<Tab>('inbox')
   const [inboxMsgs, setInboxMsgs] = useState<MessageDoc[]>([])
   const [sentMsgs, setSentMsgs] = useState<MessageDoc[]>([])
+  const [supervisionMsgs, setSupervisionMsgs] = useState<MessageDoc[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [detail, setDetail] = useState<MessageDoc | null>(null)
@@ -71,7 +72,10 @@ export default function AdminMessagesScreen() {
     // L'échec de la requête « envoyés » ne doit pas alarmer toute la messagerie
     // (seul l'inbox pilote la bannière).
     const u2 = subscribeSentMessages(profile.uid, list => setSentMsgs(list))
-    return () => { u1(); u2() }
+    // Supervision : tous les messages envoyés par un prof, peu importe le
+    // destinataire — l'admin ne doit pas rater un souci côté prof↔parent.
+    const u3 = subscribeTeacherMessages(list => setSupervisionMsgs(list))
+    return () => { u1(); u2(); u3() }
   }, [profile?.uid])
 
 
@@ -90,7 +94,7 @@ export default function AdminMessagesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.messageId, inboxMsgs])
 
-  const displayed = tab === 'inbox' ? inboxMsgs : sentMsgs
+  const displayed = tab === 'inbox' ? inboxMsgs : tab === 'sent' ? sentMsgs : supervisionMsgs
   const unreadCount = useMemo(
     () => inboxMsgs.filter(m => !(m.readBy || []).includes(profile?.uid || '')).length,
     [inboxMsgs, profile?.uid],
@@ -127,8 +131,10 @@ export default function AdminMessagesScreen() {
   const renderItem = ({ item }: { item: MessageDoc }) => {
     const isUnread = tab === 'inbox' && !(item.readBy || []).includes(profile?.uid || '')
     const isUrgent = item.priority === 'urgent'
+    const isSupervision = tab === 'supervision'
+    const showReceipt = tab === 'sent' || isSupervision
     return (
-      <Pressable onPress={() => openMessage(item)} onLongPress={() => handleDeleteMessage(item)} delayLongPress={350}
+      <Pressable onPress={() => openMessage(item)} onLongPress={isSupervision ? undefined : () => handleDeleteMessage(item)} delayLongPress={350}
         style={[styles.card, theme.shadows.xs, {
           backgroundColor: isUrgent ? theme.dangerSurface : isUnread ? theme.white : theme.surface,
           borderColor: isUrgent ? theme.danger : isUnread ? theme.primary : theme.border,
@@ -137,6 +143,8 @@ export default function AdminMessagesScreen() {
           <View style={[styles.avatar, { backgroundColor: isUrgent ? theme.white : tab === 'sent' ? theme.primarySurface : theme.violetSurface }]}>
             {tab === 'sent'
               ? <Send size={15} color={theme.primary} strokeWidth={2} />
+              : isSupervision
+              ? <Eye size={15} color={theme.primary} strokeWidth={2} />
               : <Text style={{ color: isUrgent ? theme.danger : theme.primary, fontFamily: theme.fonts.bold, fontSize: 13 }}>
                   {initialsOf(item.fromNom)}
                 </Text>}
@@ -145,7 +153,7 @@ export default function AdminMessagesScreen() {
             <View style={styles.nameRow}>
               {isUnread ? <View style={[styles.unreadDot, { backgroundColor: theme.accent }]} /> : null}
               <Text numberOfLines={1} style={{ color: theme.text, fontWeight: isUnread ? '800' : '600', fontSize: 14, flex: 1 }}>
-                {tab === 'sent' ? (item.toLabel || '—') : (item.fromNom || '—')}
+                {tab === 'sent' ? (item.toLabel || '—') : isSupervision ? `${item.fromNom || '—'} → ${item.toLabel || '—'}` : (item.fromNom || '—')}
               </Text>
               <Text style={{ color: theme.textSoft, fontSize: 11 }}>{formatTimestamp(item.createdAt)}</Text>
             </View>
@@ -155,14 +163,14 @@ export default function AdminMessagesScreen() {
             <Text numberOfLines={1} style={[{ color: theme.textSoft, fontSize: 12, marginTop: 2 }, dirStyle(localizedBody(item, lang))]}>{localizedBody(item, lang)}</Text>
           </View>
         </View>
-        {tab === 'sent' && item.toType === 'user' && Array.isArray(item.toIds) && item.toIds.length > 0 ? (
+        {showReceipt && item.toType === 'user' && Array.isArray(item.toIds) && item.toIds.length > 0 ? (
           <Text style={{
             color: item.toIds.every(uid => (item.readBy || []).includes(uid)) ? theme.success : theme.textSoft,
             fontSize: 10, fontWeight: '700', marginTop: 6,
           }}>
             ✓ {t('receipts.readOf', { read: item.toIds.filter(uid => (item.readBy || []).includes(uid)).length, total: item.toIds.length })}
           </Text>
-        ) : tab === 'sent' && item.readBy && item.readBy.length > 0 ? (
+        ) : showReceipt && item.readBy && item.readBy.length > 0 ? (
           <Text style={{ color: theme.success, fontSize: 10, fontWeight: '600', marginTop: 6 }}>✓ {t('receipts.readCount', { count: item.readBy.length })}</Text>
         ) : null}
       </Pressable>
@@ -197,6 +205,16 @@ export default function AdminMessagesScreen() {
             <Text numberOfLines={1} style={{ color: tab === 'sent' ? theme.primary : theme.textSoft, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{t('admin.sent')}</Text>
           </View>
         </Pressable>
+        <Pressable onPress={() => setTab('supervision')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: tab === 'supervision' }}
+          accessibilityLabel={t('admin.supervision')}
+          style={[styles.tab, tab === 'supervision' && [{ backgroundColor: theme.card, borderColor: theme.border }, styles.tabActive, theme.shadows.xs]]}>
+          <View style={styles.tabContent}>
+            <Eye size={14} color={tab === 'supervision' ? theme.primary : theme.textSoft} strokeWidth={2} />
+            <Text numberOfLines={1} style={{ color: tab === 'supervision' ? theme.primary : theme.textSoft, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{t('admin.supervision')}</Text>
+          </View>
+        </Pressable>
       </View>
 
       {loadError && displayed.length === 0 && <MessagesErrorBanner />}
@@ -223,7 +241,9 @@ export default function AdminMessagesScreen() {
               <View style={styles.sheetHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>
-                    {tab === 'sent' ? (detail.toLabel || '—') : (detail.fromNom || '—')}
+                    {tab === 'sent' ? (detail.toLabel || '—')
+                      : tab === 'supervision' ? `${detail.fromNom || '—'} → ${detail.toLabel || '—'}`
+                      : (detail.fromNom || '—')}
                   </Text>
                   <Text style={{ color: theme.textSoft, fontSize: 11 }}>{formatTimestamp(detail.createdAt)}</Text>
                 </View>
@@ -249,6 +269,17 @@ export default function AdminMessagesScreen() {
                     theme={theme}
                     sender={{ uid: profile.uid, nom: profile.nom, prenom: profile.prenom, role: profile.role }}
                   />
+                ) : tab === 'supervision' ? (
+                  <View style={[styles.urgentTag, { backgroundColor: theme.surfaceAlt, marginTop: 14 }]}>
+                    <Text style={{ color: theme.textSoft, fontSize: 12, fontWeight: '600' }}>
+                      {detail.toType === 'user' && Array.isArray(detail.toIds) && detail.toIds.length > 0
+                        ? t('receipts.readOf', {
+                            read: detail.toIds.filter(uid => (detail.readBy || []).includes(uid)).length,
+                            total: detail.toIds.length,
+                          })
+                        : t('receipts.readCount', { count: (detail.readBy || []).length })}
+                    </Text>
+                  </View>
                 ) : null}
               </ScrollView>
             </Pressable>

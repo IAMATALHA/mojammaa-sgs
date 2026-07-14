@@ -453,6 +453,7 @@ const en = {
     urgentPriority: '🚨 Urgent',
     sendAnnouncement: 'Send announcement',
     sent: 'Sent',
+    supervision: 'Supervision',
     sentTo: 'Announcement sent to: {{target}}.',
     scheduleTitle: 'Schedule',
     allClasses: 'All',

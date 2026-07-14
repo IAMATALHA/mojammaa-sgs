@@ -205,6 +205,29 @@ export function subscribeSentMessages(
   )
 }
 
+// Supervision admin : TOUS les messages envoyés par un prof (peu importe le
+// destinataire), pour que l'administration voie ce qui part vers les parents.
+// Volontairement PAS filtré par `deletedBy` — un prof ne doit pas pouvoir
+// soustraire un message à la supervision en le "supprimant" de sa propre vue.
+export function subscribeTeacherMessages(
+  onChange: (messages: MessageDoc[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  const period = currentAcademicPeriod()
+  return onSnapshot(
+    query(
+      collection(db, COL),
+      where('fromRole', '==', 'professeur'),
+      where('academicYear', '==', period.academicYear),
+    ),
+    snap => onChange(
+      toDocs<MessageDoc>(snap)
+        .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)),
+    ),
+    err => onError?.(err),
+  )
+}
+
 async function getParentUidsForClasses(classes: string[]): Promise<string[]> {
   const parentUids = new Set<string>()
   for (let i = 0; i < classes.length; i += 10) {

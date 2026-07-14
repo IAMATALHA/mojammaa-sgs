@@ -453,6 +453,7 @@ const ar = {
     urgentPriority: '🚨 عاجل',
     sendAnnouncement: 'إرسال الإعلان',
     sent: 'تم الإرسال',
+    supervision: 'الإشراف',
     sentTo: 'تم الإرسال إلى: {{target}}.',
     scheduleTitle: 'استعمال الزمن',
     allClasses: 'الكل',
