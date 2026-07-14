@@ -1,0 +1,18 @@
+{
+  "stops": [
+    {
+      "id": "centre-ville",
+      "label": "Centre-ville",
+      "sequence": 1,
+      "plannedTime": "16:45",
+      "eleveIds": ["ELEVE_ID_1", "ELEVE_ID_2"]
+    },
+    {
+      "id": "martil",
+      "label": "Martil",
+      "sequence": 2,
+      "plannedTime": "17:05",
+      "eleveIds": ["ELEVE_ID_3"]
+    }
+  ]
+}

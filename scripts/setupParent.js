@@ -2,12 +2,13 @@
  * Configure le profil "parent" d'un user + lie ses enfants via codeMassar.
  *
  *   - Crée le compte Firebase Auth si email inconnu (avec mdp aléatoire imprimé)
- *   - Écrit users/<uid> avec role='parent'
+ *   - Préserve le rôle principal existant (professeur/chauffeur/admin) et
+ *     ajoute la capacité parent via les liens eleves.parentUid
  *   - Met `parentUid`, `parentEmail`, `parentNom` sur chaque doc eleves/<codeMassar>
  *     (parentUid sert à l'app mobile ; parentEmail/parentNom à l'app web admin)
  *
  * Usage :
- *   node scripts/setupParent.js <email> "<nom>" "<prenom>" <codeMassar1,codeMassar2,...>
+ *   node scripts/setupParent.js <email> "<nom>" "<prenom>" <codeMassar1,codeMassar2,...> [--reassign]
  *
  * Exemple (parent d'Omar Hassan en 1APIC-3 — codeMassar A171010188) :
  *   node scripts/setupParent.js hassan.father@example.com Hassan Omar A171010188
@@ -21,10 +22,12 @@ const fs   = require('fs')
 const { randomPassword } = require('./lib/password')
 
 async function main() {
-  const [, , email, nom, prenom, codeMassarArg] = process.argv
+  const args = process.argv.slice(2)
+  const reassign = args.includes('--reassign')
+  const [email, nom, prenom, codeMassarArg] = args.filter(arg => !arg.startsWith('--'))
 
   if (!email || !codeMassarArg) {
-    console.error('Usage : node scripts/setupParent.js <email> "<nom>" "<prenom>" <codeMassar1,codeMassar2,...>')
+    console.error('Usage : node scripts/setupParent.js <email> "<nom>" "<prenom>" <codeMassar1,codeMassar2,...> [--reassign]')
     process.exit(1)
   }
 
@@ -90,17 +93,37 @@ async function main() {
   // ── 3. Écrire users/<uid> ─────────────────────────────────
   const ref = db.collection('users').doc(user.uid)
   const existing = (await ref.get()).data() || {}
+  const conflicting = children.filter(child => (
+    typeof child.parentUid === 'string'
+    && child.parentUid.length > 0
+    && child.parentUid !== user.uid
+  ))
+  if (conflicting.length > 0 && !reassign) {
+    if (createdNow) await auth.deleteUser(user.uid)
+    console.error(
+      `❌ ${conflicting.length} élève(s) sont déjà liés à un autre compte. `
+      + 'Aucune réaffectation effectuée ; utilisez --reassign après vérification administrative.',
+    )
+    process.exit(1)
+  }
+  const preservedRole = typeof existing.role === 'string' && existing.role
+    ? existing.role
+    : 'parent'
+  const linkedChildren = [...new Set([
+    ...(Array.isArray(existing.children) ? existing.children : []),
+    ...childMassarCodes,
+  ])]
   const profile = {
     uid:     user.uid,
     email:   user.email,
-    role:    'parent',
+    role:    preservedRole,
     nom:     nom    || existing.nom    || '',
     prenom:  prenom || existing.prenom || '',
-    children: childMassarCodes,
+    children: linkedChildren,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }
   await ref.set(profile, { merge: true })
-  console.log(`\n✅ users/${user.uid} mis à jour (role='parent')`)
+  console.log(`\n✅ Profil mis à jour (rôle principal préservé : ${preservedRole})`)
 
   // ── 4. Mettre parentUid + parentEmail + parentNom sur chaque enfant ──
   console.log(`\n🔗 Liaison ${childMassarCodes.length} enfant(s) → parent ${user.uid}`)

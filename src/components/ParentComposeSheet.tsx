@@ -19,7 +19,7 @@ import { Building2, GraduationCap, Send } from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext'
 import BottomSheet from './BottomSheet'
 import { getStaffDirectory, type StaffDirectory, type StaffTeacher } from '../services/directoryService'
-import { subscribeChildrenOfParent } from '../services/elevesService'
+import { subscribeChildrenOfParent, type EleveDoc } from '../services/elevesService'
 import { sendMessage } from '../services/messagesService'
 import { dirStyle } from '../utils/arabicText'
 
@@ -36,7 +36,7 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
   const { t } = useTranslation()
   const [staff, setStaff] = useState<StaffDirectory | null>(null)
   const [loadingStaff, setLoadingStaff] = useState(false)
-  const [childClasses, setChildClasses] = useState<string[]>([])
+  const [children, setChildren] = useState<EleveDoc[]>([])
   const [recipient, setRecipient] = useState<Recipient | null>(null)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
@@ -52,14 +52,16 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
   }, [visible])
 
   useEffect(() => {
+    setChildren([])
     if (!visible || !profile?.uid) return
-    const unsub = subscribeChildrenOfParent(profile.uid, eleves => {
-      const set = new Set<string>()
-      eleves.forEach(e => { if (e.classe) set.add(e.classe) })
-      setChildClasses([...set])
-    })
+    const unsub = subscribeChildrenOfParent(profile.uid, setChildren)
     return unsub
   }, [visible, profile?.uid])
+
+  const childClasses = useMemo(
+    () => [...new Set(children.map(child => child.classe).filter(Boolean))],
+    [children],
+  )
 
   const teachers = useMemo(() => {
     if (!staff) return []
@@ -67,10 +69,18 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
     return mine.length > 0 ? mine : staff.teachers
   }, [staff, childClasses])
 
+  const guardianEleveId = useMemo(() => {
+    const matched = recipient?.kind === 'teacher'
+      ? children.find(child => recipient.teacher.classes.includes(child.classe))
+      : children[0]
+    const child = matched || children[0]
+    return child?.codeMassar || child?.id || ''
+  }, [children, recipient])
+
   const reset = () => { setRecipient(null); setSubject(''); setBody('') }
 
   const send = async () => {
-    if (!profile || !recipient || !subject.trim() || !body.trim()) return
+    if (!profile || !recipient || !guardianEleveId || !subject.trim() || !body.trim()) return
     const toIds = recipient.kind === 'school'
       ? (staff?.admins || []).map(a => a.uid)
       : [recipient.teacher.uid]
@@ -87,6 +97,7 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
         fromId:   profile.uid,
         fromNom:  `${profile.prenom || ''} ${profile.nom || ''}`.trim(),
         fromRole: 'parent',
+        eleveId: guardianEleveId,
         toType:   'user',
         toIds,
         toLabel,
@@ -103,7 +114,7 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
     }
   }
 
-  const canSend = !!recipient && !!subject.trim() && !!body.trim() && !sending
+  const canSend = !!recipient && !!guardianEleveId && !!subject.trim() && !!body.trim() && !sending
 
   return (
     <BottomSheet visible={visible} onClose={() => { reset(); onClose() }}>

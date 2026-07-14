@@ -20,7 +20,7 @@ Source de vérité pour la structure de la base.
 
 ## Collections
 
-### `users` — comptes (parents, profs, admin)
+### `users` — comptes (parents, profs, admin, chauffeurs)
 
 Document ID = `uid` Firebase Auth.
 
@@ -28,7 +28,7 @@ Document ID = `uid` Firebase Auth.
 |---|---|---|---|
 | `uid` | string | ✅ | Égal à l'ID du doc |
 | `email` | string | ✅ | Email Firebase Auth |
-| `role` | `'parent' \| 'professeur' \| 'admin'` | ✅ | Drive le routing app |
+| `role` | `'parent' \| 'professeur' \| 'admin' \| 'chauffeur'` | ✅ | Espace principal ; un parent-chauffeur conserve `parent` |
 | `nom` | string | ✅ | Nom de famille |
 | `prenom` | string | ✅ | Prénom |
 | `classes` | `string[]` | optionnel | Pour profs : classes enseignées (ex: `['1APIC-3','1APIC-4']`) |
@@ -47,7 +47,7 @@ Document ID = `uid` Firebase Auth.
 
 **Sécurité** :
 - Read : self only (sauf admin = tous)
-- Write : self pour `nom`/`prenom`/`telephone`/`expoPushToken`. **Pas pour `role`** (admin seulement).
+- Write : self pour `nom`/`prenom`/`telephone`/`expoPushToken`. **Pas pour `role`** (super-admin seulement).
 
 ---
 
@@ -82,6 +82,70 @@ Document ID = `codeMassar` (ex: `A171010188`).
 **Sécurité** :
 - Read : parent (where `parentUid == request.auth.uid`), prof (where `classe in user.classes`), admin
 - Write : admin seulement
+
+---
+
+### `pickupRequests` — file de sortie Smart Pickup
+
+Document ID = `${serviceDate}_${eleveId}` pour garantir une seule demande par élève et par jour.
+
+| Champ | Type | Required | Description |
+|---|---|---|---|
+| `parentUid` | string | ✅ | Parent ayant annoncé l'arrivée |
+| `eleveId` | string | ✅ | ID MASSAR, égal à l'élève réellement lié au parent |
+| `serviceDate` | string ISO | ✅ | Journée de sortie |
+| `status` | `waiting \| called \| ready \| completed \| cancelled` | ✅ | État de remise |
+| `vehicleDescription` | string ≤ 80 | optionnel | Repère visuel minimal, sans téléphone/position |
+| `queueNumber` | number | optionnel | Numéro attribué par l'administration |
+| `zone` | string | optionnel | Zone de remise |
+| `managedByUid` | string | optionnel | Admin ayant traité l'étape |
+| `arrivedAt`, `calledAt`, `readyAt`, `completedAt`, `cancelledAt`, `updatedAt` | Timestamp | selon état | Traçabilité |
+
+**Sécurité** : le parent crée/lit sa demande uniquement pour son propre enfant et ne peut qu'annuler l'état `waiting`. L'admin lit la file du jour et fait avancer les états. Aucun chauffeur n'accède à cette collection.
+
+---
+
+### `pickupSessions` — fenêtre d'ouverture Smart Pickup
+
+Document déterministe `pickupSessions/{YYYY-MM-DD}` avec `isOpen`, `opensAt`, `closesAt`, `openedByUid` et les champs de fermeture. Seul l'admin ouvre ou ferme une session, pour une durée maximale de 6 heures. Les règles refusent toute création ou ré-annonce parent hors de cette fenêtre, y compris une date future forgée.
+
+---
+
+### `driverProfiles` — capacité chauffeur additive
+
+Document ID = `uid`. Cette collection active l'espace chauffeur sans remplacer le rôle `parent` dans `users`.
+
+| Champ | Type | Required | Description |
+|---|---|---|---|
+| `uid` | string | ✅ | Égal à l'ID du doc |
+| `active` | boolean | ✅ | Accès opérationnel actif |
+| `routeIds` | string[] | optionnel | Circuits autorisés |
+| `vehicleId` | string | optionnel | Véhicule habituel |
+| `createdAt`, `updatedAt` | Timestamp | optionnel | Audit |
+
+**Sécurité** : lecture par le chauffeur lui-même et l'admin ; écriture admin uniquement. Aucun client ne peut s'auto-promouvoir chauffeur.
+
+---
+
+### `transportTrips` — tournées scolaires
+
+| Champ | Type | Required | Description |
+|---|---|---|---|
+| `driverUid` | string | ✅ | Chauffeur assigné |
+| `serviceDate` | string ISO | ✅ | Date de la tournée |
+| `direction` | `to_school \| from_school` | ✅ | Matin ou soir |
+| `routeId`, `routeLabel` | string | ✅ | Circuit |
+| `vehicleLabel`, `scheduledTime` | string | ✅ | Véhicule et heure |
+| `status` | `scheduled \| boarding \| in_transit \| arrived \| completed \| cancelled` | ✅ | État opérationnel ; le retard reste un attribut séparé |
+| `stops`, `stopIds` | `TransportStop[]`, `string[]` | ✅ | Arrêts ordonnés et IDs autorisés |
+| `etaMinutes`, `delayMinutes`, `delayReason` | number/string | optionnel | Information de retard |
+| `boardingAt`, `startedAt`, `arrivedAt`, `completedAt`, `cancelledAt`, `updatedAt` | Timestamp | optionnel | Audit posé uniquement par la callable transactionnelle |
+
+Sous-collection `transportTrips/{tripId}/passengers/{eleveId}` : identité minimale de l'élève, classe, `stopId`/`stopLabel`, état `scheduled | boarded | dropped_off | absent | cancelled`, horodatage de transition correspondant et projection parent-safe `delayMinutes`. Chaque passager doit être affecté à un arrêt déclaré avant le départ. Aucun téléphone, note, absence scolaire ou liste d'UID parents n'est dupliqué.
+
+**Sécurité** : l'admin crée/assigne ; un chauffeur actif ne lit et ne met à jour que sa tournée et ses passagers ; un parent ne lit que le document passager de son propre enfant, jamais le trajet parent ni les autres passagers. Les transitions passent par `updateTransportTripStatus` ; les retards par `reportTransportTripDelay`. Ces callables dérivent l'identité de l'auth et garantissent transactions, révisions monotones, horodatages serveur et invariants passagers.
+
+Provisionnement MVP : `npm run setup:driver -- ...` active la capacité additive ; `npm run setup:transport-trip -- <email> <date> <route> <ids> --stops-file=...` crée une tournée et affecte chaque élève à un arrêt. Le format est illustré dans `scripts/transport-stops.example.json`.
 
 ---
 
@@ -300,21 +364,33 @@ Document ID = `{codeMassar}_{annee}_{trimestre}` (ex: `A171010188_2025-2026_2`).
 ## Vue d'ensemble des relations
 
 ```
-users (parent)         users (professeur)        users (admin)
-   │                       │                          │
-   │ uid                   │ uid                      │ accès tout
-   │                       │                          │
-   ▼                       ▼                          ▼
-eleves.parentUid    schedules/{uid}            (sans contrainte)
-   │                       │
-   │ codeMassar            │ weeklySlots[].classe
-   │                       │
-   ▼                       ▼
-notes.eleveId      attendances.classe
-homeworks.classe   homeworks.teacherUid
-attendances        notes.professorId
-bulletins
+users (rôle principal) ── uid ──► eleves.parentUid
+          │                          │
+          │ professeur/chauffeur    ├──► notes / absences / comportements
+          │ reste inchangé          ├──► pickup / transport
+          │                          └──► guardianAccess/{uid}
+          │                                     │ classes exactes
+          ▼                                     ▼
+ schedules/{uid}                         devoirs / ressources
 ```
+
+### `guardianAccess` — capacité parent additive matérialisée
+
+Document ID = UID du responsable. Ce document est calculé exclusivement par
+la Cloud Function `onEleveGuardianAccessWritten` à partir des liens vivants
+`eleves.parentUid`; aucun client ne peut l'écrire.
+
+| Champ | Type | Required | Description |
+|---|---|---|---|
+| `uid` | string | ✅ | Identique à l'ID du document |
+| `childIds` | string[] | ✅ | IDs Firestore des enfants liés |
+| `classes` | string[] | ✅ | Classes distinctes de ces enfants |
+| `updatedAt` | Timestamp | ✅ | Horodatage serveur |
+
+Le document est supprimé lorsque le dernier enfant est délié. Il permet aux
+règles de prouver les accès non nominatifs de classe (`devoirs`, `ressources`)
+sans transformer le rôle principal en `parent`. Backfill :
+`npm run guardian-access:backfill`.
 
 ---
 
@@ -327,6 +403,7 @@ bulletins
 | Créer collection `bulletins` | Quand un script de génération de bulletin sera écrit |
 | Ajouter `users.matiere` aux profs existants | Script ponctuel : `node scripts/setMatiere.js <uid> "Mathématiques"` |
 | Ajouter `parentUid` aux 60 élèves | Au fur et à mesure que les parents sont créés via `setupParent.js` |
+| Matérialiser les capacités parent existantes | `npm run guardian-access:backfill` avant le déploiement des règles multi-espace |
 
 ---
 
@@ -351,12 +428,16 @@ bulletins
 
 | Collection | Règle |
 |---|---|
-| `users` | `role` ∈ {'parent','professeur','admin'} ; `email` non vide |
+| `users` | `role` ∈ {'parent','professeur','admin','chauffeur'} ; `email` non vide |
 | `eleves` | `codeMassar` matche `/^A\d{6,}$/` ; `classe` non vide |
+| `pickupRequests` | enfant lié au parent ; `vehicleDescription` ≤ 80 ; transitions d'état bornées |
+| `driverProfiles` | ID = `uid` ; écriture admin uniquement |
+| `guardianAccess` | ID = `uid` ; lecture propre uniquement ; écriture client interdite |
+| `transportTrips` | chauffeur actif/assigné ; champs d'identité immuables pendant les updates opérationnels |
 | `notes` | `valeur` ∈ [0, 20] ; `trimestre` ∈ {1,2,3} |
 | `attendances` | `date` au format ISO ; `absents` ne contient pas de codeMassar dupliqué |
 | `homeworks` | `dueDate` > `createdAt` ; `title` non vide |
 
 ---
 
-*Dernière maj : 2026-05-23*
+*Dernière maj : 2026-07-14*

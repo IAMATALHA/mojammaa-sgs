@@ -2,7 +2,14 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { auth, db } from '../config/firebase';
+import i18n, { type AppLanguage } from '../i18n';
+
+function notificationLanguage(value: string): AppLanguage {
+  if (value.startsWith('ar')) return 'ar';
+  if (value.startsWith('en')) return 'en';
+  return 'fr';
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -106,6 +113,7 @@ export async function registerForPushNotificationsAsync(userId: string) {
       await setDoc(userRef, {
         expoPushToken: token,
         expoPushTokenUpdatedAt: serverTimestamp(),
+        notificationLanguage: notificationLanguage(i18n.language),
       }, { merge: true });
     } catch (e) {
       console.warn('[push] failed to persist token', e);
@@ -113,4 +121,17 @@ export async function registerForPushNotificationsAsync(userId: string) {
   }
 
   return token;
+}
+
+export async function syncNotificationLanguage(lang: AppLanguage) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+  try {
+    await setDoc(doc(db, 'users', uid), {
+      notificationLanguage: lang,
+      notificationLanguageUpdatedAt: serverTimestamp(),
+    }, { merge: true });
+  } catch (e) {
+    console.warn('[push] failed to persist notification language', e);
+  }
 }

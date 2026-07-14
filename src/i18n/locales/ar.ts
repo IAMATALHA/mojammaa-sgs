@@ -46,6 +46,17 @@ const ar = {
     parent: 'ولي الأمر',
     teacher: 'أستاذ(ة)',
     admin: 'الإدارة',
+    driver: 'السائق',
+  },
+
+  workspace: {
+    title: 'فضاءاتي',
+    parent: 'فضاء ولي الأمر',
+    teacher: 'فضاء الأستاذ',
+    admin: 'فضاء الإدارة',
+    driver: 'فضاء السائق',
+    active: 'الفضاء الحالي',
+    switch: 'فتح هذا الفضاء',
   },
 
   days: {
@@ -90,6 +101,7 @@ const ar = {
     announcements: 'الإعلانات',
     stats: 'الإحصائيات',
     settings: 'الإعدادات',
+    pickup: 'الخروج',
   },
 
   parent: {
@@ -588,6 +600,19 @@ const ar = {
     messages: 'الرسائل',
     resources: 'الموارد',
     schedule: 'جدول الحصص',
+  },
+
+  pickup: {
+    moduleTitle: 'Mojammaa Smart Pickup',
+    moduleSubtitle: 'خروج مدرسي ونقل ذكي',
+    openParent: 'فتح خدمة الخروج المدرسي',
+    arrivalCta: 'لقد وصلت',
+    arrivalHint: 'أخبر المدرسة وتابع تسليم طفلك.',
+    openDriver: 'فتح فضاء السائق',
+    driverWorkspace: 'فضاء السائق',
+    driverWorkspaceHint: 'عرض الرحلات والتلاميذ المسندين إليك',
+    adminCta: 'تدبير الخروج المدرسي',
+    adminHint: 'طابور أولياء الأمور مباشرة',
   },
 
   calendar: {

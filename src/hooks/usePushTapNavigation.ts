@@ -2,9 +2,9 @@
  * usePushTapNavigation — ouvre le bon écran quand l'utilisateur TAPE une
  * notification push (app au premier plan, en arrière-plan ou tuée).
  *
- * La CF `onMessageCreated` met `{ messageId, type }` dans le payload data ;
- * on route vers l'écran Messages du rôle courant avec `messageId` en param,
- * et l'écran ouvre le détail du message dès qu'il apparaît dans la liste.
+ * Les messages ouvrent leur détail. Les notifications Smart Pickup et
+ * transport ouvrent l'écran parent de sortie/suivi, sans transporter d'ID
+ * sensible dans le payload.
  *
  * Démarrage à froid : la réponse est récupérée via
  * getLastNotificationResponseAsync() puis effacée (clearLastNotification-
@@ -14,9 +14,17 @@ import { useEffect, useRef, useCallback } from 'react'
 import * as Notifications from 'expo-notifications'
 import { navigationRef } from '../navigation/navigationRef'
 
-type RoleLogic = 'admin' | 'teacher' | 'student'
+type MessageRole = 'admin' | 'teacher' | 'student'
+type PushIntent =
+  | { kind: 'message'; messageId: string; workspace?: 'parent' }
+  | { kind: 'pickup'; workspace: 'parent' }
 
-function navigateToMessages(role: RoleLogic, messageId?: string) {
+interface PushWorkspaceOptions {
+  canOpenParentWorkspace: boolean
+  openParentWorkspace: () => void
+}
+
+function navigateToMessages(role: MessageRole, messageId?: string) {
   if (!navigationRef.isReady()) return false
   const params = messageId ? { messageId } : undefined
   if (role === 'admin') {
@@ -31,18 +39,51 @@ function navigateToMessages(role: RoleLogic, messageId?: string) {
   return true
 }
 
-export function usePushTapNavigation(role: RoleLogic | null, enabled: boolean) {
-  // Tap reçu avant que la nav/le rôle soient prêts (cold start) → en attente.
-  const pending = useRef<{ messageId?: string } | null>(null)
+function navigateToPickup(role: MessageRole) {
+  if (!navigationRef.isReady() || role !== 'student') return false
+  navigationRef.navigate('HomeTab', { screen: 'StudentPickup' })
+  return true
+}
 
-  const roleRef = useRef<RoleLogic | null>(role)
+function navigateIntent(role: MessageRole, intent: PushIntent) {
+  return intent.kind === 'pickup'
+    ? navigateToPickup(role)
+    : navigateToMessages(role, intent.messageId)
+}
+
+export function usePushTapNavigation(
+  role: MessageRole | null,
+  enabled: boolean,
+  workspaceOptions?: PushWorkspaceOptions,
+) {
+  // Tap reçu avant que la nav/le rôle soient prêts (cold start) → en attente.
+  const pending = useRef<PushIntent | null>(null)
+
+  const roleRef = useRef<MessageRole | null>(role)
   const enabledRef = useRef(enabled)
+  const canOpenParentRef = useRef(workspaceOptions?.canOpenParentWorkspace === true)
+  const openParentRef = useRef(workspaceOptions?.openParentWorkspace)
   roleRef.current = role
   enabledRef.current = enabled
+  canOpenParentRef.current = workspaceOptions?.canOpenParentWorkspace === true
+  openParentRef.current = workspaceOptions?.openParentWorkspace
+
+  const requestRequiredWorkspace = useCallback(() => {
+    if (
+      pending.current?.workspace === 'parent'
+      && roleRef.current !== 'student'
+      && canOpenParentRef.current
+    ) {
+      openParentRef.current?.()
+      return true
+    }
+    return false
+  }, [])
 
   const flush = useCallback(() => {
+    if (pending.current?.workspace === 'parent' && roleRef.current !== 'student') return
     if (!pending.current || !enabledRef.current || !roleRef.current) return
-    if (navigateToMessages(roleRef.current, pending.current.messageId)) {
+    if (navigateIntent(roleRef.current, pending.current)) {
       pending.current = null
     }
   }, [])
@@ -74,9 +115,21 @@ export function usePushTapNavigation(role: RoleLogic | null, enabled: boolean) {
     handledId.current = id
     const data = response.notification?.request?.content?.data as Record<string, unknown> | undefined
     const messageId = typeof data?.messageId === 'string' ? data.messageId : undefined
-    pending.current = { messageId }
+    const type = typeof data?.type === 'string' ? data.type : ''
+    if (['pickup_status', 'transport_passenger_status', 'transport_delay'].includes(type)) {
+      pending.current = { kind: 'pickup', workspace: 'parent' }
+    } else if (messageId) {
+      pending.current = {
+        kind: 'message',
+        messageId,
+        workspace: data?.workspace === 'parent' ? 'parent' : undefined,
+      }
+    } else {
+      return
+    }
+    requestRequiredWorkspace()
     flush()
-  }, [flush])
+  }, [flush, requestRequiredWorkspace])
 
   // Tap pendant que l'app tourne (foreground/background).
   useEffect(() => {
@@ -97,5 +150,14 @@ export function usePushTapNavigation(role: RoleLogic | null, enabled: boolean) {
   }, [handleResponse])
 
   // Le rôle/la nav deviennent prêts après le tap → flush.
-  useEffect(() => { flush() }, [role, enabled, flush])
+  useEffect(() => {
+    requestRequiredWorkspace()
+    flush()
+  }, [
+    role,
+    enabled,
+    workspaceOptions?.canOpenParentWorkspace,
+    requestRequiredWorkspace,
+    flush,
+  ])
 }

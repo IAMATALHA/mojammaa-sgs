@@ -12,6 +12,7 @@ import { X, Search, Inbox, Send, PenSquare } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { subscribeChildrenOfParent } from '../../services/elevesService'
 import {
   subscribeMessages, markAsRead, deleteMessage, sendMessage,
   type MessageDoc,
@@ -30,6 +31,7 @@ export default function ParentMessagesScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
   const { profile } = useAuth()
+  const [guardianEleveId, setGuardianEleveId] = useState('')
   const { height: winH } = useWindowDimensions()
   const navigation = useNavigation<BottomTabNavigationProp<StudentTabsParamList, 'StudentMessages'>>()
   const route = useRoute<StudentTabRoute<'StudentMessages'>>()
@@ -44,16 +46,31 @@ export default function ParentMessagesScreen() {
   const [showCompose, setShowCompose] = useState(false)
 
   useEffect(() => {
+    setGuardianEleveId('')
+    if (!profile?.uid) {
+      return
+    }
+    return subscribeChildrenOfParent(
+      profile.uid,
+      children => {
+        const first = children[0]
+        setGuardianEleveId(first?.codeMassar || first?.id || '')
+      },
+      () => setGuardianEleveId(''),
+    )
+  }, [profile?.uid])
+
+  useEffect(() => {
     if (!profile?.uid) return
     setLoading(true)
     setLoadError(false)
     const unsub = subscribeMessages(
-      profile.uid, profile.role || 'parent',
+      profile.uid, 'parent',
       list => { setMessages(list); setLoadError(false); setLoading(false) },
       () => { setLoadError(true); setLoading(false) },
     )
     return unsub
-  }, [profile?.uid, profile?.role])
+  }, [profile?.uid])
 
   // Arrivée via tap sur une notification push : ouvrir le message ciblé
   // dès qu'il est présent dans la liste, puis consommer le param.
@@ -125,7 +142,7 @@ export default function ParentMessagesScreen() {
   }
 
   const handleReply = async () => {
-    if (!profile || !detail || !replyText.trim()) return
+    if (!profile || !detail || !guardianEleveId || !replyText.trim()) return
     setReplying(true)
     try {
       const fromNom = `${profile.prenom} ${profile.nom}`.trim()
@@ -136,6 +153,7 @@ export default function ParentMessagesScreen() {
         fromId: profile.uid,
         fromNom,
         fromRole: 'parent',
+        eleveId: guardianEleveId,
         toType: 'user',
         toIds: [detail.fromId],
         toLabel: detail.fromNom || '',
@@ -269,13 +287,13 @@ export default function ParentMessagesScreen() {
                   placeholder={t('teacher.writeMessage')} placeholderTextColor={theme.textMuted}
                   style={[styles.replyInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(replyText)]}
                   multiline maxLength={500} />
-                <TouchableOpacity onPress={handleReply} disabled={!replyText.trim() || replying}
+                <TouchableOpacity onPress={handleReply} disabled={!guardianEleveId || !replyText.trim() || replying}
                   accessibilityRole="button"
                   accessibilityLabel={t('compose.send')}
-                  accessibilityState={{ disabled: !replyText.trim() || replying, busy: replying }}
-                  style={[styles.replyBtn, { backgroundColor: replyText.trim() ? theme.primary : theme.surfaceAlt }]}>
+                  accessibilityState={{ disabled: !guardianEleveId || !replyText.trim() || replying, busy: replying }}
+                  style={[styles.replyBtn, { backgroundColor: guardianEleveId && replyText.trim() ? theme.primary : theme.surfaceAlt }]}>
                   {replying ? <ActivityIndicator color="#fff" size="small" /> :
-                    <Send size={18} color={replyText.trim() ? '#fff' : theme.textMuted} strokeWidth={2} />}
+                    <Send size={18} color={guardianEleveId && replyText.trim() ? '#fff' : theme.textMuted} strokeWidth={2} />}
                 </TouchableOpacity>
               </View>
             )}

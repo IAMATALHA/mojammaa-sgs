@@ -26,13 +26,15 @@ import {
   type Child,
 } from '../../utils/dashboardTypes'
 import { useParentComportements } from '../../hooks/useParentComportements'
+import type { ComportementDoc } from '../../services/comportementsService'
 import { useClassLiveCourse } from '../../hooks/useClassLiveCourse'
-import { greetingKey, hexWithAlpha, localeFor } from '../../utils/format'
+import { greetingKey, hexWithAlpha } from '../../utils/format'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 
 type StudentQuickRoute =
   | 'StudentPerformance' | 'StudentRessources' | 'StudentEdt' | 'StudentComportement'
   | 'StudentAbsences' | 'StudentDevoirs' | 'StudentMessages' | 'StudentNotes'
+  | 'StudentPickup'
 
 const QUICK_ACTION_ROUTES: Record<string, StudentQuickRoute> = {
   pqa1: 'StudentPerformance',
@@ -41,32 +43,59 @@ const QUICK_ACTION_ROUTES: Record<string, StudentQuickRoute> = {
   pqa4: 'StudentMessages',
   pqa5: 'StudentRessources',
   pqa6: 'StudentEdt',
+  pqa7: 'StudentPickup',
 }
+
+const PICKUP_QUICK_ACTION: QuickAction = {
+  id: 'pqa7',
+  label: 'Smart Pickup',
+  labelKey: 'pickup.moduleTitle',
+  icon: 'car-front',
+  tint: 'primary',
+}
+
+const PARENT_DASHBOARD_ACTIONS: QuickAction[] = [
+  ...PARENT_QUICK_ACTIONS,
+  PICKUP_QUICK_ACTION,
+]
 
 // ────────────────────────────────────────────────────────────────────────
 // Children carousel — restrained, institutional
 // ────────────────────────────────────────────────────────────────────────
 
 function ChildSlide({
-  child, isActive, onPress, theme, cardWidth,
-}: { child: Child; isActive: boolean; onPress: () => void; theme: Theme; cardWidth: number }) {
+  child, isActive, onPress, onOpenBehavior, behaviorEntries, theme, cardWidth,
+}: {
+  child: Child
+  isActive: boolean
+  onPress: () => void
+  onOpenBehavior: () => void
+  behaviorEntries: ComportementDoc[]
+  theme: Theme
+  cardWidth: number
+}) {
   const { t } = useTranslation()
   const isPreschool = /(^|[^a-z])(ps|gs)([^a-z]|$)/i.test(child.classe)
   const attendanceTone = child.attendance >= 90 ? theme.success : child.attendance >= 75 ? theme.warning : theme.danger
   return (
-    <Pressable onPress={onPress} android_ripple={{ color: theme.border }} style={[styles.carouselSlot, { width: cardWidth }]}>
-      {({ pressed }) => (
-        <MotiView
-          animate={{
-            scale: pressed ? 0.96 : isActive ? 1 : 0.98,
-            opacity: isActive ? 1 : 0.82,
-          }}
-          transition={{ type: 'spring', damping: 15, stiffness: 240, mass: 0.7 }}
-          style={[
-            styles.carouselCard,
-            { backgroundColor: theme.card, borderColor: isActive ? hexWithAlpha(child.avatarColor, 0.42) : theme.border },
-            theme.shadows.clay,
-          ]}
+    <View style={[styles.carouselSlot, { width: cardWidth }]}>
+      <MotiView
+        animate={{
+          scale: isActive ? 1 : 0.98,
+          opacity: isActive ? 1 : 0.82,
+        }}
+        transition={{ type: 'spring', damping: 15, stiffness: 240, mass: 0.7 }}
+        style={[
+          styles.carouselCard,
+          { backgroundColor: theme.card, borderColor: isActive ? hexWithAlpha(child.avatarColor, 0.42) : theme.border },
+          theme.shadows.clay,
+        ]}
+      >
+        <Pressable
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={`${child.firstName} ${child.lastName}, ${child.classe}`}
+          style={({ pressed }) => [pressed && styles.childPrimaryPressed]}
         >
           <View style={styles.carouselRow}>
             <View style={[styles.childAvatar, { backgroundColor: child.avatarColor }]}>
@@ -126,9 +155,15 @@ function ChildSlide({
           </View>
 
           <LiveCourseStrip classe={child.classe} theme={theme} />
-        </MotiView>
-      )}
-    </Pressable>
+        </Pressable>
+
+        <BehaviorHeroStrip
+          entries={behaviorEntries}
+          onPress={onOpenBehavior}
+          theme={theme}
+        />
+      </MotiView>
+    </View>
   )
 }
 
@@ -224,6 +259,59 @@ function LiveCourseStrip({ classe, theme }: { classe: string; theme: Theme }) {
   )
 }
 
+function BehaviorHeroStrip({
+  entries, onPress, theme,
+}: {
+  entries: ComportementDoc[]
+  onPress: () => void
+  theme: Theme
+}) {
+  const { t } = useTranslation()
+  const merits = entries.filter(entry => entry.kind === 'merite').length
+  const warnings = entries.filter(entry => entry.kind === 'avertissement').length
+  const latest = entries[0]
+  const detail = latest
+    ? t(`behavior.reasons.${latest.reason}`)
+    : t('behavior.noEntries')
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${t('behavior.parentTitle')}. ${merits} ${t('behavior.merites')}, ${warnings} ${t('behavior.avertissements')}`}
+      accessibilityHint={t('behavior.parentSubtitle')}
+      style={({ pressed }) => [
+        styles.behaviorHeroStrip,
+        { borderTopColor: theme.border },
+        pressed && styles.behaviorHeroPressed,
+      ]}
+    >
+      <View style={[styles.behaviorHeroIcon, { backgroundColor: theme.primarySurface }]}>
+        <Smile size={17} color={theme.primary} strokeWidth={2.2} />
+      </View>
+      <View style={styles.behaviorHeroText}>
+        <Text numberOfLines={1} style={[styles.behaviorHeroTitle, { color: theme.text }]}>
+          {t('behavior.parentTitle')}
+        </Text>
+        <Text numberOfLines={1} style={[styles.behaviorHeroDetail, { color: theme.textSoft }]}>
+          {detail}
+        </Text>
+      </View>
+      <View style={styles.behaviorHeroCounters}>
+        <View style={[styles.behaviorHeroCounter, { backgroundColor: theme.successSurface }]}>
+          <Star size={13} color={theme.success} strokeWidth={2.2} />
+          <Text style={[styles.behaviorHeroCounterValue, { color: theme.success }]}>{merits}</Text>
+        </View>
+        <View style={[styles.behaviorHeroCounter, { backgroundColor: theme.dangerSurface }]}>
+          <AlertTriangle size={13} color={theme.danger} strokeWidth={2.2} />
+          <Text style={[styles.behaviorHeroCounterValue, { color: theme.danger }]}>{warnings}</Text>
+        </View>
+      </View>
+      <ChevronRight size={16} color={theme.textMuted} strokeWidth={1.8} />
+    </Pressable>
+  )
+}
+
 // ────────────────────────────────────────────────────────────────────────
 // Animated section wrapper
 // ────────────────────────────────────────────────────────────────────────
@@ -291,10 +379,15 @@ export default function ParentDashboardScreen() {
     () => parent.children.find(c => c.id === selectedChildId) ?? parent.children[0],
     [parent.children, selectedChildId],
   )
-  const behaviorStats = useMemo(() => ({
-    merites: comportements.filter(e => e.kind === 'merite').length,
-    avertissements: comportements.filter(e => e.kind === 'avertissement').length,
-  }), [comportements])
+  const behaviorByChild = useMemo(() => {
+    const grouped = new Map<string, ComportementDoc[]>()
+    comportements.forEach(entry => {
+      const current = grouped.get(entry.eleveId) ?? []
+      current.push(entry)
+      grouped.set(entry.eleveId, current)
+    })
+    return grouped
+  }, [comportements])
 
   const goTo = (route: StudentQuickRoute) => nav.navigate(route)
 
@@ -330,13 +423,8 @@ export default function ParentDashboardScreen() {
             <MessagesErrorBanner messageKey="common.dataLoadError" />
           </View>
         ) : null}
-        {/* ── Mes enfants ──────────────────────────────────── */}
-        <View style={styles.section}>
-          <DashboardSectionHeader
-            title={t('parent.myChildren')}
-            subtitle={selectedChild ? `${selectedChild.classe} · ${selectedChild.firstName}` : t('parent.noChildren')}
-            theme={theme}
-          />
+        {/* La carte enfant est le Hero principal : aucun titre de section. */}
+        <View style={[styles.section, styles.heroSection]}>
           {parent.children.length === 0 ? (
             <Card>
               <EmptyState
@@ -370,6 +458,8 @@ export default function ParentDashboardScreen() {
                       if (c.id === selectedChild?.id) goTo('StudentNotes')
                       else setSelectedChildId(c.id)
                     }}
+                    onOpenBehavior={() => goTo('StudentComportement')}
+                    behaviorEntries={behaviorByChild.get(c.id) ?? []}
                     theme={theme}
                   />
                 </AnimatedSection>
@@ -387,64 +477,7 @@ export default function ParentDashboardScreen() {
               subtitle={selectedChild ? t('parent.forChild', { name: selectedChild.firstName }) : t('parent.accountParent')}
               theme={theme}
             />
-            <QuickActions actions={PARENT_QUICK_ACTIONS} onPress={handleQuickAction} />
-          </View>
-        </AnimatedSection>
-
-        {/* ── Comportement (mérites / avertissements) ─────── */}
-        <AnimatedSection delay={160}>
-          <View style={styles.section}>
-            <DashboardSectionHeader
-              title={t('behavior.parentTitle')}
-              subtitle={t('behavior.parentSubtitle')}
-              theme={theme}
-            />
-            <Card padding={12}>
-              {comportements.length === 0 ? (
-                <EmptyState
-                  icon={Smile}
-                  title={t('behavior.noEntries')}
-                  message={t('behavior.noEntriesMsg')}
-                />
-              ) : (
-                <>
-                  <View style={styles.behaviorSummary}>
-                    <BehaviorSummaryPill icon={<Star size={15} color={theme.success} />} value={behaviorStats.merites} label={t('behavior.merites')} color={theme.success} bg={theme.successSurface} />
-                    <BehaviorSummaryPill icon={<AlertTriangle size={15} color={theme.danger} />} value={behaviorStats.avertissements} label={t('behavior.avertissements')} color={theme.danger} bg={theme.dangerSurface} />
-                  </View>
-                  {comportements.slice(0, 3).map((e, idx) => {
-                    const merite = e.kind === 'merite'
-                    const tint = merite ? theme.success : theme.danger
-                    const Icon = merite ? Star : AlertTriangle
-                    return (
-                      <Pressable
-                        key={e.id}
-                        onPress={() => goTo('StudentComportement')}
-                        android_ripple={{ color: theme.border }}
-                        style={[
-                          styles.behaviorRow,
-                          idx < Math.min(comportements.length, 3) - 1 &&
-                            { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
-                        ]}
-                      >
-                        <View style={[styles.behaviorIcon, { backgroundColor: hexWithAlpha(tint, 0.12) }]}>
-                          <Icon size={15} color={tint} strokeWidth={2.2} />
-                        </View>
-                        <View style={{ flex: 1, marginStart: 10 }}>
-                          <Text numberOfLines={1} style={{ color: theme.text, fontFamily: theme.fonts.semibold, fontSize: 13 }}>
-                            {t(`behavior.reasons.${e.reason}`)}
-                          </Text>
-                          <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: theme.fonts.regular, fontSize: 11, marginTop: 2 }}>
-                            {e.elevePrenom} · {new Date(e.date).toLocaleDateString(localeFor(), { day: '2-digit', month: 'short' })}
-                          </Text>
-                        </View>
-                        <ChevronRight size={16} color={theme.textMuted} strokeWidth={1.75} />
-                      </Pressable>
-                    )
-                  })}
-                </>
-              )}
-            </Card>
+          <QuickActions actions={PARENT_DASHBOARD_ACTIONS} onPress={handleQuickAction} />
           </View>
         </AnimatedSection>
 
@@ -517,19 +550,6 @@ function DashboardSectionHeader({ title, subtitle, theme }: { title: string; sub
   )
 }
 
-function BehaviorSummaryPill({
-  icon, value, label, color, bg,
-}: { icon: React.ReactNode; value: number; label: string; color: string; bg: string }) {
-  return (
-    <View style={[styles.behaviorPill, { backgroundColor: bg }]}>
-      {icon}
-      <Text style={[styles.behaviorPillValue, { color }]}>{value}</Text>
-      <Text numberOfLines={1} style={[styles.behaviorPillLabel, { color }]}>{label}</Text>
-    </View>
-  )
-}
-
-
 // ────────────────────────────────────────────────────────────────────────
 // Styles
 // ────────────────────────────────────────────────────────────────────────
@@ -569,6 +589,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     minHeight: 196,
   },
+  childPrimaryPressed: { opacity: 0.72 },
   childAvatar: {
     width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center',
@@ -628,6 +649,7 @@ const styles = StyleSheet.create({
 
   // Sections
   section: { paddingHorizontal: 20, marginTop: 22 },
+  heroSection: { marginTop: 10 },
   sectionHeader: {
     marginBottom: 10,
     gap: 2,
@@ -641,43 +663,51 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Comportement
-  behaviorSummary: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  behaviorPill: {
-    flex: 1,
-    minHeight: 54,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+  // Comportement intégré au Hero enfant
+  behaviorHeroStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 9,
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  behaviorPillValue: {
-    fontSize: 17,
+  behaviorHeroPressed: { opacity: 0.68 },
+  behaviorHeroIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  behaviorHeroText: { flex: 1, minWidth: 0 },
+  behaviorHeroTitle: {
+    fontSize: 12.5,
+    fontWeight: '900',
+  },
+  behaviorHeroDetail: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  behaviorHeroCounters: {
+    flexDirection: 'row',
+    gap: 5,
+  },
+  behaviorHeroCounter: {
+    minWidth: 38,
+    height: 28,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  behaviorHeroCounterValue: {
+    fontSize: 12,
     fontWeight: '900',
     fontVariant: ['tabular-nums'],
-  },
-  behaviorPillLabel: {
-    flex: 1,
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
-  },
-  behaviorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-  },
-  behaviorIcon: {
-    width: 30, height: 30, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center',
   },
 
   // Footer

@@ -529,6 +529,52 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "pickupRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "parentUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "serviceDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eleveId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "transportTrips",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "driverUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "serviceDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "passengers",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "eleveId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "serviceDate",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

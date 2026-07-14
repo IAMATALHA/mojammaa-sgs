@@ -49,9 +49,42 @@ service cloud.firestore {
     function teacherTeaches(classe) {
       return isTeacher() && (classe in myClasses() || classe == myDoc().classe);
     }
-    // parentUid de l'élève ciblé (pour vérifier qu'un parent lit bien SON enfant)
+    // parentUid de l'élève ciblé. La capacité « espace parent » est additive :
+    // le rôle principal peut rester professeur/chauffeur, mais le lien live
+    // `eleves/{id}.parentUid == auth.uid` reste l'unique source d'autorité.
     function eleveParentUid(eleveId) {
       return get(/databases/$(database)/documents/eleves/$(eleveId)).data.parentUid;
+    }
+    function isGuardianOf(eleveId) {
+      return isSignedIn() && eleveParentUid(eleveId) == myUid();
+    }
+    function ownsGuardianRecord(parentUid, eleveId) {
+      return isSignedIn()
+        && parentUid == myUid()
+        && isGuardianOf(eleveId);
+    }
+    // Entitlement matérialisé par Admin SDK à chaque écriture d'élève. Il est
+    // nécessaire pour les documents de classe non nominatifs (`devoirs`,
+    // `ressources`) : les Rules ne savent pas requêter `eleves` pour prouver
+    // qu'au moins un enfant du responsable appartient à une classe donnée.
+    function hasGuardianAccess() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/guardianAccess/$(myUid()))
+        && get(/databases/$(database)/documents/guardianAccess/$(myUid())).data.uid == myUid()
+        && get(/databases/$(database)/documents/guardianAccess/$(myUid())).data.childIds is list
+        && get(/databases/$(database)/documents/guardianAccess/$(myUid())).data.childIds.size() > 0;
+    }
+    function guardianHasClass(classe) {
+      return hasGuardianAccess()
+        && get(/databases/$(database)/documents/guardianAccess/$(myUid())).data.classes is list
+        && classe in get(/databases/$(database)/documents/guardianAccess/$(myUid())).data.classes;
+    }
+    // Persona parent explicite pour un compte dont le rôle principal est
+    // différent. Le message doit porter un élève encore lié au moment du write.
+    function createsAsGuardian() {
+      return request.resource.data.get('fromRole', '') == 'parent'
+        && request.resource.data.keys().hasAny(['eleveId'])
+        && isGuardianOf(request.resource.data.eleveId);
     }
     // Classe RÉELLE de l'élève ciblé (anti-injection 2026-07-11) : un prof ne
     // peut créer une note/absence/comportement QUE si l'élève appartient bien
@@ -78,6 +111,33 @@ service cloud.firestore {
             && request.resource.data[field].hasOnly(resource.data.get(field, []).concat([myUid()])));
     }
 
+    // ── Smart Pickup helpers ────────────────────────────────
+    function activeDriverUid(uid) {
+      return exists(/databases/$(database)/documents/driverProfiles/$(uid))
+        && get(/databases/$(database)/documents/driverProfiles/$(uid)).data.active == true;
+    }
+    function isActiveDriver() {
+      return isSignedIn() && activeDriverUid(myUid());
+    }
+    function isAssignedTripDriver(tripId) {
+      return isActiveDriver()
+        && get(/databases/$(database)/documents/transportTrips/$(tripId)).data.driverUid == myUid();
+    }
+    function tripStatus(tripId) {
+      return get(/databases/$(database)/documents/transportTrips/$(tripId)).data.status;
+    }
+    function pickupSessionIsOpen(serviceDate) {
+      return exists(/databases/$(database)/documents/pickupSessions/$(serviceDate))
+        && get(/databases/$(database)/documents/pickupSessions/$(serviceDate)).data.serviceDate == serviceDate
+        && get(/databases/$(database)/documents/pickupSessions/$(serviceDate)).data.isOpen == true
+        && get(/databases/$(database)/documents/pickupSessions/$(serviceDate)).data.opensAt <= request.time
+        && get(/databases/$(database)/documents/pickupSessions/$(serviceDate)).data.closesAt >= request.time;
+    }
+    function validPassengerTransition(before, after) {
+      return (before == 'scheduled' && after in ['boarded', 'absent', 'cancelled'])
+        || (before == 'boarded' && after == 'dropped_off');
+    }
+
     // ── users ────────────────────────────────────────────────
     match /users/{uid} {
       allow read:           if isSignedIn() && (uid == myUid() || isAdmin());
@@ -93,10 +153,17 @@ service cloud.firestore {
                .hasAny(['role', 'classes', 'classe', 'matiere', 'cycle', 'uid']));
     }
 
+    // Document calculé côté serveur depuis `eleves.parentUid`. Un client ne
+    // peut lire que sa propre capacité et ne peut jamais la fabriquer/modifier.
+    match /guardianAccess/{uid} {
+      allow read: if isSignedIn() && uid == myUid();
+      allow write: if false;
+    }
+
     // ── eleves ───────────────────────────────────────────────
     match /eleves/{eleveId} {
       allow read: if isAdmin()
-                  || (isParent()  && resource.data.parentUid == myUid())
+                  || (isSignedIn() && resource.data.parentUid == myUid())
                   || teacherTeaches(resource.data.classe);
       allow create: if isAdmin() || teacherTeaches(request.resource.data.classe);
       // Durci 2026-07-11 : l'ancienne règle ne validait que la NOUVELLE classe —
@@ -132,7 +199,7 @@ service cloud.firestore {
       allow read: if isAdmin()
                   || (teacherTeaches(resource.data.classe)
                       && resource.data.matiere == myDoc().matiere)
-                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
+                  || isGuardianOf(resource.data.eleveId);
       // Prof : uniquement SA classe ET SA matière. Admin : tout.
       // Durci 2026-07-11 (anti-injection + anti-détournement) :
       //  - create : l'élève doit RÉELLEMENT appartenir à la classe déclarée
@@ -163,7 +230,7 @@ service cloud.firestore {
       // La requête parent (where eleveId in [enfants]) reste donc autorisée.
       allow read: if isAdmin()
                   || teacherTeaches(resource.data.classe)
-                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
+                  || isGuardianOf(resource.data.eleveId);
       // Durci 2026-07-11 — même logique que `notes` : cohérence élève/classe au
       // create, classe existante validée + eleveId/classe immuables à l'update.
       // (L'écran d'appel réécrit le doc à l'identique via set+merge, docId
@@ -186,7 +253,7 @@ service cloud.firestore {
     match /comportements/{recordId} {
       allow read: if isAdmin()
                   || teacherTeaches(resource.data.classe)
-                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
+                  || isGuardianOf(resource.data.eleveId);
       allow create: if isAdmin()
         || (teacherTeaches(request.resource.data.classe)
             && request.resource.data.teacherId == myUid()
@@ -209,13 +276,15 @@ service cloud.firestore {
 
     // ── absenceRequests (absences déclarées par les parents) ──
     match /absenceRequests/{reqId} {
-      // Parent : déclare pour SON enfant, en SON nom, statut 'pending' imposé.
-      allow create: if isParent()
-        && request.resource.data.parentUid == myUid()
-        && eleveParentUid(request.resource.data.eleveId) == myUid()
+      // Responsable légal : déclare pour SON enfant, en SON nom, statut
+      // 'pending' imposé. Son rôle principal peut être parent/prof/chauffeur.
+      allow create: if ownsGuardianRecord(
+          request.resource.data.parentUid,
+          request.resource.data.eleveId
+        )
         && request.resource.data.status == 'pending';
       allow read: if isAdmin()
-        || (isParent() && resource.data.parentUid == myUid())
+        || ownsGuardianRecord(resource.data.parentUid, resource.data.eleveId)
         || teacherTeaches(resource.data.classe);
       // Décision : prof de la classe / admin — champs de décision uniquement.
       // Durci 2026-07-11 : statut contraint aux valeurs réelles du client
@@ -228,14 +297,15 @@ service cloud.firestore {
         && request.resource.data.decidedBy == myUid();
       // Le parent peut retirer une déclaration tant qu'elle est en attente.
       allow delete: if isAdmin()
-        || (isParent() && resource.data.parentUid == myUid() && resource.data.status == 'pending');
+        || (ownsGuardianRecord(resource.data.parentUid, resource.data.eleveId)
+            && resource.data.status == 'pending');
     }
 
     // ── bulletins ────────────────────────────────────────────
     match /bulletins/{bulletinId} {
       allow read: if isAdmin()
                   || teacherTeaches(resource.data.classe)
-                  || (isParent() && eleveParentUid(resource.data.eleveId) == myUid());
+                  || isGuardianOf(resource.data.eleveId);
       allow create, update: if isAdmin();
       allow delete:         if isSuperAdmin();
     }
@@ -247,13 +317,13 @@ service cloud.firestore {
       //   - admin  : tout
       //   - prof   : SES devoirs (teacherId) OU une classe qu'il enseigne
       //              → un prof ne lit plus les devoirs des autres profs/classes
-      //   - parent : devoirs des classes de ses enfants. Le périmètre exact par
-      //              enfant n'est PAS requêtable en règles (pas de query dans les
-      //              règles) ; le contenu étant non nominatif, on cantonne au rôle.
+      //   - responsable légal : classes exactes de guardianAccess, document
+      //              serveur dérivé des liens eleves.parentUid (quel que soit
+      //              son rôle principal).
       allow read: if isAdmin()
         || (isTeacher() && (resource.data.teacherId == myUid()
                             || teacherTeaches(resource.data.classeId)))
-        || isParent();
+        || guardianHasClass(resource.data.classeId);
       allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classeId);
       allow delete: if isAdmin() || (isTeacher() && resource.data.teacherId == myUid());
     }
@@ -265,12 +335,12 @@ service cloud.firestore {
     match /ressources/{ressourceId} {
       // Même périmètre de lecture scopé que `devoirs` (défense en profondeur) :
       // admin = tout ; prof = ses ressources OU une classe qu'il enseigne ;
-      // parent = large (contenu non nominatif, périmètre par enfant non
-      // requêtable en règles). N'affecte pas l'update append-only de viewedBy.
+      // responsable légal = classes exactes de guardianAccess, quel que soit
+      // son rôle principal. N'affecte pas l'append-only de viewedBy.
       allow read: if isAdmin()
         || (isTeacher() && (resource.data.teacherId == myUid()
                             || teacherTeaches(resource.data.classeId)))
-        || isParent();
+        || guardianHasClass(resource.data.classeId);
       allow create: if isAdmin()
         || (teacherTeaches(request.resource.data.classeId)
             && request.resource.data.teacherId == myUid());
@@ -310,18 +380,23 @@ service cloud.firestore {
         resource.data.fromId == myUid()
         || (resource.data.toIds is list && myUid() in resource.data.toIds)
         || resource.data.toType == 'all'
-        || (resource.data.toType == 'parents'  && isParent())
+        || (resource.data.toType == 'parents'
+            && hasGuardianAccess())
         || (resource.data.toType == 'teachers' && isTeacher())
         || teacherTeaches(resource.data.get('classe', ''))
         // Compat ancien format (champ `toId` string) — cf. messagesService legacy.
         || resource.data.toId == myUid()
         || resource.data.toId == 'all'
+        || (resource.data.toId == 'parents'
+            && hasGuardianAccess())
         || (resource.data.toId == 'teachers' && isTeacher())
         || (resource.data.toId == 'admin'    && isAdmin())
         || isAdmin()
       );
       // Création : seulement en SON nom (anti-usurpation) ; les diffusions
-      // larges (all/parents/teachers/class) réservées prof/admin.
+      // larges (all/parents/teachers/class) réservées prof/admin. Un compte
+      // professionnel peut signer comme parent uniquement avec un eleveId
+      // encore lié et récupère alors les mêmes bornes anti-spam qu'un parent.
       // Durci 23/06/2026 : `fromRole` ne peut pas mentir — s'il est présent il
       // DOIT valoir le rôle réel de l'auteur (sinon un parent pourrait poster un
       // message affiché comme « administration » → phishing in-app).
@@ -343,11 +418,12 @@ service cloud.firestore {
       // borne réelle par destinataire viendra du refactor deliveries (CF).
       allow create: if isSignedIn()
         && request.resource.data.fromId == myUid()
-        && (request.resource.data.toType == 'user' || isAdmin())
-        && (isTeacher() || isAdmin()
+        && (request.resource.data.toType == 'user'
+            || (isAdmin() && !createsAsGuardian()))
+        && ((isTeacher() || isAdmin()) && !createsAsGuardian()
             || (request.resource.data.toIds is list
                 && request.resource.data.toIds.size() <= 10))
-        && (!isTeacher()
+        && (!isTeacher() || createsAsGuardian()
             || request.resource.data.get('toIds', []).size() <= 1
             // classe non vide OBLIGATOIRE en multi-destinataires ('' absent
             // matcherait le filler legacy vide du concat ci-dessous).
@@ -363,11 +439,13 @@ service cloud.firestore {
         && !(request.resource.data.keys().hasAny(['toId'])
              && request.resource.data.keys().hasAny(['toType', 'toIds']))
         && (!request.resource.data.keys().hasAny(['fromRole'])
-            || request.resource.data.fromRole == myRole())
+            || (request.resource.data.fromRole == myRole()
+                && request.resource.data.fromRole != 'parent')
+            || createsAsGuardian())
         // Un parent ne signe pas d'un nom arbitraire (« Administration »… =
         // même phishing que fromRole) : fromNom doit être SON nom réel
         // (les deux ordres prénom/nom sont tolérés, cf. composes client).
-        && (!isParent()
+        && (!(isParent() || createsAsGuardian())
             || !request.resource.data.keys().hasAny(['fromNom'])
             || request.resource.data.fromNom.trim() in [
                  (myDoc().get('prenom', '') + ' ' + myDoc().get('nom', '')).trim(),
@@ -443,8 +521,303 @@ service cloud.firestore {
     // (AUCUNE donnée sensible — pas d'email ni de token). Écrit uniquement
     // par la CF onUserWritten (Admin SDK).
     match /directory/{docId} {
-      allow read:  if isSignedIn();
+      allow read:  if isAdmin() || isTeacher() || hasGuardianAccess();
       allow write: if false;
+    }
+
+    // ── Smart Pickup : créneau opérationnel ─────────────────
+    match /pickupSessions/{serviceDate} {
+      allow read: if isSignedIn();
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+          'serviceDate', 'isOpen', 'openedByUid', 'opensAt', 'closesAt',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'serviceDate', 'isOpen', 'openedByUid', 'opensAt', 'closesAt',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.serviceDate == serviceDate
+        && request.resource.data.isOpen == true
+        && request.resource.data.openedByUid == myUid()
+        && request.resource.data.opensAt == request.time
+        && request.resource.data.closesAt is timestamp
+        && request.resource.data.closesAt > request.time
+        && request.resource.data.closesAt <= request.time + duration.value(6, 'h')
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isAdmin()
+        && untouched(['serviceDate', 'createdAt'])
+        && request.resource.data.serviceDate == serviceDate
+        && request.resource.data.updatedAt == request.time
+        && ((resource.data.isOpen == true
+            && request.resource.data.isOpen == false
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'isOpen', 'closedAt', 'closedByUid', 'updatedAt'
+            ])
+            && request.resource.data.closedAt == request.time
+            && request.resource.data.closedByUid == myUid())
+          || (resource.data.isOpen == false
+            && request.resource.data.isOpen == true
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'isOpen', 'openedByUid', 'opensAt', 'closesAt', 'closedAt',
+              'closedByUid', 'updatedAt'
+            ])
+            && request.resource.data.openedByUid == myUid()
+            && request.resource.data.opensAt == request.time
+            && request.resource.data.closesAt is timestamp
+            && request.resource.data.closesAt > request.time
+            && request.resource.data.closesAt <= request.time + duration.value(6, 'h')
+            && !request.resource.data.keys().hasAny(['closedAt', 'closedByUid']))
+          || (resource.data.isOpen == true
+            && resource.data.closesAt < request.time
+            && request.resource.data.isOpen == true
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'openedByUid', 'opensAt', 'closesAt', 'updatedAt'
+            ])
+            && request.resource.data.openedByUid == myUid()
+            && request.resource.data.opensAt == request.time
+            && request.resource.data.closesAt is timestamp
+            && request.resource.data.closesAt > request.time
+            && request.resource.data.closesAt <= request.time + duration.value(6, 'h')));
+
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── Smart Pickup : sortie scolaire ──────────────────────
+    match /pickupRequests/{requestId} {
+      allow read: if isAdmin()
+        || ownsGuardianRecord(resource.data.parentUid, resource.data.eleveId);
+
+      // Une demande déterministe par élève/jour. Le lien parent-enfant est
+      // résolu depuis eleves/ et ne dépend jamais d'un champ libre du client.
+      allow create: if ownsGuardianRecord(
+          request.resource.data.parentUid,
+          request.resource.data.eleveId
+        )
+        && request.resource.data.keys().hasAll([
+          'parentUid', 'eleveId', 'serviceDate', 'status', 'arrivedAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'parentUid', 'eleveId', 'serviceDate', 'status',
+          'vehicleDescription', 'arrivedAt', 'updatedAt'
+        ])
+        && pickupSessionIsOpen(request.resource.data.serviceDate)
+        && requestId == request.resource.data.serviceDate + '_' + request.resource.data.eleveId
+        && request.resource.data.serviceDate is string
+        && request.resource.data.status == 'waiting'
+        && request.resource.data.get('vehicleDescription', '') is string
+        && request.resource.data.get('vehicleDescription', '').size() <= 80
+        && request.resource.data.arrivedAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if
+        // Parent : annulation avant appel uniquement.
+        (ownsGuardianRecord(resource.data.parentUid, resource.data.eleveId)
+          && resource.data.status == 'waiting'
+          && request.resource.data.status == 'cancelled'
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'cancelledAt', 'updatedAt'])
+          && request.resource.data.cancelledAt == request.time
+          && request.resource.data.updatedAt == request.time)
+        // Parent : ré-annonce autorisée seulement après SA propre annulation.
+        || (ownsGuardianRecord(resource.data.parentUid, resource.data.eleveId)
+          && resource.data.status == 'cancelled'
+          && request.resource.data.status == 'waiting'
+          && pickupSessionIsOpen(resource.data.serviceDate)
+          && untouched(['parentUid', 'eleveId', 'serviceDate'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'arrivedAt', 'updatedAt', 'cancelledAt', 'vehicleDescription'
+          ])
+          && !request.resource.data.keys().hasAny(['cancelledAt'])
+          && request.resource.data.get('vehicleDescription', '') is string
+          && request.resource.data.get('vehicleDescription', '').size() <= 80
+          && request.resource.data.arrivedAt == request.time
+          && request.resource.data.updatedAt == request.time)
+        // Admin : machine d'état stricte waiting → called → ready → completed.
+        || (isAdmin()
+          && untouched(['parentUid', 'eleveId', 'serviceDate', 'arrivedAt'])
+          && resource.data.parentUid == eleveParentUid(resource.data.eleveId)
+          && request.resource.data.managedByUid == myUid()
+          && request.resource.data.updatedAt == request.time
+          && ((resource.data.status == 'waiting'
+              && request.resource.data.status == 'called'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'status', 'calledAt', 'managedByUid', 'queueNumber', 'zone', 'updatedAt'
+              ])
+              && request.resource.data.calledAt == request.time
+              && untouched(['readyAt', 'completedAt']))
+            || (resource.data.status == 'called'
+              && request.resource.data.status == 'ready'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'status', 'readyAt', 'managedByUid', 'queueNumber', 'zone', 'updatedAt'
+              ])
+              && request.resource.data.readyAt == request.time
+              && untouched(['calledAt', 'completedAt']))
+            || (resource.data.status == 'ready'
+              && request.resource.data.status == 'completed'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'status', 'completedAt', 'managedByUid', 'queueNumber', 'zone', 'updatedAt'
+              ])
+              && request.resource.data.completedAt == request.time
+              && untouched(['calledAt', 'readyAt']))));
+
+      allow delete: if isSuperAdmin();
+    }
+
+    // Capacité additive : un parent peut aussi être chauffeur sans que son
+    // users/{uid}.role ne change. L'auto-promotion client est impossible.
+    match /driverProfiles/{uid} {
+      allow read: if isSignedIn() && (uid == myUid() || isAdmin());
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Le document trajet n'est PAS lisible par les parents : il décrirait la
+    // tournée entière. Le parent lit seulement le passenger doc de son enfant.
+    match /transportTrips/{tripId} {
+      allow read: if isAdmin()
+        || (isActiveDriver() && resource.data.driverUid == myUid());
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+          'driverUid', 'serviceDate', 'direction', 'routeId', 'routeLabel',
+          'vehicleLabel', 'scheduledTime', 'stops', 'stopIds', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'driverUid', 'serviceDate', 'direction', 'routeId', 'routeLabel',
+          'vehicleId', 'vehicleLabel', 'scheduledTime', 'stops', 'stopIds',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && activeDriverUid(request.resource.data.driverUid)
+        && request.resource.data.status == 'scheduled'
+        && request.resource.data.direction in ['to_school', 'from_school']
+        && request.resource.data.serviceDate is string
+        && request.resource.data.routeId is string
+        && request.resource.data.routeLabel is string
+        && request.resource.data.vehicleLabel is string
+        && request.resource.data.scheduledTime is string
+        && request.resource.data.stops is list
+        && request.resource.data.stops.size() > 0
+        && request.resource.data.stops.size() <= 100
+        && request.resource.data.stopIds is list
+        && request.resource.data.stopIds.size() == request.resource.data.stops.size()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if (isAdmin()
+          || (isActiveDriver() && resource.data.driverUid == myUid()))
+        && untouched([
+          'driverUid', 'serviceDate', 'direction', 'routeId', 'routeLabel',
+          'vehicleId', 'vehicleLabel', 'scheduledTime', 'stops', 'stopIds', 'createdAt',
+          'status', 'boardingAt', 'startedAt', 'arrivedAt', 'completedAt',
+          'cancelledAt', 'delayMinutes', 'delayReason', 'delayRevision',
+          'delayUpdatedAt'
+        ])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'currentStopId', 'etaMinutes', 'incidentMessage', 'updatedAt'
+        ])
+        && resource.data.status != 'completed'
+        && resource.data.status != 'cancelled'
+        && request.resource.data.get('etaMinutes', 0) is int
+        && request.resource.data.get('etaMinutes', 0) >= 0
+        && request.resource.data.get('etaMinutes', 0) <= 300
+        && request.resource.data.get('delayMinutes', 0) is int
+        && request.resource.data.get('delayMinutes', 0) >= 0
+        && request.resource.data.get('delayMinutes', 0) <= 180
+        && request.resource.data.get('delayReason', '') is string
+        && request.resource.data.get('delayReason', '').size() <= 160
+        && request.resource.data.get('incidentMessage', '') is string
+        && request.resource.data.get('incidentMessage', '').size() <= 500
+        && request.resource.data.get('currentStopId', '') is string
+        && (request.resource.data.get('currentStopId', '') == ''
+          || request.resource.data.currentStopId in resource.data.stopIds)
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if isAdmin();
+
+      match /passengers/{passengerId} {
+        allow read: if isAdmin()
+          || isAssignedTripDriver(tripId)
+          || isGuardianOf(resource.data.eleveId);
+
+        allow create: if isAdmin()
+          && tripStatus(tripId) == 'scheduled'
+          && request.resource.data.keys().hasAll([
+            'tripId', 'eleveId', 'elevePrenom', 'serviceDate', 'direction',
+            'routeLabel', 'vehicleLabel', 'scheduledTime', 'stopId',
+            'stopLabel', 'status', 'createdAt', 'updatedAt'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'tripId', 'eleveId', 'elevePrenom', 'eleveNom', 'classe',
+            'serviceDate', 'direction', 'routeLabel', 'vehicleLabel',
+            'scheduledTime', 'stopId', 'stopLabel', 'status',
+            'createdAt', 'updatedAt'
+          ])
+          && request.resource.data.eleveId == passengerId
+          && request.resource.data.tripId == tripId
+          && request.resource.data.status == 'scheduled'
+          && request.resource.data.serviceDate == get(/databases/$(database)/documents/transportTrips/$(tripId)).data.serviceDate
+          && request.resource.data.direction == get(/databases/$(database)/documents/transportTrips/$(tripId)).data.direction
+          && request.resource.data.routeLabel == get(/databases/$(database)/documents/transportTrips/$(tripId)).data.routeLabel
+          && request.resource.data.vehicleLabel == get(/databases/$(database)/documents/transportTrips/$(tripId)).data.vehicleLabel
+          && request.resource.data.scheduledTime == get(/databases/$(database)/documents/transportTrips/$(tripId)).data.scheduledTime
+          && request.resource.data.stopId is string
+          && request.resource.data.stopId in get(/databases/$(database)/documents/transportTrips/$(tripId)).data.stopIds
+          && request.resource.data.stopLabel is string
+          && request.resource.data.stopLabel.size() > 0
+          && request.resource.data.stopLabel.size() <= 120
+          && request.resource.data.elevePrenom is string
+          && request.resource.data.elevePrenom.size() <= 80
+          && request.resource.data.get('eleveNom', '') is string
+          && request.resource.data.get('eleveNom', '').size() <= 80
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time;
+
+        allow update: if (isAdmin() || isAssignedTripDriver(tripId))
+          && untouched([
+            'tripId', 'eleveId', 'elevePrenom', 'eleveNom', 'classe',
+            'serviceDate', 'direction', 'routeLabel', 'vehicleLabel',
+            'scheduledTime', 'stopId', 'stopLabel', 'createdAt'
+          ])
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly([
+              'status', 'boardedAt', 'droppedOffAt', 'absentAt',
+              'cancelledAt', 'updatedAt'
+            ])
+          && request.resource.data.status in [
+            'scheduled', 'boarded', 'dropped_off', 'absent', 'cancelled'
+          ]
+          && validPassengerTransition(resource.data.status, request.resource.data.status)
+          && request.resource.data.updatedAt == request.time
+          && ((request.resource.data.status == 'boarded'
+              && tripStatus(tripId) == 'boarding'
+              && request.resource.data.boardedAt == request.time
+              && untouched(['droppedOffAt', 'absentAt', 'cancelledAt']))
+            || (request.resource.data.status == 'dropped_off'
+              && tripStatus(tripId) in ['in_transit', 'arrived']
+              && request.resource.data.droppedOffAt == request.time
+              && untouched(['boardedAt', 'absentAt', 'cancelledAt']))
+            || (request.resource.data.status == 'absent'
+              && tripStatus(tripId) in ['scheduled', 'boarding']
+              && request.resource.data.absentAt == request.time
+              && untouched(['boardedAt', 'droppedOffAt', 'cancelledAt']))
+            || (request.resource.data.status == 'cancelled'
+              && tripStatus(tripId) in ['scheduled', 'boarding']
+              && request.resource.data.cancelledAt == request.time
+              && untouched(['boardedAt', 'droppedOffAt', 'absentAt'])));
+
+        allow delete: if isAdmin();
+      }
+    }
+
+    // Règles v2 : chemin récursif requis pour les requêtes collectionGroup
+    // `passengers`. Le filtre eleveId de l'app permet aux rules de prouver le
+    // lien courant ; une requête non bornée reste refusée.
+    match /{path=**}/passengers/{passengerId} {
+      allow read: if isGuardianOf(resource.data.eleveId);
     }
 
     // ── stats (agrégat du tableau de bord admin, maintenu par CF) ──

@@ -2,15 +2,18 @@
  * Types partagés à travers l'app multi-rôles.
  *
  * Note sur les rôles : la base Firestore existante utilise les libellés
- * 'parent', 'professeur', 'admin'. Le nouveau code interne utilise la
- * convention 'student' / 'teacher' / 'admin' (plus courte, anglo-saxonne),
+ * 'parent', 'professeur', 'admin'. Smart Pickup ajoute 'chauffeur' comme
+ * rôle principal possible pour les comptes chauffeur-only ; un parent qui
+ * conduit conserve role:'parent' et reçoit son accès via driverProfiles/{uid}.
+ * Le nouveau code interne utilise la convention
+ * 'student' / 'teacher' / 'admin' / 'driver' (plus courte, anglo-saxonne),
  * mais on lit/écrit la base avec les anciennes valeurs pour ne pas casser
  * l'app admin web et l'app parent existantes. Le mapping est dans
  * src/contexts/AuthContext.tsx.
  */
 
-export type RoleRaw   = 'parent' | 'student' | 'professeur' | 'admin'
-export type RoleLogic = 'student' | 'teacher'    | 'admin'
+export type RoleRaw   = 'parent' | 'student' | 'professeur' | 'admin' | 'chauffeur' | 'driver'
+export type RoleLogic = 'student' | 'teacher' | 'admin' | 'driver'
 
 export interface UserProfile {
   uid:     string

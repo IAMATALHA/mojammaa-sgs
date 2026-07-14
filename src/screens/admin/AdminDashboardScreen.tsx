@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next'
 import {
   Users, GraduationCap, School, BookOpen, Send, Mail, CalendarClock, CalendarX,
   ChevronRight, ClipboardCheck, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown,
+  CarFront,
 } from 'lucide-react-native'
 import { collection, doc, getDoc, getDocs, query, where, Timestamp } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
@@ -46,7 +47,7 @@ import {
 type AdminQuickRoute =
   | 'AdminAbsences' | 'AdminUsers' | 'AdminDevoirs'
   | 'AdminStatsTab' | 'AdminMessages' | 'AdminCalendarTab'
-  | 'AdminRollCalls'
+  | 'AdminRollCalls' | 'AdminPickup'
 
 function compactLabels(lang: string) {
   if (lang === 'ar') {
@@ -333,6 +334,20 @@ export default function AdminDashboardScreen() {
             </View>
           )}
         </LinearGradient>
+
+        <View style={styles.bentoWideGroup}>
+          <BentoWide
+            icon={<CarFront size={17} color={theme.primary} strokeWidth={2.1} />}
+            iconBg={theme.primarySurface}
+            text={`${t('pickup.adminCta')} · ${t('pickup.adminHint')}`}
+            bg={theme.card}
+            border={theme.primaryBorder}
+            bold
+            onPress={() => goTo('AdminPickup')}
+            theme={theme}
+            isAr={isAr}
+          />
+        </View>
 
         {/* Bannière jour spécial */}
         {todayJour && todayJour.annuleCours ? (

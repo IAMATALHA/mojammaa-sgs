@@ -33,6 +33,7 @@ import ParentComportementScreen from '../screens/student/ParentComportementScree
 import ParentRessourcesScreen from '../screens/student/ParentRessourcesScreen'
 import ParentPerformanceScreen from '../screens/student/ParentPerformanceScreen'
 import ParentEdtScreen from '../screens/student/ParentEdtScreen'
+import ParentPickupScreen from '../screens/student/parent-pickup-screen'
 import DevoirDetailScreen from '../screens/shared/DevoirDetailScreen'
 import type { StudentTabsParamList, StudentHomeStackParamList, StudentDevoirsStackParamList } from './types'
 
@@ -61,6 +62,7 @@ function HomeStack() {
       }}
     >
       <HomeStackNav.Screen name="StudentHome" component={ParentDashboardScreen} />
+      <HomeStackNav.Screen name="StudentPickup" component={ParentPickupScreen} />
       <HomeStackNav.Screen name="StudentComportement" component={ParentComportementScreen} />
       <HomeStackNav.Screen name="StudentRessources" component={ParentRessourcesScreen} />
       <HomeStackNav.Screen name="StudentPerformance" component={ParentPerformanceScreen} />
@@ -82,7 +84,7 @@ function DevoirsStack() {
 export default function StudentStack() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const unread = useUnreadMessagesCount()
+  const unread = useUnreadMessagesCount('parent')
 
   return (
     <Tab.Navigator

@@ -7,6 +7,7 @@ import { Globe, Check } from 'lucide-react-native'
 import { MotiView } from 'moti'
 import { useTheme } from '../contexts/ThemeContext'
 import { changeLanguage, type AppLanguage } from '../i18n'
+import { syncNotificationLanguage } from '../services/NotificationService'
 
 const LANGS: { code: AppLanguage; label: string; native: string }[] = [
   { code: 'fr', label: 'Français', native: 'Français' },
@@ -31,6 +32,7 @@ export default function LanguagePicker({ visible, onClose }: Props) {
     }
     onClose()
     await changeLanguage(lang)
+    await syncNotificationLanguage(lang)
   }
 
   return (

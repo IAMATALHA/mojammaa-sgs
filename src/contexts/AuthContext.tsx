@@ -8,6 +8,7 @@
  *   - role: 'parent'              → 'student' (parent voit les données enfant)
  *   - role: 'professeur'          → 'teacher'
  *   - role: 'admin'               → 'admin'
+ *   - role: 'chauffeur'           → 'driver'
  *
  * Le profil est suivi en TEMPS RÉEL (onSnapshot sur users/{uid}) tant que
  * l'utilisateur est connecté :
@@ -32,6 +33,7 @@ import { registerForPushNotificationsAsync, clearPushToken, recordLogin } from '
 function rawToLogic(raw: RoleRaw | string | undefined): RoleLogic {
   if (raw === 'admin') return 'admin'
   if (raw === 'professeur' || raw === 'teacher') return 'teacher'
+  if (raw === 'chauffeur' || raw === 'driver') return 'driver'
   return 'student' // 'parent', 'student' ou rien → student
 }
 

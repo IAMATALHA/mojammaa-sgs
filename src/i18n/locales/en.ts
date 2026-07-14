@@ -46,6 +46,17 @@ const en = {
     parent: 'PARENT',
     teacher: 'TEACHER',
     admin: 'ADMIN',
+    driver: 'DRIVER',
+  },
+
+  workspace: {
+    title: 'My workspaces',
+    parent: 'Parent workspace',
+    teacher: 'Teacher workspace',
+    admin: 'Administration workspace',
+    driver: 'Driver workspace',
+    active: 'Active workspace',
+    switch: 'Open this workspace',
   },
 
   days: {
@@ -90,6 +101,7 @@ const en = {
     announcements: 'Announcements',
     stats: 'Stats',
     settings: 'Settings',
+    pickup: 'Pickup',
   },
 
   parent: {
@@ -588,6 +600,19 @@ const en = {
     messages: 'Messages',
     resources: 'Resources',
     schedule: 'Timetable',
+  },
+
+  pickup: {
+    moduleTitle: 'Mojammaa Smart Pickup',
+    moduleSubtitle: 'Smart school pickup and transport',
+    openParent: 'Open school pickup',
+    arrivalCta: 'I have arrived',
+    arrivalHint: 'Notify the school and follow your child’s handoff.',
+    openDriver: 'Open driver workspace',
+    driverWorkspace: 'Driver workspace',
+    driverWorkspaceHint: 'View your trips and assigned students',
+    adminCta: 'Manage school pickup',
+    adminHint: 'Live parent queue',
   },
 
   calendar: {

@@ -6,6 +6,7 @@ import React, { useState } from 'react'
 import { View, ActivityIndicator, Text, StyleSheet, Pressable } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { useAuth } from '../contexts/AuthContext'
+import { useWorkspace } from '../contexts/driver-workspace-context'
 import { useTheme } from '../contexts/ThemeContext'
 import { navigationRef } from './navigationRef'
 import { usePushTapNavigation } from '../hooks/usePushTapNavigation'
@@ -13,6 +14,7 @@ import AuthStack    from './AuthStack'
 import StudentStack from './StudentStack'
 import TeacherStack from './TeacherStack'
 import AdminStack   from './AdminStack'
+import DriverStack  from './driver-stack'
 
 function Splash() {
   const theme = useTheme()
@@ -60,23 +62,88 @@ function ProfileErrorScreen() {
   )
 }
 
+function DriverAccessScreen({ readError }: { readError: boolean }) {
+  const theme = useTheme()
+  const { logout } = useAuth()
+  const { retryDriverProfile } = useWorkspace()
+  return (
+    <View style={[styles.splash, { backgroundColor: theme.bg, paddingHorizontal: 32 }]}>
+      <Text style={[styles.errorTitle, { color: theme.text }]}>Espace chauffeur indisponible</Text>
+      <Text style={[styles.errorBody, { color: theme.textSoft }]}>
+        {readError
+          ? 'Impossible de vérifier votre autorisation chauffeur. Vérifiez la connexion puis réessayez.'
+          : 'Ce compte doit être activé comme chauffeur par l’administration.'}
+      </Text>
+      <Pressable
+        onPress={retryDriverProfile}
+        accessibilityRole="button"
+        style={[styles.retryBtn, { backgroundColor: theme.primary }]}
+      >
+        <Text style={styles.retryText}>Réessayer</Text>
+      </Pressable>
+      <Pressable onPress={logout} accessibilityRole="button" style={styles.logoutLink}>
+        <Text style={[styles.logoutText, { color: theme.textSoft }]}>Se déconnecter</Text>
+      </Pressable>
+    </View>
+  )
+}
+
 export default function NavigationRoot() {
   const { user, isLoading, role, profile, profileError } = useAuth()
+  const {
+    activeWorkspace,
+    canUseDriverWorkspace,
+    canUseParentWorkspace,
+    openParentWorkspace,
+    isLoading: driverProfileLoading,
+    error: driverProfileError,
+  } = useWorkspace()
   const [navReady, setNavReady] = useState(false)
 
-  // Tap sur une notification push → écran Messages du rôle (+ détail).
-  usePushTapNavigation(user ? role : null, navReady && !!user)
+  // Tap push → message ciblé, ou écran Smart Pickup/transport côté parent.
+  // L'espace chauffeur n'a pas de boîte Messages ; un compte hybride conserve
+  // l'intention en attente jusqu'au retour dans son espace parent.
+  usePushTapNavigation(
+    user && activeWorkspace === 'parent'
+      ? 'student'
+      : user && role !== 'driver' && activeWorkspace === 'primary'
+        ? role
+        : null,
+    navReady && !!user && (activeWorkspace === 'parent'
+      || (role !== 'driver' && activeWorkspace === 'primary')),
+    {
+      canOpenParentWorkspace: canUseParentWorkspace,
+      openParentWorkspace,
+    },
+  )
 
   if (isLoading) return <Splash />
+
+  if (user && role === 'driver' && driverProfileLoading) return <Splash />
 
   // Authentifié mais profil illisible (erreur, pas « parent ») : écran dédié
   // plutôt que de router vers l'espace parent par défaut (cf. AuthContext #3).
   if (user && profileError && !profile) return <ProfileErrorScreen />
 
+  // Un chauffeur sans profil actif reste bloqué, sauf si son accès parent est
+  // prouvé indépendamment par un enfant lié à son propre UID.
+  if (
+    user
+    && role === 'driver'
+    && !canUseDriverWorkspace
+    && activeWorkspace !== 'parent'
+  ) {
+    return <DriverAccessScreen readError={Boolean(driverProfileError)} />
+  }
+
   return (
     <NavigationContainer ref={navigationRef} onReady={() => setNavReady(true)}>
       {!user ? (
         <AuthStack />
+      ) : activeWorkspace === 'driver' ? (
+        <DriverStack />
+      ) : activeWorkspace === 'parent' ? (
+        <StudentStack />
       ) : role === 'admin' ? (
         <AdminStack />
       ) : role === 'teacher' ? (

@@ -25,6 +25,7 @@ import {
   Cairo_700Bold,
 } from '@expo-google-fonts/cairo'
 import { AuthProvider } from './src/contexts/AuthContext'
+import { WorkspaceProvider } from './src/contexts/driver-workspace-context'
 import { ThemeProvider } from './src/contexts/ThemeContext'
 import NavigationRoot from './src/navigation/NavigationRoot'
 import { initI18n } from './src/i18n'
@@ -69,10 +70,12 @@ export default function App() {
       <SafeAreaProvider>
         {ready && (
           <AuthProvider>
-            <ThemeProvider>
-              <StatusBar style="auto" />
-              <NavigationRoot />
-            </ThemeProvider>
+            <WorkspaceProvider>
+              <ThemeProvider>
+                <StatusBar style="auto" />
+                <NavigationRoot />
+              </ThemeProvider>
+            </WorkspaceProvider>
           </AuthProvider>
         )}
         <AnimatePresence>

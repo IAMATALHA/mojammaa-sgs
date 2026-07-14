@@ -49,17 +49,47 @@ export async function createAbsenceRequest(
 
 export function subscribeAbsenceRequestsForParent(
   parentUid: string,
+  eleveIds: string[],
   onChange: (list: AbsenceRequestDoc[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  return onSnapshot(
-    query(collection(db, COL), where('parentUid', '==', parentUid)),
-    snap => onChange(
-      toDocs<AbsenceRequestDoc>(snap)
+  const ids = [...new Set(eleveIds.filter(Boolean))]
+  if (ids.length === 0) {
+    onChange([])
+    return () => {}
+  }
+
+  const buckets = new Map<number, AbsenceRequestDoc[]>()
+  const unsubs: Unsubscribe[] = []
+  const publish = () => {
+    const byId = new Map<string, AbsenceRequestDoc>()
+    buckets.forEach(list => list.forEach(item => {
+      if (item.id) byId.set(item.id, item)
+    }))
+    onChange(
+      [...byId.values()]
         .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)),
-    ),
-    err => onError?.(err),
-  )
+    )
+  }
+
+  for (let offset = 0; offset < ids.length; offset += 30) {
+    const bucketId = offset / 30
+    const chunk = ids.slice(offset, offset + 30)
+    buckets.set(bucketId, [])
+    unsubs.push(onSnapshot(
+      query(
+        collection(db, COL),
+        where('parentUid', '==', parentUid),
+        where('eleveId', 'in', chunk),
+      ),
+      snap => {
+        buckets.set(bucketId, toDocs<AbsenceRequestDoc>(snap))
+        publish()
+      },
+      err => onError?.(err),
+    ))
+  }
+  return () => unsubs.forEach(unsub => unsub())
 }
 
 /** Déclarations d'une classe pour une date (écran d'appel du prof). */

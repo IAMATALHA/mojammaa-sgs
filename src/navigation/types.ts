@@ -66,6 +66,7 @@ export type TeacherDashboardNav = CompositeNavigationProp<
 // ── Student / Parent ───────────────────────────────────────────────────────
 export type StudentHomeStackParamList = {
   StudentHome:         undefined
+  StudentPickup:       undefined
   StudentComportement: undefined
   StudentRessources:   undefined
   StudentPerformance:  undefined
@@ -113,6 +114,7 @@ export type AdminStackParamList = {
   AdminDevoirView: DevoirDetailParams
   AdminMatiereDetail: { matiere?: string; classe?: string } | undefined
   AdminUsers:     undefined
+  AdminPickup:    undefined
 }
 
 /** Tableau de bord admin : onglet (AdminDashboard) ciblant onglets + pile. */
@@ -120,6 +122,12 @@ export type AdminDashboardNav = CompositeNavigationProp<
   BottomTabNavigationProp<AdminTabsParamList>,
   NativeStackNavigationProp<AdminStackParamList>
 >
+
+// ── Chauffeur / Smart Pickup ─────────────────────────────────────────────
+export type DriverStackParamList = {
+  DriverHome: undefined
+  DriverSettings: undefined
+}
 
 // ── Helpers route ──────────────────────────────────────────────────────────
 export type TeacherRoute<T extends keyof TeacherStackParamList> = RouteProp<TeacherStackParamList, T>

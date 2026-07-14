@@ -46,12 +46,12 @@ export function useParentMessages(): ParentMessagesData {
     setLoading(true)
     const unsub = subscribeMessages(
       profile.uid,
-      profile.role || 'parent',
+      'parent',
       list => { setRaw(list); setLoading(false); setError(null) },
       err => { setError(err.message); setLoading(false) },
     )
     return unsub
-  }, [profile?.uid, profile?.role])
+  }, [profile?.uid])
 
   const messages = useMemo(() => raw.map(toAnnouncement), [raw])
   const unread = useMemo(() => raw.filter(m => !(m.readBy || []).includes(profile?.uid || '')).length, [raw, profile?.uid])

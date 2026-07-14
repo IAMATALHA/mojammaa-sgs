@@ -46,6 +46,17 @@ const fr = {
     parent: 'PARENT',
     teacher: 'ENSEIGNANT',
     admin: 'DIRECTION',
+    driver: 'CHAUFFEUR',
+  },
+
+  workspace: {
+    title: 'Mes espaces',
+    parent: 'Espace parent',
+    teacher: 'Espace professeur',
+    admin: 'Espace direction',
+    driver: 'Espace chauffeur',
+    active: 'Espace actif',
+    switch: 'Ouvrir cet espace',
   },
 
   days: {
@@ -90,6 +101,7 @@ const fr = {
     announcements: 'Annonces',
     stats: 'Stats',
     settings: 'Réglages',
+    pickup: 'Sortie',
   },
 
   parent: {
@@ -588,6 +600,19 @@ const fr = {
     messages: 'Messages',
     resources: 'Ressources',
     schedule: 'Emploi du temps',
+  },
+
+  pickup: {
+    moduleTitle: 'Mojammaa Smart Pickup',
+    moduleSubtitle: 'Sortie scolaire et transport intelligent',
+    openParent: 'Ouvrir la sortie scolaire',
+    arrivalCta: 'Je suis arrivé',
+    arrivalHint: 'Prévenez l’école et suivez la remise de votre enfant.',
+    openDriver: 'Ouvrir l’espace chauffeur',
+    driverWorkspace: 'Espace chauffeur',
+    driverWorkspaceHint: 'Voir vos tournées et les élèves assignés',
+    adminCta: 'Gérer la sortie scolaire',
+    adminHint: 'File des parents en direct',
   },
 
   calendar: {

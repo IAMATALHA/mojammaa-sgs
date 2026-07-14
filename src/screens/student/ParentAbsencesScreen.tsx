@@ -48,8 +48,13 @@ export default function ParentAbsencesScreen() {
 
   useEffect(() => {
     if (!profile?.uid) return
-    return subscribeAbsenceRequestsForParent(profile.uid, setDeclarations, () => {})
-  }, [profile?.uid])
+    return subscribeAbsenceRequestsForParent(
+      profile.uid,
+      parent.children.map(child => child.id),
+      setDeclarations,
+      () => {},
+    )
+  }, [profile?.uid, parent.children.map(child => child.id).join('|')])
 
   const filtered = useMemo(() => {
     const base = selectedChildId === 'all'

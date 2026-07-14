@@ -4,7 +4,7 @@ import { MotiView } from 'moti'
 import {
   CheckCircle, PencilLine, BookOpen, Send,
   GraduationCap, CalendarX, MessageCircle, Bell, BarChart3, FolderOpen,
-  CalendarClock,
+  CalendarClock, CarFront, BusFront,
   type LucideIcon,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -23,6 +23,8 @@ const ICONS: Record<string, LucideIcon> = {
   'bar-chart-3': BarChart3,
   'folder-open': FolderOpen,
   'calendar-clock': CalendarClock,
+  'car-front': CarFront,
+  'bus-front': BusFront,
 }
 
 function actionTone(theme: Theme): Record<string, { bg: string; fg: string; border: string }> {
@@ -50,10 +52,13 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
       {actions.map(action => {
         const Icon = ICONS[action.icon] ?? Bell
         const tint = tones[action.tint] || tones.primary
+        const label = action.labelKey ? t(action.labelKey) : action.label
         return (
           <Pressable
             key={action.id}
             onPress={() => onPress?.(action)}
+            accessibilityRole="button"
+            accessibilityLabel={label}
             android_ripple={{ color: '#ffffff40' }}
             style={styles.tilePressable}
           >
@@ -90,7 +95,7 @@ export default function QuickActions({ actions, onPress }: QuickActionsProps) {
                     writingDirection: isAr ? 'rtl' : 'ltr',
                   }}
                 >
-                  {action.labelKey ? t(action.labelKey) : action.label}
+                  {label}
                 </Text>
               </MotiView>
             )}

@@ -167,6 +167,7 @@ export function subscribeMessages(
   // 3. Old format compatibility (toId string field)
   const oldToIds = [uid, 'all']
   if (role === 'professeur') oldToIds.push('teachers')
+  else if (role === 'parent') oldToIds.push('parents')
   else if (role === 'admin') oldToIds.push('admin', 'teachers')
   unsubs.push(listen(
     query(

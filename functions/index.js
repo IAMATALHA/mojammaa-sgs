@@ -22,6 +22,15 @@ const { claimEmailSlot, claimGlobalSlot } = require('./resetThrottle')
 const { computeClassStats, statsDocId } = require('./classStats')
 const { computeSchoolStats } = require('./schoolStats')
 const { buildSlotDocs } = require('./emploiDuTempsSync')
+const {
+  TransportTransitionError,
+  reportTransportTripDelay,
+  transitionTransportTrip,
+} = require('./transportTransitions')
+const {
+  affectedGuardianUids,
+  rebuildGuardianAccess,
+} = require('./guardianAccess')
 
 initializeApp()
 const db = getFirestore()
@@ -53,6 +62,11 @@ async function resolveRecipientUids(data) {
   } else if (data.toType === 'parents') {
     const snap = await db.collection('users').where('role', '==', 'parent').get()
     snap.forEach((d) => uids.add(d.id))
+    // Le rôle professionnel reste intact pour un professeur/chauffeur qui a
+    // des enfants. `guardianAccess` matérialise ces liens sans dupliquer le
+    // compte ni exposer les élèves dans le message.
+    const guardians = await db.collection('guardianAccess').get()
+    guardians.forEach((d) => uids.add(d.id))
   } else if (data.toType === 'teachers') {
     const snap = await db.collection('users').where('role', '==', 'professeur').get()
     snap.forEach((d) => uids.add(d.id))
@@ -96,6 +110,28 @@ async function tokensForUids(uids) {
     })
   }
   return { tokens: [...tokens], invalid }
+}
+
+/** Token + langue préférée, sans exposer ces valeurs dans les logs. */
+async function pushTargetsForUids(uids) {
+  const byToken = new Map()
+  let invalid = 0
+  for (let i = 0; i < uids.length; i += 100) {
+    const refs = uids.slice(i, i + 100).map((uid) => db.collection('users').doc(uid))
+    const docs = await db.getAll(...refs)
+    docs.forEach((docSnap) => {
+      const token = docSnap.exists ? docSnap.get('expoPushToken') : null
+      if (!token) return
+      if (!isValidExpoPushToken(token)) {
+        invalid++
+        return
+      }
+      const requested = docSnap.get('notificationLanguage')
+      const language = ['fr', 'en', 'ar'].includes(requested) ? requested : 'fr'
+      byToken.set(token, { token, language })
+    })
+  }
+  return { targets: [...byToken.values()], invalid }
 }
 
 function summarizeExpoTicketError(ticket) {
@@ -160,6 +196,212 @@ async function sendExpoPush(messages) {
   }
   return { sent, errors, ticketIds }
 }
+
+/**
+ * Envoie une notification Smart Pickup sans identifiant, nom, classe, trajet
+ * ou zone dans le contenu visible ni dans les logs. Les identifiants utiles à
+ * l'autorisation restent exclusivement dans Firestore.
+ */
+async function sendPrivacySafePushToUids(uids, notification, eventKind) {
+  const recipients = [...new Set(
+    uids.filter((uid) => typeof uid === 'string' && uid.length > 0),
+  )]
+  if (recipients.length === 0) return
+
+  const { targets, invalid: invalidTokens } = await pushTargetsForUids(recipients)
+  if (targets.length === 0) {
+    logger.info('Smart Pickup push skipped (no valid token)', {
+      eventKind,
+      recipients: recipients.length,
+      invalidTokens,
+    })
+    return
+  }
+
+  const messages = targets.map(({ token, language }) => {
+    const copy = notification.copies[language] || notification.copies.fr
+    return {
+      to: token,
+      sound: 'default',
+      title: copy.title,
+      body: copy.body,
+      priority: 'high',
+      channelId: 'default',
+      // Ne pas envoyer requestId/tripId/eleveId : l'écran recharge sa vue
+      // autorisée depuis Firestore après ouverture de l'application.
+      data: notification.data,
+    }
+  })
+  const result = await sendExpoPush(messages)
+  logger.info('Smart Pickup push processed', {
+    eventKind,
+    recipients: recipients.length,
+    tokens: targets.length,
+    invalidTokens,
+    sent: result.sent,
+    errors: result.errors,
+  })
+}
+
+const PICKUP_PUSH_COPY = Object.freeze({
+  called: {
+    fr: { title: 'Sortie scolaire', body: "Votre enfant a été appelé. Suivez l'état dans Mojammaa." },
+    en: { title: 'School pickup', body: 'Your child has been called. Follow the status in Mojammaa.' },
+    ar: { title: 'الخروج المدرسي', body: 'تم استدعاء طفلكم. تابعوا الحالة في تطبيق Mojammaa.' },
+  },
+  ready: {
+    fr: { title: 'Sortie scolaire', body: 'Votre enfant est prêt dans la zone de remise.' },
+    en: { title: 'School pickup', body: 'Your child is ready in the pickup area.' },
+    ar: { title: 'الخروج المدرسي', body: 'طفلكم جاهز في منطقة التسليم.' },
+  },
+  completed: {
+    fr: { title: 'Sortie scolaire', body: 'La remise de votre enfant a été confirmée.' },
+    en: { title: 'School pickup', body: 'Your child handoff has been confirmed.' },
+    ar: { title: 'الخروج المدرسي', body: 'تم تأكيد تسليم طفلكم.' },
+  },
+})
+
+const PASSENGER_PUSH_COPY = Object.freeze({
+  boarded: {
+    fr: { title: 'Transport scolaire', body: 'La montée de votre enfant dans le véhicule a été confirmée.' },
+    en: { title: 'School transport', body: 'Your child boarding the vehicle has been confirmed.' },
+    ar: { title: 'النقل المدرسي', body: 'تم تأكيد صعود طفلكم إلى مركبة النقل المدرسي.' },
+  },
+  dropped_off: {
+    fr: { title: 'Transport scolaire', body: 'La descente de votre enfant a été confirmée.' },
+    en: { title: 'School transport', body: 'Your child drop-off has been confirmed.' },
+    ar: { title: 'النقل المدرسي', body: 'تم تأكيد نزول طفلكم من مركبة النقل المدرسي.' },
+  },
+})
+
+/** Retourne le parent de l'élève sans recopier parentUid dans les trajets. */
+async function parentUidForEleve(eleveId) {
+  if (typeof eleveId !== 'string' || eleveId.length === 0) return null
+  const snap = await db.collection('eleves').doc(eleveId).get()
+  const parentUid = snap.exists ? snap.get('parentUid') : null
+  return typeof parentUid === 'string' && parentUid.length > 0 ? parentUid : null
+}
+
+/** Parents uniques des passagers d'un trajet, résolus depuis `eleves`. */
+async function parentUidsForTrip(tripId) {
+  const passengerSnap = await db
+    .collection('transportTrips')
+    .doc(tripId)
+    .collection('passengers')
+    .get()
+  const eleveIds = [...new Set(
+    passengerSnap.docs
+      .map((passenger) => passenger.get('eleveId'))
+      .filter((eleveId) => typeof eleveId === 'string' && eleveId.length > 0),
+  )]
+
+  const parentUids = new Set()
+  for (let i = 0; i < eleveIds.length; i += 100) {
+    const refs = eleveIds
+      .slice(i, i + 100)
+      .map((eleveId) => db.collection('eleves').doc(eleveId))
+    const eleves = await db.getAll(...refs)
+    eleves.forEach((eleve) => {
+      const parentUid = eleve.exists ? eleve.get('parentUid') : null
+      if (typeof parentUid === 'string' && parentUid.length > 0) parentUids.add(parentUid)
+    })
+  }
+  return [...parentUids]
+}
+
+// ── Smart Pickup / transport : notifications privées ─────────────────────
+// Aucun trigger ne journalise parentUid, eleveId, tripId ou requestId.
+exports.onPickupRequestWritten = onDocumentWritten('pickupRequests/{requestId}', async (event) => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null
+  const after = event.data?.after?.exists ? event.data.after.data() : null
+  if (!after || before?.status === after.status) return
+
+  const copy = PICKUP_PUSH_COPY[after.status]
+  if (!copy) return
+  const current = await event.data.after.ref.get()
+  if (!current.exists || current.get('status') !== after.status) return
+  const parentUid = await parentUidForEleve(after.eleveId)
+  if (!parentUid) return
+  await sendPrivacySafePushToUids(
+    [parentUid],
+    { copies: copy, data: { type: 'pickup_status', status: after.status } },
+    `pickup_${after.status}`,
+  )
+})
+
+exports.onTransportPassengerWritten = onDocumentWritten(
+  'transportTrips/{tripId}/passengers/{passengerId}',
+  async (event) => {
+    const before = event.data?.before?.exists ? event.data.before.data() : null
+    const after = event.data?.after?.exists ? event.data.after.data() : null
+    if (!after || before?.status === after.status) return
+
+    const copy = PASSENGER_PUSH_COPY[after.status]
+    if (!copy) return
+    const current = await event.data.after.ref.get()
+    if (!current.exists || current.get('status') !== after.status) return
+    const parentUid = await parentUidForEleve(after.eleveId)
+    if (!parentUid) return
+    await sendPrivacySafePushToUids(
+      [parentUid],
+      { copies: copy, data: { type: 'transport_passenger_status', status: after.status } },
+      `passenger_${after.status}`,
+    )
+  },
+)
+
+exports.onTransportTripWritten = onDocumentWritten('transportTrips/{tripId}', async (event) => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null
+  const after = event.data?.after?.exists ? event.data.after.data() : null
+  if (!after) return
+
+  const previousDelay = Number(before?.delayMinutes || 0)
+  const rawDelay = Number(after.delayMinutes || 0)
+  if (!Number.isFinite(rawDelay)) return
+  const delayMinutes = Math.max(0, Math.round(rawDelay))
+  if (delayMinutes === previousDelay) return
+  if (delayMinutes <= 0) return
+
+  // Les triggers peuvent arriver dans le désordre : seul l'événement qui
+  // correspond encore à la révision courante est autorisé à notifier.
+  const current = await event.data.after.ref.get()
+  const afterRevision = Number(after.delayRevision || 0)
+  if (!current.exists
+      || Number(current.get('delayRevision') || 0) !== afterRevision
+      || Number(current.get('delayMinutes') || 0) !== delayMinutes) return
+
+  const parentUids = await parentUidsForTrip(event.params.tripId)
+  await sendPrivacySafePushToUids(
+    parentUids,
+    {
+      copies: {
+        fr: { title: 'Transport scolaire', body: `Un retard d'environ ${delayMinutes} min est signalé.` },
+        en: { title: 'School transport', body: `A delay of about ${delayMinutes} min has been reported.` },
+        ar: { title: 'النقل المدرسي', body: `تم الإبلاغ عن تأخر يقدر بحوالي ${delayMinutes} دقيقة.` },
+      },
+      data: { type: 'transport_delay', delayMinutes: Math.round(delayMinutes) },
+    },
+    'transport_delay',
+  )
+})
+
+// Capacité parent additive pour les comptes professeur/chauffeur. La source
+// d'autorité reste `eleves.parentUid`; ce document ne sert qu'aux règles qui
+// doivent prouver un droit de classe sans pouvoir exécuter de requête.
+exports.onEleveGuardianAccessWritten = onDocumentWritten('eleves/{eleveId}', async (event) => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null
+  const after = event.data?.after?.exists ? event.data.after.data() : null
+  const uids = affectedGuardianUids(before, after)
+  if (uids.length === 0) return
+
+  const results = await Promise.all(
+    uids.map((uid) => rebuildGuardianAccess(db, uid, FieldValue)),
+  )
+  logger.info('Guardian access rebuilt', {
+    guardians: uids.length,
+    active: results.filter((result) => result.active).length,
+  })
+})
 
 async function fetchExpoPushReceipts(ids) {
   const receipts = {}
@@ -231,6 +473,9 @@ exports.onMessageCreated = onDocumentCreated('messages/{messageId}', async (even
 
   const { tokens, invalid: invalidTokens } = await tokensForUids(uids)
   const title = (data.priority === 'urgent' ? '🚨 ' : '') + (data.subject || data.subjectAr || 'Nouveau message')
+  const targetWorkspace = data.toType === 'parents' || data.toId === 'parents'
+    ? 'parent'
+    : undefined
   const messages = tokens.map((to) => ({
     to,
     sound: 'default',
@@ -241,7 +486,11 @@ exports.onMessageCreated = onDocumentCreated('messages/{messageId}', async (even
     // channelId : canal Android créé par l'app (importance MAX).
     priority: 'high',
     channelId: 'default',
-    data: { messageId: event.params.messageId, type: data.category || 'announcement' },
+    data: {
+      messageId: event.params.messageId,
+      type: data.category || 'announcement',
+      ...(targetWorkspace ? { workspace: targetWorkspace } : {}),
+    },
   }))
 
   const pushResult = await sendExpoPush(messages)
@@ -665,6 +914,49 @@ exports.recomputeSchoolStats = onCall(async (request) => {
   const s = await refreshSchoolStats()
   logger.info('stats/summary refreshed (on-demand)', { by: uid, eleves: s.totalEleves })
   return { ok: true, updatedAt: Date.now(), totalEleves: s.totalEleves, totalClasses: s.totalClasses }
+})
+
+// ── Transport scolaire : transitions d'état transactionnelles ────────────
+// Les clients Firestore peuvent modifier le retard/ETA, mais jamais le statut
+// d'une tournée. Cette callable relit identité, assignation et passagers dans
+// UNE transaction, puis pose elle-même les horodatages serveur.
+exports.updateTransportTripStatus = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid
+  try {
+    return await transitionTransportTrip(db, {
+      uid,
+      tripId: request.data && request.data.tripId,
+      nextStatus: request.data && request.data.nextStatus,
+    })
+  } catch (error) {
+    if (error instanceof TransportTransitionError) {
+      throw new HttpsError(error.code, error.message)
+    }
+    logger.error('transport trip transition failed', {
+      code: error && error.code ? String(error.code) : 'unknown',
+    })
+    throw new HttpsError('internal', 'Trip transition failed.')
+  }
+})
+
+exports.reportTransportTripDelay = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid
+  try {
+    return await reportTransportTripDelay(db, {
+      uid,
+      tripId: request.data && request.data.tripId,
+      delayMinutes: request.data && request.data.delayMinutes,
+      reason: request.data && request.data.reason,
+    })
+  } catch (error) {
+    if (error instanceof TransportTransitionError) {
+      throw new HttpsError(error.code, error.message)
+    }
+    logger.error('transport delay report failed', {
+      code: error && error.code ? String(error.code) : 'unknown',
+    })
+    throw new HttpsError('internal', 'Delay report failed.')
+  }
 })
 
 // ─────────────────────────────────────────────────────────────────────────
