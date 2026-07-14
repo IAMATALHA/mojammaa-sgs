@@ -23,6 +23,8 @@ export interface UserProfile {
   matiere?: string                // prof : sa matière (verrouillée pour la saisie de notes)
   cycle?:   string                // prof : 'primaire' | 'college'
   expoPushToken?: string
+  lastLoginAt?: unknown            // Firestore Timestamp — dernière connexion
+  lastLoginPlatform?: 'ios' | 'android' | 'web'
 }
 
 export interface Eleve {

@@ -380,6 +380,7 @@ const ar = {
     profCount: 'أساتذة ({{count}})',
     parentCount: 'أولياء ({{count}})',
     noUserFilter: 'لا مستخدمين لهذا الفلتر.',
+    lastSeen: 'آخر ظهور {{time}}',
     viewAs: 'عرض كـ',
     classesTitle: 'الأقسام',
     noClassInDb: 'لا أقسام في القاعدة.',

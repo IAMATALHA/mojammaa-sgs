@@ -380,6 +380,7 @@ const fr = {
     profCount: 'Profs ({{count}})',
     parentCount: 'Parents ({{count}})',
     noUserFilter: 'Aucun utilisateur pour ce filtre.',
+    lastSeen: 'Vu {{time}}',
     viewAs: 'Voir comme',
     classesTitle: 'Classes',
     noClassInDb: 'Aucune classe dans la base.',

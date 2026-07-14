@@ -380,6 +380,7 @@ const en = {
     profCount: 'Teachers ({{count}})',
     parentCount: 'Parents ({{count}})',
     noUserFilter: 'No users for this filter.',
+    lastSeen: 'Seen {{time}}',
     viewAs: 'View as',
     classesTitle: 'Classes',
     noClassInDb: 'No classes in database.',

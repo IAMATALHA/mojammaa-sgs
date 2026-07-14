@@ -27,7 +27,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { auth, db } from '../config/firebase'
 import type { RoleLogic, RoleRaw, UserProfile } from '../types'
-import { registerForPushNotificationsAsync, clearPushToken } from '../services/NotificationService'
+import { registerForPushNotificationsAsync, clearPushToken, recordLogin } from '../services/NotificationService'
 
 function rawToLogic(raw: RoleRaw | string | undefined): RoleLogic {
   if (raw === 'admin') return 'admin'
@@ -114,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!pushRegisteredRef.current) {
             pushRegisteredRef.current = true
             registerForPushNotificationsAsync(fbUser.uid)
+            recordLogin(fbUser.uid)
           }
           if (first) { first = false; setIsLoading(false) }
         },

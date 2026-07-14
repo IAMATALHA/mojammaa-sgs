@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 import { toDoc } from '../../services/firestore'
+import { formatRelative } from '../../utils/format'
 import type { RoleRaw, UserProfile } from '../../types'
 
 interface UserRow {
@@ -19,6 +20,14 @@ interface UserRow {
   role: RoleRaw
   classe?: string
   classes?: string[]
+  lastLoginAt?: unknown
+  lastLoginPlatform?: string
+}
+
+const PLATFORM_LABEL: Record<string, string> = {
+  ios: 'iOS',
+  android: 'Android',
+  web: 'Web',
 }
 
 const ROLE_COLORS: Record<string, { bg: string; fg: string }> = {
@@ -49,6 +58,8 @@ export default function AdminUsersScreen() {
           role: data.role || 'parent',
           classe: data.classe,
           classes: data.classes,
+          lastLoginAt: data.lastLoginAt,
+          lastLoginPlatform: data.lastLoginPlatform,
         }
       })
       list.sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
@@ -73,6 +84,8 @@ export default function AdminUsersScreen() {
   const renderItem = ({ item }: { item: UserRow }) => {
     const rc = ROLE_COLORS[item.role] || ROLE_COLORS.parent
     const classInfo = item.classes?.join(', ') || item.classe || ''
+    const lastSeen = formatRelative(item.lastLoginAt)
+    const platformLabel = item.lastLoginPlatform ? PLATFORM_LABEL[item.lastLoginPlatform] || item.lastLoginPlatform : ''
     return (
       <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <View style={{ flex: 1 }}>
@@ -92,6 +105,11 @@ export default function AdminUsersScreen() {
               </View>
             ) : null}
           </View>
+          {lastSeen ? (
+            <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 4 }}>
+              {t('admin.lastSeen', { time: lastSeen })}{platformLabel ? ` · ${platformLabel}` : ''}
+            </Text>
+          ) : null}
         </View>
       </View>
     )

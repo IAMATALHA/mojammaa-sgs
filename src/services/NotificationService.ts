@@ -25,6 +25,20 @@ function getExpoProjectId(): string | undefined {
   return undefined;
 }
 
+/** Enregistre la plateforme + l'horodatage de connexion sur users/{uid}. */
+export async function recordLogin(userId: string) {
+  if (!userId) return;
+  try {
+    const userRef = doc(db, 'users', userId);
+    await setDoc(userRef, {
+      lastLoginAt: serverTimestamp(),
+      lastLoginPlatform: Platform.OS,
+    }, { merge: true });
+  } catch (e) {
+    console.warn('[auth] failed to record login', e);
+  }
+}
+
 export async function clearPushToken(userId: string) {
   if (!userId) return;
   try {
