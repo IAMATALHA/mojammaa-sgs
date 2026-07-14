@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import i18n, { type AppLanguage } from '../i18n';
+import { palette } from '../theme/designTokens';
 
 function notificationLanguage(value: string): AppLanguage {
   if (value.startsWith('ar')) return 'ar';
@@ -67,7 +68,7 @@ export async function registerForPushNotificationsAsync(userId: string) {
       name: 'default',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
+      lightColor: palette.brandRed,
     });
   }
 

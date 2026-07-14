@@ -1,10 +1,8 @@
 /**
- * ThemeContext — unified SaaS brand palette.
+ * ThemeContext — identité unifiée dérivée du logo Mojammaa.
  *
- * The previous build assigned a different `primary` colour per role
- * (student=green, teacher=blue, admin=red). The current system uses one
- * restrained navy/coral system across every role. Role differentiation is
- * expressed through iconography, copy, and small status indicators.
+ * Tous les rôles partagent le rouge, l'or, l'orange et les surfaces crème du
+ * logo. Les rôles restent différenciés par leurs icônes, contenus et statuts.
  *
  * Public shape is preserved (`primary`, `primarySurface`, spacing,
  * radius, fonts) so every existing screen keeps compiling — they
@@ -69,10 +67,10 @@ export interface Theme {
 }
 
 const THEME: Theme = {
-  primary:        palette.navy,
-  primarySurface: palette.navySoft,
-  primaryBorder:  palette.navyBorder,
-  primaryDark:    palette.navyDark,
+  primary:        palette.brandRed,
+  primarySurface: palette.brandRedSoft,
+  primaryBorder:  palette.brandRedBorder,
+  primaryDark:    palette.brandRedDark,
   accent:         palette.accent,
   accentSurface:  palette.accentSoft,
   green:          palette.green,

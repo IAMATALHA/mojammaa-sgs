@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  View, Text, TextInput, Image, StyleSheet, Dimensions,
+  View, Text, TextInput, Image, StyleSheet, useWindowDimensions,
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
   Alert, Linking, TouchableOpacity, Pressable,
 } from 'react-native'
@@ -15,13 +15,13 @@ import { auth, functions } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
 import LanguagePicker from '../../components/LanguagePicker'
 
-const { width: SCREEN_W } = Dimensions.get('window')
 const PRIVACY_URL = 'https://mojammaa-sgs.web.app/privacy'
 
 export default function LoginScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
   const insets = useSafeAreaInsets()
+  const { width: screenWidth } = useWindowDimensions()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -80,13 +80,13 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.screen, { backgroundColor: '#F5F1E8' }]}>
+      <View style={[styles.screen, { backgroundColor: theme.bg }]}>
         {/* Watercolor blobs */}
-        <View style={[styles.blob, styles.blobTopRight, { backgroundColor: 'rgba(255, 210, 63, 0.22)' }]} />
-        <View style={[styles.blob, styles.blobTopLeft, { backgroundColor: 'rgba(242, 181, 212, 0.18)' }]} />
-        <View style={[styles.blob, styles.blobMidRight, { backgroundColor: 'rgba(184, 181, 255, 0.16)' }]} />
-        <View style={[styles.blob, styles.blobBottomLeft, { backgroundColor: 'rgba(255, 140, 66, 0.14)' }]} />
-        <View style={[styles.blob, styles.blobBottomCenter, { backgroundColor: 'rgba(82, 183, 136, 0.12)' }]} />
+        <View style={[styles.blob, styles.blobTopRight, { backgroundColor: theme.watercolorA }]} />
+        <View style={[styles.blob, styles.blobTopLeft, { backgroundColor: theme.roseSurface }]} />
+        <View style={[styles.blob, styles.blobMidRight, { backgroundColor: theme.violetSurface }]} />
+        <View style={[styles.blob, styles.blobBottomLeft, { backgroundColor: theme.accentSurface }]} />
+        <View style={[styles.blob, styles.blobBottomCenter, { backgroundColor: theme.greenSurface }]} />
 
         {/* Language globe — top right */}
         <Pressable
@@ -94,7 +94,11 @@ export default function LoginScreen() {
           hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel={t('common.changeLanguage')}
-          style={[styles.langGlobe, { top: insets.top + 12 }]}
+          style={[
+            styles.langGlobe,
+            { top: insets.top + 12, backgroundColor: theme.card, borderColor: theme.border },
+            theme.shadows.xs,
+          ]}
         >
           <Globe size={20} color={theme.textSoft} strokeWidth={1.5} />
         </Pressable>
@@ -111,7 +115,7 @@ export default function LoginScreen() {
           <Animated.View entering={FadeInUp.duration(600).delay(100)} style={styles.logoSection}>
             <Image
               source={require('../../../assets/logo.png')}
-              style={styles.arabicLogo}
+              style={[styles.arabicLogo, { width: screenWidth * 0.42, height: screenWidth * 0.42 }]}
               resizeMode="contain"
               accessible={false}
               importantForAccessibility="no"
@@ -120,7 +124,7 @@ export default function LoginScreen() {
 
           {/* ── Ornate calligraphy ─────────────────────────────── */}
           <Animated.View entering={FadeInUp.duration(700).delay(200)} style={styles.calligraphySection}>
-            <Text style={styles.calligraphyMain} numberOfLines={2} adjustsFontSizeToFit>
+            <Text style={[styles.calligraphyMain, { color: theme.primary }]} numberOfLines={2} adjustsFontSizeToFit>
               Mojammaa{'\n'}Al Maarifa
             </Text>
             <MotiView
@@ -128,7 +132,7 @@ export default function LoginScreen() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ type: 'timing', duration: 500, delay: 500 }}
             >
-              <Text style={styles.calligraphySub}>
+              <Text style={[styles.calligraphySub, { color: theme.accent }]}>
                 {t('login.connexion')}
               </Text>
             </MotiView>
@@ -143,40 +147,40 @@ export default function LoginScreen() {
             ) : null}
 
             {/* Email input with icon */}
-            <View style={styles.inputWrap}>
+            <View style={[styles.inputWrap, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <TextInput
                 value={email}
                 onChangeText={setEmail}
                 accessibilityLabel={t('login.email')}
                 placeholder={t('login.email')}
-                placeholderTextColor="rgba(29, 53, 87, 0.38)"
+                placeholderTextColor={theme.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="email-address"
                 style={[styles.input, { color: theme.text, fontFamily: theme.fonts.regular }]}
               />
               <View style={styles.inputIcon}>
-                <User size={18} color="rgba(29, 53, 87, 0.35)" strokeWidth={1.75} />
+                <User size={18} color={theme.textMuted} strokeWidth={1.75} />
               </View>
             </View>
 
             {/* Password input with icon */}
-            <View style={[styles.inputWrap, { marginTop: 12 }]}>
+            <View style={[styles.inputWrap, { marginTop: 12, backgroundColor: theme.card, borderColor: theme.border }]}>
               <TextInput
                 value={password}
                 onChangeText={setPassword}
                 accessibilityLabel={t('login.password')}
                 placeholder={t('login.password')}
-                placeholderTextColor="rgba(29, 53, 87, 0.38)"
+                placeholderTextColor={theme.textMuted}
                 secureTextEntry
                 style={[styles.input, { color: theme.text, fontFamily: theme.fonts.regular }]}
               />
               <View style={styles.inputIcon}>
-                <Lock size={18} color="rgba(29, 53, 87, 0.35)" strokeWidth={1.75} />
+                <Lock size={18} color={theme.textMuted} strokeWidth={1.75} />
               </View>
             </View>
 
-            {/* Submit button — navy */}
+            {/* Submit button — rouge de marque */}
             <Pressable
               onPress={submit}
               disabled={loading}
@@ -186,14 +190,10 @@ export default function LoginScreen() {
               style={({ pressed }) => [
                 styles.button,
                 {
-                  backgroundColor: '#1D3557',
+                  backgroundColor: theme.primary,
                   opacity: loading ? 0.7 : pressed ? 0.92 : 1,
-                  shadowColor: '#1D3557',
-                  shadowOpacity: 0.25,
-                  shadowRadius: 14,
-                  shadowOffset: { width: 0, height: 6 },
-                  elevation: 5,
                 },
+                theme.shadows.md,
               ]}
             >
               {loading ? (
@@ -216,11 +216,11 @@ export default function LoginScreen() {
           {/* ── Decorative ornament ────────────────────────────── */}
           <Animated.View entering={FadeInDown.duration(600).delay(600)} style={styles.ornamentSection}>
             <View style={styles.ornamentLine}>
-              <View style={[styles.ornamentDash, { backgroundColor: 'rgba(29, 53, 87, 0.12)' }]} />
+              <View style={[styles.ornamentDash, { backgroundColor: theme.borderStrong }]} />
               <View style={[styles.ornamentDot, { backgroundColor: theme.accent }]} />
               <View style={[styles.ornamentDotSm, { backgroundColor: theme.success }]} />
-              <View style={[styles.ornamentDot, { backgroundColor: '#E76F51' }]} />
-              <View style={[styles.ornamentDash, { backgroundColor: 'rgba(29, 53, 87, 0.12)' }]} />
+              <View style={[styles.ornamentDot, { backgroundColor: theme.primary }]} />
+              <View style={[styles.ornamentDash, { backgroundColor: theme.borderStrong }]} />
             </View>
           </Animated.View>
 
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -306,8 +306,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   arabicLogo: {
-    width: SCREEN_W * 0.42,
-    height: SCREEN_W * 0.42,
+    maxWidth: 220,
+    maxHeight: 220,
   },
 
   // Calligraphy
@@ -320,7 +320,6 @@ const styles = StyleSheet.create({
     fontFamily: 'GreatVibes_400Regular',
     fontSize: 48,
     lineHeight: 58,
-    color: '#1D3557',
     textAlign: 'center',
     letterSpacing: 1,
     alignSelf: 'stretch',   // borne la largeur → permet à adjustsFontSizeToFit d'agir
@@ -329,7 +328,6 @@ const styles = StyleSheet.create({
   calligraphySub: {
     fontFamily: 'GreatVibes_400Regular',
     fontSize: 28,
-    color: '#1D3557',
     textAlign: 'center',
     marginTop: 2,
     opacity: 0.75,
@@ -343,10 +341,8 @@ const styles = StyleSheet.create({
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.85)',
     borderRadius: 28,
     borderWidth: 1,
-    borderColor: 'rgba(29, 53, 87, 0.12)',
     paddingHorizontal: 20,
     height: 54,
   },

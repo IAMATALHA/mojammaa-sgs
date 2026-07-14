@@ -21,11 +21,12 @@ import type { Attachment } from '../../services/StorageService'
 import { toDoc } from '../../services/firestore'
 import * as Haptics from 'expo-haptics'
 import { academicPeriodForDate } from '../../utils/academicPeriod'
+import { palette } from '../../theme/designTokens'
 
 const JOUR_TYPES: { value: JourType; labelKey: string; color: string }[] = [
-  { value: 'vacances', labelKey: 'calendar.vacances', color: '#52B788' },
-  { value: 'evenement', labelKey: 'calendar.evenement', color: '#D95B00' },
-  { value: 'examen', labelKey: 'calendar.examen', color: '#E63946' },
+  { value: 'vacances', labelKey: 'calendar.vacances', color: palette.success },
+  { value: 'evenement', labelKey: 'calendar.evenement', color: palette.brandOrangeDark },
+  { value: 'examen', labelKey: 'calendar.examen', color: palette.brandRed },
 ]
 
 const WEEK_DAYS_FR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
@@ -133,7 +134,7 @@ export default function AdminCalendarScreen() {
       .map(j => ({
         key: `j-${j.date}`, date: j.date, label: j.label,
         sub: t(`calendar.${j.type}`),
-        color: JOUR_TYPES.find(jt => jt.value === j.type)?.color || '#D95B00',
+        color: JOUR_TYPES.find(jt => jt.value === j.type)?.color || palette.brandOrangeDark,
       }))
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 12)
@@ -220,7 +221,7 @@ export default function AdminCalendarScreen() {
   const dotColors = (iso: string): string[] => {
     const colors: string[] = []
     const jour = joursMap.get(iso)
-    if (jour) colors.push(JOUR_TYPES.find(jt => jt.value === jour.type)?.color || '#D95B00')
+    if (jour) colors.push(JOUR_TYPES.find(jt => jt.value === jour.type)?.color || palette.brandOrangeDark)
     const dt = tasksByDate.get(iso)
     if (dt && dt.length > 0) colors.push(theme.primary)
     return colors
@@ -293,8 +294,8 @@ export default function AdminCalendarScreen() {
             </Text>
 
             {selectedJour && (
-              <View style={[s.eventRow, { backgroundColor: (JOUR_TYPES.find(jt => jt.value === selectedJour.type)?.color || '#D95B00') + '15' }]}>
-                <View style={[s.eventDot, { backgroundColor: JOUR_TYPES.find(jt => jt.value === selectedJour.type)?.color || '#D95B00' }]} />
+              <View style={[s.eventRow, { backgroundColor: (JOUR_TYPES.find(jt => jt.value === selectedJour.type)?.color || palette.brandOrangeDark) + '15' }]}>
+                <View style={[s.eventDot, { backgroundColor: JOUR_TYPES.find(jt => jt.value === selectedJour.type)?.color || palette.brandOrangeDark }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>{selectedJour.label}</Text>
                   <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>{t(`calendar.${selectedJour.type}`)}</Text>

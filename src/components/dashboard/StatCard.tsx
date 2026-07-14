@@ -28,7 +28,7 @@ export default function StatCard({
   // Le paramètre `tint` est conservé pour la rétrocompatibilité mais
   // n'affecte plus le visuel (était autrefois la couleur du carré).
   void tint
-  const iconBoxBg = theme.text       // navy #1D3557
+  const iconBoxBg = theme.text       // encre du logo
   const iconColor = '#FFFFFF'
   const renderedIcon = React.isValidElement(icon)
     ? React.cloneElement(icon as React.ReactElement<{ color?: string; strokeWidth?: number }>, {

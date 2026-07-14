@@ -11,6 +11,7 @@ import { toDoc } from '../services/firestore'
 import { db } from '../config/firebase'
 import type { Child } from '../utils/dashboardTypes'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
+import { palette } from '../theme/designTokens'
 
 export interface ParentData {
   loading:  boolean
@@ -19,7 +20,13 @@ export interface ParentData {
   children: Child[]
 }
 
-const AVATAR_COLORS = ['#E63946', '#1D3557', '#F77F00', '#457B9D', '#FCBF49']
+const AVATAR_COLORS = [
+  palette.brandRed,
+  palette.brandGoldDark,
+  palette.brandOrangeDark,
+  palette.success,
+  palette.brandInk,
+]
 
 function hashOf(s: string): number {
   let h = 0

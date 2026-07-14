@@ -259,7 +259,7 @@ export default function AdminDashboardScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         <LinearGradient
-          colors={[theme.primaryDark, theme.primary, '#2F8A72']}
+          colors={[theme.primaryDark, theme.primary, theme.accent]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.heroCard, theme.shadows.clay]}
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
     borderRadius: 64,
     bottom: -52,
     left: -34,
-    backgroundColor: 'rgba(255, 210, 63, 0.18)',
+    backgroundColor: 'rgba(252, 204, 6, 0.18)',
   },
   heroSheen: {
     position: 'absolute',

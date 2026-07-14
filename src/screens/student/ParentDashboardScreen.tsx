@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   metricLabel: {
-    color: 'rgba(29, 53, 87, 0.64)',
+    color: 'rgba(18, 14, 9, 0.64)',
     fontSize: 9,
     fontWeight: '800',
     textTransform: 'uppercase',

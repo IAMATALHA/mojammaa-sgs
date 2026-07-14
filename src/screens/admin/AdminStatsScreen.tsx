@@ -253,8 +253,8 @@ function gradeBands(notes: NoteRow[]): GradeBand[] {
   return [
     { label: '<8', value: notes.filter(row => row.note! < 8).length, color: palette.danger },
     { label: '8-10', value: notes.filter(row => row.note! >= 8 && row.note! < 10).length, color: palette.orange },
-    { label: '10-14', value: notes.filter(row => row.note! >= 10 && row.note! < 14).length, color: palette.navy },
-    { label: '14+', value: notes.filter(row => row.note! >= 14).length, color: palette.green },
+    { label: '10-14', value: notes.filter(row => row.note! >= 10 && row.note! < 14).length, color: palette.brandInk },
+    { label: '14+', value: notes.filter(row => row.note! >= 14).length, color: palette.success },
   ]
 }
 

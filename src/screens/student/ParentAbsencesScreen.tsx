@@ -118,7 +118,7 @@ export default function ParentAbsencesScreen() {
         {/* Signaler une absence (déclaration parent) */}
         <Pressable
           onPress={() => setShowDeclare(true)}
-          style={({ pressed }) => [styles.declareBtn, { backgroundColor: theme.primary }, pressed && { opacity: 0.88 }]}>
+          style={({ pressed }) => [styles.declareBtn, { backgroundColor: theme.primary }, theme.shadows.sm, pressed && { opacity: 0.88 }]}>
           <CalendarPlus size={17} color="#fff" strokeWidth={2.2} />
           <Text style={{ color: '#fff', fontFamily: theme.fonts.bold, fontSize: 13.5 }}>
             {t('absenceRequest.declare')}
@@ -337,7 +337,6 @@ const styles = StyleSheet.create({
   declareBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     marginHorizontal: 20, marginTop: 16, paddingVertical: 13, borderRadius: 14,
-    shadowColor: '#1D3557', shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4,
   },
   kpiChip: {
     flex: 1,

@@ -363,7 +363,7 @@ export default function TeacherStatsScreen() {
         ) : (
           <>
             <LinearGradient
-              colors={[theme.primaryDark, theme.primary, '#2F8A72']}
+              colors={[theme.primaryDark, theme.primary, theme.accent]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[styles.hero, theme.shadows.clay]}

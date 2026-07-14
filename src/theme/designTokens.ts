@@ -1,11 +1,10 @@
 /**
- * Storybook-inspired design tokens for Mojammaa SGS.
+ * Design tokens dérivés du logo Mojammaa Al Maarifa.
  *
- * The visual system is intentionally warm and educational:
- * - soft cream backgrounds
- * - navy typography for structure
- * - orange + gold accents for actions and achievements
- * - pastel green / rose / violet for friendly illustrated moments
+ * - rouge du logo pour les actions principales
+ * - or et orange pour l'identité et les accents
+ * - encre presque noire pour la lisibilité
+ * - surfaces crème chaudes pour garder une interface calme
  */
 
 import { Platform } from 'react-native'
@@ -13,66 +12,60 @@ import { Platform } from 'react-native'
 export const colors = {
   light: {
     text: {
-      primary: '#1D3557',
-      secondary: 'rgba(29, 53, 87, 0.92)',
-      // Muted/caption text. The old olive at 48% sat around 1.8:1 on cream
-      // (failed even 3:1). Bumped 23/06/2026 from 55% (~3.2:1, still failed AA
-      // for normal text) to 65% (~4.5:1 on cream), keeping the de-emphasised
-      // feel in the same hue family as primary text while clearing WCAG AA.
-      tertiary: 'rgba(29, 53, 87, 0.65)',
+      primary: '#120E09',
+      secondary: 'rgba(18, 14, 9, 0.84)',
+      tertiary: 'rgba(18, 14, 9, 0.64)',
       inverse: '#FFFFFF',
     },
     surface: {
-      primary: '#FAF8F5',
-      secondary: '#FFFDFC',
-      tertiary: '#F3EEE7',
+      primary: '#FFFBEB',
+      secondary: '#FFFDF7',
+      tertiary: '#FEF4DB',
       elevated: '#FFFFFF',
-      grouped: '#F6F1EA',
+      grouped: '#FFF7E1',
     },
-    separator: 'rgba(29, 53, 87, 0.10)',
-    separatorStrong: 'rgba(29, 53, 87, 0.18)',
+    separator: 'rgba(18, 14, 9, 0.10)',
+    separatorStrong: 'rgba(18, 14, 9, 0.18)',
     primary: {
-      value: '#1D3557',
-      pressed: '#16304F',
-      surface: 'rgba(29, 53, 87, 0.10)',
-      surfaceStrong: 'rgba(29, 53, 87, 0.16)',
-      border: 'rgba(29, 53, 87, 0.18)',
+      value: '#D00302',
+      pressed: '#A71304',
+      surface: 'rgba(208, 3, 2, 0.08)',
+      surfaceStrong: 'rgba(208, 3, 2, 0.14)',
+      border: 'rgba(208, 3, 2, 0.20)',
     },
     accent: {
-      primary: '#FF8C42',
-      pressed: '#F07B2F',
-      surface: 'rgba(255, 140, 66, 0.12)',
-      surfaceStrong: 'rgba(250, 112, 27, 0.2)',
-      border: 'rgba(255, 140, 66, 0.22)',
+      // Or assombri pour le texte et les boutons (6.1:1 sur blanc).
+      primary: '#8A5700',
+      pressed: '#704600',
+      bright: '#FCCC06',
+      surface: 'rgba(252, 204, 6, 0.18)',
+      surfaceStrong: 'rgba(252, 204, 6, 0.28)',
+      border: 'rgba(162, 104, 13, 0.28)',
     },
     status: {
-      // `success` must read as "good" and stay legible as text/icon on light
-      // surfaces. Yellow (#FFD23F) failed both: it reads as caution and only
-      // reached ~1.4:1 contrast. This green clears 4.5:1 on cream/white.
       success: '#15803D',
       successSurface: 'rgba(21, 128, 61, 0.12)',
-      warning: '#FF8C42',
-      warningSurface: 'rgba(255, 140, 66, 0.14)',
-      danger: '#E76F51',
-      dangerSurface: 'rgba(231, 111, 81, 0.14)',
-      info: '#52B788',
-      infoSurface: 'rgba(82, 183, 136, 0.16)',
-      // The original warm gold — kept for charts and achievement moments,
-      // never for semantic "success" text/icons.
-      gold: '#FFD23F',
-      goldSurface: 'rgba(255, 210, 63, 0.18)',
+      warning: '#9A5700',
+      warningSurface: 'rgba(253, 115, 2, 0.14)',
+      danger: '#B42318',
+      dangerSurface: 'rgba(180, 35, 24, 0.12)',
+      info: '#92400E',
+      infoSurface: 'rgba(253, 115, 2, 0.12)',
+      // Or lumineux : décoration et surfaces uniquement, jamais texte blanc.
+      gold: '#FCCC06',
+      goldSurface: 'rgba(252, 204, 6, 0.18)',
     },
     pastel: {
       green: '#52B788',
       greenSoft: 'rgba(82, 183, 136, 0.16)',
-      rose: '#F2B5D4',
-      roseSoft: 'rgba(242, 181, 212, 0.18)',
-      violet: '#B8B5FF',
-      violetSoft: 'rgba(184, 181, 255, 0.18)',
-      cream: '#FAF8F5',
-      watercolorA: 'rgba(255, 210, 63, 0.18)',
-      watercolorB: 'rgba(242, 181, 212, 0.16)',
-      watercolorC: 'rgba(184, 181, 255, 0.16)',
+      rose: '#D00302',
+      roseSoft: 'rgba(208, 3, 2, 0.08)',
+      violet: '#B84F00',
+      violetSoft: 'rgba(253, 115, 2, 0.12)',
+      cream: '#FFFBEB',
+      watercolorA: 'rgba(252, 204, 6, 0.18)',
+      watercolorB: 'rgba(208, 3, 2, 0.07)',
+      watercolorC: 'rgba(253, 115, 2, 0.10)',
     },
   },
 } as const
@@ -80,14 +73,27 @@ export const colors = {
 const light = colors.light
 
 export const palette = {
+  brandInk: light.text.primary,
+  brandRed: light.primary.value,
+  brandRedDark: light.primary.pressed,
+  brandRedSoft: light.primary.surface,
+  brandRedBorder: light.primary.border,
+  brandGold: light.accent.bright,
+  brandGoldDark: light.accent.primary,
+  brandGoldSoft: light.accent.surface,
+  brandOrange: '#FD7302',
+  brandOrangeDark: '#B84F00',
+  brandOrangeSoft: 'rgba(253, 115, 2, 0.12)',
+
+  // Alias historiques conservés pour les composants existants.
   navy: light.primary.value,
   navyDark: light.primary.pressed,
   navySoft: light.primary.surface,
   navyBorder: light.primary.border,
 
-  coral: light.accent.primary,
-  coralDark: light.accent.pressed,
-  coralSoft: light.accent.surface,
+  coral: '#FD7302',
+  coralDark: '#B84F00',
+  coralSoft: 'rgba(253, 115, 2, 0.12)',
 
   orange: light.status.warning,
   orangeSoft: light.status.warningSurface,
@@ -104,12 +110,9 @@ export const palette = {
   watercolorB: light.pastel.watercolorB,
   watercolorC: light.pastel.watercolorC,
 
-  brandRed: light.accent.primary,
-  brandRedDark: light.accent.pressed,
-  brandRedSoft: light.accent.surface,
-
   accent: light.accent.primary,
   accentDark: light.accent.pressed,
+  accentBright: light.accent.bright,
   accentSoft: light.accent.surface,
   accentSoftStrong: light.accent.surfaceStrong,
   accentBorder: light.accent.border,
@@ -191,18 +194,18 @@ export const fontSize = {
   display: 40,
 } as const
 
-// Ombre douce et teintée navy, identique sur les deux plateformes.
+// Ombre douce teintée avec l'encre du logo, identique sur les plateformes.
 //  - iOS    : shadowColor/Opacity/Radius/Offset (rendu de référence).
 //  - Android: `elevation` ignore shadowColor → ombre DURE et GRISE de l'OS
 //             (halo gris autour des tuiles bento). On n'utilise donc PAS
 //             elevation : sous la New Architecture (RN 0.81), `boxShadow`
 //             rend une vraie ombre douce ET teintée, calquée sur iOS.
 // `boxShadow` : offsetX offsetY blur color  (blur ≈ shadowRadius iOS).
-const NAVY = '29, 53, 87' // #1D3557 en RGB (pour rgba dans boxShadow)
+const BRAND_INK_RGB = '18, 14, 9'
 const softShadow = (radius: number, opacity: number, y = 2) =>
   Platform.select({
     ios: {
-      shadowColor: '#1D3557',
+      shadowColor: palette.brandInk,
       shadowOpacity: opacity,
       shadowRadius: radius,
       shadowOffset: { width: 0, height: y },
@@ -211,7 +214,7 @@ const softShadow = (radius: number, opacity: number, y = 2) =>
       // Pas d'elevation (= gris dur). On utilise boxShadow (Fabric), MAIS Android
       // le rend plus dense/sombre qu'iOS → on allège : opacité ~moitié, flou
       // élargi et décalage réduit pour une ombre douce et discrète, non grise.
-      boxShadow: `0px ${Math.round(y * 0.6)}px ${Math.round(radius * 1.3)}px rgba(${NAVY}, ${+(opacity * 0.45).toFixed(3)})`,
+      boxShadow: `0px ${Math.round(y * 0.6)}px ${Math.round(radius * 1.3)}px rgba(${BRAND_INK_RGB}, ${+(opacity * 0.45).toFixed(3)})`,
     },
     default: {},
   }) as object
@@ -240,12 +243,12 @@ export const motion = {
 } as const
 
 export const chartColors = [
-  palette.navy,
-  palette.orange,
-  palette.yellow,
-  palette.green,
-  palette.rose,
-  palette.violet,
+  palette.brandRed,
+  palette.brandGoldDark,
+  palette.brandOrangeDark,
+  palette.success,
+  palette.warning,
+  palette.brandInk,
 ] as const
 
 export const fontStack =

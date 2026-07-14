@@ -758,7 +758,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
                         <View style={[cs.checkbox, { borderColor: on ? theme.primary : theme.borderStrong, backgroundColor: on ? theme.primary : 'transparent' }]}>
                           {on && <Check size={12} color="#fff" strokeWidth={3} />}
                         </View>
-                        <View style={[cs.personAv, { backgroundColor: r.role === 'parent' ? '#52B788' : '#D95B00', marginStart: 8 }]}>
+                        <View style={[cs.personAv, { backgroundColor: r.role === 'parent' ? theme.success : theme.accent, marginStart: 8 }]}>
                           <Text style={{ color: '#fff', fontWeight: '800', fontSize: 10 }}>{(r.prenom[0] || '').toUpperCase()}{(r.nom[0] || '').toUpperCase()}</Text>
                         </View>
                         <View style={{ flex: 1, marginStart: 8 }}>

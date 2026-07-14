@@ -30,15 +30,16 @@ const PLATFORM_LABEL: Record<string, string> = {
   web: 'Web',
 }
 
-const ROLE_COLORS: Record<string, { bg: string; fg: string }> = {
-  admin:      { bg: '#1D3557', fg: '#FFFFFF' },
-  professeur: { bg: '#D95B00', fg: '#FFFFFF' },
-  parent:     { bg: '#52B788', fg: '#FFFFFF' },
-}
-
 export default function AdminUsersScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
+  const roleColors: Record<string, { bg: string; fg: string }> = {
+    admin:      { bg: theme.primary, fg: theme.white },
+    professeur: { bg: theme.accent, fg: theme.white },
+    chauffeur:  { bg: theme.warning, fg: theme.white },
+    driver:     { bg: theme.warning, fg: theme.white },
+    parent:     { bg: theme.success, fg: theme.white },
+  }
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -82,7 +83,7 @@ export default function AdminUsersScreen() {
   }
 
   const renderItem = ({ item }: { item: UserRow }) => {
-    const rc = ROLE_COLORS[item.role] || ROLE_COLORS.parent
+    const rc = roleColors[item.role] || roleColors.parent
     const classInfo = item.classes?.join(', ') || item.classe || ''
     const lastSeen = formatRelative(item.lastLoginAt)
     const platformLabel = item.lastLoginPlatform ? PLATFORM_LABEL[item.lastLoginPlatform] || item.lastLoginPlatform : ''
