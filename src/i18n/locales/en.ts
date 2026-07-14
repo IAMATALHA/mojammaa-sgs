@@ -57,6 +57,9 @@ const en = {
     driver: 'Driver workspace',
     active: 'Active workspace',
     switch: 'Open this workspace',
+    checking: 'Checking access…',
+    parentUnavailable: 'No child linked to this account',
+    retryParent: 'Unable to check · Try again',
   },
 
   days: {

@@ -57,6 +57,9 @@ const fr = {
     driver: 'Espace chauffeur',
     active: 'Espace actif',
     switch: 'Ouvrir cet espace',
+    checking: 'Vérification des accès…',
+    parentUnavailable: 'Aucun enfant lié à ce compte',
+    retryParent: 'Vérification impossible · Réessayer',
   },
 
   days: {

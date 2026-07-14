@@ -57,6 +57,9 @@ const ar = {
     driver: 'فضاء السائق',
     active: 'الفضاء الحالي',
     switch: 'فتح هذا الفضاء',
+    checking: 'جارٍ التحقق من الصلاحيات…',
+    parentUnavailable: 'لا يوجد طفل مرتبط بهذا الحساب',
+    retryParent: 'تعذر التحقق · أعد المحاولة',
   },
 
   days: {

@@ -7,6 +7,7 @@ import { Globe, ExternalLink, ChevronRight } from 'lucide-react-native';
 import Constants from 'expo-constants';
 import ScreenLayout from '../../components/ScreenLayout';
 import LanguagePicker from '../../components/LanguagePicker';
+import WorkspaceSettingsGroup from '../../components/WorkspaceSettingsGroup';
 import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -55,6 +56,8 @@ export default function AdminSettingsScreen() {
             </View>
           </View>
         </View>
+
+        <WorkspaceSettingsGroup />
 
         {/* Langue + outils admin */}
         <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>

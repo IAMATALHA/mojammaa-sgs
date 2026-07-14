@@ -15,6 +15,7 @@
     "test:transport-transition": "firebase emulators:exec --only firestore --project demo-mojammaa-transport \"node tests/functions/transportTransitions.test.mjs\"",
     "test:guardian-access": "node tests/functions/guardianAccess.test.mjs",
     "setup:driver": "node scripts/setup-driver.js",
+    "setup:test-driver-child": "node scripts/provision-test-driver-child.js",
     "setup:transport-trip": "node scripts/create-transport-trip.js",
     "guardian-access:dry-run": "node scripts/backfill-guardian-access.js",
     "guardian-access:backfill": "node scripts/backfill-guardian-access.js --commit",
