@@ -25,9 +25,20 @@ export interface EleveDoc {
   niveau?:       string
   dateNaissance?:string   // YYYY-MM-DD
   parentUid?:    string   // uid Auth du parent lié (indexé pour subscribeChildrenOfParent)
+  active?:       boolean  // absent sur les anciens docs = actif (compatibilité)
+  academicYear?: string
+  archivedAt?:   unknown
+  archivedBeforeAcademicYear?: string
 }
 
 const COL = 'eleves'
+
+/** Les documents historiques sans champ `active` restent actifs. */
+export function isActiveEleve(
+  eleve: Pick<EleveDoc, 'active'> | Record<string, unknown>,
+): boolean {
+  return eleve.active !== false
+}
 
 /**
  * Liste les élèves filtrés par classes (optionnel).
@@ -37,7 +48,7 @@ const COL = 'eleves'
 export async function listEleves(filter?: { classes?: string[] }): Promise<EleveDoc[]> {
   if (!filter?.classes || filter.classes.length === 0) {
     const snap = await getDocs(collection(db, COL))
-    return toDocs<EleveDoc>(snap)
+    return toDocs<EleveDoc>(snap).filter(isActiveEleve)
   }
 
   const chunks: string[][] = []
@@ -52,6 +63,7 @@ export async function listEleves(filter?: { classes?: string[] }): Promise<Eleve
     const snap = await getDocs(q)
     snap.docs.forEach(d => {
       const data = toDoc<EleveDoc>(d)
+      if (!isActiveEleve(data)) return
       const key = data.codeMassar || d.id
       if (!seen.has(key)) {
         seen.add(key)
@@ -81,7 +93,7 @@ export function subscribeEleves(
   const q = query(collection(db, COL), where('classe', 'in', safeClasses))
   return onSnapshot(
     q,
-    snap => onChange(toDocs<EleveDoc>(snap)),
+    snap => onChange(toDocs<EleveDoc>(snap).filter(isActiveEleve)),
     err  => { onError?.(err) },
   )
 }
@@ -106,7 +118,7 @@ export function subscribeChildrenOfParent(
   const q = query(collection(db, COL), where('parentUid', '==', parentUid))
   return onSnapshot(
     q,
-    snap => onChange(toDocs<EleveDoc>(snap)),
+    snap => onChange(toDocs<EleveDoc>(snap).filter(isActiveEleve)),
     err  => { onError?.(err) },
   )
 }

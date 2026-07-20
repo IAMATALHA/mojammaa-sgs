@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { toDoc } from '../services/firestore'
-import type { EleveDoc } from '../services/elevesService'
+import { isActiveEleve, type EleveDoc } from '../services/elevesService'
 import type { AbsenceDoc } from '../services/absencesService'
 
 export interface DashboardStats {
@@ -44,11 +44,17 @@ export function useDashboardStats() {
         getCountFromServer(query(collection(db, 'users'),    where('role', '==', 'professeur'))),
         getDocs(            query(collection(db, 'absences'), where('date', '==', today))),
       ])
-      const totalEleves = elevesSnap.size
       const totalProfs  = profsCount.data().count
       const classeSet   = new Set<string>()
+      const activeEleveIds = new Set<string>()
+      let totalEleves = 0
       elevesSnap.forEach(d => {
-        const c = toDoc<EleveDoc>(d).classe
+        const eleve = toDoc<EleveDoc>(d)
+        if (!isActiveEleve(eleve)) return
+        totalEleves++
+        activeEleveIds.add(d.id)
+        if (eleve.codeMassar) activeEleveIds.add(eleve.codeMassar)
+        const c = eleve.classe
         if (c) classeSet.add(String(c))
       })
 
@@ -57,7 +63,11 @@ export function useDashboardStats() {
       const absentEleves = new Set<string>()
       absencesSnap.forEach(d => {
         const data = toDoc<AbsenceDoc>(d)
-        if (data.statut === 'absent' && data.eleveId) {
+        if (
+          data.statut === 'absent'
+          && data.eleveId
+          && activeEleveIds.has(String(data.eleveId))
+        ) {
           absentEleves.add(String(data.eleveId))
         }
       })

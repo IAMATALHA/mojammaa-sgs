@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 import { toDoc } from '../../services/firestore'
-import type { EleveDoc } from '../../services/elevesService'
+import { isActiveEleve, type EleveDoc } from '../../services/elevesService'
 
 interface Eleve {
   id:         string
@@ -32,15 +32,16 @@ export default function TeacherClasseElevesScreen() {
     setLoading(true); setError(null)
     try {
       const snap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', classe)))
-      const list = snap.docs.map(d => {
-        const data = toDoc<EleveDoc>(d)
-        return {
-          id:         d.id,
+      const list = snap.docs
+        .map(d => ({ id: d.id, data: toDoc<EleveDoc>(d) }))
+        .filter(({ data }) => isActiveEleve(data))
+        .map(({ id, data }) => ({
+          id,
           nom:        data.nom        || '',
           prenom:     data.prenom     || '',
           codeMassar: data.codeMassar || '',
-        }
-      }).sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
+        }))
+        .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
       setEleves(list)
     } catch (e: any) {
       setError(e?.message || 'Impossible de charger.')

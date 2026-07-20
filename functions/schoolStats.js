@@ -148,16 +148,29 @@ function computeSchoolStats(cache, options = {}) {
   const periodAttendance = options.periodAttendance === true
 
   // ── normalisation (miroir du mapping onSnapshot client) ──
-  const eleves = (cache.eleves || []).map((d) => ({
-    id: d.id,
-    classe: asString(d.classe),
-    niveau: asString(d.niveau),
-    codeMassar: asString(d.codeMassar),
-  }))
+  const eleves = (cache.eleves || [])
+    // Compatibilité : les documents antérieurs à la synchronisation annuelle
+    // n'ont pas `active`; seul `active: false` signifie archivé.
+    .filter((d) => d?.active !== false)
+    .map((d) => ({
+      id: d.id,
+      classe: asString(d.classe),
+      niveau: asString(d.niveau),
+      codeMassar: asString(d.codeMassar),
+    }))
+  const activeEleveIds = new Set(
+    eleves.flatMap((eleve) => [eleve.id, eleve.codeMassar].filter(Boolean)),
+  )
+  const belongsToActiveEleve = (row) => {
+    const eleveId = asString(row?.eleveId) || asString(row?.studentId)
+    const codeMassar = asString(row?.eleveCodeMassar) || asString(row?.codeMassar)
+    if (!eleveId && !codeMassar) return true
+    return activeEleveIds.has(eleveId) || activeEleveIds.has(codeMassar)
+  }
   const eleveNiveauById = new Map(eleves.map((e) => [e.id, e.niveau]))
   const users = (cache.users || []).map((d) => ({ id: d.id, role: asString(d.role) || 'parent' }))
   const coefOf = makeCoefOf(cache.coefficients)
-  const notes = (cache.notes || []).map((d) => {
+  const notes = (cache.notes || []).filter(belongsToActiveEleve).map((d) => {
     const eleveId = asString(d.eleveId)
     const matiere = asString(d.matiere)
     return {
@@ -171,20 +184,22 @@ function computeSchoolStats(cache, options = {}) {
       coef: coefOf(matiere, eleveNiveauById.get(eleveId)),
     }
   })
-  const absences = (cache.absences || []).map((d) => ({
+  const absences = (cache.absences || []).filter(belongsToActiveEleve).map((d) => ({
     id: d.id, eleveId: asString(d.eleveId), classe: asString(d.classe),
     date: asString(d.date), statut: asString(d.statut),
   }))
   const devoirs = (cache.devoirs || []).map((d) => ({
     id: d.id, classeId: asString(d.classeId) || asString(d.classe), dateLimite: asString(d.dateLimite),
   }))
-  const homeworkSubmissions = (cache.homeworkSubmissions || []).map((d) => ({
+  const homeworkSubmissions = (cache.homeworkSubmissions || [])
+    .filter(belongsToActiveEleve)
+    .map((d) => ({
     id: d.id,
     homeworkId: asString(d.homeworkId),
     eleveId: asString(d.eleveId) || asString(d.studentId),
     eleveCodeMassar: asString(d.eleveCodeMassar) || asString(d.codeMassar),
     status: asString(d.status).toLowerCase(),
-  }))
+    }))
 
   const allValidNotes = notes.filter((r) => r.note != null && r.note >= 0 && r.note <= 20)
   const validNotes = allValidNotes.filter((r) => !semScope || r.semestre === semScope)

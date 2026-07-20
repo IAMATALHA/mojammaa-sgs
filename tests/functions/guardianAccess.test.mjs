@@ -58,21 +58,29 @@ assert.deepEqual(
   ),
   [],
 )
+assert.deepEqual(
+  affectedGuardianUids(
+    { parentUid: 'same', classe: '1A', active: true },
+    { parentUid: 'same', classe: '1A', active: false },
+  ),
+  ['same'],
+)
 
 const activeDb = fakeFirestore([
   { id: 'e2', parentUid: 'guardian', classe: '2B' },
   { id: 'e1', parentUid: 'guardian', classe: '1A' },
   { id: 'e3', parentUid: 'guardian', classe: '1A' },
+  { id: 'old', parentUid: 'guardian', classe: 'OLD', active: false },
   { id: 'other', parentUid: 'elsewhere', classe: '3C' },
 ])
 const active = await rebuildGuardianAccess(activeDb, 'guardian', FieldValue)
-assert.deepEqual(active, { active: true, childCount: 3, classCount: 2 })
+assert.deepEqual(active, { active: true, childCount: 4, classCount: 2 })
 assert.deepEqual(activeDb.writes, [{
   type: 'set',
   uid: 'guardian',
   data: {
     uid: 'guardian',
-    childIds: ['e1', 'e2', 'e3'],
+    childIds: ['e1', 'e2', 'e3', 'old'],
     classes: ['1A', '2B'],
     updatedAt: 'SERVER_TIME',
   },
@@ -83,4 +91,4 @@ const inactive = await rebuildGuardianAccess(emptyDb, 'guardian', FieldValue)
 assert.deepEqual(inactive, { active: false, childCount: 0, classCount: 0 })
 assert.deepEqual(emptyDb.writes, [{ type: 'delete', uid: 'guardian' }])
 
-console.log('guardianAccess: 4 tests OK')
+console.log('guardianAccess: 5 tests OK')

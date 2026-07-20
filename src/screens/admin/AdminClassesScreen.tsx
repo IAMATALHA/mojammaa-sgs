@@ -308,14 +308,16 @@ export default function AdminClassesScreen() {
 
     const unsubs: Unsubscribe[] = [
       onSnapshot(collection(db, 'eleves'), snap => {
-        cache.eleves = snap.docs.map(docSnap => {
-          const row = docSnap.data() as Record<string, unknown>
-          return {
-            id: docSnap.id,
-            classe: asString(row.classe),
-            niveau: asString(row.niveau),
-          }
-        })
+        cache.eleves = snap.docs
+          .filter(docSnap => docSnap.data().active !== false)
+          .map(docSnap => {
+            const row = docSnap.data() as Record<string, unknown>
+            return {
+              id: docSnap.id,
+              classe: asString(row.classe),
+              niveau: asString(row.niveau),
+            }
+          })
         ready.add('eleves')
         recompute()
       }, handleError),

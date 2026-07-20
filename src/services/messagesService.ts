@@ -31,7 +31,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { toDoc, toDocs } from './firestore'
-import type { EleveDoc } from './elevesService'
+import { isActiveEleve, type EleveDoc } from './elevesService'
 import type { UserProfile } from '../types'
 import type { Attachment } from './StorageService'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
@@ -236,6 +236,7 @@ async function getParentUidsForClasses(classes: string[]): Promise<string[]> {
     const snap = await getDocs(query(collection(db, 'eleves'), where('classe', 'in', chunk)))
     snap.forEach(d => {
       const data = toDoc<EleveDoc>(d)
+      if (!isActiveEleve(data)) return
       if (data.parentUid) parentUids.add(data.parentUid)
     })
   }
@@ -438,6 +439,7 @@ export async function getRecipientsList(): Promise<{
   const classSet = new Set<string>()
   elevesSnap.forEach(d => {
     const data = toDoc<EleveDoc>(d)
+    if (!isActiveEleve(data)) return
     if (data.classe) classSet.add(data.classe)
     if (data.parentUid) {
       const arr = childrenByParent.get(data.parentUid) || []

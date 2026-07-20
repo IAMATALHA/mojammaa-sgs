@@ -81,7 +81,7 @@ export default function TeacherClassesScreen() {
           const elevesSnap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', c)))
           return {
             name:         c,
-            studentCount: elevesSnap.size,
+            studentCount: elevesSnap.docs.filter(d => d.data().active !== false).length,
             subjects:     [...subjectsByClasse.get(c)!],
           }
         }),

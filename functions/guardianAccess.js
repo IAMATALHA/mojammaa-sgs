@@ -19,6 +19,9 @@ async function rebuildGuardianAccess(db, parentUid, FieldValue) {
   const childIds = children.docs.map((snap) => snap.id).sort()
   const classes = [...new Set(
     children.docs
+      // Conserver les childIds historiques pour les droits sur les anciennes
+      // données, mais ne jamais donner une classe courante via un élève archivé.
+      .filter((snap) => snap.get('active') !== false)
       .map((snap) => nonEmptyString(snap.get('classe')))
       .filter(Boolean),
   )].sort()
@@ -43,8 +46,14 @@ function affectedGuardianUids(before, after) {
   const afterUid = nonEmptyString(after?.parentUid)
   const beforeClass = nonEmptyString(before?.classe)
   const afterClass = nonEmptyString(after?.classe)
+  const beforeActive = before?.active !== false
+  const afterActive = after?.active !== false
 
-  if (beforeUid === afterUid && beforeClass === afterClass) return []
+  if (
+    beforeUid === afterUid
+    && beforeClass === afterClass
+    && beforeActive === afterActive
+  ) return []
   return [...new Set([beforeUid, afterUid].filter(Boolean))]
 }
 

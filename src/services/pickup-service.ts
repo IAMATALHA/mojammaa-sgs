@@ -26,7 +26,7 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from '../config/firebase'
-import type { EleveDoc } from './elevesService'
+import { isActiveEleve, type EleveDoc } from './elevesService'
 import { docData, toDocs } from './firestore'
 import type {
   AnnouncePickupArrivalInput,
@@ -83,7 +83,9 @@ async function studentMap(ids: string[]): Promise<Map<string, EleveDoc>> {
       collection(db, 'eleves'),
       where(documentId(), 'in', chunk),
     ))
-    toDocs<EleveDoc>(snap).forEach(student => result.set(student.id, student))
+    toDocs<EleveDoc>(snap)
+      .filter(isActiveEleve)
+      .forEach(student => result.set(student.id, student))
   }
   return result
 }

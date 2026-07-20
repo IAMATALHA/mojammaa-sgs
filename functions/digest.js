@@ -40,7 +40,7 @@ async function buildWeeklyDigests(db) {
   const childrenByParent = new Map()
   elevesSnap.forEach((d) => {
     const e = d.data()
-    if (!e.parentUid) return
+    if (e.active === false || !e.parentUid) return
     const list = childrenByParent.get(e.parentUid) || []
     list.push({
       id: d.id,

@@ -5,12 +5,16 @@
  * du Ministère de l'Éducation), extrait les élèves, déduplique par
  * code MASSAR, transliterre l'arabe en français marocain, et :
  *
- *   - sans `--commit` : dry-run, affiche ce qui serait écrit
- *   - avec `--commit`  : écrit dans la collection `eleves`
+ *   - sans `--commit` : dry-run, affiche uniquement des totaux anonymisés
+ *   - avec `--commit` : active/ajoute les élèves de l'année courante
+ *   - avec `--archive-missing` : prépare l'archivage des élèves absents
+ *     des exports officiels, sans supprimer leur historique ni parentUid
  *
  * Usage :
- *   node scripts/importStudents.js              # dry-run
- *   node scripts/importStudents.js --commit     # écriture réelle
+ *   node scripts/importStudents.js
+ *   node scripts/importStudents.js --academic-year=2026-2027 --archive-missing
+ *   node scripts/importStudents.js --academic-year=2026-2027 --archive-missing \
+ *     --commit --confirm-archive=<nombre_du_dry-run>
  *
  * Prérequis : .secrets/firebase-admin.json (clé de service Firebase Admin)
  */
@@ -19,6 +23,11 @@ const path  = require('path')
 const fs    = require('fs')
 const glob  = require('glob')
 const XLSX  = require('xlsx')
+const {
+  assertArchiveConfirmation,
+  buildStudentYearSyncPlan,
+  normalizeAcademicYear,
+} = require('./lib/studentYearSync')
 
 // ──────────────────────────────────────────────────────────────────────────
 // 1. Transliteration arabe → français (style marocain)
@@ -258,14 +267,38 @@ function parseFile(file) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// 3. Dédup + écriture Firestore
+// 3. Dédup + synchronisation Firestore
 // ──────────────────────────────────────────────────────────────────────────
 
+function argumentValue(name) {
+  const prefix = `${name}=`
+  const arg = process.argv.find(value => value.startsWith(prefix))
+  return arg ? arg.slice(prefix.length) : ''
+}
+
 async function main() {
-  const COMMIT  = process.argv.includes('--commit')
-  const WIPE    = process.argv.includes('--wipe')
-  const DATA    = path.join(__dirname, '..', 'data')
-  const files   = glob.sync(path.join(DATA, 'export_notesCC_*.xlsx'))
+  const COMMIT = process.argv.includes('--commit')
+  const WIPE = process.argv.includes('--wipe')
+  const ARCHIVE_MISSING = process.argv.includes('--archive-missing')
+  const requestedAcademicYear = argumentValue('--academic-year')
+  const archiveConfirmation = argumentValue('--confirm-archive')
+  const DATA = path.join(__dirname, '..', 'data')
+  const files = glob.sync(path.join(DATA, 'export_notesCC_*.xlsx'))
+
+  if (WIPE) {
+    throw new Error(
+      'Le mode --wipe est désactivé : il détruirait les liens parents et les historiques. '
+      + 'Utilisez --archive-missing.',
+    )
+  }
+
+  let academicYear = ''
+  if (requestedAcademicYear) academicYear = normalizeAcademicYear(requestedAcademicYear)
+  if ((COMMIT || ARCHIVE_MISSING) && !academicYear) {
+    throw new Error(
+      'Ajoutez une année scolaire explicite, par exemple --academic-year=2026-2027.',
+    )
+  }
 
   if (files.length === 0) {
     console.error(`❌ Aucun fichier MASSAR trouvé dans ${DATA}`)
@@ -302,66 +335,75 @@ async function main() {
   const unique = [...byMassar.values()]
   console.log(`\n✅ ${unique.length} élève(s) unique(s) au total`)
 
-  // Aperçu
-  console.log('\n📋 Aperçu (5 premiers) :')
-  unique.slice(0, 5).forEach(s => {
-    console.log(`   ${s.codeMassar}  ${s.nomComplet}  →  ${s.nomLatin} ${s.prenomLatin}  (${s.classe})`)
-  })
+  let admin = null
+  let db = null
+  let existingStudents = []
+  if (COMMIT || ARCHIVE_MISSING) {
+    const keyPath = path.join(__dirname, '..', '.secrets', 'firebase-admin.json')
+    if (!fs.existsSync(keyPath)) {
+      throw new Error(`Clé Firebase Admin introuvable : ${keyPath}`)
+    }
+    admin = require('firebase-admin')
+    const serviceAccount = require(keyPath)
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
+    db = admin.firestore()
+    const existingSnap = await db.collection('eleves').get()
+    existingStudents = existingSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+  }
 
-  if (!COMMIT) {
-    console.log('\n💡 Dry-run terminé. Relance avec --commit pour écrire dans Firestore.')
-    console.log('   Prérequis : .secrets/firebase-admin.json doit exister.')
+  if (!academicYear) {
+    console.log('\n💡 Lecture locale terminée. Aucun nom, code MASSAR ou autre donnée personnelle n’a été affiché.')
+    console.log('   Pour préparer la rentrée : ajoutez --academic-year=YYYY-YYYY --archive-missing.')
     return
   }
 
-  // ── COMMIT MODE ────────────────────────────────────────────────
-  const keyPath = path.join(__dirname, '..', '.secrets', 'firebase-admin.json')
-  if (!fs.existsSync(keyPath)) {
-    console.error(`\n❌ Clé Firebase Admin introuvable : ${keyPath}`)
-    console.error('   Crée-la depuis console.firebase.google.com → ⚙️ → Paramètres du projet → Comptes de service → Générer une nouvelle clé privée')
-    process.exit(1)
-  }
+  const plan = buildStudentYearSyncPlan({
+    existingStudents,
+    importedStudents: unique,
+    academicYear,
+    archiveMissing: ARCHIVE_MISSING,
+  })
+  console.log('\n📊 Plan de synchronisation (totaux uniquement) :')
+  console.log(`   Année scolaire : ${plan.academicYear}`)
+  console.log(`   Élèves dans les exports : ${plan.counts.imported}`)
+  console.log(`   Nouveaux : ${plan.counts.new}`)
+  console.log(`   Mis à jour : ${plan.counts.updated}`)
+  console.log(`   Réactivés : ${plan.counts.reactivated}`)
+  console.log(`   À archiver : ${plan.counts.archived}`)
+  console.log(`   Déjà archivés : ${plan.counts.alreadyArchived}`)
 
-  const admin = require('firebase-admin')
-  const serviceAccount = require(keyPath)
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
-  const db = admin.firestore()
-
-  // ── WIPE (avec backup automatique) ────────────────────────────
-  if (WIPE) {
-    console.log('\n🗑️  Wipe demandé. Backup en cours...')
-    const snap = await db.collection('eleves').get()
-    if (snap.size > 0) {
-      const backup = snap.docs.map(d => ({ id: d.id, data: d.data() }))
-      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      const backupPath = path.join(DATA, `eleves-backup-${ts}.json`)
-      fs.writeFileSync(backupPath, JSON.stringify(backup, null, 2))
-      console.log(`   ✅ ${snap.size} doc(s) sauvegardés dans ${path.basename(backupPath)}`)
-
-      console.log('   Suppression en cours...')
-      let deleted = 0
-      const delBatchSize = 400
-      for (let i = 0; i < snap.docs.length; i += delBatchSize) {
-        const batch = db.batch()
-        snap.docs.slice(i, i + delBatchSize).forEach(d => batch.delete(d.ref))
-        await batch.commit()
-        deleted += Math.min(delBatchSize, snap.docs.length - i)
-        console.log(`   Supprimé ${deleted}/${snap.size}`)
-      }
-    } else {
-      console.log('   (collection déjà vide, rien à supprimer)')
+  if (!COMMIT) {
+    console.log('\n🔒 Dry-run terminé : aucune écriture Firestore.')
+    if (ARCHIVE_MISSING) {
+      console.log(
+        `   Après vérification des totaux, relancez avec --commit --confirm-archive=${plan.counts.archived}`,
+      )
     }
+    return
   }
 
-  console.log('\n🚀 Écriture vers Firestore...')
+  if (ARCHIVE_MISSING) {
+    assertArchiveConfirmation(plan.counts.archived, archiveConfirmation)
+  } else if (archiveConfirmation) {
+    throw new Error('--confirm-archive exige aussi --archive-missing.')
+  }
+
+  console.log('\n🚀 Synchronisation vers Firestore...')
   let written = 0
+  const existingIdByMassar = new Map(
+    existingStudents
+      .filter(s => typeof s.codeMassar === 'string' && s.codeMassar.trim())
+      .map(s => [s.codeMassar.trim(), s.id]),
+  )
   // Batch écrit par paquets de 400 (limite Firestore: 500)
   const batchSize = 400
-  for (let i = 0; i < unique.length; i += batchSize) {
+  for (let i = 0; i < plan.toUpsert.length; i += batchSize) {
     const batch = db.batch()
-    const slice = unique.slice(i, i + batchSize)
+    const slice = plan.toUpsert.slice(i, i + batchSize)
     slice.forEach(s => {
-      const ref = db.collection('eleves').doc(s.codeMassar)
+      // Si une ancienne base utilise un ID non canonique, écrire dans le doc
+      // existant conserve parentUid et évite de créer un doublon.
+      const ref = db.collection('eleves').doc(existingIdByMassar.get(s.codeMassar) || s.codeMassar)
       batch.set(ref, {
         codeMassar:    s.codeMassar,
         nom:           s.nom,
@@ -373,19 +415,42 @@ async function main() {
         classes:       s.classes ?? [s.classe],
         niveau:        s.niveau,
         dateNaissance: s.dateNaissance,
+        active:        true,
+        academicYear:  plan.academicYear,
+        archivedAt:    admin.firestore.FieldValue.delete(),
+        archivedBeforeAcademicYear: admin.firestore.FieldValue.delete(),
         updatedAt:     admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true })
     })
     await batch.commit()
     written += slice.length
-    console.log(`   ${written}/${unique.length}`)
+    console.log(`   Actifs écrits : ${written}/${plan.toUpsert.length}`)
   }
 
-  console.log(`\n✅ ${written} élève(s) écrit(s) dans Firestore (collection "eleves")`)
-  process.exit(0)
+  let archived = 0
+  for (let i = 0; i < plan.toArchive.length; i += batchSize) {
+    const batch = db.batch()
+    const slice = plan.toArchive.slice(i, i + batchSize)
+    slice.forEach(s => {
+      const ref = db.collection('eleves').doc(s.id || s.codeMassar)
+      batch.set(ref, {
+        active: false,
+        archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        archivedBeforeAcademicYear: plan.academicYear,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true })
+    })
+    await batch.commit()
+    archived += slice.length
+    console.log(`   Archivés : ${archived}/${plan.toArchive.length}`)
+  }
+
+  console.log(
+    `\n✅ Synchronisation terminée : ${written} actif(s), ${archived} archivé(s), 0 suppression.`,
+  )
 }
 
 main().catch(err => {
-  console.error('❌ Erreur fatale :', err)
+  console.error('❌ Synchronisation annulée :', err.message || err)
   process.exit(1)
 })

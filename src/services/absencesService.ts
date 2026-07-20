@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { toDoc, toDocs } from './firestore'
+import { isActiveEleve, type EleveDoc } from './elevesService'
 
 export interface AbsenceDoc {
   id?:           string
@@ -59,7 +60,7 @@ export async function computeTeacherPresenceRate(
     const snap = await getDocs(
       query(collection(db, 'eleves'), where('classe', 'in', chunk)),
     )
-    totalEleves += snap.size
+    totalEleves += snap.docs.filter(d => isActiveEleve(toDoc<EleveDoc>(d))).length
   }
   if (totalEleves === 0) return 100
 

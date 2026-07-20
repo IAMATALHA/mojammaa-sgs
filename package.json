@@ -16,6 +16,8 @@
     "test:transport-transition": "firebase emulators:exec --only firestore --project demo-mojammaa-transport \"node tests/functions/transportTransitions.test.mjs\"",
     "test:prayer-start": "firebase emulators:exec --only firestore --project demo-mojammaa-prayer \"node tests/functions/prayerClassSessions.test.mjs\"",
     "test:guardian-access": "node tests/functions/guardianAccess.test.mjs",
+    "test:school-stats": "node tests/functions/schoolStatsHomework.test.mjs",
+    "test:student-year-sync": "node tests/scripts/studentYearSync.test.mjs",
     "setup:driver": "node scripts/setup-driver.js",
     "setup:test-driver-child": "node scripts/provision-test-driver-child.js",
     "setup:transport-trip": "node scripts/create-transport-trip.js",
@@ -23,7 +25,8 @@
     "guardian-access:backfill": "node scripts/backfill-guardian-access.js --commit",
     "db:import:eleves": "node scripts/importStudents.js",
     "db:import:eleves:commit": "node scripts/importStudents.js --commit",
-    "db:reset:eleves": "node scripts/importStudents.js --commit --wipe",
+    "db:sync:eleves": "node scripts/importStudents.js --archive-missing",
+    "db:sync:eleves:commit": "node scripts/importStudents.js --archive-missing --commit",
     "db:import:schedule": "node scripts/importSchedule.js cNnmhtiJF7VLgW01RBErKTwu9Ym2"
   },
   "dependencies": {

@@ -20,7 +20,7 @@ import {
 import { useRoute } from '@react-navigation/native';
 import type { TeacherRoute } from '../../navigation/types';
 import { toDoc } from '../../services/firestore';
-import type { EleveDoc } from '../../services/elevesService';
+import { isActiveEleve, type EleveDoc } from '../../services/elevesService';
 import {
   collection, getDocs, query, where, setDoc, doc, serverTimestamp,
 } from 'firebase/firestore';
@@ -185,16 +185,17 @@ export default function TeacherNotesScreen() {
       const elevesSnap = await getDocs(
         query(collection(db, 'eleves'), where('classe', '==', classe))
       )
-      const list: EleveLite[] = elevesSnap.docs.map(d => {
-        const data = toDoc<EleveDoc>(d)
-        return {
-          id:         d.id,
+      const list: EleveLite[] = elevesSnap.docs
+        .map(d => ({ id: d.id, data: toDoc<EleveDoc>(d) }))
+        .filter(({ data }) => isActiveEleve(data))
+        .map(({ id, data }) => ({
+          id,
           nom:        data.nom        || '',
           prenom:     data.prenom     || '',
           codeMassar: data.codeMassar || '',
           classe:     data.classe     || '',
-        }
-      }).sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
+        }))
+        .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
       setEleves(list)
 
       // 2. Les notes existantes pour la matière+semestre+classe
@@ -276,10 +277,15 @@ export default function TeacherNotesScreen() {
 
       // Charge les élèves de la classe pour le matching
       const elevesSnap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', classe)))
-      const elevesData = elevesSnap.docs.map(d => {
-        const data = toDoc<EleveDoc>(d)
-        return { id: d.id, nom: data.nom || '', prenom: data.prenom || '', codeMassar: data.codeMassar || '' }
-      })
+      const elevesData = elevesSnap.docs
+        .map(d => ({ id: d.id, data: toDoc<EleveDoc>(d) }))
+        .filter(({ data }) => isActiveEleve(data))
+        .map(({ id, data }) => ({
+          id,
+          nom: data.nom || '',
+          prenom: data.prenom || '',
+          codeMassar: data.codeMassar || '',
+        }))
 
       const matched: { row: ParsedNoteRow; eleve: typeof elevesData[number] }[] = []
       const unmatched: ParsedNoteRow[] = []

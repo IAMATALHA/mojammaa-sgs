@@ -29,7 +29,7 @@ import { sendMessage } from '../../services/messagesService'
 import { getSchedule } from '../../services/scheduleService'
 import { getAbsenceRequestsForClassDate, decideAbsenceRequest, type AbsenceRequestDoc } from '../../services/absenceRequestsService'
 import { toDoc } from '../../services/firestore'
-import type { EleveDoc } from '../../services/elevesService'
+import { isActiveEleve, type EleveDoc } from '../../services/elevesService'
 import type { AbsenceDoc } from '../../services/absencesService'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
@@ -90,6 +90,7 @@ async function notifyParentsOfAbsents(
   const eleveToParent = new Map<string, { parentUid: string; prenom: string; nom: string }>()
   elevesSnap.forEach(d => {
     const data = toDoc<EleveDoc>(d)
+    if (!isActiveEleve(data)) return
     if (data.parentUid) {
       eleveToParent.set(d.id, {
         parentUid: data.parentUid,
@@ -207,10 +208,15 @@ export default function TeacherAttendanceScreen() {
           where('statut', '==', 'absent'),
         )),
       ])
-      const list: EleveLite[] = elevesSnap.docs.map(d => {
-        const data = toDoc<EleveDoc>(d)
-        return { id: d.id, nom: data.nom || '', prenom: data.prenom || '' }
-      }).sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
+      const list: EleveLite[] = elevesSnap.docs
+        .map(d => ({ id: d.id, data: toDoc<EleveDoc>(d) }))
+        .filter(({ data }) => isActiveEleve(data))
+        .map(({ id, data }) => ({
+          id,
+          nom: data.nom || '',
+          prenom: data.prenom || '',
+        }))
+        .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
       setEleves(list)
       const set = new Set<string>()
       absentsSnap.forEach(d => set.add(toDoc<AbsenceDoc>(d).eleveId))

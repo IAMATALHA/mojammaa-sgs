@@ -965,9 +965,14 @@ async function filteredSchoolStats(filters) {
     db.collection('settings').doc('coefficients').get(),
   ])
   const toRows = (snap) => snap.docs.map((row) => ({ id: row.id, ...row.data() }))
-  const allEleves = toRows(elevesSnap).map((row) => ({ ...row, cycle: cycleFromStudent(row) }))
+  const allStudentRows = toRows(elevesSnap)
+  const allEleves = allStudentRows
+    .filter((row) => row.active !== false)
+    .map((row) => ({ ...row, cycle: cycleFromStudent(row) }))
   const allNotes = toRows(notesSnap)
-  const knownStudentIds = new Set(allEleves.map((row) => row.id))
+  // Inclure les archives dans l'ensemble "connu" empêche une ancienne note
+  // de retomber dans le scope via sa classe historique.
+  const knownStudentIds = new Set(allStudentRows.map((row) => row.id))
 
   const cycleEleves = allEleves.filter((row) => !cycle || row.cycle === cycle)
   const niveauOptions = [...new Set(cycleEleves.map((row) => statsFilterText(row.niveau)).filter(Boolean))]

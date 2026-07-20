@@ -72,7 +72,7 @@ export default function TeacherClasseFolderScreen() {
           where('academicYear', '==', period.academicYear),
         )),
       ])
-      setEleveCount(elevesSnap.size)
+      setEleveCount(elevesSnap.docs.filter(d => d.data().active !== false).length)
       setDevoirsCount(devoirsSnap.size)
     } catch {
       // Une rule qui rate ne doit pas casser l'écran.
