@@ -1,13 +1,5 @@
 import { dayName, parseHM, type WeekDay } from './courseSchedule'
-
-const START_TO_SEANCE: Record<string, string> = {
-  '08:30': 'S1',
-  '09:30': 'S2',
-  '10:30': 'S3',
-  '11:30': 'S4',
-  '13:00': 'S5',
-  '14:00': 'S6',
-}
+import { resolveScheduleSessionCode } from './scheduleSession'
 
 const DAY_ALIASES: Record<string, WeekDay> = {
   sunday: 'sunday',
@@ -83,11 +75,10 @@ export function normalizeDay(value?: string | null): WeekDay | null {
   return DAY_ALIASES[normalizeToken(value)] ?? null
 }
 
-function seanceForSlot(slot: RollCallSlot): string {
-  const explicit = slot.seance?.trim()
-  if (explicit) return explicit
+function seanceForSlot(slot: RollCallSlot): string | null {
   const start = slot.startTime?.trim() || ''
-  return START_TO_SEANCE[start] || start || 'S1'
+  return resolveScheduleSessionCode({ seance: slot.seance, startTime: start })
+    ?? (start || null)
 }
 
 function timingForSlot(slot: RollCallSlot, now: Date): RollCallTiming {
@@ -119,6 +110,7 @@ export function buildTodayRollCallSessions(
     const classe = (slot.classeId || slot.classe || '').trim()
     if (day !== today || !classe) return
     const seance = seanceForSlot(slot)
+    if (!seance) return
     sessions.push({
       id: slot.id,
       classe,

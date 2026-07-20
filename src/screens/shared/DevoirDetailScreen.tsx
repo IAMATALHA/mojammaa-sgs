@@ -18,8 +18,11 @@ import {
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { dirStyle } from '../../utils/arabicText'
 import type { DevoirDetailParams } from '../../navigation/types'
+import HomeworkParentSubmission from '../../components/homework/HomeworkParentSubmission'
+import HomeworkTeacherTracking from '../../components/homework/HomeworkTeacherTracking'
 
 function fmtDate(iso?: string): string {
   if (!iso) return '—'
@@ -36,6 +39,7 @@ function fmtSize(bytes?: number): string {
 export default function DevoirDetailScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
+  const { role } = useAuth()
   const navigation = useNavigation()
   const route = useRoute<RouteProp<{ params: DevoirDetailParams }, 'params'>>()
   const devoir = route.params.devoir
@@ -62,10 +66,10 @@ export default function DevoirDetailScreen() {
             {(devoir.type || 'devoir').toUpperCase()}
           </Text>
         </View>
-        <View style={[styles.statusPill, { backgroundColor: isPast ? theme.surfaceAlt : theme.primarySurface }]}>
-          <View style={[styles.dot, { backgroundColor: isPast ? theme.success : theme.warning }]} />
+        <View style={[styles.statusPill, { backgroundColor: isPast ? theme.danger + '12' : theme.primarySurface }]}>
+          <View style={[styles.dot, { backgroundColor: isPast ? theme.danger : theme.warning }]} />
           <Text style={{ color: theme.textSoft, fontWeight: '700', fontSize: 11, marginStart: 5 }}>
-            {isPast ? t('parent.statusSubmitted') : t('parent.statusPending')}
+            {isPast ? t('homeworkTracking.deadlinePassed') : t('homeworkTracking.deadlineOpen')}
           </Text>
         </View>
       </View>
@@ -140,6 +144,16 @@ export default function DevoirDetailScreen() {
             ))}
           </View>
         )}
+
+        {role === 'student' && devoir.eleveId ? (
+          <HomeworkParentSubmission homework={devoir} />
+        ) : null}
+        {role === 'teacher' ? (
+          <HomeworkTeacherTracking homework={devoir} />
+        ) : null}
+        {role === 'admin' ? (
+          <HomeworkTeacherTracking homework={devoir} readOnly />
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   )

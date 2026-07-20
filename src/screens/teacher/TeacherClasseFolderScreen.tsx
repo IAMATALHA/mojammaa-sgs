@@ -16,16 +16,43 @@ import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useAuth } from '../../contexts/AuthContext'
+import { useCurrentTeacherScheduleSlot } from '../../hooks/useCurrentTeacherScheduleSlot'
+import { useTeacherPrayerActivity } from '../../hooks/useTeacherPrayerActivity'
 import { db } from '../../config/firebase'
 import type { TeacherStackParamList, TeacherRoute } from '../../navigation/types'
 import { currentAcademicPeriod } from '../../utils/academicPeriod'
+import { localServiceDate } from '../../services/pickup-service'
+import { getSchedule } from '../../services/scheduleService'
+import {
+  findCurrentScheduleSlot,
+  resolveScheduleSessionCode,
+  scheduleLessonKey,
+} from '../../utils/scheduleSession'
 
 export default function TeacherClasseFolderScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
+  const { profile } = useAuth()
+  const { currentSlot } = useCurrentTeacherScheduleSlot()
   const navigation = useNavigation<NativeStackNavigationProp<TeacherStackParamList>>()
   const route = useRoute<TeacherRoute<'TeacherClasseFolder'>>()
-  const { classe, seance, openAttendance } = route.params ?? { classe: '' }
+  const { classe, openAttendance } = route.params ?? { classe: '' }
+  const prayerActivity = useTeacherPrayerActivity(
+    classe ? [classe] : [],
+    localServiceDate(),
+    profile?.uid,
+  )
+  const classPrayerSession = prayerActivity.sessions.find(
+    session => session.classe === classe,
+  ) ?? null
+  const canOpenPrayer = (
+    currentSlot?.classe === classe && !classPrayerSession
+  ) || (
+    !!classPrayerSession
+    && classPrayerSession.status !== 'returned'
+    && classPrayerSession.startedByUid === profile?.uid
+  )
 
   const [eleveCount,   setEleveCount]   = useState<number | null>(null)
   const [devoirsCount, setDevoirsCount] = useState<number | null>(null)
@@ -56,17 +83,42 @@ export default function TeacherClasseFolderScreen() {
 
   useEffect(() => { load() }, [load])
 
+  const openExactAttendance = useCallback(async () => {
+    if (!profile?.uid) {
+      navigation.navigate('TeacherTabs', { screen: 'TeacherEdt' })
+      return
+    }
+
+    try {
+      const schedule = await getSchedule(profile.uid)
+      const currentSlot = findCurrentScheduleSlot(schedule?.weeklySlots ?? [])
+      if (
+        !currentSlot
+        || currentSlot.classe !== classe
+        || !resolveScheduleSessionCode(currentSlot)
+      ) {
+        navigation.navigate('TeacherTabs', { screen: 'TeacherEdt' })
+        return
+      }
+      navigation.navigate('TeacherAttendance', {
+        lessonKey: scheduleLessonKey(currentSlot),
+      })
+    } catch {
+      navigation.navigate('TeacherTabs', { screen: 'TeacherEdt' })
+    }
+  }, [classe, navigation, profile?.uid])
+
   // Auto-redirige vers l'attendance si on vient du bouton "Faire l'appel"
   useEffect(() => {
     if (openAttendance && classe) {
       // Petit délai pour éviter une transition saccadée
       const id = setTimeout(() => {
-        navigation.navigate('TeacherAttendance', { classe, seance })
+        openExactAttendance()
       }, 250)
       return () => clearTimeout(id)
     }
     return undefined
-  }, [openAttendance, classe, seance, navigation])
+  }, [openAttendance, classe, openExactAttendance])
 
   const Action = ({
     icon, label, sub, onPress, color,
@@ -104,7 +156,7 @@ export default function TeacherClasseFolderScreen() {
 
         {/* Action grosse : appel */}
         <TouchableOpacity
-          onPress={() => navigation.navigate('TeacherAttendance', { classe, seance })}
+          onPress={openExactAttendance}
           style={[styles.bigBtn, { backgroundColor: theme.primary }]}
           activeOpacity={0.85}
         >
@@ -131,6 +183,15 @@ export default function TeacherClasseFolderScreen() {
           sub={t('teacher.notesSeeEnter')}
           onPress={() => navigation.navigate('TeacherNotes', { classe })}
         />
+        {canOpenPrayer ? (
+          <Action
+            icon="moon-outline"
+            label={t('prayer.folderAction')}
+            sub={t('prayer.folderActionSub')}
+            onPress={() => navigation.navigate('TeacherPrayer', { classe })}
+            color={theme.info}
+          />
+        ) : null}
         <Action
           icon="happy-outline"
           label={t('behavior.folderAction')}

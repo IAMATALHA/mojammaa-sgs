@@ -1,27 +1,48 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, RefreshControl,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, RefreshControl, Modal,
 } from 'react-native'
-import { doc, onSnapshot } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { useNavigation } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import {
   AlertTriangle, Award, BarChart3, BookOpen, CheckCircle2,
-  ChevronLeft, ChevronRight, TrendingUp, Users, type LucideIcon,
+  ChevronLeft, ChevronRight, Filter, TrendingUp, Users, X, type LucideIcon,
 } from 'lucide-react-native'
 import Svg, { Circle } from 'react-native-svg'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { palette, chartColors } from '../../theme/designTokens'
-import { db, functions } from '../../config/firebase'
+import { functions } from '../../config/firebase'
 import type { AdminDashboardNav } from '../../navigation/types'
 
 type CollectionName = 'eleves' | 'users' | 'notes' | 'absences' | 'devoirs'
 type StatsView = 'niveaux' | 'subjects'
 type StatsAction = 'absences' | 'devoirs' | 'niveaux' | 'subjects'
 type NotesTarget = { matiere?: string; classe?: string }
+type StatsPeriod = 'semaine' | 'mois' | 'S1' | 'S2' | 'annee'
+type StatsCycle = '' | 'prescolaire' | 'primaire' | 'college'
+type StatsFilterKey = 'cycle' | 'niveau' | 'classe' | 'matiere'
+
+interface StatsFilters {
+  period: StatsPeriod
+  cycle: StatsCycle
+  niveau: string
+  classe: string
+  matiere: string
+}
+
+interface FilterOption {
+  value: string
+  label: string
+}
+
+interface StatsFilterOptions {
+  niveaux: string[]
+  classes: string[]
+  matieres: FilterOption[]
+}
 
 interface EleveRow {
   id: string
@@ -85,6 +106,7 @@ interface ClassStats {
   niveauGroup?: string
   studentCount: number
   presenceRate: number
+  attendanceCount?: number
   avgNote: number | null
   successRate: number | null
   absencesToday: number
@@ -128,8 +150,10 @@ interface DashboardData {
   absentsToday: number
   retardsToday: number
   presenceRate: number
+  attendanceCount?: number
   avgNote: number | null
   successRate: number | null
+  studentsToFollow?: number
   notesCount: number
   activeHomework: number
   absenceTrend: TrendPoint[]
@@ -151,6 +175,14 @@ interface SnapshotCache {
 const COLLECTIONS: CollectionName[] = ['eleves', 'users', 'notes', 'absences', 'devoirs']
 const RING = 124
 const RING_SM = 74
+const INITIAL_FILTERS: StatsFilters = {
+  period: 'mois',
+  cycle: '',
+  niveau: '',
+  classe: '',
+  matiere: '',
+}
+const EMPTY_FILTER_OPTIONS: StatsFilterOptions = { niveaux: [], classes: [], matieres: [] }
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -535,6 +567,8 @@ export default function AdminStatsScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [filters, setFilters] = useState<StatsFilters>(INITIAL_FILTERS)
+  const [filterOptions, setFilterOptions] = useState<StatsFilterOptions>(EMPTY_FILTER_OPTIONS)
 
   const handleStatsAction = useCallback((action: StatsAction) => {
     if (action === 'absences') {
@@ -553,62 +587,56 @@ export default function AdminStatsScreen() {
     nav.navigate('AdminMatiereDetail', target)
   }, [nav])
 
-  // Pull-to-refresh : force le recalcul serveur (callable admin-only). Le
-  // listener stats/summary reçoit ensuite la MAJ tout seul.
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
+  // Les collections nominatives restent côté serveur. La callable admin-only
+  // renvoie uniquement les agrégats correspondant aux cinq filtres globaux.
+  const loadStats = useCallback(async (nextFilters: StatsFilters, pullToRefresh = false) => {
+    if (pullToRefresh) setRefreshing(true)
+    else setLoading(true)
     try {
-      await httpsCallable(functions, 'recomputeSchoolStats')()
+      const response = await httpsCallable<StatsFilters, {
+        data: DashboardData
+        options: StatsFilterOptions
+      }>(functions, 'getFilteredSchoolStats')(nextFilters)
+      setData(response.data.data)
+      setFilterOptions(response.data.options || EMPTY_FILTER_OPTIONS)
+      setError(null)
     } catch (err: any) {
       setError(err?.message || t('common.error'))
     } finally {
+      setLoading(false)
       setRefreshing(false)
     }
   }, [t])
 
+  const onRefresh = useCallback(async () => {
+    await loadStats(filters, true)
+  }, [filters, loadStats])
+
   useEffect(() => {
-    let cancelled = false
-    let seedRequested = false
+    void loadStats(filters)
+  }, [filters, loadStats])
 
-    // Amorçage rare : s'il manque le document compact, un seul recalcul serveur
-    // le crée. On ne télécharge jamais les cinq collections brutes sur le client.
-    const seedSummary = async () => {
-      if (seedRequested) return
-      seedRequested = true
-      try {
-        await httpsCallable(functions, 'recomputeSchoolStats')()
-      } catch (err: any) {
-        if (!cancelled) {
-          setError(err?.message || t('common.error'))
-          setLoading(false)
-        }
+  const changeFilter = useCallback((key: StatsFilterKey, value: string) => {
+    setSelectedNiveau(null)
+    setFilters(current => {
+      if (key === 'cycle') {
+        return { ...current, cycle: value as StatsCycle, niveau: '', classe: '', matiere: '' }
       }
-    }
+      if (key === 'niveau') return { ...current, niveau: value, classe: '', matiere: '' }
+      if (key === 'classe') return { ...current, classe: value, matiere: '' }
+      return { ...current, matiere: value }
+    })
+  }, [])
 
-    const summaryUnsub = onSnapshot(
-      doc(db, 'stats', 'summary'),
-      snap => {
-        if (snap.exists()) {
-          setData(snap.data() as DashboardData)
-          setLoading(false)
-          setError(null)
-        } else {
-          void seedSummary()
-        }
-      },
-      err => {
-        if (!cancelled) {
-          setError(err.message || t('common.error'))
-          setLoading(false)
-        }
-      },
-    )
+  const changePeriod = useCallback((period: StatsPeriod) => {
+    setSelectedNiveau(null)
+    setFilters(current => ({ ...current, period }))
+  }, [])
 
-    return () => {
-      cancelled = true
-      summaryUnsub()
-    }
-  }, [t])
+  const clearFilters = useCallback(() => {
+    setSelectedNiveau(null)
+    setFilters(current => ({ ...INITIAL_FILTERS, period: current.period }))
+  }, [])
 
   return (
     <ScreenLayout title={t('admin.statsTitle')}>
@@ -617,20 +645,30 @@ export default function AdminStatsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
-        {loading && !data ? (
-          <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
-        ) : error ? (
+        {error ? (
           <View style={[styles.errorBox, { backgroundColor: theme.dangerSurface }]}>
             <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
           </View>
+        ) : null}
+        {loading && !data ? (
+          <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
         ) : data ? (
           <>
-            <VisualHero
+            <GeneralReport
               data={data}
+              filters={filters}
               theme={theme}
               t={t}
-              onAction={handleStatsAction}
-              onOpenNotes={openNotes}
+            />
+            <StatsFilters
+              value={filters}
+              options={filterOptions}
+              loading={loading}
+              onPeriodChange={changePeriod}
+              onFilterChange={changeFilter}
+              onClear={clearFilters}
+              theme={theme}
+              t={t}
             />
             <ViewTabs value={view} onChange={(v) => { setView(v); setSelectedNiveau(null) }} theme={theme} t={t} />
             {view === 'subjects' ? <SubjectsView data={data} onOpenNotes={openNotes} theme={theme} t={t} /> : null}
@@ -655,6 +693,221 @@ export default function AdminStatsScreen() {
         )}
       </ScrollView>
     </ScreenLayout>
+  )
+}
+
+function GeneralReport({ data, filters, theme, t }: {
+  data: DashboardData
+  filters: StatsFilters
+  theme: Theme
+  t: TFunction
+}) {
+  const subjectLabel = filters.matiere || ''
+  const scopeLabel = [filters.cycle ? t(`admin.statsCycle_${filters.cycle}`) : '', filters.niveau, filters.classe, subjectLabel]
+    .filter(Boolean)
+    .join(' · ') || t('admin.statsWholeSchool')
+  const periodLabel = t(`admin.statsPeriod_${filters.period}`)
+  const average = data.avgNote == null
+    ? '—'
+    : filters.cycle === 'primaire'
+      ? `${round1(data.avgNote / 2)}/10`
+      : `${round1(data.avgNote)}/20`
+  const attendance = data.attendanceCount ? `${data.presenceRate}%` : '—'
+
+  return (
+    <View style={[styles.report, { backgroundColor: theme.primarySurface, borderColor: theme.border }]}>
+      <View style={styles.reportIntro}>
+        <Text style={[styles.reportEyebrow, { color: theme.primary }]}>{t('admin.statsReportEyebrow')}</Text>
+        <Text selectable style={[styles.reportTitle, { color: theme.text }]}>{t('admin.statsReportTitle')}</Text>
+        <Text selectable style={[styles.reportLead, { color: theme.textSoft }]}>{t('admin.statsReportLead')}</Text>
+        <View style={styles.reportScopeRow}>
+          <View style={[styles.reportScopePill, { backgroundColor: theme.card }]}>
+            <Text numberOfLines={1} style={[styles.reportScopeText, { color: theme.textSoft }]}>{scopeLabel}</Text>
+          </View>
+          <View style={[styles.reportScopePill, { backgroundColor: theme.card }]}>
+            <Text numberOfLines={1} style={[styles.reportScopeText, { color: theme.textSoft }]}>{periodLabel}</Text>
+          </View>
+        </View>
+      </View>
+      <View style={styles.reportGrid}>
+        <ReportMetric
+          icon={<Users size={17} color={theme.primary} />}
+          value={String(data.totalEleves)}
+          label={t('admin.statsStudents')}
+          tone={theme.card}
+          theme={theme}
+        />
+        <ReportMetric
+          icon={<CheckCircle2 size={17} color={theme.info} />}
+          value={attendance}
+          label={t('admin.statsAttendance')}
+          tone={theme.card}
+          theme={theme}
+        />
+        <ReportMetric
+          icon={<BarChart3 size={17} color={theme.primary} />}
+          value={average}
+          label={t('admin.statsAverage')}
+          tone={theme.card}
+          theme={theme}
+        />
+        <ReportMetric
+          icon={<AlertTriangle size={17} color={(data.studentsToFollow || 0) > 0 ? theme.danger : theme.info} />}
+          value={String(data.studentsToFollow || 0)}
+          label={t('admin.statsToFollow')}
+          tone={theme.card}
+          theme={theme}
+        />
+      </View>
+    </View>
+  )
+}
+
+function ReportMetric({ icon, value, label, tone, theme }: {
+  icon: React.ReactNode
+  value: string
+  label: string
+  tone: string
+  theme: Theme
+}) {
+  return (
+    <View style={[styles.reportMetric, { backgroundColor: tone, borderColor: theme.border }]}>
+      <View style={styles.reportMetricHead}>
+        <Text numberOfLines={1} style={[styles.reportMetricLabel, { color: theme.textSoft }]}>{label}</Text>
+        {icon}
+      </View>
+      <Text selectable style={[styles.reportMetricValue, { color: theme.text }]}>{value}</Text>
+    </View>
+  )
+}
+
+function StatsFilters({ value, options, loading, onPeriodChange, onFilterChange, onClear, theme, t }: {
+  value: StatsFilters
+  options: StatsFilterOptions
+  loading: boolean
+  onPeriodChange: (period: StatsPeriod) => void
+  onFilterChange: (key: StatsFilterKey, value: string) => void
+  onClear: () => void
+  theme: Theme
+  t: TFunction
+}) {
+  const [picker, setPicker] = useState<StatsFilterKey | null>(null)
+  const periods: StatsPeriod[] = ['semaine', 'mois', 'S1', 'S2', 'annee']
+  const cycleOptions: FilterOption[] = [
+    { value: '', label: t('admin.statsAllCycles') },
+    { value: 'prescolaire', label: t('admin.statsCycle_prescolaire') },
+    { value: 'primaire', label: t('admin.statsCycle_primaire') },
+    { value: 'college', label: t('admin.statsCycle_college') },
+  ]
+  const pickerOptions: Record<StatsFilterKey, FilterOption[]> = {
+    cycle: cycleOptions,
+    niveau: [{ value: '', label: t('admin.statsAllLevels') }, ...options.niveaux.map(item => ({ value: item, label: item }))],
+    classe: [{ value: '', label: t('admin.statsAllClasses') }, ...options.classes.map(item => ({ value: item, label: item }))],
+    matiere: [{ value: '', label: t('admin.statsAllSubjects') }, ...options.matieres],
+  }
+  const pickerTitles: Record<StatsFilterKey, string> = {
+    cycle: t('admin.statsCycle'),
+    niveau: t('admin.statsLevel'),
+    classe: t('admin.statsClass'),
+    matiere: t('admin.statsSubject'),
+  }
+  const selectedLabels: Record<StatsFilterKey, string> = {
+    cycle: cycleOptions.find(item => item.value === value.cycle)?.label || t('admin.statsAllCycles'),
+    niveau: value.niveau || t('admin.statsAllLevels'),
+    classe: value.classe || t('admin.statsAllClasses'),
+    matiere: options.matieres.find(item => item.value === value.matiere)?.label || value.matiere || t('admin.statsAllSubjects'),
+  }
+  const hasFilters = !!(value.cycle || value.niveau || value.classe || value.matiere)
+
+  return (
+    <>
+      <View style={[styles.filtersCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.filtersHead}>
+          <View style={styles.filtersTitleWrap}>
+            <Filter size={15} color={theme.primary} />
+            <Text style={[styles.filtersTitle, { color: theme.text }]}>{t('admin.statsFilters')}</Text>
+          </View>
+          {loading ? <ActivityIndicator size="small" color={theme.primary} /> : null}
+          {hasFilters ? (
+            <Pressable onPress={onClear} accessibilityRole="button" style={[styles.clearFilters, { backgroundColor: theme.dangerSurface }]}>
+              <X size={13} color={theme.danger} />
+              <Text style={[styles.clearFiltersText, { color: theme.danger }]}>{t('admin.statsClear')}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodRow}>
+          {periods.map(period => {
+            const active = value.period === period
+            return (
+              <Pressable
+                key={period}
+                onPress={() => onPeriodChange(period)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                style={[styles.periodChip, { borderColor: active ? theme.primary : theme.border, backgroundColor: active ? theme.primary : theme.surface }]}
+              >
+                <Text style={[styles.periodChipText, { color: active ? palette.white : theme.textSoft }]}>{t(`admin.statsPeriod_${period}`)}</Text>
+              </Pressable>
+            )
+          })}
+        </ScrollView>
+
+        <View style={styles.filterSelectGrid}>
+          {(['cycle', 'niveau', 'classe', 'matiere'] as StatsFilterKey[]).map(key => (
+            <Pressable
+              key={key}
+              onPress={() => setPicker(key)}
+              accessibilityRole="button"
+              accessibilityLabel={`${pickerTitles[key]}: ${selectedLabels[key]}`}
+              style={[styles.filterSelect, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            >
+              <Text style={[styles.filterSelectCaption, { color: theme.textMuted }]}>{pickerTitles[key]}</Text>
+              <View style={styles.filterSelectValueRow}>
+                <Text numberOfLines={1} style={[styles.filterSelectValue, { color: theme.text }]}>{selectedLabels[key]}</Text>
+                <ChevronRight size={14} color={theme.textMuted} />
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <Modal visible={picker != null} transparent animationType="fade" onRequestClose={() => setPicker(null)}>
+        <View style={styles.pickerOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setPicker(null)} accessibilityLabel={t('admin.statsCloseFilter')} />
+          {picker ? (
+            <View style={[styles.pickerSheet, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={styles.pickerHead}>
+                <Text style={[styles.pickerTitle, { color: theme.text }]}>{pickerTitles[picker]}</Text>
+                <Pressable onPress={() => setPicker(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('admin.statsCloseFilter')}>
+                  <X size={20} color={theme.textSoft} />
+                </Pressable>
+              </View>
+              <ScrollView style={styles.pickerList} showsVerticalScrollIndicator={false}>
+                {pickerOptions[picker].map(option => {
+                  const selected = value[picker] === option.value
+                  return (
+                    <Pressable
+                      key={`${picker}-${option.value || 'all'}`}
+                      onPress={() => {
+                        onFilterChange(picker, option.value)
+                        setPicker(null)
+                      }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      style={[styles.pickerOption, { borderBottomColor: theme.border }, selected && { backgroundColor: theme.primarySurface }]}
+                    >
+                      <Text style={[styles.pickerOptionText, { color: selected ? theme.primary : theme.text }]}>{option.label}</Text>
+                      {selected ? <CheckCircle2 size={17} color={theme.primary} /> : null}
+                    </Pressable>
+                  )
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+    </>
   )
 }
 
@@ -1168,6 +1421,42 @@ const styles = StyleSheet.create({
   errorBox: { padding: 12, borderRadius: 8, marginBottom: 12 },
   errorText: { fontSize: 13, fontWeight: '700' },
   pressed: { opacity: 0.68, transform: [{ scale: 0.98 }] },
+
+  report: { borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 12 },
+  reportIntro: { marginBottom: 14 },
+  reportEyebrow: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.7 },
+  reportTitle: { fontSize: 25, lineHeight: 31, fontWeight: '900', marginTop: 7 },
+  reportLead: { fontSize: 13, lineHeight: 19, fontWeight: '600', marginTop: 5 },
+  reportScopeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 11 },
+  reportScopePill: { maxWidth: '100%', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  reportScopeText: { fontSize: 10, fontWeight: '800' },
+  reportGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  reportMetric: { width: '48.5%', minHeight: 82, borderWidth: 1, borderRadius: 12, padding: 11, justifyContent: 'space-between' },
+  reportMetricHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  reportMetricLabel: { flex: 1, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  reportMetricValue: { fontSize: 22, fontWeight: '900', marginTop: 8, fontVariant: ['tabular-nums'] },
+
+  filtersCard: { borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 12 },
+  filtersHead: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 9 },
+  filtersTitleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  filtersTitle: { fontSize: 13, fontWeight: '900' },
+  clearFilters: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
+  clearFiltersText: { fontSize: 10, fontWeight: '900' },
+  periodRow: { gap: 6, paddingBottom: 10 },
+  periodChip: { minHeight: 34, borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+  periodChipText: { fontSize: 11, fontWeight: '900' },
+  filterSelectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterSelect: { width: '48.5%', minHeight: 58, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center' },
+  filterSelectCaption: { fontSize: 9, fontWeight: '800', textTransform: 'uppercase', marginBottom: 4 },
+  filterSelectValueRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  filterSelectValue: { flex: 1, fontSize: 12, fontWeight: '800' },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.42)', alignItems: 'center', justifyContent: 'center', padding: 22 },
+  pickerSheet: { width: '100%', maxHeight: '72%', borderWidth: 1, borderRadius: 18, padding: 14 },
+  pickerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingBottom: 8 },
+  pickerTitle: { flex: 1, fontSize: 17, fontWeight: '900' },
+  pickerList: { flexGrow: 0 },
+  pickerOption: { minHeight: 48, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  pickerOptionText: { flex: 1, fontSize: 13, fontWeight: '800' },
 
   hero: { borderWidth: 1, borderRadius: 8, padding: 14, marginBottom: 12, flexDirection: 'row', gap: 12 },
   heroMain: { width: 138, alignItems: 'center', justifyContent: 'center' },

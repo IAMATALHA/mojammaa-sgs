@@ -9,6 +9,8 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   AlertTriangle,
   BusFront,
@@ -61,50 +63,49 @@ interface StatusCopy {
   surface: string
 }
 
-function statusCopy(status: PickupStatus, theme: Theme): StatusCopy {
-  const copy: Record<PickupStatus, StatusCopy> = {
+type LatinFontWeight = 'regular' | 'medium' | 'semibold' | 'bold' | 'black'
+
+function fontFor(theme: Theme, isAr: boolean, weight: LatinFontWeight): string {
+  if (!isAr) return theme.fonts[weight]
+  if (weight === 'regular') return theme.fonts.arabic
+  if (weight === 'medium' || weight === 'semibold') return theme.fonts.arabicSemi
+  return theme.fonts.arabicBold
+}
+
+function statusCopy(status: PickupStatus, theme: Theme, t: TFunction): StatusCopy {
+  const visual: Record<PickupStatus, Pick<StatusCopy, 'icon' | 'color' | 'surface'>> = {
     waiting: {
-      title: 'Arrivée signalée',
-      message: 'L’école a reçu votre signal. Votre enfant sera appelé à son tour.',
-      shortLabel: 'Arrivé',
       icon: Clock3,
       color: theme.warning,
       surface: theme.warningSurface,
     },
     called: {
-      title: 'Votre enfant est appelé',
-      message: 'L’équipe prépare votre enfant pour la sortie.',
-      shortLabel: 'Appelé',
       icon: Megaphone,
       color: theme.info,
       surface: theme.infoSurface,
     },
     ready: {
-      title: 'Prêt à sortir',
-      message: 'Votre enfant est prêt. Restez dans la zone de remise prévue.',
-      shortLabel: 'Prêt',
       icon: UserCheck,
       color: theme.success,
       surface: theme.successSurface,
     },
     completed: {
-      title: 'Sortie terminée',
-      message: 'La remise de votre enfant a été confirmée par l’école.',
-      shortLabel: 'Terminé',
       icon: CheckCircle2,
       color: theme.success,
       surface: theme.successSurface,
     },
     cancelled: {
-      title: 'Signal annulé',
-      message: 'Vous pouvez signaler une nouvelle arrivée si nécessaire.',
-      shortLabel: 'Annulé',
       icon: X,
       color: theme.danger,
       surface: theme.dangerSurface,
     },
   }
-  return copy[status]
+  return {
+    ...visual[status],
+    title: t(`pickup.parent.status.${status}.title`),
+    message: t(`pickup.parent.status.${status}.message`),
+    shortLabel: t(`pickup.parent.status.${status}.shortLabel`),
+  }
 }
 
 function toMillis(value: unknown): number {
@@ -130,30 +131,35 @@ function latestRequestForChild(
     .sort((a, b) => toMillis(b.arrivedAt) - toMillis(a.arrivedAt))[0]
 }
 
-function transportStatusCopy(status: TransportPassengerStatus, theme: Theme) {
-  const copy: Record<TransportPassengerStatus, { label: string; color: string; surface: string }> = {
-    scheduled: { label: 'Planifié', color: theme.info, surface: theme.infoSurface },
-    boarded: { label: 'À bord', color: theme.primary, surface: theme.primarySurface },
-    dropped_off: { label: 'Déposé', color: theme.success, surface: theme.successSurface },
-    absent: { label: 'Absent', color: theme.warning, surface: theme.warningSurface },
-    cancelled: { label: 'Annulé', color: theme.danger, surface: theme.dangerSurface },
+function transportStatusCopy(status: TransportPassengerStatus, theme: Theme, t: TFunction) {
+  const visual: Record<TransportPassengerStatus, { color: string; surface: string }> = {
+    scheduled: { color: theme.info, surface: theme.infoSurface },
+    boarded: { color: theme.primary, surface: theme.primarySurface },
+    dropped_off: { color: theme.success, surface: theme.successSurface },
+    absent: { color: theme.warning, surface: theme.warningSurface },
+    cancelled: { color: theme.danger, surface: theme.dangerSurface },
   }
-  return copy[status]
+  const statusKey = status === 'dropped_off' ? 'droppedOff' : status
+  return { ...visual[status], label: t(`pickup.parent.transport.status.${statusKey}`) }
 }
 
-function transportDirectionLabel(direction: TransportPassenger['direction']): string {
-  return direction === 'to_school' ? 'Vers l’école' : 'Retour de l’école'
+function transportDirectionLabel(direction: TransportPassenger['direction'], t: TFunction): string {
+  return direction === 'to_school'
+    ? t('pickup.parent.transport.direction.toSchool')
+    : t('pickup.parent.transport.direction.fromSchool')
 }
 
 export default function ParentPickupScreen() {
   const theme = useTheme()
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language.startsWith('ar')
   const { profile } = useAuth()
   const parent = useParentData()
   const [selectedChildId, setSelectedChildId] = useState('')
   const [vehicleDescription, setVehicleDescription] = useState('')
   const [requests, setRequests] = useState<PickupRequest[]>([])
   const [requestsLoading, setRequestsLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadErrorKey, setLoadErrorKey] = useState<string | null>(null)
   const [pickupSession, setPickupSession] = useState<PickupSession | null>(null)
   const [sessionLoading, setSessionLoading] = useState(true)
   const [sessionError, setSessionError] = useState(false)
@@ -163,7 +169,7 @@ export default function ParentPickupScreen() {
   const [transportLoading, setTransportLoading] = useState(true)
   const [transportError, setTransportError] = useState(false)
   const [transportSubscriptionKey, setTransportSubscriptionKey] = useState(0)
-  const [actionError, setActionError] = useState<string | null>(null)
+  const [actionErrorKey, setActionErrorKey] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const childIdsKey = parent.children.map(child => child.id).sort().join('|')
   const childIds = useMemo(
@@ -189,17 +195,17 @@ export default function ParentPickupScreen() {
     }
 
     setRequestsLoading(true)
-    setLoadError(null)
+    setLoadErrorKey(null)
     return subscribeParentPickupRequests(
       profile.uid,
       childIds,
       (nextRequests: PickupRequest[]) => {
         setRequests(nextRequests)
         setRequestsLoading(false)
-        setLoadError(null)
+        setLoadErrorKey(null)
       },
       () => {
-        setLoadError('Impossible de suivre la sortie scolaire.')
+        setLoadErrorKey('pickup.parent.errors.requestsLoad')
         setRequestsLoading(false)
       },
     )
@@ -266,7 +272,7 @@ export default function ParentPickupScreen() {
   const announceArrival = async () => {
     if (!profile?.uid || !selectedChild || !sessionIsOpen || requestIsActive || submitting) return
     setSubmitting(true)
-    setActionError(null)
+    setActionErrorKey(null)
     try {
       await announcePickupArrival({
         parentUid: profile.uid,
@@ -274,7 +280,7 @@ export default function ParentPickupScreen() {
         vehicleDescription: vehicleDescription.trim() || undefined,
       })
     } catch {
-      setActionError('Votre arrivée n’a pas pu être signalée. Réessayez.')
+      setActionErrorKey('pickup.parent.errors.announce')
     } finally {
       setSubmitting(false)
     }
@@ -283,18 +289,18 @@ export default function ParentPickupScreen() {
   const confirmCancellation = () => {
     if (!selectedRequest || selectedRequest.status !== 'waiting' || submitting) return
     Alert.alert(
-      'Annuler mon arrivée ?',
-      'L’élève sera retiré de la file d’attente.',
+      t('pickup.parent.cancelDialog.title'),
+      t('pickup.parent.cancelDialog.message'),
       [
-        { text: 'Garder', style: 'cancel' },
+        { text: t('pickup.parent.cancelDialog.keep'), style: 'cancel' },
         {
-          text: 'Annuler l’arrivée',
+          text: t('pickup.parent.cancelDialog.confirm'),
           style: 'destructive',
           onPress: () => {
             setSubmitting(true)
-            setActionError(null)
+            setActionErrorKey(null)
             cancelPickupArrival(selectedRequest.id)
-              .catch(() => setActionError('L’annulation a échoué. Réessayez.'))
+              .catch(() => setActionErrorKey('pickup.parent.errors.cancel'))
               .finally(() => setSubmitting(false))
           },
         },
@@ -305,7 +311,7 @@ export default function ParentPickupScreen() {
   const initialLoading = parent.loading || requestsLoading
 
   return (
-    <ScreenLayout title="Sortie scolaire">
+    <ScreenLayout title={t('pickup.screenTitle')}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
@@ -315,6 +321,7 @@ export default function ParentPickupScreen() {
         <View
           style={[
             styles.hero,
+            isAr && styles.rtlRow,
             { backgroundColor: theme.primaryDark, borderColor: theme.primaryBorder },
             theme.shadows.sm,
           ]}
@@ -323,9 +330,9 @@ export default function ParentPickupScreen() {
             <Car size={25} color="#fff" strokeWidth={2} />
           </View>
           <View style={styles.heroText}>
-            <Text style={[styles.heroEyebrow, { fontFamily: theme.fonts.semibold }]}>SMART PICKUP</Text>
-            <Text style={[styles.heroTitle, { fontFamily: theme.fonts.black }]}>Une sortie plus fluide</Text>
-            <Text style={[styles.heroSubtitle, { fontFamily: theme.fonts.regular }]}>Signalez votre arrivée sans quitter votre véhicule.</Text>
+            <Text style={[styles.heroEyebrow, isAr && styles.rtlText, { fontFamily: fontFor(theme, isAr, 'semibold'), letterSpacing: isAr ? 0 : 1.1 }]}>{t('pickup.parent.hero.eyebrow')}</Text>
+            <Text style={[styles.heroTitle, isAr && styles.rtlText, { fontFamily: fontFor(theme, isAr, 'black') }]}>{t('pickup.parent.hero.title')}</Text>
+            <Text style={[styles.heroSubtitle, isAr && styles.rtlText, { fontFamily: fontFor(theme, isAr, 'regular') }]}>{t('pickup.parent.hero.subtitle')}</Text>
           </View>
         </View>
 
@@ -338,35 +345,35 @@ export default function ParentPickupScreen() {
           onRetry={() => setSessionSubscriptionKey(key => key + 1)}
         />
 
-        {(parent.error || loadError) ? (
+        {(parent.error || loadErrorKey) ? (
           <View
             accessibilityRole="alert"
             style={[styles.errorBox, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}
           >
-            <Text selectable style={[styles.errorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>
-              {loadError || 'Impossible de charger les enfants associés à ce compte.'}
+            <Text selectable style={[styles.errorText, isAr && styles.rtlText, { color: theme.danger, fontFamily: fontFor(theme, isAr, 'semibold') }]}>
+              {loadErrorKey ? t(loadErrorKey) : t('pickup.parent.errors.childrenLoad')}
             </Text>
           </View>
         ) : null}
 
         {initialLoading ? (
-          <View style={styles.loading} accessibilityLabel="Chargement de la sortie scolaire">
+          <View style={styles.loading} accessibilityLabel={t('pickup.parent.a11y.loading')}>
             <ActivityIndicator color={theme.primary} size="large" />
-            <Text style={[styles.loadingText, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>Chargement…</Text>
+            <Text style={[styles.loadingText, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'medium') }]}>{t('common.loading')}</Text>
           </View>
         ) : parent.children.length === 0 ? (
           <Card>
             <EmptyState
               icon={Users}
-              title="Aucun enfant associé"
-              message="Contactez l’administration pour vérifier votre compte parent."
+              title={t('parent.noChildren')}
+              message={t('pickup.parent.children.emptyMessage')}
             />
           </Card>
         ) : (
           <>
-            <View style={styles.sectionHeading}>
-              <Text style={[styles.sectionTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}>Qui récupérez-vous ?</Text>
-              <Text style={[styles.sectionHint, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Sélectionnez un enfant</Text>
+            <View style={[styles.sectionHeading, isAr && styles.rtlBlock]}>
+              <Text style={[styles.sectionTitle, isAr && styles.rtlText, { color: theme.text, fontFamily: fontFor(theme, isAr, 'bold') }]}>{t('pickup.parent.children.title')}</Text>
+              <Text style={[styles.sectionHint, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') }]}>{t('pickup.parent.children.hint')}</Text>
             </View>
 
             <ScrollView
@@ -374,7 +381,7 @@ export default function ParentPickupScreen() {
               contentInsetAdjustmentBehavior="automatic"
               showsHorizontalScrollIndicator={false}
               style={styles.childScroller}
-              contentContainerStyle={styles.childChips}
+              contentContainerStyle={[styles.childChips, isAr && styles.rtlRow]}
             >
               {parent.children.map(child => {
                 const selected = child.id === selectedChildId
@@ -386,10 +393,11 @@ export default function ParentPickupScreen() {
                     accessibilityState={{ selected }}
                     onPress={() => {
                       setSelectedChildId(child.id)
-                      setActionError(null)
+                      setActionErrorKey(null)
                     }}
                     style={({ pressed }) => [
                       styles.childChip,
+                      isAr && styles.rtlRow,
                       {
                         backgroundColor: selected ? theme.primary : theme.card,
                         borderColor: selected ? theme.primary : theme.border,
@@ -398,15 +406,15 @@ export default function ParentPickupScreen() {
                     ]}
                   >
                     <View style={[styles.avatar, { backgroundColor: selected ? '#FFFFFF22' : child.avatarColor }]}>
-                      <Text style={[styles.avatarText, { color: '#fff', fontFamily: theme.fonts.bold }]}>
+                      <Text style={[styles.avatarText, { color: '#fff', fontFamily: fontFor(theme, isAr, 'bold') }]}>
                         {child.firstName.slice(0, 1).toLocaleUpperCase()}
                       </Text>
                     </View>
                     <View>
-                      <Text numberOfLines={1} style={[styles.childName, { color: selected ? '#fff' : theme.text, fontFamily: theme.fonts.bold }]}>
+                      <Text numberOfLines={1} style={[styles.childName, isAr && styles.rtlText, { color: selected ? '#fff' : theme.text, fontFamily: fontFor(theme, isAr, 'bold') }]}>
                         {child.firstName}
                       </Text>
-                      <Text numberOfLines={1} style={[styles.childClass, { color: selected ? '#FFFFFFCC' : theme.textSoft, fontFamily: theme.fonts.medium }]}>
+                      <Text numberOfLines={1} style={[styles.childClass, isAr && styles.rtlText, { color: selected ? '#FFFFFFCC' : theme.textSoft, fontFamily: fontFor(theme, isAr, 'medium') }]}>
                         {child.classe}
                       </Text>
                     </View>
@@ -419,47 +427,48 @@ export default function ParentPickupScreen() {
               <PickupStatusCard request={selectedRequest} theme={theme} />
             ) : (
               <Card style={styles.arrivalCard}>
-                <View style={styles.cardTitleRow}>
+                <View style={[styles.cardTitleRow, isAr && styles.rtlRow]}>
                   <View style={[styles.smallIcon, { backgroundColor: theme.primarySurface }]}>
                     <Car size={18} color={theme.primary} strokeWidth={2.1} />
                   </View>
                   <View style={styles.cardTitleText}>
-                    <Text style={[styles.cardTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}>Votre véhicule</Text>
-                    <Text style={[styles.cardSubtitle, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Facultatif, pour vous repérer plus facilement</Text>
+                    <Text style={[styles.cardTitle, isAr && styles.rtlText, { color: theme.text, fontFamily: fontFor(theme, isAr, 'bold') }]}>{t('pickup.parent.vehicle.title')}</Text>
+                    <Text style={[styles.cardSubtitle, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') }]}>{t('pickup.parent.vehicle.subtitle')}</Text>
                   </View>
                 </View>
                 <TextInput
-                  accessibilityLabel="Description facultative du véhicule"
+                  accessibilityLabel={t('pickup.parent.vehicle.a11yLabel')}
                   value={vehicleDescription}
                   onChangeText={setVehicleDescription}
                   maxLength={80}
-                  placeholder="Ex. Dacia blanche"
+                  placeholder={t('pickup.parent.vehicle.placeholder')}
                   placeholderTextColor={theme.textMuted}
                   autoCapitalize="sentences"
                   returnKeyType="done"
                   style={[
                     styles.input,
+                    isAr && styles.rtlInput,
                     {
                       color: theme.text,
                       backgroundColor: theme.surface,
                       borderColor: theme.borderStrong,
-                      fontFamily: theme.fonts.regular,
+                      fontFamily: fontFor(theme, isAr, 'regular'),
                     },
                   ]}
                 />
-                <View style={styles.privacyRow}>
+                <View style={[styles.privacyRow, isAr && styles.rtlRow]}>
                   <ShieldCheck size={14} color={theme.success} strokeWidth={2} />
-                  <Text style={[styles.privacyText, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>N’indiquez ni numéro de téléphone ni position précise.</Text>
+                  <Text style={[styles.privacyText, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') }]}>{t('pickup.parent.vehicle.privacyHint')}</Text>
                 </View>
               </Card>
             )}
 
-            {actionError ? (
+            {actionErrorKey ? (
               <View
                 accessibilityRole="alert"
                 style={[styles.errorBox, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}
               >
-                <Text selectable style={[styles.errorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>{actionError}</Text>
+                <Text selectable style={[styles.errorText, isAr && styles.rtlText, { color: theme.danger, fontFamily: fontFor(theme, isAr, 'semibold') }]}>{t(actionErrorKey)}</Text>
               </View>
             ) : null}
 
@@ -467,46 +476,50 @@ export default function ParentPickupScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={sessionIsOpen
-                  ? `Je suis arrivé pour ${selectedChild?.firstName || 'mon enfant'}`
-                  : 'Smart Pickup est fermé'}
+                  ? t('pickup.parent.arrival.a11yLabel', {
+                    name: selectedChild?.firstName || t('pickup.parent.children.fallback'),
+                  })
+                  : t('pickup.parent.session.closedTitle')}
                 accessibilityHint={sessionIsOpen
-                  ? 'Ajoute l’enfant à la file de sortie scolaire'
-                  : 'L’administration doit ouvrir le créneau avant une annonce'}
+                  ? t('pickup.parent.arrival.a11yHint')
+                  : t('pickup.parent.arrival.closedHint')}
                 accessibilityState={{ disabled: submitting || !sessionIsOpen, busy: submitting || sessionLoading }}
                 disabled={submitting || !selectedChild || !sessionIsOpen}
                 onPress={announceArrival}
                 style={({ pressed }) => [
                   styles.primaryButton,
+                  isAr && styles.rtlRow,
                   { backgroundColor: sessionIsOpen ? theme.accent : theme.borderStrong },
                   (submitting || !selectedChild || !sessionIsOpen) && styles.disabled,
                   pressed && styles.pressed,
                 ]}
               >
                 {submitting ? <ActivityIndicator color="#fff" /> : <Car size={21} color="#fff" strokeWidth={2.4} />}
-                <Text style={[styles.primaryButtonText, { fontFamily: theme.fonts.bold }]}>
+                <Text style={[styles.primaryButtonText, isAr && styles.rtlText, { fontFamily: fontFor(theme, isAr, 'bold') }]}>
                   {sessionLoading
-                    ? 'Vérification du créneau…'
+                    ? t('pickup.parent.session.checking')
                     : sessionIsOpen
-                      ? 'Je suis arrivé'
-                      : 'Smart Pickup fermé'}
+                      ? t('pickup.arrivalCta')
+                      : t('pickup.parent.arrival.closedCta')}
                 </Text>
               </Pressable>
             ) : selectedRequest.status === 'waiting' ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Annuler mon arrivée"
+                accessibilityLabel={t('pickup.parent.arrival.cancelCta')}
                 accessibilityState={{ disabled: submitting, busy: submitting }}
                 disabled={submitting}
                 onPress={confirmCancellation}
                 style={({ pressed }) => [
                   styles.cancelButton,
+                  isAr && styles.rtlRow,
                   { backgroundColor: theme.card, borderColor: theme.danger },
                   submitting && styles.disabled,
                   pressed && styles.pressed,
                 ]}
               >
                 {submitting ? <ActivityIndicator color={theme.danger} /> : <X size={18} color={theme.danger} strokeWidth={2.4} />}
-                <Text style={[styles.cancelButtonText, { color: theme.danger, fontFamily: theme.fonts.bold }]}>Annuler mon arrivée</Text>
+                <Text style={[styles.cancelButtonText, isAr && styles.rtlText, { color: theme.danger, fontFamily: fontFor(theme, isAr, 'bold') }]}>{t('pickup.parent.arrival.cancelCta')}</Text>
               </Pressable>
             ) : null}
 
@@ -540,27 +553,30 @@ function ParentTransportSection({
   theme: Theme
   onRetry: () => void
 }) {
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language.startsWith('ar')
+
   return (
     <View style={styles.transportSection}>
-      <View style={styles.sectionHeading}>
-        <Text style={[styles.sectionTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}>Transport scolaire aujourd’hui</Text>
-        <Text style={[styles.sectionHint, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Trajets de vos enfants uniquement</Text>
+      <View style={[styles.sectionHeading, isAr && styles.rtlBlock]}>
+        <Text style={[styles.sectionTitle, isAr && styles.rtlText, { color: theme.text, fontFamily: fontFor(theme, isAr, 'bold') }]}>{t('pickup.parent.transport.title')}</Text>
+        <Text style={[styles.sectionHint, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') }]}>{t('pickup.parent.transport.hint')}</Text>
       </View>
 
       {loading ? (
         <Card style={styles.transportStateCard}>
-          <View style={styles.transportLoadingRow}>
+          <View style={[styles.transportLoadingRow, isAr && styles.rtlRow]}>
             <ActivityIndicator color={theme.primary} size="small" />
-            <Text style={[styles.transportStateText, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>Chargement des trajets…</Text>
+            <Text style={[styles.transportStateText, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'medium') }]}>{t('pickup.parent.transport.loading')}</Text>
           </View>
         </Card>
       ) : error ? (
-        <View accessibilityRole="alert" style={[styles.transportError, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}>
+        <View accessibilityRole="alert" style={[styles.transportError, isAr && styles.rtlRow, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}>
           <X size={18} color={theme.danger} strokeWidth={2.2} />
-          <Text selectable style={[styles.transportErrorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>Impossible de charger le transport scolaire.</Text>
+          <Text selectable style={[styles.transportErrorText, isAr && styles.rtlText, { color: theme.danger, fontFamily: fontFor(theme, isAr, 'semibold') }]}>{t('pickup.parent.transport.loadError')}</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Réessayer de charger le transport scolaire"
+            accessibilityLabel={t('pickup.parent.transport.retryA11y')}
             onPress={onRetry}
             hitSlop={8}
             style={({ pressed }) => [styles.sessionRetry, pressed && styles.pressed]}
@@ -572,25 +588,26 @@ function ParentTransportSection({
         <Card style={styles.transportStateCard}>
           <EmptyState
             icon={BusFront}
-            title="Aucun trajet aujourd’hui"
-            message="Aucun transport scolaire n’est planifié pour vos enfants."
+            title={t('pickup.parent.transport.emptyTitle')}
+            message={t('pickup.parent.transport.emptyMessage')}
           />
         </Card>
       ) : (
         children.map(child => {
           const childPassengers = passengers.filter(passenger => passenger.eleveId === child.id)
-          const fullName = [child.firstName, child.lastName].filter(Boolean).join(' ').trim() || 'Enfant'
+          const fullName = [child.firstName, child.lastName].filter(Boolean).join(' ').trim()
+            || t('pickup.parent.transport.childFallback')
           return (
             <Card key={child.id} style={styles.transportChildCard}>
-              <View style={styles.transportChildHeader}>
+              <View style={[styles.transportChildHeader, isAr && styles.rtlRow]}>
                 <View style={[styles.transportChildIcon, { backgroundColor: theme.primarySurface }]}>
                   <BusFront size={18} color={theme.primary} strokeWidth={2.1} />
                 </View>
-                <Text selectable numberOfLines={1} style={[styles.transportChildName, { color: theme.text, fontFamily: theme.fonts.bold }]}>{fullName}</Text>
+                <Text selectable numberOfLines={1} style={[styles.transportChildName, isAr && styles.rtlText, { color: theme.text, fontFamily: fontFor(theme, isAr, 'bold') }]}>{fullName}</Text>
               </View>
 
               {childPassengers.length === 0 ? (
-                <Text style={[styles.transportNoTrip, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Aucun trajet planifié pour cet enfant.</Text>
+                <Text style={[styles.transportNoTrip, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') }]}>{t('pickup.parent.transport.noTripForChild')}</Text>
               ) : childPassengers.map((passenger, index) => (
                 <TransportTripRow
                   key={`${passenger.tripId}:${passenger.id}`}
@@ -616,8 +633,10 @@ function TransportTripRow({
   isLast: boolean
   theme: Theme
 }) {
-  const status = transportStatusCopy(passenger.status, theme)
-  const direction = transportDirectionLabel(passenger.direction)
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language.startsWith('ar')
+  const status = transportStatusCopy(passenger.status, theme, t)
+  const direction = transportDirectionLabel(passenger.direction, t)
   const circuit = passenger.stopLabel
     ? `${passenger.routeLabel} · ${passenger.stopLabel}`
     : passenger.routeLabel
@@ -627,41 +646,49 @@ function TransportTripRow({
     ? Math.round(passenger.delayMinutes)
     : 0
   const delayAccessibility = delayMinutes > 0
-    ? `, Retard estimé : ${delayMinutes} minutes`
+    ? t('pickup.parent.transport.delayA11y', { count: delayMinutes })
     : ''
+  const separator = isAr ? '، ' : ', '
+  const accessibilityParts = [
+    direction,
+    passenger.scheduledTime,
+    circuit,
+    passenger.vehicleLabel,
+    `${status.label}${delayAccessibility ? `${separator}${delayAccessibility}` : ''}`,
+  ]
 
   return (
     <View
       accessible
-      accessibilityLabel={`${direction}, ${passenger.scheduledTime}, ${circuit}, ${passenger.vehicleLabel}, ${status.label}${delayAccessibility}`}
+      accessibilityLabel={accessibilityParts.join(separator)}
       style={[
         styles.transportTrip,
         !isLast && { borderBottomColor: theme.border, borderBottomWidth: StyleSheet.hairlineWidth },
       ]}
     >
-      <View style={styles.transportTripTop}>
+      <View style={[styles.transportTripTop, isAr && styles.rtlRow]}>
         <View style={[styles.directionPill, { backgroundColor: theme.surface }]}>
-          <Text style={[styles.directionText, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>{direction}</Text>
+          <Text style={[styles.directionText, isAr && styles.rtlText, { color: theme.primary, fontFamily: fontFor(theme, isAr, 'semibold') }]}>{direction}</Text>
         </View>
         <View style={[styles.transportStatusPill, { backgroundColor: status.surface }]}>
-          <Text style={[styles.transportStatusText, { color: status.color, fontFamily: theme.fonts.bold }]}>{status.label}</Text>
+          <Text style={[styles.transportStatusText, isAr && styles.rtlText, { color: status.color, fontFamily: fontFor(theme, isAr, 'bold') }]}>{status.label}</Text>
         </View>
       </View>
       {delayMinutes > 0 ? (
-        <View style={[styles.transportDelayAlert, { backgroundColor: theme.warningSurface }]}>
+        <View style={[styles.transportDelayAlert, isAr && styles.rtlRow, { backgroundColor: theme.warningSurface }]}>
           <AlertTriangle size={14} color={theme.warning} strokeWidth={2.2} />
-          <Text selectable style={[styles.transportDelayText, { color: theme.warning, fontFamily: theme.fonts.bold }]}>Retard estimé : {delayMinutes} min</Text>
+          <Text selectable style={[styles.transportDelayText, isAr && styles.rtlText, { color: theme.warning, fontFamily: fontFor(theme, isAr, 'bold') }]}>{t('pickup.parent.transport.delay', { count: delayMinutes })}</Text>
         </View>
       ) : null}
-      <View style={styles.transportMetaRow}>
+      <View style={[styles.transportMetaRow, isAr && styles.rtlRow]}>
         <Clock3 size={14} color={theme.textMuted} strokeWidth={2} />
-        <Text selectable style={[styles.transportTime, { color: theme.text, fontFamily: theme.fonts.bold }]}>{passenger.scheduledTime}</Text>
+        <Text selectable style={[styles.transportTime, isAr && styles.rtlText, { color: theme.text, fontFamily: fontFor(theme, isAr, 'bold') }]}>{passenger.scheduledTime}</Text>
         <MapPin size={14} color={theme.textMuted} strokeWidth={2} />
-        <Text selectable numberOfLines={1} style={[styles.transportMetaText, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>{circuit}</Text>
+        <Text selectable numberOfLines={1} style={[styles.transportMetaText, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'medium') }]}>{circuit}</Text>
       </View>
-      <View style={styles.transportMetaRow}>
+      <View style={[styles.transportMetaRow, isAr && styles.rtlRow]}>
         <BusFront size={14} color={theme.textMuted} strokeWidth={2} />
-        <Text selectable numberOfLines={1} style={[styles.transportMetaText, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>{passenger.vehicleLabel}</Text>
+        <Text selectable numberOfLines={1} style={[styles.transportMetaText, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'medium') }]}>{passenger.vehicleLabel}</Text>
       </View>
     </View>
   )
@@ -682,13 +709,17 @@ function ParentSessionStatus({
   theme: Theme
   onRetry: () => void
 }) {
+  const { t, i18n } = useTranslation()
+  const language = i18n.resolvedLanguage || i18n.language
+  const isAr = language.startsWith('ar')
+
   if (loading) {
     return (
-      <View style={[styles.sessionBanner, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <View style={[styles.sessionBanner, isAr && styles.rtlRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <ActivityIndicator color={theme.primary} size="small" />
         <View style={styles.sessionTextBlock}>
-          <Text style={[styles.sessionTitle, { color: theme.text, fontFamily: theme.fonts.semibold }]}>Vérification du créneau…</Text>
-          <Text style={[styles.sessionMessage, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Connexion à la sortie scolaire en direct.</Text>
+          <Text style={[styles.sessionTitle, isAr && styles.rtlText, { color: theme.text, fontFamily: fontFor(theme, isAr, 'semibold') }]}>{t('pickup.parent.session.checking')}</Text>
+          <Text style={[styles.sessionMessage, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') }]}>{t('pickup.parent.session.connecting')}</Text>
         </View>
       </View>
     )
@@ -696,15 +727,15 @@ function ParentSessionStatus({
 
   if (error) {
     return (
-      <View accessibilityRole="alert" style={[styles.sessionBanner, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}>
+      <View accessibilityRole="alert" style={[styles.sessionBanner, isAr && styles.rtlRow, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}>
         <X size={19} color={theme.danger} strokeWidth={2.2} />
         <View style={styles.sessionTextBlock}>
-          <Text style={[styles.sessionTitle, { color: theme.danger, fontFamily: theme.fonts.bold }]}>Créneau indisponible</Text>
-          <Text style={[styles.sessionMessage, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Impossible de vérifier l’ouverture. L’annonce est désactivée.</Text>
+          <Text style={[styles.sessionTitle, isAr && styles.rtlText, { color: theme.danger, fontFamily: fontFor(theme, isAr, 'bold') }]}>{t('pickup.parent.session.unavailableTitle')}</Text>
+          <Text style={[styles.sessionMessage, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') }]}>{t('pickup.parent.session.unavailableMessage')}</Text>
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Réessayer de vérifier le créneau Smart Pickup"
+          accessibilityLabel={t('pickup.parent.session.retryA11y')}
           onPress={onRetry}
           hitSlop={8}
           style={({ pressed }) => [styles.sessionRetry, pressed && styles.pressed]}
@@ -717,62 +748,65 @@ function ParentSessionStatus({
 
   const open = pickupSessionIsCurrentlyOpen(session, now)
   const closesAt = toMillis(session?.closesAt)
+  const timeLocale = isAr ? 'ar-MA' : language.startsWith('en') ? 'en-US' : 'fr-FR'
   const closeTime = closesAt
-    ? new Date(closesAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    ? new Date(closesAt).toLocaleTimeString(timeLocale, { hour: '2-digit', minute: '2-digit' })
     : null
   const expired = Boolean(session?.isOpen && closesAt && closesAt < now)
   const title = open
-    ? 'Smart Pickup est ouvert'
+    ? t('pickup.parent.session.openTitle')
     : expired
-      ? 'Le créneau est terminé'
-      : 'Smart Pickup est fermé'
+      ? t('pickup.parent.session.expiredTitle')
+      : t('pickup.parent.session.closedTitle')
   const message = open && closeTime
-    ? `Vous pouvez annoncer votre arrivée jusqu’à ${closeTime}.`
+    ? t('pickup.parent.session.openMessage', { time: closeTime })
     : expired
-      ? 'L’administration doit rouvrir un créneau pour accepter de nouvelles arrivées.'
-      : 'L’administration ouvrira le service au moment de la sortie.'
+      ? t('pickup.parent.session.expiredMessage')
+      : t('pickup.parent.session.closedMessage')
   const color = open ? theme.success : theme.warning
   const surface = open ? theme.successSurface : theme.warningSurface
 
   return (
-    <View accessibilityLiveRegion="polite" style={[styles.sessionBanner, { backgroundColor: surface, borderColor: color }]}>
+    <View accessibilityLiveRegion="polite" style={[styles.sessionBanner, isAr && styles.rtlRow, { backgroundColor: surface, borderColor: color }]}>
       {open
         ? <CheckCircle2 size={20} color={color} strokeWidth={2.2} />
         : <Clock3 size={20} color={color} strokeWidth={2.2} />}
       <View style={styles.sessionTextBlock}>
-        <Text style={[styles.sessionTitle, { color, fontFamily: theme.fonts.bold }]}>{title}</Text>
-        <Text style={[styles.sessionMessage, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>{message}</Text>
+        <Text style={[styles.sessionTitle, isAr && styles.rtlText, { color, fontFamily: fontFor(theme, isAr, 'bold') }]}>{title}</Text>
+        <Text style={[styles.sessionMessage, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') }]}>{message}</Text>
       </View>
     </View>
   )
 }
 
 function PickupStatusCard({ request, theme }: { request: PickupRequest; theme: Theme }) {
-  const current = statusCopy(request.status, theme)
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language.startsWith('ar')
+  const current = statusCopy(request.status, theme, t)
   const CurrentIcon = current.icon
   const currentIndex = request.status === 'cancelled' ? -1 : STATUS_ORDER.indexOf(request.status)
 
   return (
     <Card style={styles.statusCard}>
-      <View style={[styles.currentStatus, { backgroundColor: current.surface }]}>
+      <View style={[styles.currentStatus, isAr && styles.rtlRow, { backgroundColor: current.surface }]}>
         <View style={[styles.statusIcon, { backgroundColor: current.color }]}>
           <CurrentIcon size={22} color="#fff" strokeWidth={2.2} />
         </View>
         <View style={styles.currentStatusText}>
-          <Text accessibilityLiveRegion="polite" style={[styles.statusTitle, { color: current.color, fontFamily: theme.fonts.bold }]}>
+          <Text accessibilityLiveRegion="polite" style={[styles.statusTitle, isAr && styles.rtlText, { color: current.color, fontFamily: fontFor(theme, isAr, 'bold') }]}>
             {current.title}
           </Text>
-          <Text style={[styles.statusMessage, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>
+          <Text style={[styles.statusMessage, isAr && styles.rtlText, { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') }]}>
             {current.message}
           </Text>
         </View>
       </View>
 
       {request.status !== 'cancelled' ? (
-        <View accessibilityRole="progressbar" accessibilityValue={{ min: 1, max: 4, now: currentIndex + 1 }} style={styles.timeline}>
+        <View accessibilityRole="progressbar" accessibilityValue={{ min: 1, max: 4, now: currentIndex + 1 }} style={[styles.timeline, isAr && styles.rtlRow]}>
           {STATUS_ORDER.map((status, index) => {
             const reached = index <= currentIndex
-            const meta = statusCopy(status, theme)
+            const meta = statusCopy(status, theme, t)
             return (
               <React.Fragment key={status}>
                 <View style={styles.timelineStep}>
@@ -787,7 +821,7 @@ function PickupStatusCard({ request, theme }: { request: PickupRequest; theme: T
                   >
                     {reached ? <CheckCircle2 size={13} color="#fff" strokeWidth={2.8} /> : null}
                   </View>
-                  <Text style={[styles.timelineLabel, { color: reached ? theme.text : theme.textMuted, fontFamily: theme.fonts.medium }]}>
+                  <Text style={[styles.timelineLabel, { color: reached ? theme.text : theme.textMuted, fontFamily: fontFor(theme, isAr, 'medium') }]}>
                     {meta.shortLabel}
                   </Text>
                 </View>
@@ -804,6 +838,10 @@ function PickupStatusCard({ request, theme }: { request: PickupRequest; theme: T
 }
 
 const styles = StyleSheet.create({
+  rtlRow: { flexDirection: 'row-reverse' },
+  rtlBlock: { alignItems: 'flex-end' },
+  rtlText: { textAlign: 'right', writingDirection: 'rtl' },
+  rtlInput: { textAlign: 'right', writingDirection: 'rtl' },
   scrollContent: { paddingBottom: 40, gap: 16 },
   hero: {
     flexDirection: 'row',

@@ -15,12 +15,17 @@ import { useParentDevoirs, type ParentDevoir } from '../../hooks/useParentDevoir
 import ScreenBackground from '../../components/ScreenBackground'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import type { StudentDevoirsStackParamList } from '../../navigation/types'
+import {
+  isHomeworkAwaitingReview,
+  isHomeworkClosed,
+  type HomeworkSubmissionStatus,
+} from '../../services/homeworkSubmissionsService'
 
 export default function ParentDevoirsScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
   const parent = useParentData()
-  const { loading, error, devoirs } = useParentDevoirs()
+  const { loading, error, devoirs } = useParentDevoirs(parent.eleves)
   const navigation = useNavigation<NativeStackNavigationProp<StudentDevoirsStackParamList, 'StudentDevoirsList'>>()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
 
@@ -29,7 +34,8 @@ export default function ParentDevoirsScreen() {
     navigation.navigate('StudentDevoirView', {
       devoir: {
         id: d.id, titre: d.title, description: d.description, type: d.type,
-        classeId: d.classeId, teacherNom: d.teacherNom, dateLimite: d.dateLimite,
+        classeId: d.classeId, teacherId: d.teacherId, teacherNom: d.teacherNom, dateLimite: d.dateLimite,
+        eleveId: d.childId, eleveNom: d.childName, parentUid: d.parentUid,
         attachments: d.attachments,
       },
     })
@@ -40,13 +46,9 @@ export default function ParentDevoirsScreen() {
     return devoirs.filter(d => d.childId === selectedChildId)
   }, [devoirs, selectedChildId])
 
-  const pending = filtered.filter(d => !d.isPast)
-  const past = filtered.filter(d => d.isPast)
-
-  const childName = (childId: string): string => {
-    const c = parent.children.find(x => x.id === childId)
-    return c ? c.firstName : ''
-  }
+  const pending = filtered.filter(d => !isHomeworkAwaitingReview(d.status) && !isHomeworkClosed(d.status))
+  const awaiting = filtered.filter(d => isHomeworkAwaitingReview(d.status))
+  const history = filtered.filter(d => isHomeworkClosed(d.status))
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>
@@ -88,18 +90,29 @@ export default function ParentDevoirsScreen() {
                   <EmptyState icon={Check} title={t('parent.noHomework')} message={t('parent.allDone')} />
                 ) : (
                   pending.map((d, idx) => (
-                    <DevoirRow key={d.id} item={d} childName={childName(d.childId)} isLast={idx === pending.length - 1} onPress={() => openDetail(d)} theme={theme} />
+                    <DevoirRow key={`${d.id}_${d.childId}`} item={d} isLast={idx === pending.length - 1} onPress={() => openDetail(d)} theme={theme} />
                   ))
                 )}
               </Card>
             </View>
 
-            {past.length > 0 && (
+            {awaiting.length > 0 && (
               <View style={styles.section}>
-                <SectionHeader title={t('parent.submitted')} subtitle={t('parent.archived', { count: past.length })} />
+                <SectionHeader title={t('homeworkTracking.awaitingReview')} subtitle={t('homeworkTracking.itemsCount', { count: awaiting.length })} />
                 <Card padding={12}>
-                  {past.map((d, idx) => (
-                    <DevoirRow key={d.id} item={d} childName={childName(d.childId)} isLast={idx === past.length - 1} onPress={() => openDetail(d)} theme={theme} />
+                  {awaiting.map((d, idx) => (
+                    <DevoirRow key={`${d.id}_${d.childId}`} item={d} isLast={idx === awaiting.length - 1} onPress={() => openDetail(d)} theme={theme} />
+                  ))}
+                </Card>
+              </View>
+            )}
+
+            {history.length > 0 && (
+              <View style={styles.section}>
+                <SectionHeader title={t('homeworkTracking.history')} subtitle={t('homeworkTracking.itemsCount', { count: history.length })} />
+                <Card padding={12}>
+                  {history.map((d, idx) => (
+                    <DevoirRow key={`${d.id}_${d.childId}`} item={d} isLast={idx === history.length - 1} onPress={() => openDetail(d)} theme={theme} />
                   ))}
                 </Card>
               </View>
@@ -124,14 +137,21 @@ function FilterChip({ label, active, onPress, color, theme }: { label: string; a
   )
 }
 
-function DevoirRow({ item, childName, isLast, onPress, theme }: { item: ParentDevoir; childName: string; isLast: boolean; onPress: () => void; theme: Theme }) {
+function statusColor(status: HomeworkSubmissionStatus, theme: Theme): string {
+  if (status === 'graded' || status === 'excused') return theme.success
+  if (status === 'not_done' || status === 'not_submitted') return theme.danger
+  if (status === 'submitted' || status === 'submitted_late') return theme.info
+  return theme.warning
+}
+
+function DevoirRow({ item, isLast, onPress, theme }: { item: ParentDevoir; isLast: boolean; onPress: () => void; theme: Theme }) {
   return (
     <Pressable onPress={onPress} style={[styles.devoirRow, !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}>
-      <View style={[styles.devoirDot, { backgroundColor: item.isPast ? theme.success : theme.warning }]} />
+      <View style={[styles.devoirDot, { backgroundColor: statusColor(item.status, theme) }]} />
       <View style={{ flex: 1, marginStart: 10 }}>
         <Text numberOfLines={1} style={{ color: theme.text, fontFamily: theme.fonts.semibold, fontSize: 14 }}>{item.title}</Text>
         <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>
-          {item.classeId}{childName ? ` · ${childName}` : ''} · {item.dateLimite.split('-').reverse().join('/')}
+          {item.classeId}{item.childName ? ` · ${item.childName}` : ''} · {item.dateLimite.split('-').reverse().join('/')}
         </Text>
       </View>
       {item.attachments.length > 0 && <Paperclip size={13} color={theme.textSoft} strokeWidth={2} style={{ marginEnd: 6 }} />}

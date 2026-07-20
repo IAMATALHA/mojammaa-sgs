@@ -16,6 +16,12 @@ service firebase.storage {
         && request.resource.contentType.matches('application/pdf|image/.*|text/.*|application/vnd.*|application/msword');
     }
 
+    function currentRole() {
+      return firestore.get(
+        /databases/(default)/documents/users/$(request.auth.uid)
+      ).data.role;
+    }
+
     // Devoirs : seul le prof propriétaire peut écrire dans son sous-dossier.
     // Lecture autorisée à tout utilisateur authentifié (parents, élèves,
     // autres profs, admin) — sinon le parent ne pourrait pas télécharger
@@ -23,6 +29,33 @@ service firebase.storage {
     match /devoirs/{teacherUid}/{filename} {
       allow read:  if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == teacherUid && isAllowedDoc();
+    }
+
+    // Preuves de devoir envoyées par les parents. L'écriture est limitée au
+    // dossier du compte connecté, à SON enfant et à un devoir de sa classe.
+    // La lecture est réservée au parent, au professeur propriétaire et à
+    // l'administration.
+    match /homework-submissions/{parentUid}/{filename} {
+      allow create: if request.auth != null
+        && request.auth.uid == parentUid
+        && isAllowedDoc()
+        && request.resource.metadata.parentUid == parentUid
+        && firestore.get(
+          /databases/(default)/documents/eleves/$(request.resource.metadata.eleveId)
+        ).data.parentUid == parentUid
+        && firestore.get(
+          /databases/(default)/documents/eleves/$(request.resource.metadata.eleveId)
+        ).data.classe == firestore.get(
+          /databases/(default)/documents/devoirs/$(request.resource.metadata.homeworkId)
+        ).data.classeId;
+
+      allow read: if request.auth != null
+        && resource.metadata.parentUid == parentUid
+        && (request.auth.uid == parentUid
+            || currentRole() == 'admin'
+            || firestore.get(
+              /databases/(default)/documents/devoirs/$(resource.metadata.homeworkId)
+            ).data.teacherId == request.auth.uid);
     }
 
     // Imports de notes (Excel/CSV) : strictement privé au prof qui upload.

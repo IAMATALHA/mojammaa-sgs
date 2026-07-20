@@ -21,6 +21,7 @@ interface DevoirRow {
   titre: string
   description: string
   classeId: string
+  teacherId: string
   teacherNom: string
   dateLimite: string
   type: string
@@ -55,7 +56,7 @@ export default function AdminDevoirsScreen() {
       ))
       const list: DevoirRow[] = snap.docs.map(d => {
         const data = toDoc<{
-          titre?: string; description?: string; classeId?: string; teacherNom?: string
+          titre?: string; description?: string; classeId?: string; teacherId?: string; teacherNom?: string
           dateLimite?: string; type?: string; attachments?: Attachment[]; createdAt?: Timestamp
         }>(d)
         return {
@@ -63,6 +64,7 @@ export default function AdminDevoirsScreen() {
           titre: data.titre || '',
           description: data.description || '',
           classeId: data.classeId || '',
+          teacherId: data.teacherId || '',
           teacherNom: data.teacherNom || '',
           dateLimite: data.dateLimite || '',
           type: data.type || '',
@@ -86,7 +88,7 @@ export default function AdminDevoirsScreen() {
     navigation.navigate('AdminDevoirView', {
       devoir: {
         id: d.id, titre: d.titre, description: d.description, type: d.type,
-        classeId: d.classeId, teacherNom: d.teacherNom, dateLimite: d.dateLimite,
+        classeId: d.classeId, teacherId: d.teacherId, teacherNom: d.teacherNom, dateLimite: d.dateLimite,
         attachments: d.attachments,
       },
     })

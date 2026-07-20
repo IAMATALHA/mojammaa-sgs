@@ -38,10 +38,14 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
-import { academicPeriodForDate } from '../../utils/academicPeriod'
+import { academicPeriodForDate, localISODate } from '../../utils/academicPeriod'
 import { commitInChunks } from '../../utils/firestoreBatch'
-
-const SEANCES = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'] as const
+import type { WeeklySlot } from '../../services/scheduleService'
+import {
+  findScheduleSlotByLessonKey,
+  isScheduleSlotToday,
+  resolveScheduleSessionCode,
+} from '../../utils/scheduleSession'
 
 interface EleveLite {
   id:     string
@@ -49,14 +53,9 @@ interface EleveLite {
   prenom: string
 }
 
-
-function todayISO(): string {
-  return new Date().toISOString().split('T')[0]
-}
-
-function todayWeekDay(): string {
-  const names = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-  return names[new Date().getDay()]
+interface ResolvedLesson {
+  slot: WeeklySlot
+  seance: string
 }
 
 interface TeacherInfo {
@@ -140,24 +139,62 @@ export default function TeacherAttendanceScreen() {
   const { t } = useTranslation()
   const navigation = useNavigation<NativeStackNavigationProp<TeacherStackParamList>>()
   const route = useRoute<TeacherRoute<'TeacherAttendance'>>()
-  const { classe, seance: initialSeance } = route.params ?? { classe: '' }
+  const lessonKey = route.params?.lessonKey ?? ''
   const { profile } = useAuth()
 
+  const [lesson, setLesson] = useState<ResolvedLesson | null>(null)
+  const [scheduleLoading, setScheduleLoading] = useState(true)
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [eleves,  setEleves]  = useState<EleveLite[]>([])
   const [absent,  setAbsent]  = useState<Set<string>>(new Set())  // ids des absents
-  const [seance,  setSeance]  = useState<string>(initialSeance || 'S1')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [saving,  setSaving]  = useState(false)
   const [requests, setRequests] = useState<AbsenceRequestDoc[]>([])  // déclarations parents (classe+date)
   const [error,   setError]   = useState<string | null>(null)
   const [behaviorFor, setBehaviorFor] = useState<EleveLite | null>(null)  // élève de la fiche comportement
-  // Séances de CETTE classe AUJOURD'HUI selon l'EDT du prof. null = pas
-  // encore chargé ; [] = rien de prévu (fallback : toutes les séances).
-  const [todaySeances, setTodaySeances] = useState<string[] | null>(null)
 
-  const date = todayISO()
+  const classe = lesson?.slot.classe ?? ''
+  const seance = lesson?.seance ?? ''
+  const date = localISODate()
+
+  // La route ne transporte qu'une clé de créneau. Classe et période sont
+  // toujours relues dans l'EDT du professeur connecté, jamais acceptées
+  // depuis des paramètres modifiables côté navigation.
+  useEffect(() => {
+    let cancelled = false
+    setScheduleLoading(true)
+    setScheduleError(null)
+    setLesson(null)
+
+    if (!profile?.uid || !lessonKey) {
+      setScheduleLoading(false)
+      setScheduleError(t('teacher.attendanceSlotUnavailable'))
+      return () => { cancelled = true }
+    }
+
+    getSchedule(profile.uid)
+      .then(schedule => {
+        if (cancelled) return
+        const slot = findScheduleSlotByLessonKey(schedule?.weeklySlots ?? [], lessonKey)
+        const resolvedSeance = slot ? resolveScheduleSessionCode(slot) : null
+        if (!slot || !isScheduleSlotToday(slot) || !resolvedSeance) {
+          setScheduleError(t('teacher.attendanceSlotUnavailable'))
+          return
+        }
+        setLesson({ slot, seance: resolvedSeance })
+      })
+      .catch(() => {
+        if (!cancelled) setScheduleError(t('teacher.attendanceSlotUnavailable'))
+      })
+      .finally(() => {
+        if (!cancelled) setScheduleLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [lessonKey, profile?.uid, t])
 
   const load = useCallback(async () => {
+    if (!lesson) return
     setLoading(true); setError(null)
     try {
       const [elevesSnap, absentsSnap] = await Promise.all([
@@ -187,38 +224,17 @@ export default function TeacherAttendanceScreen() {
     } finally {
       setLoading(false)
     }
-  }, [classe, date, seance])
+  }, [classe, date, lesson, seance])
 
-  useEffect(() => { load() }, [load])
-
-  // L'appel se fait sur les séances réellement prévues AUJOURD'HUI pour
-  // cette classe (EDT du prof) — pas sur S1..S6 à l'aveugle. Si l'EDT n'a
-  // rien (donnée manquante, rattrapage), on retombe sur toutes les séances.
   useEffect(() => {
-    if (!profile?.uid) return
-    let cancelled = false
-    getSchedule(profile.uid)
-      .then(schedule => {
-        if (cancelled) return
-        const day = todayWeekDay()
-        const seances = [...new Set(
-          (schedule?.weeklySlots || [])
-            .filter(s => s.day === day && s.classe === classe && s.seance)
-            .map(s => s.seance as string),
-        )].sort()
-        setTodaySeances(seances)
-        // Pré-sélectionner la séance du jour si l'utilisateur n'en a pas
-        // déjà choisi une valide (ex. arrivée depuis le dossier de classe).
-        if (seances.length > 0 && !seances.includes(initialSeance || '')) {
-          setSeance(prev => (seances.includes(prev) ? prev : seances[0]))
-        }
-      })
-      .catch(() => { if (!cancelled) setTodaySeances([]) })
-    return () => { cancelled = true }
-  }, [profile?.uid, classe, initialSeance])
-
-  const seanceChoices: readonly string[] =
-    todaySeances && todaySeances.length > 0 ? todaySeances : SEANCES
+    if (!lesson) {
+      setEleves([])
+      setAbsent(new Set())
+      setRequests([])
+      return
+    }
+    load()
+  }, [lesson, load])
 
   const toggleAbsent = (id: string) => {
     // Vibration impact moyen = signal clair "j'ai marqué un absent"
@@ -232,7 +248,10 @@ export default function TeacherAttendanceScreen() {
   }
 
   const save = async () => {
-    if (!profile) { setError('Profil non chargé.'); return }
+    if (!profile || !lesson || !classe || !seance) {
+      setError(t('teacher.attendanceSlotUnavailable'))
+      return
+    }
     setSaving(true); setError(null)
     try {
       const period = academicPeriodForDate(date)
@@ -303,27 +322,6 @@ export default function TeacherAttendanceScreen() {
   const declaredFor = (eleveId: string): AbsenceRequestDoc | undefined =>
     requests.find(r => r.eleveId === eleveId && r.status !== 'declined')
 
-  const SeanceChip = ({ value }: { value: string }) => {
-    const active = seance === value
-    return (
-      <PressableScale
-        onPress={() => setSeance(value)}
-        scaleDown={0.92}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: active }}
-        accessibilityLabel={value}
-        style={[
-          styles.chip,
-          { borderColor: active ? theme.primary : theme.border, backgroundColor: active ? theme.primarySurface : 'transparent' },
-        ]}
-      >
-        <Text style={{ color: active ? theme.primary : theme.textSoft, fontFamily: active ? theme.fonts.black : theme.fonts.medium, fontSize: 13 }}>
-          {value}
-        </Text>
-      </PressableScale>
-    )
-  }
-
   const renderEleve = ({ item, index }: { item: EleveLite; index: number }) => {
     const isAbsent = absent.has(item.id)
     return (
@@ -377,6 +375,37 @@ export default function TeacherAttendanceScreen() {
     )
   }
 
+  if (scheduleLoading) {
+    return (
+      <ScreenLayout title={t('teacher.attendanceTitle', { classe: '—' })}>
+        <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
+      </ScreenLayout>
+    )
+  }
+
+  if (!lesson) {
+    return (
+      <ScreenLayout title={t('teacher.attendanceTitle', { classe: '—' })}>
+        <View style={[styles.blockedCard, { backgroundColor: theme.danger + '12', borderColor: theme.danger + '30' }]}>
+          <Ionicons name="calendar-outline" size={28} color={theme.danger} />
+          <Text style={[styles.blockedText, { color: theme.text, fontFamily: theme.fonts.semibold }]}>
+            {scheduleError || t('teacher.attendanceSlotUnavailable')}
+          </Text>
+          <PressableScale
+            onPress={() => navigation.navigate('TeacherTabs', { screen: 'TeacherEdt' })}
+            accessibilityRole="button"
+            accessibilityLabel={t('teacher.seeFullSchedule')}
+            style={[styles.scheduleBtn, { backgroundColor: theme.primary }]}
+          >
+            <Text style={[styles.scheduleBtnText, { fontFamily: theme.fonts.bold }]}>
+              {t('teacher.seeFullSchedule')}
+            </Text>
+          </PressableScale>
+        </View>
+      </ScreenLayout>
+    )
+  }
+
   return (
     <ScreenLayout title={t('teacher.attendanceTitle', { classe })}>
       {error ? (
@@ -386,14 +415,21 @@ export default function TeacherAttendanceScreen() {
       ) : null}
 
       <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.session')}</Text>
-      <View style={styles.chipRow}>
-        {seanceChoices.map(s => <SeanceChip key={s} value={s} />)}
-      </View>
-      {todaySeances !== null && todaySeances.length === 0 ? (
-        <Text style={{ color: theme.warning, fontSize: 11, fontWeight: '600', marginTop: -4, marginBottom: 10 }}>
-          ⚠ {t('teacher.noSessionTodayForClass')}
+      <View
+        accessible
+        accessibilityLabel={`${t('teacher.session')} ${seance}`}
+        style={[styles.lockedSession, { borderColor: theme.primary + '35', backgroundColor: theme.primarySurface }]}
+      >
+        <View style={[styles.lockIcon, { backgroundColor: theme.primary + '16' }]}>
+          <Ionicons name="lock-closed" size={15} color={theme.primary} />
+        </View>
+        <Text style={[styles.lockedSessionCode, { color: theme.primary, fontFamily: theme.fonts.black }]}>
+          {seance}
         </Text>
-      ) : null}
+        <Text style={[styles.lockedSessionTime, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>
+          {lesson.slot.startTime}–{lesson.slot.endTime}
+        </Text>
+      </View>
 
       <View style={[styles.summary, { backgroundColor: theme.white, borderColor: theme.border }]}>
         <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800' }}>
@@ -470,8 +506,14 @@ export default function TeacherAttendanceScreen() {
 
 const styles = StyleSheet.create({
   label:        { fontSize: 10.5, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 },
-  chipRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
-  chip:         { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, minWidth: 50, alignItems: 'center' },
+  lockedSession:{ flexDirection: 'row', alignItems: 'center', gap: 9, minHeight: 48, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, marginBottom: 12 },
+  lockIcon:     { width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  lockedSessionCode:{ fontSize: 15 },
+  lockedSessionTime:{ marginStart: 'auto', fontSize: 12 },
+  blockedCard:  { alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 28, borderRadius: 14, borderWidth: 1 },
+  blockedText:  { fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  scheduleBtn:  { minHeight: 44, paddingHorizontal: 18, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  scheduleBtnText:{ color: '#fff', fontSize: 13 },
   summary:      { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, marginBottom: 12 },
   card:         { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8, borderRadius: 8, borderWidth: 1, overflow: 'hidden' },
   statusStripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },

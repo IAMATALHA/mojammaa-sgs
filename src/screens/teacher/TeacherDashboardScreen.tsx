@@ -8,7 +8,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   View, ScrollView, RefreshControl, StyleSheet, Text, Pressable, Image,
-  Alert,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -17,21 +16,28 @@ import { useNavigation } from '@react-navigation/native'
 import type { TeacherDashboardNav } from '../../navigation/types'
 import {
   Layers, Users, Percent, ClipboardCheck,
-  ChevronRight, Send, BookOpen, Clock3,
+  ChevronRight, Send, BookOpen, Clock3, MoonStar,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTeacherData } from '../../hooks/useTeacherData'
 import { useTeacherDayCompletion } from '../../hooks/useTeacherDayCompletion'
+import { useTeacherPrayerActivity } from '../../hooks/useTeacherPrayerActivity'
 import {
   QuickActions,
 } from '../../components/dashboard'
 import {
-  type ScheduleEntry, type QuickAction,
+  type QuickAction,
 } from '../../utils/dashboardTypes'
 import type { WeeklySlot } from '../../services/scheduleService'
 import { greetingKey, hexWithAlpha } from '../../utils/format'
+import { localServiceDate } from '../../services/pickup-service'
+import {
+  findCurrentScheduleSlot,
+  resolveScheduleSessionCode,
+  scheduleLessonKey,
+} from '../../utils/scheduleSession'
 
 const TEACHER_QUICK_ACTIONS: QuickAction[] = [
   { id: 'qa1', label: 'Faire l\'appel',  labelKey: 'actions.takeAttendance', icon: 'check-circle', tint: 'primary' },
@@ -46,15 +52,6 @@ const QUICK_ACTION_ROUTES: Record<string, TeacherQuickRoute> = {
   qa3: 'TeacherDevoirs',   // Nouveau devoir
   qa4: 'TeacherMessages',  // Envoyer message
   qa5: 'TeacherStats',     // Performance
-}
-
-function seanceForSlot(entry: ScheduleEntry): string {
-  if (entry.seance) return entry.seance
-  const seances: Record<string, string> = {
-    '08:30': 'S1', '09:30': 'S2', '10:30': 'S3', '11:30': 'S4',
-    '13:00': 'S5', '14:00': 'S6',
-  }
-  return seances[entry.startTime] || 'S1'
 }
 
 export default function TeacherDashboardScreen() {
@@ -73,6 +70,8 @@ export default function TeacherDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [showGreeting, setShowGreeting] = useState(true)
   const loading = teacher.loading
+  const serviceDate = localServiceDate()
+  const prayerActivity = useTeacherPrayerActivity(teacher.classes, serviceDate, profile?.uid)
 
   // Le toast de salutation s'affiche une seule fois au montage puis s'efface.
   useEffect(() => {
@@ -80,10 +79,20 @@ export default function TeacherDashboardScreen() {
     return () => clearTimeout(id)
   }, [])
 
-  const focusSlot = teacher.todaySlots.find(s => s.status === 'now')
+  const currentSlot = teacher.todaySlots.find(s => s.status === 'now')
+  const currentScheduleSlot = findCurrentScheduleSlot(teacher.schedule?.weeklySlots ?? [])
+  const currentAttendanceSeance = currentScheduleSlot
+    ? resolveScheduleSessionCode(currentScheduleSlot)
+    : null
+  const focusSlot = currentSlot
     ?? teacher.todaySlots.find(s => s.status === 'upcoming')
     ?? teacher.todaySlots[teacher.todaySlots.length - 1]
-  const focusSeance = focusSlot ? seanceForSlot(focusSlot) : undefined
+  const focusSeance = focusSlot ? resolveScheduleSessionCode(focusSlot) : null
+  const currentPrayerSession = currentScheduleSlot
+    ? prayerActivity.sessions.find(session => session.classe === currentScheduleSlot.classe) ?? null
+    : null
+  const prayerClasse = prayerActivity.activeSession?.classe
+    ?? (currentScheduleSlot && !currentPrayerSession ? currentScheduleSlot.classe : null)
   const focusAttendanceDone = !!focusSlot && !!focusSeance && attendanceDone.has(`${focusSlot.classe}|${focusSeance}`)
   const focusHomeworkDone = !!focusSlot && homeworkPosted.has(focusSlot.classe)
   const focusStudents = focusSlot ? (teacher.byClasse[focusSlot.classe]?.length ?? 0) : teacher.kpis.students
@@ -97,6 +106,13 @@ export default function TeacherDashboardScreen() {
       ? theme.warning
       : theme.danger
   const focusIsActionable = !!focusSlot && focusSlot.status !== 'done'
+  const focusCanTakeAttendance = !!(
+    currentSlot
+    && currentScheduleSlot
+    && currentAttendanceSeance
+    && currentSlot.classe === currentScheduleSlot.classe
+    && currentSlot.startTime === currentScheduleSlot.startTime
+  )
   const focusStatusLabel = !focusSlot
     ? t('teacher.noCourseToday')
     : focusSlot.status === 'now'
@@ -104,7 +120,7 @@ export default function TeacherDashboardScreen() {
       : focusSlot.status === 'upcoming'
         ? t('teacher.nextCourse')
         : t('teacher.finishedToday')
-  const heroActionLabel = focusSlot && focusIsActionable
+  const heroActionLabel = focusCanTakeAttendance
     ? t('teacher.heroActionAttendance')
     : t('teacher.heroActionSchedule')
 
@@ -116,23 +132,15 @@ export default function TeacherDashboardScreen() {
   const goTo = (route: TeacherQuickRoute) => nav.navigate(route)
 
   const handleQuickAction = (action: QuickAction) => {
-    // Cas spécial : "Faire l'appel" cible directement le cours en cours
-    // (ou le prochain, ou le 1er du jour, sinon affiche un message)
+    // "Faire l'appel" n'ouvre que le cours réellement en cours. Sans cible
+    // exacte, l'enseignant choisit le créneau depuis son emploi du temps.
     if (action.id === 'qa1') {
-      const slots = teacher.todaySlots
-      const target = slots.find(s => s.status === 'now')
-                  ?? slots.find(s => s.status === 'upcoming')
-                  ?? slots[0]
-      if (target) {
+      if (currentScheduleSlot && currentAttendanceSeance) {
         nav.navigate('TeacherAttendance', {
-          classe: target.classe,
-          seance: seanceForSlot(target),
+          lessonKey: scheduleLessonKey(currentScheduleSlot),
         })
       } else {
-        Alert.alert(
-          t('teacher.noCourseAlert'),
-          t('teacher.noCourseAlertMsg'),
-        )
+        goTo('TeacherEdt')
       }
       return
     }
@@ -141,10 +149,12 @@ export default function TeacherDashboardScreen() {
   }
 
   const openFocusAttendance = () => {
-    if (!focusSlot) return
+    if (!focusCanTakeAttendance || !currentScheduleSlot) {
+      goTo('TeacherEdt')
+      return
+    }
     nav.navigate('TeacherAttendance', {
-      classe: focusSlot.classe,
-      seance: focusSeance,
+      lessonKey: scheduleLessonKey(currentScheduleSlot),
     })
   }
 
@@ -157,7 +167,7 @@ export default function TeacherDashboardScreen() {
   }
 
   const openHero = () => {
-    if (focusSlot && focusIsActionable) {
+    if (focusCanTakeAttendance) {
       openFocusAttendance()
       return
     }
@@ -169,10 +179,7 @@ export default function TeacherDashboardScreen() {
       nav.navigate('TeacherClasses')
       return
     }
-    nav.navigate('TeacherClasseFolder', {
-      classe: focusSlot.classe,
-      seance: focusSeance,
-    })
+    nav.navigate('TeacherClasseFolder', { classe: focusSlot.classe })
   }
 
   const openFocusStudents = () => {
@@ -193,7 +200,20 @@ export default function TeacherDashboardScreen() {
     onPress: () => void
   }[] = []
 
-  if (focusSlot && focusIsActionable && focusSeance && !focusAttendanceDone) {
+  if (prayerClasse) {
+    priorities.push({
+      key: 'prayer',
+      icon: <MoonStar size={17} color={theme.info} strokeWidth={2.3} />,
+      title: t('prayer.dashboardTitle'),
+      detail: prayerActivity.activeSession
+        ? `${prayerClasse} · ${t(`prayer.status.${prayerActivity.activeSession.status}`)}`
+        : t('prayer.dashboardDetail', { classe: prayerClasse }),
+      color: theme.info,
+      bg: theme.infoSurface,
+      onPress: () => nav.navigate('TeacherPrayer', { classe: prayerClasse }),
+    })
+  }
+  if (priorities.length < 2 && focusSlot && focusCanTakeAttendance && focusSeance && !focusAttendanceDone) {
     priorities.push({
       key: 'attendance',
       icon: <ClipboardCheck size={17} color={theme.warning} strokeWidth={2.3} />,
@@ -204,7 +224,7 @@ export default function TeacherDashboardScreen() {
       onPress: openFocusAttendance,
     })
   }
-  if (focusSlot && focusIsActionable && !focusHomeworkDone) {
+  if (priorities.length < 2 && focusSlot && focusIsActionable && !focusHomeworkDone) {
     priorities.push({
       key: 'homework',
       icon: <BookOpen size={17} color={theme.info} strokeWidth={2.3} />,
@@ -502,6 +522,8 @@ function PriorityCard({ item, theme, isAr }: {
   return (
     <Pressable
       onPress={item.onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.title}. ${item.detail}`}
       style={({ pressed }) => [
         styles.priorityCard,
         { backgroundColor: item.bg, borderColor: item.color + '33' },

@@ -49,6 +49,48 @@ service cloud.firestore {
     function teacherTeaches(classe) {
       return isTeacher() && (classe in myClasses() || classe == myDoc().classe);
     }
+    function ownsHomework(homeworkId) {
+      return exists(/databases/$(database)/documents/devoirs/$(homeworkId))
+        && get(/databases/$(database)/documents/devoirs/$(homeworkId)).data.teacherId == myUid();
+    }
+    function validHomeworkSubmissionStatus(status) {
+      return status in [
+        'pending', 'submitted', 'submitted_late', 'graded',
+        'not_submitted', 'not_done', 'excused'
+      ];
+    }
+    function validHomeworkSubmissionIdentity(submissionId, data) {
+      return data.keys().hasAll([
+          'homeworkId', 'eleveId', 'classeId', 'parentUid', 'teacherId', 'status'
+        ])
+        && submissionId == data.homeworkId + '_' + data.eleveId
+        && data.homeworkId is string
+        && data.eleveId is string
+        && data.classeId is string
+        && data.parentUid is string
+        && data.teacherId is string
+        && validHomeworkSubmissionStatus(data.status)
+        && exists(/databases/$(database)/documents/devoirs/$(data.homeworkId))
+        && exists(/databases/$(database)/documents/eleves/$(data.eleveId))
+        && data.classeId ==
+          get(/databases/$(database)/documents/devoirs/$(data.homeworkId)).data.classeId
+        && data.teacherId ==
+          get(/databases/$(database)/documents/devoirs/$(data.homeworkId)).data.teacherId
+        && data.classeId ==
+          get(/databases/$(database)/documents/eleves/$(data.eleveId)).data.classe
+        && data.parentUid ==
+          get(/databases/$(database)/documents/eleves/$(data.eleveId)).data.get('parentUid', '');
+    }
+    function validParentHomeworkProof(data) {
+      return data.attachments is list
+        && data.attachments.size() > 0
+        && data.attachments.size() <= 5
+        && data.get('parentComment', '') is string
+        && data.get('parentComment', '').size() <= 500
+        && data.submittedAt == request.time
+        && data.updatedAt == request.time
+        && data.submittedByUid == myUid();
+    }
     // parentUid de l'élève ciblé. La capacité « espace parent » est additive :
     // le rôle principal peut rester professeur/chauffeur, mais le lien live
     // `eleves/{id}.parentUid == auth.uid` reste l'unique source d'autorité.
@@ -138,19 +180,27 @@ service cloud.firestore {
         || (before == 'boarded' && after == 'dropped_off');
     }
 
+    // ── Prière : suivi de classe uniquement ─────────────────
+    function isPrayerStaffForClass(classe) {
+      return isAdmin() || teacherTeaches(classe);
+    }
     // ── users ────────────────────────────────────────────────
     match /users/{uid} {
       allow read:           if isSignedIn() && (uid == myUid() || isAdmin());
       // Créer/supprimer un compte : SUPERADMIN uniquement.
       allow create, delete: if isSuperAdmin();
       allow update: if isSuperAdmin()
-        // Admin : gère les profils (nom, classes, matière…) mais PAS le rôle.
+        // Admin : gère les profils (nom, classes, matière…) mais PAS le rôle,
+        // ni la localisation de connexion (dérivée serveur, cf. Cloud Function
+        // recordLoginLocation — jamais éditable, sinon perd toute valeur de preuve).
         || (isAdmin() &&
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
-        // Soi-même : son profil SAUF champs sensibles (anti auto-élévation).
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'lastLoginLocation']))
+        // Soi-même : son profil SAUF champs sensibles (anti auto-élévation) et
+        // SAUF lastLoginLocation (sinon on pourrait se falsifier sa propre
+        // localisation — seule la Cloud Function, via l'Admin SDK, l'écrit).
         || (isSignedIn() && uid == myUid() &&
             !request.resource.data.diff(resource.data).affectedKeys()
-               .hasAny(['role', 'classes', 'classe', 'matiere', 'cycle', 'uid']));
+               .hasAny(['role', 'classes', 'classe', 'matiere', 'cycle', 'uid', 'lastLoginLocation']));
     }
 
     // Document calculé côté serveur depuis `eleves.parentUid`. Un client ne
@@ -326,6 +376,92 @@ service cloud.firestore {
         || guardianHasClass(resource.data.classeId);
       allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classeId);
       allow delete: if isAdmin() || (isTeacher() && resource.data.teacherId == myUid());
+    }
+
+    // ── homeworkSubmissions (statut nominatif du rendu) ─────────
+    // Le parent envoie uniquement une preuve pour SON enfant. Il ne peut
+    // jamais auto-valider « rendu ». Le professeur propriétaire décide du
+    // statut final. L'admin garde la lecture globale pour les statistiques.
+    match /homeworkSubmissions/{submissionId} {
+      allow read: if isAdmin()
+        || ownsGuardianRecord(resource.data.parentUid, resource.data.eleveId)
+        || (isTeacher() && ownsHomework(resource.data.get('homeworkId', '')));
+
+      allow create: if isAdmin()
+        // Preuve initiale du parent : « envoyé », jamais « validé ».
+        || (ownsGuardianRecord(
+              request.resource.data.parentUid,
+              request.resource.data.eleveId
+            )
+            && validHomeworkSubmissionIdentity(submissionId, request.resource.data)
+            && request.resource.data.status == 'submitted'
+            && request.resource.data.createdAt == request.time
+            && request.resource.data.keys().hasOnly([
+              'homeworkId', 'eleveId', 'classeId', 'parentUid', 'teacherId',
+              'status', 'attachments', 'parentComment', 'submittedAt',
+              'submittedByUid', 'createdAt', 'updatedAt'
+            ])
+            && validParentHomeworkProof(request.resource.data))
+        // Première décision du professeur propriétaire.
+        || (isTeacher()
+            && ownsHomework(request.resource.data.get('homeworkId', ''))
+            && validHomeworkSubmissionIdentity(submissionId, request.resource.data)
+            && request.resource.data.teacherId == myUid()
+            && request.resource.data.status in [
+              'graded', 'not_submitted', 'not_done', 'excused'
+            ]
+            && request.resource.data.reviewedAt == request.time
+            && request.resource.data.reviewedByUid == myUid()
+            && request.resource.data.createdAt == request.time
+            && request.resource.data.updatedAt == request.time
+            && request.resource.data.keys().hasOnly([
+              'homeworkId', 'eleveId', 'classeId', 'parentUid', 'teacherId',
+              'status', 'attachments', 'parentComment', 'reviewedAt',
+              'reviewedByUid', 'createdAt', 'updatedAt'
+            ]));
+
+      allow update: if isAdmin()
+        // Le parent peut corriger son envoi. Après « non rendu/non fait », sa
+        // nouvelle preuve devient explicitement « envoyée en retard » et doit
+        // être revalidée par le professeur.
+        || (ownsGuardianRecord(resource.data.parentUid, resource.data.eleveId)
+            && validHomeworkSubmissionIdentity(submissionId, request.resource.data)
+            && untouched([
+              'homeworkId', 'eleveId', 'classeId', 'parentUid', 'teacherId',
+              'createdAt', 'reviewedAt', 'reviewedByUid'
+            ])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'attachments', 'parentComment', 'submittedAt',
+              'submittedByUid', 'updatedAt'
+            ])
+            && ((resource.data.status in ['pending', 'submitted']
+                  && request.resource.data.status == 'submitted')
+                || (resource.data.status in [
+                      'not_submitted', 'not_done', 'submitted_late'
+                    ]
+                    && request.resource.data.status == 'submitted_late'))
+            && validParentHomeworkProof(request.resource.data))
+        // Le professeur propriétaire est le seul décideur du statut final.
+        || (isTeacher()
+            && ownsHomework(resource.data.get('homeworkId', ''))
+            && validHomeworkSubmissionIdentity(submissionId, request.resource.data)
+            && request.resource.data.teacherId == myUid()
+            && untouched([
+              'homeworkId', 'eleveId', 'classeId', 'parentUid', 'teacherId',
+              'attachments', 'parentComment', 'submittedAt',
+              'submittedByUid', 'createdAt'
+            ])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'reviewedAt', 'reviewedByUid', 'updatedAt'
+            ])
+            && request.resource.data.status in [
+              'graded', 'not_submitted', 'not_done', 'excused'
+            ]
+            && request.resource.data.reviewedAt == request.time
+            && request.resource.data.reviewedByUid == myUid()
+            && request.resource.data.updatedAt == request.time);
+
+      allow delete: if isAdmin();
     }
 
     // ── ressources (supports de cours, non nominatifs) ───────
@@ -818,6 +954,44 @@ service cloud.firestore {
     // lien courant ; une requête non bornée reste refusée.
     match /{path=**}/passengers/{passengerId} {
       allow read: if isGuardianOf(resource.data.eleveId);
+    }
+
+    // ── Déplacement d'une classe vers la prière ───────────────────────────
+    // Suivi collectif uniquement : aucun identifiant élève. Une session est
+    // créée au statut going puis avance strictement going → praying → returned.
+    match /prayerClassSessions/{sessionId} {
+      allow read: if isPrayerStaffForClass(resource.data.classe);
+
+      // Seule la callable startPrayerClassSession (Admin SDK) crée le départ :
+      // elle prouve côté serveur que le professeur a ce cours EN CE MOMENT.
+      // Un client Firestore ne peut donc jamais contourner cette preuve.
+      allow create: if false;
+
+      allow update: if teacherTeaches(resource.data.classe)
+        && resource.data.startedByUid == myUid()
+        && untouched([
+          'serviceDate', 'classe',
+          'startedAt', 'startedByUid'
+        ])
+        && request.resource.data.updatedAt == request.time
+        && ((resource.data.status == 'going'
+            && request.resource.data.status == 'praying'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'prayingAt', 'prayingByUid', 'updatedAt'
+            ])
+            && request.resource.data.prayingAt == request.time
+            && request.resource.data.prayingByUid == myUid()
+            && !request.resource.data.keys().hasAny(['returnedAt', 'returnedByUid']))
+          || (resource.data.status == 'praying'
+            && request.resource.data.status == 'returned'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'returnedAt', 'returnedByUid', 'updatedAt'
+            ])
+            && request.resource.data.returnedAt == request.time
+            && request.resource.data.returnedByUid == myUid()
+            && untouched(['prayingAt', 'prayingByUid'])));
+
+      allow delete: if false;
     }
 
     // ── stats (agrégat du tableau de bord admin, maintenu par CF) ──

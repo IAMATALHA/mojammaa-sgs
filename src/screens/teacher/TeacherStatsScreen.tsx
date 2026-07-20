@@ -25,6 +25,11 @@ import type { EleveDoc } from '../../services/elevesService'
 import type { TeacherStackParamList } from '../../navigation/types'
 import AnimatedCounter from '../../components/AnimatedCounter'
 import { currentAcademicPeriod } from '../../utils/academicPeriod'
+import {
+  findCurrentScheduleSlot,
+  resolveScheduleSessionCode,
+  scheduleLessonKey,
+} from '../../utils/scheduleSession'
 
 interface NoteRow {
   eleveId?: string
@@ -107,10 +112,6 @@ function noteValue(row: NoteRow, bareme: 10 | 20): number | null {
 function average(values: number[]): number | null {
   if (values.length === 0) return null
   return values.reduce((sum, value) => sum + value, 0) / values.length
-}
-
-function seanceForClasse(todaySlots: { classe: string; seance?: string }[], classe: string): string | undefined {
-  return todaySlots.find(slot => slot.classe === classe)?.seance
 }
 
 function formatNumber(value: number | null | undefined, decimals = 0): string {
@@ -319,10 +320,12 @@ export default function TeacherStatsScreen() {
   }, [classStats])
 
   const openAttendance = (classe: string) => {
-    navigation.navigate('TeacherAttendance', {
-      classe,
-      seance: seanceForClasse(teacher.todaySlots, classe),
-    })
+    const currentSlot = findCurrentScheduleSlot(teacher.schedule?.weeklySlots ?? [])
+    if (!currentSlot || currentSlot.classe !== classe || !resolveScheduleSessionCode(currentSlot)) {
+      navigation.navigate('TeacherTabs', { screen: 'TeacherEdt' })
+      return
+    }
+    navigation.navigate('TeacherAttendance', { lessonKey: scheduleLessonKey(currentSlot) })
   }
 
   const openFolder = (classe: string) => navigation.navigate('TeacherClasseFolder', { classe })

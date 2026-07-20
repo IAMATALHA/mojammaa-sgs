@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   ActivityIndicator,
   Alert,
@@ -23,7 +25,6 @@ import {
 } from 'lucide-react-native'
 import type { LucideIcon } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
-import { EmptyState } from '../../components/dashboard'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import {
   closeTodayPickupSession,
@@ -55,7 +56,24 @@ const NEXT_STATUS: Partial<Record<PickupStatus, AdvancePickupStatus>> = {
   ready: 'completed',
 }
 
-function statusDetails(status: ActivePickupStatus, theme: Theme) {
+function fontFor(
+  theme: Theme,
+  isAr: boolean,
+  weight: 'regular' | 'medium' | 'semibold' | 'bold' | 'black',
+) {
+  if (isAr) return weight === 'bold' || weight === 'black'
+    ? theme.fonts.arabicBold
+    : theme.fonts.arabicSemi
+  return theme.fonts[weight]
+}
+
+function localeForLanguage(language: string): string {
+  if (language.startsWith('ar')) return 'ar-MA'
+  if (language.startsWith('en')) return 'en-US'
+  return 'fr-FR'
+}
+
+function statusDetails(status: ActivePickupStatus, theme: Theme, t: TFunction) {
   const details: Record<ActivePickupStatus, {
     title: string
     subtitle: string
@@ -66,36 +84,36 @@ function statusDetails(status: ActivePickupStatus, theme: Theme) {
     icon: LucideIcon
   }> = {
     waiting: {
-      title: 'À appeler',
-      subtitle: 'Parents arrivés · du plus ancien au plus récent',
-      badge: 'En attente',
-      action: 'Appeler l’élève',
+      title: t('pickup.admin.status.waiting.title'),
+      subtitle: t('pickup.admin.status.waiting.subtitle'),
+      badge: t('pickup.admin.status.waiting.badge'),
+      action: t('pickup.admin.status.waiting.action'),
       color: theme.warning,
       surface: theme.warningSurface,
       icon: Clock3,
     },
     called: {
-      title: 'Appelés',
-      subtitle: 'Élèves en cours de préparation',
-      badge: 'Appelé',
-      action: 'Marquer prêt',
+      title: t('pickup.admin.status.called.title'),
+      subtitle: t('pickup.admin.status.called.subtitle'),
+      badge: t('pickup.admin.status.called.badge'),
+      action: t('pickup.admin.status.called.action'),
       color: theme.info,
       surface: theme.infoSurface,
       icon: Megaphone,
     },
     ready: {
-      title: 'Prêts',
-      subtitle: 'Élèves prêts pour la remise',
-      badge: 'Prêt',
-      action: 'Confirmer la sortie',
+      title: t('pickup.admin.status.ready.title'),
+      subtitle: t('pickup.admin.status.ready.subtitle'),
+      badge: t('pickup.admin.status.ready.badge'),
+      action: t('pickup.admin.status.ready.action'),
       color: theme.success,
       surface: theme.successSurface,
       icon: UserCheck,
     },
     completed: {
-      title: 'Sorties terminées',
-      subtitle: 'Remises confirmées aujourd’hui',
-      badge: 'Terminé',
+      title: t('pickup.admin.status.completed.title'),
+      subtitle: t('pickup.admin.status.completed.subtitle'),
+      badge: t('pickup.admin.status.completed.badge'),
       action: null,
       color: theme.success,
       surface: theme.successSurface,
@@ -125,28 +143,35 @@ function arrivalMillis(request: PickupRequest): number {
   return timestampToDate(request.arrivedAt)?.getTime() ?? 0
 }
 
-function arrivalLabel(value: unknown): string {
+function arrivalLabel(value: unknown, t: TFunction, locale: string): string {
   const date = timestampToDate(value)
-  if (!date) return 'Heure d’arrivée indisponible'
-  return `Arrivé à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+  if (!date) return t('pickup.admin.time.arrivalUnavailable')
+  return t('pickup.admin.time.arrivedAt', {
+    time: date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
+  })
 }
 
-function waitingLabel(value: unknown): string | null {
+function waitingLabel(value: unknown, t: TFunction): string | null {
   const date = timestampToDate(value)
   if (!date) return null
   const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60_000))
-  if (minutes < 1) return 'à l’instant'
-  if (minutes < 60) return `${minutes} min d’attente`
+  if (minutes < 1) return t('pickup.admin.time.justNow')
+  if (minutes < 60) return t('pickup.admin.time.waitMinutes', { count: minutes })
   const hours = Math.floor(minutes / 60)
-  return `${hours} h ${minutes % 60} min d’attente`
+  return t('pickup.admin.time.waitHoursMinutes', { hours, minutes: minutes % 60 })
 }
 
-function studentName(request: PickupRequest): string {
-  return [request.elevePrenom, request.eleveNom].filter(Boolean).join(' ').trim() || 'Élève'
+function studentName(request: PickupRequest, t: TFunction): string {
+  return [request.elevePrenom, request.eleveNom].filter(Boolean).join(' ').trim()
+    || t('pickup.common.student')
 }
 
 export default function AdminPickupScreen() {
   const theme = useTheme()
+  const { t, i18n } = useTranslation()
+  const language = i18n.resolvedLanguage ?? i18n.language ?? 'fr'
+  const isAr = language.startsWith('ar')
+  const timeLocale = localeForLanguage(language)
   const [queue, setQueue] = useState<PickupRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -188,10 +213,10 @@ export default function AdminPickupScreen() {
       },
       () => {
         setSessionLoading(false)
-        setSessionError('Impossible de charger le créneau Smart Pickup.')
+        setSessionError(t('pickup.admin.errors.sessionLoad'))
       },
     )
-  }, [sessionSubscriptionKey])
+  }, [sessionSubscriptionKey, t])
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000)
@@ -218,7 +243,7 @@ export default function AdminPickupScreen() {
 
   const sections = useMemo<QueueSection[]>(
     () => STATUS_ORDER.map(status => {
-      const details = statusDetails(status, theme)
+      const details = statusDetails(status, theme, t)
       return {
         status,
         title: details.title,
@@ -231,7 +256,7 @@ export default function AdminPickupScreen() {
           .sort((a, b) => arrivalMillis(a) - arrivalMillis(b)),
       }
     }).filter(section => section.data.length > 0),
-    [theme, visibleQueue],
+    [t, theme, visibleQueue],
   )
 
   const activeCount = counts.waiting + counts.called + counts.ready
@@ -244,7 +269,7 @@ export default function AdminPickupScreen() {
     try {
       await openTodayPickupSession(180)
     } catch {
-      setSessionError('Impossible d’ouvrir le créneau Smart Pickup.')
+      setSessionError(t('pickup.admin.errors.sessionOpen'))
     } finally {
       setSessionUpdating(false)
     }
@@ -257,7 +282,7 @@ export default function AdminPickupScreen() {
     try {
       await closeTodayPickupSession()
     } catch {
-      setSessionError('Impossible de fermer le créneau Smart Pickup.')
+      setSessionError(t('pickup.admin.errors.sessionClose'))
     } finally {
       setSessionUpdating(false)
     }
@@ -266,12 +291,12 @@ export default function AdminPickupScreen() {
   const confirmClosePickupSession = () => {
     if (!sessionIsOpen || sessionUpdating) return
     Alert.alert(
-      'Fermer Smart Pickup ?',
-      'Les parents ne pourront plus annoncer une nouvelle arrivée. Les demandes déjà reçues resteront dans la file.',
+      t('pickup.admin.dialogs.closeSession.title'),
+      t('pickup.admin.dialogs.closeSession.message'),
       [
-        { text: 'Garder ouvert', style: 'cancel' },
+        { text: t('pickup.admin.dialogs.closeSession.keepOpen'), style: 'cancel' },
         {
-          text: 'Fermer le créneau',
+          text: t('pickup.admin.dialogs.closeSession.confirm'),
           style: 'destructive',
           onPress: () => { void closePickupSession() },
         },
@@ -308,12 +333,12 @@ export default function AdminPickupScreen() {
 
     if (nextStatus === 'completed') {
       Alert.alert(
-        'Confirmer la remise ?',
-        `Avant de terminer, vérifiez l’identité de la personne autorisée ou le code de retrait pour ${studentName(request)}. Cette action est irréversible.`,
+        t('pickup.admin.dialogs.handoff.title'),
+        t('pickup.admin.dialogs.handoff.message', { student: studentName(request, t) }),
         [
-          { text: 'Revenir', style: 'cancel' },
+          { text: t('common.back'), style: 'cancel' },
           {
-            text: 'Identité vérifiée',
+            text: t('pickup.admin.dialogs.handoff.verified'),
             style: 'destructive',
             onPress: () => { void performStatusUpdate(request, nextStatus) },
           },
@@ -326,7 +351,7 @@ export default function AdminPickupScreen() {
   }
 
   return (
-    <ScreenLayout title="Sortie scolaire">
+    <ScreenLayout title={t('pickup.screenTitle')}>
       <SectionList
         sections={sections}
         keyExtractor={request => request.id}
@@ -343,22 +368,46 @@ export default function AdminPickupScreen() {
                 theme.shadows.sm,
               ]}
             >
-              <View style={styles.summaryTopRow}>
+              <View style={[styles.summaryTopRow, isAr && styles.rtlRow]}>
                 <View style={styles.summaryTitleBlock}>
-                  <Text style={[styles.summaryEyebrow, { fontFamily: theme.fonts.semibold }]}>FILE EN DIRECT</Text>
-                  <Text style={[styles.summaryTitle, { fontFamily: theme.fonts.black }]}>Sortie du jour</Text>
-                  <Text style={[styles.summarySubtitle, { fontFamily: theme.fonts.regular }]}>Les demandes apparaissent automatiquement.</Text>
+                  <Text style={[
+                    styles.summaryEyebrow,
+                    isAr && styles.rtlText,
+                    isAr && styles.arabicEyebrow,
+                    { fontFamily: fontFor(theme, isAr, 'semibold') },
+                  ]}>
+                    {t('pickup.admin.summary.eyebrow')}
+                  </Text>
+                  <Text style={[
+                    styles.summaryTitle,
+                    isAr && styles.rtlText,
+                    { fontFamily: fontFor(theme, isAr, 'black') },
+                  ]}>
+                    {t('pickup.admin.summary.title')}
+                  </Text>
+                  <Text style={[
+                    styles.summarySubtitle,
+                    isAr && styles.rtlText,
+                    { fontFamily: fontFor(theme, isAr, 'regular') },
+                  ]}>
+                    {t('pickup.admin.summary.subtitle')}
+                  </Text>
                 </View>
-                <View style={styles.activeCountBubble} accessibilityLabel={`${activeCount} élèves en cours`}>
-                  <Text style={[styles.activeCount, { fontFamily: theme.fonts.black }]}>{activeCount}</Text>
-                  <Text style={[styles.activeCountLabel, { fontFamily: theme.fonts.semibold }]}>en cours</Text>
+                <View
+                  style={styles.activeCountBubble}
+                  accessibilityLabel={t('pickup.admin.summary.activeCountA11y', { count: activeCount })}
+                >
+                  <Text style={[styles.activeCount, { fontFamily: fontFor(theme, isAr, 'black') }]}>{activeCount}</Text>
+                  <Text style={[styles.activeCountLabel, { fontFamily: fontFor(theme, isAr, 'semibold') }]}>
+                    {t('pickup.admin.summary.activeLabel')}
+                  </Text>
                 </View>
               </View>
-              <View style={styles.summaryStats}>
-                <SummaryStat label="À appeler" value={counts.waiting} icon={Clock3} />
-                <SummaryStat label="Appelés" value={counts.called} icon={Megaphone} />
-                <SummaryStat label="Prêts" value={counts.ready} icon={UserCheck} />
-                <SummaryStat label="Terminés" value={counts.completed} icon={CheckCircle2} />
+              <View style={[styles.summaryStats, isAr && styles.rtlRow]}>
+                <SummaryStat label={t('pickup.admin.summary.waiting')} value={counts.waiting} icon={Clock3} theme={theme} isAr={isAr} />
+                <SummaryStat label={t('pickup.admin.summary.called')} value={counts.called} icon={Megaphone} theme={theme} isAr={isAr} />
+                <SummaryStat label={t('pickup.admin.summary.ready')} value={counts.ready} icon={UserCheck} theme={theme} isAr={isAr} />
+                <SummaryStat label={t('pickup.admin.summary.completed')} value={counts.completed} icon={CheckCircle2} theme={theme} isAr={isAr} />
               </View>
             </View>
 
@@ -370,6 +419,9 @@ export default function AdminPickupScreen() {
               error={sessionError}
               now={now}
               theme={theme}
+              t={t}
+              locale={timeLocale}
+              isAr={isAr}
               onOpen={() => { void openPickupSession() }}
               onClose={confirmClosePickupSession}
               onRetry={() => setSessionSubscriptionKey(key => key + 1)}
@@ -378,18 +430,35 @@ export default function AdminPickupScreen() {
             {loadError ? (
               <View
                 accessibilityRole="alert"
-                style={[styles.errorBox, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}
+                style={[
+                  styles.errorBox,
+                  isAr && styles.rtlRow,
+                  { backgroundColor: theme.dangerSurface, borderColor: theme.danger },
+                ]}
               >
                 <AlertTriangle size={18} color={theme.danger} strokeWidth={2.1} />
-                <Text selectable style={[styles.errorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>Impossible de charger la file de sortie.</Text>
+                <Text selectable style={[
+                  styles.errorText,
+                  isAr && styles.rtlText,
+                  { color: theme.danger, fontFamily: fontFor(theme, isAr, 'semibold') },
+                ]}>
+                  {t('pickup.admin.errors.queueLoad')}
+                </Text>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Réessayer de charger la file"
+                  accessibilityLabel={t('pickup.admin.queue.retryA11y')}
                   onPress={() => setSubscriptionKey(key => key + 1)}
-                  style={({ pressed }) => [styles.retryButton, { borderColor: theme.danger }, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.retryButton,
+                    isAr && styles.rtlRow,
+                    { borderColor: theme.danger },
+                    pressed && styles.pressed,
+                  ]}
                 >
                   <RefreshCw size={15} color={theme.danger} strokeWidth={2.2} />
-                  <Text style={[styles.retryText, { color: theme.danger, fontFamily: theme.fonts.bold }]}>Réessayer</Text>
+                  <Text style={[styles.retryText, { color: theme.danger, fontFamily: fontFor(theme, isAr, 'bold') }]}>
+                    {t('pickup.admin.queue.retry')}
+                  </Text>
                 </Pressable>
               </View>
             ) : null}
@@ -397,22 +466,44 @@ export default function AdminPickupScreen() {
             {mutationError ? (
               <View
                 accessibilityRole="alert"
-                style={[styles.errorBox, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}
+                style={[
+                  styles.errorBox,
+                  isAr && styles.rtlRow,
+                  { backgroundColor: theme.dangerSurface, borderColor: theme.danger },
+                ]}
               >
                 <AlertTriangle size={18} color={theme.danger} strokeWidth={2.1} />
-                <Text selectable style={[styles.errorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>La mise à jour a échoué. L’état affiché reste inchangé.</Text>
+                <Text selectable style={[
+                  styles.errorText,
+                  isAr && styles.rtlText,
+                  { color: theme.danger, fontFamily: fontFor(theme, isAr, 'semibold') },
+                ]}>
+                  {t('pickup.admin.errors.update')}
+                </Text>
               </View>
             ) : null}
 
             {!loading && visibleQueue.length > 0 ? (
-              <View style={styles.queueHeading}>
-                <View>
-                  <Text style={[styles.queueTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}>File d’attente</Text>
-                  <Text style={[styles.queueSubtitle, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Ordre d’arrivée dans chaque étape</Text>
+              <View style={[styles.queueHeading, isAr && styles.rtlRow]}>
+                <View style={isAr && styles.rtlBlock}>
+                  <Text style={[
+                    styles.queueTitle,
+                    isAr && styles.rtlText,
+                    { color: theme.text, fontFamily: fontFor(theme, isAr, 'bold') },
+                  ]}>
+                    {t('pickup.admin.queue.title')}
+                  </Text>
+                  <Text style={[
+                    styles.queueSubtitle,
+                    isAr && styles.rtlText,
+                    { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') },
+                  ]}>
+                    {t('pickup.admin.queue.subtitle')}
+                  </Text>
                 </View>
-                <View style={[styles.totalPill, { backgroundColor: theme.surfaceAlt }]}>
+                <View style={[styles.totalPill, isAr && styles.rtlRow, { backgroundColor: theme.surfaceAlt }]}>
                   <Users size={14} color={theme.primary} strokeWidth={2} />
-                  <Text style={[styles.totalText, { color: theme.primary, fontFamily: theme.fonts.bold }]}>{visibleQueue.length}</Text>
+                  <Text style={[styles.totalText, { color: theme.primary, fontFamily: fontFor(theme, isAr, 'bold') }]}>{visibleQueue.length}</Text>
                 </View>
               </View>
             ) : null}
@@ -420,28 +511,51 @@ export default function AdminPickupScreen() {
         )}
         ListEmptyComponent={(
           loading ? (
-            <View style={styles.loading} accessibilityLabel="Chargement de la file de sortie">
+            <View style={styles.loading} accessibilityLabel={t('pickup.admin.queue.loadingA11y')}>
               <ActivityIndicator color={theme.primary} size="large" />
-              <Text style={[styles.loadingText, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>Chargement de la file…</Text>
+              <Text style={[
+                styles.loadingText,
+                isAr && styles.rtlText,
+                { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'medium') },
+              ]}>
+                {t('pickup.admin.queue.loading')}
+              </Text>
             </View>
           ) : !loadError ? (
             <View style={[styles.emptyCard, { backgroundColor: theme.card }, theme.shadows.xs]}>
-              <EmptyState
-                icon={School}
-                title="Aucune arrivée signalée"
-                message="La file se mettra à jour dès qu’un parent annoncera son arrivée."
-              />
+              <View style={styles.emptyStateWrap}>
+                <View style={[styles.emptyStateIcon, { backgroundColor: theme.surface }]}>
+                  <School size={22} color={theme.textMuted} strokeWidth={1.75} />
+                </View>
+                <Text style={[
+                  styles.emptyStateTitle,
+                  isAr && styles.rtlText,
+                  { color: theme.text, fontFamily: fontFor(theme, isAr, 'semibold') },
+                ]}>
+                  {t('pickup.admin.queue.emptyTitle')}
+                </Text>
+                <Text style={[
+                  styles.emptyStateMessage,
+                  isAr && styles.rtlText,
+                  { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') },
+                ]}>
+                  {t('pickup.admin.queue.emptyMessage')}
+                </Text>
+              </View>
             </View>
           ) : null
         )}
         renderSectionHeader={({ section }) => (
-          <SectionHeader section={section} theme={theme} />
+          <SectionHeader section={section} theme={theme} isAr={isAr} />
         )}
         renderItem={({ item, section }) => (
           <QueueCard
             request={item}
             section={section}
             theme={theme}
+            t={t}
+            locale={timeLocale}
+            isAr={isAr}
             updating={updatingIds.has(item.id)}
             onAdvance={() => advanceRequest(item)}
           />
@@ -459,6 +573,9 @@ function AdminSessionControl({
   error,
   now,
   theme,
+  t,
+  locale,
+  isAr,
   onOpen,
   onClose,
   onRetry,
@@ -470,33 +587,53 @@ function AdminSessionControl({
   error: string | null
   now: number
   theme: Theme
+  t: TFunction
+  locale: string
+  isAr: boolean
   onOpen: () => void
   onClose: () => void
   onRetry: () => void
 }) {
   const closesAt = timestampToDate(session?.closesAt)
   const expired = Boolean(session?.isOpen && closesAt && closesAt.getTime() < now)
-  const closeTime = closesAt?.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const closeTime = closesAt?.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
   const title = isOpen
-    ? 'Créneau parent ouvert'
+    ? t('pickup.admin.session.openTitle')
     : expired
-      ? 'Créneau expiré'
-      : 'Créneau parent fermé'
+      ? t('pickup.admin.session.expiredTitle')
+      : t('pickup.admin.session.closedTitle')
   const message = isOpen && closeTime
-    ? `Les arrivées sont acceptées jusqu’à ${closeTime}.`
+    ? t('pickup.admin.session.openUntil', { time: closeTime })
     : expired
-      ? 'La fenêtre de trois heures est terminée. Vous pouvez la rouvrir si nécessaire.'
-      : 'Ouvrez une fenêtre de trois heures pour autoriser les annonces parent.'
+      ? t('pickup.admin.session.expiredMessage')
+      : t('pickup.admin.session.closedMessage')
   const color = isOpen ? theme.success : theme.warning
   const surface = isOpen ? theme.successSurface : theme.warningSurface
 
   if (loading) {
     return (
-      <View style={[styles.sessionCard, styles.sessionLoadingCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <View style={[
+        styles.sessionCard,
+        styles.sessionLoadingCard,
+        isAr && styles.rtlRow,
+        { backgroundColor: theme.card, borderColor: theme.border },
+      ]}>
         <ActivityIndicator color={theme.primary} size="small" />
-        <View style={styles.sessionTextBlock}>
-          <Text style={[styles.sessionTitle, { color: theme.text, fontFamily: theme.fonts.semibold }]}>Chargement du créneau…</Text>
-          <Text style={[styles.sessionMessage, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>Vérification de l’accès parent en direct.</Text>
+        <View style={[styles.sessionTextBlock, isAr && styles.rtlBlock]}>
+          <Text style={[
+            styles.sessionTitle,
+            isAr && styles.rtlText,
+            { color: theme.text, fontFamily: fontFor(theme, isAr, 'semibold') },
+          ]}>
+            {t('pickup.admin.session.loadingTitle')}
+          </Text>
+          <Text style={[
+            styles.sessionMessage,
+            isAr && styles.rtlText,
+            { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') },
+          ]}>
+            {t('pickup.admin.session.loadingMessage')}
+          </Text>
         </View>
       </View>
     )
@@ -504,28 +641,58 @@ function AdminSessionControl({
 
   return (
     <View style={[styles.sessionCard, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>
-      <View style={styles.sessionHeader}>
+      <View style={[styles.sessionHeader, isAr && styles.rtlRow]}>
         <View style={[styles.sessionIcon, { backgroundColor: surface }]}>
           {isOpen
             ? <CheckCircle2 size={20} color={color} strokeWidth={2.2} />
             : <Clock3 size={20} color={color} strokeWidth={2.2} />}
         </View>
-        <View style={styles.sessionTextBlock}>
-          <Text accessibilityLiveRegion="polite" style={[styles.sessionTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}>{title}</Text>
-          <Text style={[styles.sessionMessage, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>{message}</Text>
+        <View style={[styles.sessionTextBlock, isAr && styles.rtlBlock]}>
+          <Text
+            accessibilityLiveRegion="polite"
+            style={[
+              styles.sessionTitle,
+              isAr && styles.rtlText,
+              { color: theme.text, fontFamily: fontFor(theme, isAr, 'bold') },
+            ]}
+          >
+            {title}
+          </Text>
+          <Text style={[
+            styles.sessionMessage,
+            isAr && styles.rtlText,
+            { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') },
+          ]}>
+            {message}
+          </Text>
         </View>
         <View style={[styles.sessionStatePill, { backgroundColor: surface }]}>
-          <Text style={[styles.sessionStateText, { color, fontFamily: theme.fonts.bold }]}>{isOpen ? 'OUVERT' : 'FERMÉ'}</Text>
+          <Text style={[
+            styles.sessionStateText,
+            isAr && styles.rtlText,
+            { color, fontFamily: fontFor(theme, isAr, 'bold') },
+          ]}>
+            {isOpen ? t('pickup.admin.session.stateOpen') : t('pickup.admin.session.stateClosed')}
+          </Text>
         </View>
       </View>
 
       {error ? (
-        <View accessibilityRole="alert" style={[styles.sessionError, { backgroundColor: theme.dangerSurface }]}>
+        <View
+          accessibilityRole="alert"
+          style={[styles.sessionError, isAr && styles.rtlRow, { backgroundColor: theme.dangerSurface }]}
+        >
           <AlertTriangle size={15} color={theme.danger} strokeWidth={2} />
-          <Text selectable style={[styles.sessionErrorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>{error}</Text>
+          <Text selectable style={[
+            styles.sessionErrorText,
+            isAr && styles.rtlText,
+            { color: theme.danger, fontFamily: fontFor(theme, isAr, 'semibold') },
+          ]}>
+            {error}
+          </Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Actualiser le créneau Smart Pickup"
+            accessibilityLabel={t('pickup.admin.session.refreshA11y')}
             disabled={updating}
             onPress={onRetry}
             hitSlop={8}
@@ -537,12 +704,15 @@ function AdminSessionControl({
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={isOpen ? 'Fermer le créneau Smart Pickup' : 'Ouvrir Smart Pickup pendant trois heures'}
+        accessibilityLabel={isOpen
+          ? t('pickup.admin.session.closeA11y')
+          : t('pickup.admin.session.openA11y')}
         accessibilityState={{ disabled: updating, busy: updating }}
         disabled={updating}
         onPress={isOpen ? onClose : onOpen}
         style={({ pressed }) => [
           styles.sessionButton,
+          isAr && styles.rtlRow,
           {
             backgroundColor: isOpen ? theme.dangerSurface : theme.primary,
             borderColor: isOpen ? theme.danger : theme.primary,
@@ -558,8 +728,17 @@ function AdminSessionControl({
             {isOpen
               ? <X size={17} color={theme.danger} strokeWidth={2.3} />
               : <Clock3 size={17} color="#fff" strokeWidth={2.3} />}
-            <Text style={[styles.sessionButtonText, { color: isOpen ? theme.danger : '#fff', fontFamily: theme.fonts.bold }]}>
-              {isOpen ? 'Fermer le créneau' : 'Ouvrir pour 3 heures'}
+            <Text style={[
+              styles.sessionButtonText,
+              isAr && styles.rtlText,
+              {
+                color: isOpen ? theme.danger : '#fff',
+                fontFamily: fontFor(theme, isAr, 'bold'),
+              },
+            ]}>
+              {isOpen
+                ? t('pickup.admin.session.closeButton')
+                : t('pickup.admin.session.openButton')}
             </Text>
           </>
         )}
@@ -568,29 +747,58 @@ function AdminSessionControl({
   )
 }
 
-function SummaryStat({ label, value, icon: Icon }: { label: string; value: number; icon: LucideIcon }) {
+function SummaryStat({
+  label,
+  value,
+  icon: Icon,
+  theme,
+  isAr,
+}: {
+  label: string
+  value: number
+  icon: LucideIcon
+  theme: Theme
+  isAr: boolean
+}) {
   return (
     <View style={styles.summaryStat} accessibilityLabel={`${label} : ${value}`}>
       <Icon size={13} color="#FFFFFFD9" strokeWidth={2.1} />
-      <Text style={styles.summaryStatValue}>{value}</Text>
-      <Text numberOfLines={1} style={styles.summaryStatLabel}>{label}</Text>
+      <Text style={[styles.summaryStatValue, { fontFamily: fontFor(theme, isAr, 'black') }]}>{value}</Text>
+      <Text
+        numberOfLines={1}
+        style={[styles.summaryStatLabel, isAr && styles.rtlText, { fontFamily: fontFor(theme, isAr, 'semibold') }]}
+      >
+        {label}
+      </Text>
     </View>
   )
 }
 
-function SectionHeader({ section, theme }: { section: QueueSection; theme: Theme }) {
+function SectionHeader({ section, theme, isAr }: { section: QueueSection; theme: Theme; isAr: boolean }) {
   const Icon = section.icon
   return (
-    <View style={styles.sectionHeader}>
+    <View style={[styles.sectionHeader, isAr && styles.rtlRow]}>
       <View style={[styles.sectionIcon, { backgroundColor: section.surface }]}>
         <Icon size={17} color={section.color} strokeWidth={2.2} />
       </View>
-      <View style={styles.sectionTitleBlock}>
-        <Text style={[styles.sectionTitle, { color: theme.text, fontFamily: theme.fonts.bold }]}>{section.title}</Text>
-        <Text numberOfLines={1} style={[styles.sectionSubtitle, { color: theme.textSoft, fontFamily: theme.fonts.regular }]}>{section.subtitle}</Text>
+      <View style={[styles.sectionTitleBlock, isAr && styles.rtlBlock]}>
+        <Text style={[
+          styles.sectionTitle,
+          isAr && styles.rtlText,
+          { color: theme.text, fontFamily: fontFor(theme, isAr, 'bold') },
+        ]}>
+          {section.title}
+        </Text>
+        <Text numberOfLines={1} style={[
+          styles.sectionSubtitle,
+          isAr && styles.rtlText,
+          { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'regular') },
+        ]}>
+          {section.subtitle}
+        </Text>
       </View>
       <View style={[styles.sectionCount, { backgroundColor: section.surface }]}>
-        <Text style={[styles.sectionCountText, { color: section.color, fontFamily: theme.fonts.black }]}>{section.data.length}</Text>
+        <Text style={[styles.sectionCountText, { color: section.color, fontFamily: fontFor(theme, isAr, 'black') }]}>{section.data.length}</Text>
       </View>
     </View>
   )
@@ -600,55 +808,97 @@ function QueueCard({
   request,
   section,
   theme,
+  t,
+  locale,
+  isAr,
   updating,
   onAdvance,
 }: {
   request: PickupRequest
   section: QueueSection
   theme: Theme
+  t: TFunction
+  locale: string
+  isAr: boolean
   updating: boolean
   onAdvance: () => void
 }) {
-  const details = statusDetails(section.status, theme)
+  const details = statusDetails(section.status, theme, t)
   const Icon = details.icon
-  const name = studentName(request)
-  const wait = waitingLabel(request.arrivedAt)
+  const name = studentName(request, t)
+  const wait = waitingLabel(request.arrivedAt, t)
 
   return (
     <View style={[styles.queueCard, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>
-      <View style={styles.queueCardTop}>
+      <View style={[styles.queueCardTop, isAr && styles.rtlRow]}>
         <View style={[styles.studentAvatar, { backgroundColor: section.surface }]}>
-          <Text style={[styles.studentInitial, { color: section.color, fontFamily: theme.fonts.black }]}>
-            {name.slice(0, 1).toLocaleUpperCase()}
+          <Text style={[styles.studentInitial, { color: section.color, fontFamily: fontFor(theme, isAr, 'black') }]}>
+            {name.slice(0, 1).toLocaleUpperCase(locale)}
           </Text>
         </View>
-        <View style={styles.studentBlock}>
-          <Text selectable numberOfLines={1} style={[styles.studentName, { color: theme.text, fontFamily: theme.fonts.bold }]}>{name}</Text>
-          <View style={styles.studentMetaRow}>
+        <View style={[styles.studentBlock, isAr && styles.rtlBlock]}>
+          <Text selectable numberOfLines={1} style={[
+            styles.studentName,
+            isAr && styles.rtlText,
+            { color: theme.text, fontFamily: fontFor(theme, isAr, 'bold') },
+          ]}>
+            {name}
+          </Text>
+          <View style={[styles.studentMetaRow, isAr && styles.rtlRow]}>
             {request.classe ? (
-              <Text selectable numberOfLines={1} style={[styles.studentClass, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>{request.classe}</Text>
+              <Text selectable numberOfLines={1} style={[
+                styles.studentClass,
+                isAr && styles.rtlText,
+                { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'medium') },
+              ]}>
+                {request.classe}
+              </Text>
             ) : null}
-            <Text style={[styles.arrivalTime, { color: theme.textMuted, fontFamily: theme.fonts.regular }]}>{arrivalLabel(request.arrivedAt)}</Text>
+            <Text style={[
+              styles.arrivalTime,
+              isAr && styles.rtlText,
+              { color: theme.textMuted, fontFamily: fontFor(theme, isAr, 'regular') },
+            ]}>
+              {arrivalLabel(request.arrivedAt, t, locale)}
+            </Text>
           </View>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: section.surface }]}>
+        <View style={[styles.statusBadge, isAr && styles.rtlRow, { backgroundColor: section.surface }]}>
           <Icon size={13} color={section.color} strokeWidth={2.2} />
-          <Text style={[styles.statusBadgeText, { color: section.color, fontFamily: theme.fonts.bold }]}>{details.badge}</Text>
+          <Text style={[
+            styles.statusBadgeText,
+            isAr && styles.rtlText,
+            { color: section.color, fontFamily: fontFor(theme, isAr, 'bold') },
+          ]}>
+            {details.badge}
+          </Text>
         </View>
       </View>
 
       {(request.vehicleDescription || wait) ? (
         <View style={[styles.detailsRow, { backgroundColor: theme.surface }]}>
           {request.vehicleDescription ? (
-            <View style={styles.detailItem}>
+            <View style={[styles.detailItem, isAr && styles.rtlRow]}>
               <Car size={14} color={theme.primary} strokeWidth={2} />
-              <Text selectable numberOfLines={1} style={[styles.detailText, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>{request.vehicleDescription}</Text>
+              <Text selectable numberOfLines={1} style={[
+                styles.detailText,
+                isAr && styles.rtlText,
+                { color: theme.textSoft, fontFamily: fontFor(theme, isAr, 'medium') },
+              ]}>
+                {request.vehicleDescription}
+              </Text>
             </View>
           ) : null}
           {wait ? (
-            <View style={styles.detailItem}>
+            <View style={[styles.detailItem, isAr && styles.rtlRow]}>
               <Clock3 size={14} color={theme.textMuted} strokeWidth={2} />
-              <Text style={[styles.detailText, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>{wait}</Text>
+              <Text style={[
+                styles.detailText,
+                isAr && styles.rtlText,
+                { color: theme.textMuted, fontFamily: fontFor(theme, isAr, 'medium') },
+              ]}>
+                {wait}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -663,6 +913,7 @@ function QueueCard({
           onPress={onAdvance}
           style={({ pressed }) => [
             styles.actionButton,
+            isAr && styles.rtlRow,
             { backgroundColor: section.color },
             updating && styles.disabled,
             pressed && styles.pressed,
@@ -672,15 +923,32 @@ function QueueCard({
             <ActivityIndicator color="#fff" size="small" />
           ) : (
             <>
-              <Text style={[styles.actionText, { fontFamily: theme.fonts.bold }]}>{details.action}</Text>
-              <ChevronRight size={17} color="#fff" strokeWidth={2.4} />
+              <Text style={[
+                styles.actionText,
+                isAr && styles.rtlText,
+                { fontFamily: fontFor(theme, isAr, 'bold') },
+              ]}>
+                {details.action}
+              </Text>
+              <ChevronRight
+                size={17}
+                color="#fff"
+                strokeWidth={2.4}
+                style={isAr ? styles.chevronRtl : undefined}
+              />
             </>
           )}
         </Pressable>
       ) : (
-        <View style={styles.completedRow}>
+        <View style={[styles.completedRow, isAr && styles.rtlRow]}>
           <CheckCircle2 size={16} color={theme.success} strokeWidth={2.2} />
-          <Text style={[styles.completedText, { color: theme.success, fontFamily: theme.fonts.semibold }]}>Remise confirmée</Text>
+          <Text style={[
+            styles.completedText,
+            isAr && styles.rtlText,
+            { color: theme.success, fontFamily: fontFor(theme, isAr, 'semibold') },
+          ]}>
+            {t('pickup.admin.handoffConfirmed')}
+          </Text>
         </View>
       )}
     </View>
@@ -732,6 +1000,10 @@ const styles = StyleSheet.create({
   loading: { minHeight: 230, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { fontSize: 13 },
   emptyCard: { borderRadius: 24, padding: 12, marginTop: 4 },
+  emptyStateWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 32 },
+  emptyStateIcon: { width: 50, height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  emptyStateTitle: { fontSize: 14, marginTop: 10, textAlign: 'center' },
+  emptyStateMessage: { maxWidth: 260, fontSize: 12, lineHeight: 17, marginTop: 4, textAlign: 'center' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingTop: 6, paddingBottom: 9, gap: 9 },
   sectionIcon: { width: 35, height: 35, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   sectionTitleBlock: { flex: 1 },
@@ -757,6 +1029,11 @@ const styles = StyleSheet.create({
   actionText: { color: '#fff', fontSize: 13.5 },
   completedRow: { minHeight: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   completedText: { fontSize: 12 },
+  rtlRow: { flexDirection: 'row-reverse' },
+  rtlBlock: { alignItems: 'flex-end' },
+  rtlText: { textAlign: 'right', writingDirection: 'rtl' },
+  arabicEyebrow: { letterSpacing: 0 },
+  chevronRtl: { transform: [{ rotate: '180deg' }] },
   pressed: { opacity: 0.84 },
   disabled: { opacity: 0.55 },
 })

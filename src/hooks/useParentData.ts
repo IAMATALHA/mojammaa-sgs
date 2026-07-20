@@ -12,6 +12,11 @@ import { db } from '../config/firebase'
 import type { Child } from '../utils/dashboardTypes'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
 import { palette } from '../theme/designTokens'
+import {
+  homeworkSubmissionId,
+  subscribeParentHomeworkSubmissions,
+  type HomeworkSubmissionStatus,
+} from '../services/homeworkSubmissionsService'
 
 export interface ParentData {
   loading:  boolean
@@ -55,7 +60,8 @@ export function useParentData(): ParentData {
   const [eleves, setEleves] = useState<EleveDoc[]>([])
   const [absences, setAbsences] = useState<AbsenceDoc[]>([])
   const [notesByEleve, setNotesByEleve] = useState<Map<string, NoteDoc[]>>(new Map())
-  const [devoirCounts, setDevoirCounts] = useState<Map<string, number>>(new Map())
+  const [devoirsByClasse, setDevoirsByClasse] = useState<Map<string, string[]>>(new Map())
+  const [submissionStatus, setSubmissionStatus] = useState<Map<string, HomeworkSubmissionStatus>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -95,10 +101,10 @@ export function useParentData(): ParentData {
 
   useEffect(() => {
     const classes = [...new Set(eleves.map(e => e.classe).filter(Boolean))]
-    if (classes.length === 0) { setDevoirCounts(new Map()); return }
+    if (classes.length === 0) { setDevoirsByClasse(new Map()); return }
     const today = new Date().toISOString().split('T')[0]
     const unsubs: Unsubscribe[] = []
-    const counts = new Map<string, number>()
+    const devoirIds = new Map<string, string[]>()
 
     for (let i = 0; i < classes.length; i += 10) {
       const chunk = classes.slice(i, i + 10)
@@ -109,22 +115,32 @@ export function useParentData(): ParentData {
           where('academicYear', '==', period.academicYear),
         ),
         snap => {
-          chunk.forEach(c => counts.set(c, 0))
+          chunk.forEach(c => devoirIds.set(c, []))
           snap.docs.forEach(d => {
             const data = toDoc<{ dateLimite?: string; classeId: string }>(d)
             const dl = data.dateLimite
             if (typeof dl === 'string' && dl >= today) {
               const cls = data.classeId
-              counts.set(cls, (counts.get(cls) || 0) + 1)
+              devoirIds.set(cls, [...(devoirIds.get(cls) || []), d.id])
             }
           })
-          setDevoirCounts(new Map(counts))
+          setDevoirsByClasse(new Map(devoirIds))
         },
         () => {},
       ))
     }
     return () => unsubs.forEach(u => u())
   }, [eleves.map(e => e.classe).join('|'), period.academicYear])
+
+  useEffect(() => {
+    if (!profile?.uid) { setSubmissionStatus(new Map()); return }
+    return subscribeParentHomeworkSubmissions(
+      profile.uid,
+      eleves.map(eleve => eleve.codeMassar || eleve.id || ''),
+      rows => setSubmissionStatus(new Map(rows.map(row => [row.id, row.status]))),
+      () => {},
+    )
+  }, [profile?.uid, eleves.map(eleve => eleve.codeMassar || eleve.id || '').join('|')])
 
   const children = useMemo(
     () => eleves.map(e => {
@@ -144,10 +160,16 @@ export function useParentData(): ParentData {
         avatarColor: AVATAR_COLORS[hashOf(e.codeMassar) % AVATAR_COLORS.length],
         attendance: computeChildPresenceRate(absences, e.codeMassar),
         averageGrade: avgGrade,
-        pendingHomework: devoirCounts.get(e.classe) || 0,
+        pendingHomework: (devoirsByClasse.get(e.classe) || []).filter(homeworkId => {
+          const status = submissionStatus.get(homeworkSubmissionId(homeworkId, e.codeMassar))
+          return status !== 'submitted'
+            && status !== 'submitted_late'
+            && status !== 'graded'
+            && status !== 'excused'
+        }).length,
       }
     }),
-    [eleves, absences, notesByEleve, devoirCounts],
+    [eleves, absences, notesByEleve, devoirsByClasse, submissionStatus],
   )
 
   return { loading, error, eleves, children }

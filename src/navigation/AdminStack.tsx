@@ -24,6 +24,7 @@ import AdminUsersScreen from '../screens/admin/AdminUsersScreen'
 import DevoirDetailScreen from '../screens/shared/DevoirDetailScreen'
 import AdminMatiereDetailScreen from '../screens/admin/AdminMatiereDetailScreen'
 import AdminPickupScreen from '../screens/admin/admin-pickup-screen'
+import AdminPrayerScreen from '../screens/admin/AdminPrayerScreen'
 import type { AdminTabsParamList, AdminStackParamList } from './types'
 
 const Tab = createBottomTabNavigator<AdminTabsParamList>()
@@ -93,6 +94,7 @@ export default function AdminStack() {
       <Stack.Screen name="AdminMatiereDetail" component={AdminMatiereDetailScreen} />
       <Stack.Screen name="AdminUsers" component={AdminUsersScreen} />
       <Stack.Screen name="AdminPickup" component={AdminPickupScreen} />
+      <Stack.Screen name="AdminPrayer" component={AdminPrayerScreen} />
     </Stack.Navigator>
   )
 }

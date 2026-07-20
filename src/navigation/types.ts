@@ -28,8 +28,12 @@ export type DevoirDetailParams = {
     description?: string
     type?: string
     classeId?: string
+    teacherId?: string
     teacherNom?: string
     dateLimite?: string
+    eleveId?: string
+    eleveNom?: string
+    parentUid?: string
     attachments?: { url: string; name: string; mime: string; size?: number }[]
   }
 }
@@ -46,11 +50,12 @@ export type TeacherTabsParamList = {
 
 export type TeacherStackParamList = {
   TeacherTabs:          NavigatorScreenParams<TeacherTabsParamList> | undefined
-  TeacherAttendance:    { classe: string; seance?: string }
-  TeacherClasseFolder:  { classe: string; seance?: string; openAttendance?: boolean }
+  TeacherAttendance:    { lessonKey: string }
+  TeacherClasseFolder:  { classe: string; openAttendance?: boolean }
   TeacherClasseEleves:  { classe: string }
   TeacherNotes:         { classe?: string }
   TeacherComportement:  { classe: string }
+  TeacherPrayer:        { classe: string }
   TeacherRessources:    { classe: string }
   TeacherDevoirsDetail: { classe?: string }
   TeacherDevoirView:    DevoirDetailParams
@@ -115,6 +120,7 @@ export type AdminStackParamList = {
   AdminMatiereDetail: { matiere?: string; classe?: string } | undefined
   AdminUsers:     undefined
   AdminPickup:    undefined
+  AdminPrayer:    undefined
 }
 
 /** Tableau de bord admin : onglet (AdminDashboard) ciblant onglets + pile. */

@@ -12,6 +12,7 @@
  *  3. Cohérence élève↔classe au create (notes/absences/comportements)
  *  4. toIds borné pour les parents
  *  5. absenceRequests : statuts contraints + décision signée
+ *  6. devoirs : preuve parent + validation finale du professeur propriétaire
  */
 import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
@@ -22,7 +23,8 @@ import {
   assertFails,
 } from '@firebase/rules-unit-testing'
 import {
-  doc, getDoc, getDocs, setDoc, updateDoc, addDoc, collection, collectionGroup, query, where,
+  doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, collection, collectionGroup, query, where,
+  orderBy, limit,
   arrayUnion, writeBatch, serverTimestamp, deleteField,
 } from 'firebase/firestore'
 
@@ -41,6 +43,9 @@ await testEnv.withSecurityRulesDisabled(async (ctx) => {
     seed('config/superadmins', { uids: ['super1'] }),
     seed('users/admin1',  { uid: 'admin1',  role: 'admin' }),
     seed('users/prof1',   { uid: 'prof1',   role: 'professeur', classes: ['1A'], matiere: 'Maths' }),
+    seed('users/profSameClass', {
+      uid: 'profSameClass', role: 'professeur', classes: ['1A'], matiere: 'Maths',
+    }),
     seed('users/prof2',   { uid: 'prof2',   role: 'professeur', classes: ['2B'], matiere: 'PC' }),
     seed('users/profParent', {
       uid: 'profParent', role: 'professeur', classes: ['9Z'], matiere: 'Histoire',
@@ -123,6 +128,10 @@ await testEnv.withSecurityRulesDisabled(async (ctx) => {
     seed('devoirs/d2b', {
       classeId: '2B', teacherId: 'prof2', titre: 'Devoir 2B', academicYear: '2025-2026',
     }),
+    seed('devoirs/d1a', {
+      classeId: '1A', teacherId: 'prof1', titre: 'Devoir 1A',
+      dateLimite: '2026-07-18', academicYear: '2025-2026',
+    }),
     seed('ressources/res3c', {
       classeId: '3C', teacherId: 'prof2', titre: 'Ressource 3C', academicYear: '2025-2026', viewedBy: [],
     }),
@@ -201,6 +210,7 @@ await testEnv.withSecurityRulesDisabled(async (ctx) => {
 })
 
 const asUser = (uid) => testEnv.authenticatedContext(uid).firestore()
+const asGuest = () => testEnv.unauthenticatedContext().firestore()
 
 // ── Mini harness ──────────────────────────────────────────────────────────
 let passed = 0
@@ -413,6 +423,108 @@ await deny('parent lit la note d\'un autre enfant',
   getDoc(doc(asUser('parent1'), 'notes/n2')))
 await allow('destinataire lit son message',
   getDoc(doc(asUser('prof1'), 'messages/m1')))
+
+console.log('\n── 10a. Devoirs : preuve parent et décision professeur ──')
+const homeworkProof = (eleveId = 'e1', parentUid = 'parent1') => ({
+  homeworkId: 'd1a',
+  eleveId,
+  classeId: '1A',
+  parentUid,
+  teacherId: 'prof1',
+  status: 'submitted',
+  attachments: [{ url: 'https://example.test/proof.jpg', name: 'proof.jpg', mime: 'image/jpeg' }],
+  parentComment: 'Travail joint',
+  submittedAt: serverTimestamp(),
+  submittedByUid: parentUid,
+  createdAt: serverTimestamp(),
+  updatedAt: serverTimestamp(),
+})
+
+await allow('parent envoie une preuve pour SON enfant',
+  setDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e1'), homeworkProof()))
+await deny('parent forge l’identifiant déterministe de la soumission',
+  setDoc(doc(asUser('parent1'), 'homeworkSubmissions/id-libre'), homeworkProof()))
+await deny('parent envoie une preuve sans pièce jointe',
+  setDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e3'), {
+    ...homeworkProof('e3'), attachments: [],
+  }))
+await deny('autre parent soumet pour un enfant qui ne lui appartient pas',
+  setDoc(doc(asUser('parent2'), 'homeworkSubmissions/d1a_e3'), homeworkProof('e3', 'parent2')))
+await allow('parent lit la soumission de SON enfant',
+  getDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e1')))
+await deny('autre parent lit une preuve nominative',
+  getDoc(doc(asUser('parent2'), 'homeworkSubmissions/d1a_e1')))
+await allow('parent interroge uniquement ses soumissions',
+  getDocs(query(
+    collection(asUser('parent1'), 'homeworkSubmissions'),
+    where('parentUid', '==', 'parent1'),
+    where('eleveId', '==', 'e1'),
+  )))
+await deny('parent tente de lister toutes les soumissions',
+  getDocs(collection(asUser('parent1'), 'homeworkSubmissions')))
+await allow('prof propriétaire interroge les rendus de SON devoir',
+  getDocs(query(
+    collection(asUser('prof1'), 'homeworkSubmissions'),
+    where('homeworkId', '==', 'd1a'),
+  )))
+await deny('prof de la même classe lit le rendu d’un devoir qu’il ne possède pas',
+  getDoc(doc(asUser('profSameClass'), 'homeworkSubmissions/d1a_e1')))
+await deny('parent auto-valide son devoir comme rendu',
+  updateDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e1'), {
+    status: 'graded',
+    reviewedAt: serverTimestamp(),
+    reviewedByUid: 'parent1',
+    updatedAt: serverTimestamp(),
+  }))
+await allow('prof propriétaire valide le rendu',
+  updateDoc(doc(asUser('prof1'), 'homeworkSubmissions/d1a_e1'), {
+    status: 'graded',
+    reviewedAt: serverTimestamp(),
+    reviewedByUid: 'prof1',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('parent ne réécrit plus une décision validée',
+  updateDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e1'), {
+    status: 'submitted',
+    attachments: [{ url: 'https://example.test/new.jpg', name: 'new.jpg', mime: 'image/jpeg' }],
+    parentComment: 'Nouvelle version',
+    submittedAt: serverTimestamp(),
+    submittedByUid: 'parent1',
+    updatedAt: serverTimestamp(),
+  }))
+await allow('prof marque un autre élève non rendu',
+  setDoc(doc(asUser('prof1'), 'homeworkSubmissions/d1a_e3'), {
+    homeworkId: 'd1a', eleveId: 'e3', classeId: '1A',
+    parentUid: 'parent1', teacherId: 'prof1', status: 'not_submitted',
+    attachments: [], parentComment: '',
+    reviewedAt: serverTimestamp(), reviewedByUid: 'prof1',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  }))
+await allow('parent répond à non rendu avec une preuve tardive à revalider',
+  updateDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e3'), {
+    status: 'submitted_late',
+    attachments: [{ url: 'https://example.test/late.pdf', name: 'late.pdf', mime: 'application/pdf' }],
+    parentComment: 'Envoi tardif',
+    submittedAt: serverTimestamp(),
+    submittedByUid: 'parent1',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('prof non propriétaire modifie le statut',
+  updateDoc(doc(asUser('profSameClass'), 'homeworkSubmissions/d1a_e3'), {
+    status: 'graded',
+    reviewedAt: serverTimestamp(),
+    reviewedByUid: 'profSameClass',
+    updatedAt: serverTimestamp(),
+  }))
+await allow('prof propriétaire valide la preuve tardive',
+  updateDoc(doc(asUser('prof1'), 'homeworkSubmissions/d1a_e3'), {
+    status: 'graded',
+    reviewedAt: serverTimestamp(),
+    reviewedByUid: 'prof1',
+    updatedAt: serverTimestamp(),
+  }))
+await allow('admin conserve la lecture globale pour les statistiques',
+  getDocs(collection(asUser('admin1'), 'homeworkSubmissions')))
 
 console.log('\n── 10b. Capacité parent additive : prof/chauffeur liés uniquement ──')
 await allow('prof-parent lit son entitlement de classes',
@@ -891,6 +1003,169 @@ await deny('client ne termine jamais directement une tournée',
   updateDoc(doc(asUser('parent1'), 'transportTrips/trip1'), {
     status: 'completed', completedAt: serverTimestamp(), updatedAt: serverTimestamp(),
   }))
+
+console.log('\n── 13. Prière : suivi manuel de classe, sans donnée élève ──')
+const prayerStart = (startedByUid, classe = '1A', extra = {}) => ({
+  serviceDate: '2026-07-16',
+  classe,
+  status: 'going',
+  startedAt: serverTimestamp(),
+  startedByUid,
+  updatedAt: serverTimestamp(),
+  ...extra,
+})
+
+// La création passe exclusivement par la callable Admin SDK, qui vérifie le
+// créneau en cours. Toute écriture Firestore directe est refusée, même si le
+// document présenté serait par ailleurs bien formé.
+await deny('prof ne crée jamais directement une session de SA classe',
+  setDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A-direct'),
+    prayerStart('prof1')))
+await deny('autre prof ne crée jamais directement une session',
+  setDoc(doc(asUser('prof2'), 'prayerClassSessions/2026-07-16_2B-direct'),
+    prayerStart('prof2', '2B')))
+await deny('admin ne crée jamais directement une session',
+  setDoc(doc(asUser('admin1'), 'prayerClassSessions/2026-07-16_admin-attempt'),
+    prayerStart('admin1')))
+await deny('parent ne crée jamais directement une session',
+  setDoc(doc(asUser('parent1'), 'prayerClassSessions/2026-07-16_parent-attempt'),
+    prayerStart('parent1')))
+await deny('chauffeur ne crée jamais directement une session',
+  setDoc(doc(asUser('driver2'), 'prayerClassSessions/2026-07-16_driver-attempt'),
+    prayerStart('driver2')))
+await deny('visiteur ne crée jamais directement une session',
+  setDoc(doc(asGuest(), 'prayerClassSessions/2026-07-16_guest-attempt'),
+    prayerStart('guest')))
+
+// Simulation des documents créés par la callable (Admin SDK contourne les
+// rules). Les transitions client suivantes exercent ensuite les vraies rules.
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const seededAt = new Date('2026-07-16T11:00:00.000Z')
+  await Promise.all([
+    setDoc(doc(ctx.firestore(), 'prayerClassSessions/2026-07-16_1A'), {
+      serviceDate: '2026-07-16', classe: '1A', status: 'going',
+      startedAt: seededAt, startedByUid: 'prof1', updatedAt: seededAt,
+    }),
+    setDoc(doc(ctx.firestore(), 'prayerClassSessions/2026-07-16_2B'), {
+      serviceDate: '2026-07-16', classe: '2B', status: 'going',
+      startedAt: seededAt, startedByUid: 'prof2', updatedAt: seededAt,
+    }),
+  ])
+})
+
+await allow('prof lit la session de SA classe',
+  getDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A')))
+await deny('prof ne lit pas la session d’une autre classe',
+  getDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_2B')))
+await deny('parent ne lit aucune session de classe',
+  getDoc(doc(asUser('parent1'), 'prayerClassSessions/2026-07-16_1A')))
+await deny('chauffeur ne lit aucune session de classe',
+  getDoc(doc(asUser('driver2'), 'prayerClassSessions/2026-07-16_1A')))
+await deny('visiteur non connecté ne lit aucune session de classe',
+  getDoc(doc(asGuest(), 'prayerClassSessions/2026-07-16_1A')))
+await allow('admin liste les sessions de la journée',
+  getDocs(query(
+    collection(asUser('admin1'), 'prayerClassSessions'),
+    where('serviceDate', '==', '2026-07-16'),
+    orderBy('startedAt', 'asc'),
+  )))
+await allow('prof liste uniquement les sessions de SA classe',
+  getDocs(query(
+    collection(asUser('prof1'), 'prayerClassSessions'),
+    where('serviceDate', '==', '2026-07-16'),
+    where('classe', '==', '1A'),
+  )))
+await allow('prof interroge sa classe sans session (état idle)',
+  getDocs(query(
+    collection(asUser('prof1'), 'prayerClassSessions'),
+    where('serviceDate', '==', '2026-07-18'),
+    where('classe', '==', '1A'),
+    orderBy('startedAt', 'desc'),
+    limit(1),
+  )))
+await deny('prof ne peut pas lister toutes les classes du jour',
+  getDocs(query(
+    collection(asUser('prof1'), 'prayerClassSessions'),
+    where('serviceDate', '==', '2026-07-16'),
+  )))
+
+await deny('transition going → returned interdite',
+  updateDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'returned', returnedAt: serverTimestamp(), returnedByUid: 'prof1',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('parent ne peut pas faire avancer une session',
+  updateDoc(doc(asUser('parent1'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'praying', prayingAt: serverTimestamp(), prayingByUid: 'parent1',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('chauffeur ne peut pas faire avancer une session',
+  updateDoc(doc(asUser('driver2'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'praying', prayingAt: serverTimestamp(), prayingByUid: 'driver2',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('prof d’une autre classe ne fait pas avancer la session',
+  updateDoc(doc(asUser('prof2'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'praying', prayingAt: serverTimestamp(), prayingByUid: 'prof2',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('prof de la même classe mais non-créateur ne fait pas avancer la session',
+  updateDoc(doc(asUser('profSameClass'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'praying', prayingAt: serverTimestamp(), prayingByUid: 'profSameClass',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('admin est en lecture seule et ne fait pas avancer la session',
+  updateDoc(doc(asUser('admin1'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'praying', prayingAt: serverTimestamp(), prayingByUid: 'admin1',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('acteur praying falsifié refusé',
+  updateDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'praying', prayingAt: serverTimestamp(), prayingByUid: 'admin1',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('horodatage client praying refusé',
+  updateDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'praying', prayingAt: new Date(), prayingByUid: 'prof1',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('identité de classe immuable pendant la transition',
+  updateDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A'), {
+    classe: '2B', status: 'praying', prayingAt: serverTimestamp(),
+    prayingByUid: 'prof1', updatedAt: serverTimestamp(),
+  }))
+await deny('acteur du départ reste immuable pendant la transition',
+  updateDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A'), {
+    startedByUid: 'admin1', status: 'praying', prayingAt: serverTimestamp(),
+    prayingByUid: 'prof1', updatedAt: serverTimestamp(),
+  }))
+await allow('prof avance going → praying avec acteur et temps serveur',
+  updateDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'praying', prayingAt: serverTimestamp(), prayingByUid: 'prof1',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('acteur returned falsifié refusé',
+  updateDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'returned', returnedAt: serverTimestamp(), returnedByUid: 'admin1',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('prayingAt reste immuable au retour',
+  updateDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'returned', prayingAt: serverTimestamp(), returnedAt: serverTimestamp(),
+    returnedByUid: 'prof1', updatedAt: serverTimestamp(),
+  }))
+await allow('prof confirme praying → returned avec sa propre signature',
+  updateDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'returned', returnedAt: serverTimestamp(), returnedByUid: 'prof1',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('une session returned est terminale',
+  updateDoc(doc(asUser('prof1'), 'prayerClassSessions/2026-07-16_1A'), {
+    status: 'praying', prayingAt: serverTimestamp(), prayingByUid: 'prof1',
+    updatedAt: serverTimestamp(),
+  }))
+await deny('aucun client, même admin, ne supprime une session',
+  deleteDoc(doc(asUser('admin1'), 'prayerClassSessions/2026-07-16_1A')))
 
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)

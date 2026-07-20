@@ -31,6 +31,10 @@ const {
   affectedGuardianUids,
   rebuildGuardianAccess,
 } = require('./guardianAccess')
+const {
+  PrayerClassSessionError,
+  startPrayerClassSession: startPrayerClassSessionTransaction,
+} = require('./prayerClassSessions')
 
 initializeApp()
 const db = getFirestore()
@@ -890,6 +894,137 @@ async function refreshSchoolStats() {
   return summary
 }
 
+const STATS_PERIODS = new Set(['semaine', 'mois', 'S1', 'S2', 'annee'])
+const STATS_CYCLES = new Set(['prescolaire', 'primaire', 'college'])
+
+function statsFilterText(value, maxLength = 100) {
+  if (typeof value !== 'string') return ''
+  return value.trim().slice(0, maxLength)
+}
+
+function cycleFromStudent(data) {
+  const explicit = statsFilterText(data.cycle).toLowerCase()
+  if (STATS_CYCLES.has(explicit)) return explicit
+  const niveau = statsFilterText(data.niveau).toUpperCase()
+  if (niveau.includes('APIC')) return 'college'
+  if (niveau.includes('AEP')) return 'primaire'
+  return 'prescolaire'
+}
+
+function casablancaToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Casablanca',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const part = (type) => parts.find((row) => row.type === type)?.value
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
+function shiftISODate(value, days) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return value
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + days, 12))
+  return date.toISOString().slice(0, 10)
+}
+
+function statsDateRange(periodName) {
+  const today = casablancaToday()
+  const academic = academicPeriodForValue(today)
+  const startYear = Number(academic.academicYear.slice(0, 4))
+  if (periodName === 'semaine') return { ...academic, from: shiftISODate(today, -7), to: today, semestre: null }
+  if (periodName === 'mois') return { ...academic, from: `${today.slice(0, 7)}-01`, to: today, semestre: null }
+  if (periodName === 'S1') return { ...academic, from: `${startYear}-09-01`, to: `${startYear + 1}-01-31`, semestre: 'S1' }
+  if (periodName === 'S2') return { ...academic, from: `${startYear + 1}-02-01`, to: `${startYear + 1}-07-10`, semestre: 'S2' }
+  return { ...academic, from: `${startYear}-09-01`, to: today, semestre: null }
+}
+
+function statsRowInScope(row, scopeIds, scopeClasses, knownStudentIds) {
+  const eleveId = statsFilterText(row.eleveId)
+  if (eleveId && scopeIds.has(eleveId)) return true
+  if (eleveId && knownStudentIds.has(eleveId)) return false
+  return scopeClasses.has(statsFilterText(row.classe) || statsFilterText(row.classeId))
+}
+
+async function filteredSchoolStats(filters) {
+  const periodName = STATS_PERIODS.has(filters.period) ? filters.period : 'mois'
+  const cycle = STATS_CYCLES.has(filters.cycle) ? filters.cycle : ''
+  const niveau = statsFilterText(filters.niveau)
+  const classe = statsFilterText(filters.classe)
+  const matiere = statsFilterText(filters.matiere)
+  const range = statsDateRange(periodName)
+
+  const [elevesSnap, usersSnap, notesSnap, absencesSnap, devoirsSnap, submissionsSnap, coefDoc] = await Promise.all([
+    db.collection('eleves').get(),
+    db.collection('users').get(),
+    db.collection('notes').where('academicYear', '==', range.academicYear).get(),
+    db.collection('absences').where('date', '>=', range.from).where('date', '<=', range.to).get(),
+    db.collection('devoirs').where('academicYear', '==', range.academicYear).get(),
+    db.collection('homeworkSubmissions').get(),
+    db.collection('settings').doc('coefficients').get(),
+  ])
+  const toRows = (snap) => snap.docs.map((row) => ({ id: row.id, ...row.data() }))
+  const allEleves = toRows(elevesSnap).map((row) => ({ ...row, cycle: cycleFromStudent(row) }))
+  const allNotes = toRows(notesSnap)
+  const knownStudentIds = new Set(allEleves.map((row) => row.id))
+
+  const cycleEleves = allEleves.filter((row) => !cycle || row.cycle === cycle)
+  const niveauOptions = [...new Set(cycleEleves.map((row) => statsFilterText(row.niveau)).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))
+  const levelEleves = cycleEleves.filter((row) => !niveau || statsFilterText(row.niveau) === niveau)
+  const classeOptions = [...new Set(levelEleves.map((row) => statsFilterText(row.classe)).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))
+  const scopeEleves = levelEleves.filter((row) => !classe || statsFilterText(row.classe) === classe)
+  const scopeIds = new Set(scopeEleves.map((row) => row.id))
+  const scopeClasses = new Set(scopeEleves.map((row) => statsFilterText(row.classe)).filter(Boolean))
+
+  const scopedNotes = allNotes.filter((row) => statsRowInScope(row, scopeIds, scopeClasses, knownStudentIds))
+  const subjectMap = new Map()
+  scopedNotes.forEach((row) => {
+    const key = statsFilterText(row.matiere) || statsFilterText(row.subject) || statsFilterText(row.matiereLabel)
+    if (key) subjectMap.set(key, statsFilterText(row.matiereLabel) || statsFilterText(row.subject) || key)
+  })
+  const subjectOptions = [...subjectMap.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+  const selectedNotes = scopedNotes.filter((row) => {
+    if (!matiere) return true
+    const key = statsFilterText(row.matiere) || statsFilterText(row.subject) || statsFilterText(row.matiereLabel)
+    return key === matiere
+  })
+
+  const selectedAbsences = toRows(absencesSnap).filter((row) =>
+    statsRowInScope(row, scopeIds, scopeClasses, knownStudentIds))
+  const selectedDevoirs = toRows(devoirsSnap).filter((row) => {
+    const due = statsFilterText(row.dateLimite)
+    const rowClass = statsFilterText(row.classeId) || statsFilterText(row.classe)
+    return scopeClasses.has(rowClass) && due >= range.from && due <= range.to
+  })
+  const devoirIds = new Set(selectedDevoirs.map((row) => row.id))
+  const selectedSubmissions = toRows(submissionsSnap).filter((row) => devoirIds.has(statsFilterText(row.homeworkId)))
+
+  const data = computeSchoolStats({
+    eleves: scopeEleves,
+    users: toRows(usersSnap),
+    notes: selectedNotes,
+    absences: selectedAbsences,
+    devoirs: selectedDevoirs,
+    homeworkSubmissions: selectedSubmissions,
+    coefficients: coefDoc.exists ? coefDoc.data() : null,
+  }, { semestre: range.semestre, periodAttendance: true })
+
+  return {
+    data,
+    options: {
+      niveaux: niveauOptions,
+      classes: classeOptions,
+      matieres: subjectOptions,
+    },
+    applied: { period: periodName, cycle, niveau, classe, matiere },
+  }
+}
+
 // Un seul recalcul planifié par jour, juste avant l'ouverture de l'école
 // (8h30–16h) : l'admin trouve des stats fraîches le matin sans dépendre du
 // pull-to-refresh, et on ne paie aucun scan pour une école fermée. Le scan
@@ -914,6 +1049,33 @@ exports.recomputeSchoolStats = onCall(async (request) => {
   const s = await refreshSchoolStats()
   logger.info('stats/summary refreshed (on-demand)', { by: uid, eleves: s.totalEleves })
   return { ok: true, updatedAt: Date.now(), totalEleves: s.totalEleves, totalClasses: s.totalClasses }
+})
+
+// Rapport filtré de l'app admin. Les données nominatives restent côté serveur :
+// le téléphone ne reçoit que les agrégats et les valeurs des listes de filtres.
+exports.getFilteredSchoolStats = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in required.')
+  const me = await db.collection('users').doc(uid).get()
+  if (!me.exists || me.get('role') !== 'admin') {
+    throw new HttpsError('permission-denied', 'Admin only.')
+  }
+
+  const raw = request.data && typeof request.data === 'object' ? request.data : {}
+  const result = await filteredSchoolStats({
+    period: statsFilterText(raw.period, 10),
+    cycle: statsFilterText(raw.cycle, 20),
+    niveau: statsFilterText(raw.niveau),
+    classe: statsFilterText(raw.classe),
+    matiere: statsFilterText(raw.matiere),
+  })
+  logger.info('filtered school stats computed', {
+    by: uid,
+    period: result.applied.period,
+    students: result.data.totalEleves,
+    classes: result.data.totalClasses,
+  })
+  return result
 })
 
 // ── Transport scolaire : transitions d'état transactionnelles ────────────
@@ -956,6 +1118,27 @@ exports.reportTransportTripDelay = onCall(async (request) => {
       code: error && error.code ? String(error.code) : 'unknown',
     })
     throw new HttpsError('internal', 'Delay report failed.')
+  }
+})
+
+// ── Prière : départ autorisé uniquement pendant le cours du professeur ──
+// Le client ne fournit que la classe. Le serveur relit rôle, classes et EDT,
+// puis dérive lui-même la date Africa/Casablanca et les horodatages.
+exports.startPrayerClassSession = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid
+  try {
+    return await startPrayerClassSessionTransaction(db, {
+      uid,
+      classe: request.data && request.data.classe,
+    })
+  } catch (error) {
+    if (error instanceof PrayerClassSessionError) {
+      throw new HttpsError(error.code, error.message)
+    }
+    logger.error('prayer class session start failed', {
+      code: error && error.code ? String(error.code) : 'unknown',
+    })
+    throw new HttpsError('internal', 'Prayer class session start failed.')
   }
 })
 
@@ -1086,3 +1269,46 @@ exports.sendBrandedPasswordReset = onCall(
     return { ok: true }
   },
 )
+
+// ── Localisation de connexion (ville/pays) ────────────────────────────────
+// Le client ne peut pas connaître/prouver sa propre IP publique, et
+// firestore.rules interdit d'écrire lastLoginLocation depuis le client (seul
+// l'Admin SDK ici le peut) — sinon un utilisateur pourrait se falsifier une
+// localisation. On lit l'IP réelle côté serveur (rawRequest.ip, résolue par
+// le proxy de confiance Cloud Functions) et on la résout via un service tiers
+// (ipapi.co) : best effort, ne doit jamais faire échouer la connexion.
+function isPrivateIp(ip) {
+  if (!ip) return true
+  const v = ip.replace('::ffff:', '')
+  return v === '127.0.0.1' || v === '::1'
+    || v.startsWith('10.') || v.startsWith('192.168.')
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(v)
+}
+
+exports.recordLoginLocation = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in required.')
+
+  const ip = request.rawRequest && request.rawRequest.ip
+  if (isPrivateIp(ip)) return { ok: false }
+
+  try {
+    const res = await fetch(`https://ipapi.co/${ip}/json/`, { signal: AbortSignal.timeout(4000) })
+    if (!res.ok) throw new Error(`ipapi.co HTTP ${res.status}`)
+    const data = await res.json()
+    if (data.error) throw new Error(data.reason || 'ipapi.co error')
+
+    await db.collection('users').doc(uid).set({
+      lastLoginLocation: {
+        city: data.city || null,
+        country: data.country_name || null,
+        countryCode: data.country_code || null,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+    }, { merge: true })
+    return { ok: true }
+  } catch (error) {
+    logger.warn('recordLoginLocation failed', { uid, error: String(error) })
+    return { ok: false }
+  }
+})

@@ -22,6 +22,7 @@ interface UserRow {
   classes?: string[]
   lastLoginAt?: unknown
   lastLoginPlatform?: string
+  lastLoginLocation?: { city?: string; country?: string; countryCode?: string }
 }
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -61,6 +62,7 @@ export default function AdminUsersScreen() {
           classes: data.classes,
           lastLoginAt: data.lastLoginAt,
           lastLoginPlatform: data.lastLoginPlatform,
+          lastLoginLocation: data.lastLoginLocation,
         }
       })
       list.sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
@@ -87,6 +89,8 @@ export default function AdminUsersScreen() {
     const classInfo = item.classes?.join(', ') || item.classe || ''
     const lastSeen = formatRelative(item.lastLoginAt)
     const platformLabel = item.lastLoginPlatform ? PLATFORM_LABEL[item.lastLoginPlatform] || item.lastLoginPlatform : ''
+    const loc = item.lastLoginLocation
+    const locationLabel = loc ? [loc.city, loc.country].filter(Boolean).join(', ') : ''
     return (
       <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <View style={{ flex: 1 }}>
@@ -108,7 +112,7 @@ export default function AdminUsersScreen() {
           </View>
           {lastSeen ? (
             <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 4 }}>
-              {t('admin.lastSeen', { time: lastSeen })}{platformLabel ? ` · ${platformLabel}` : ''}
+              {t('admin.lastSeen', { time: lastSeen })}{platformLabel ? ` · ${platformLabel}` : ''}{locationLabel ? ` · ${locationLabel}` : ''}
             </Text>
           ) : null}
         </View>

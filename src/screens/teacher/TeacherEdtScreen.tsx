@@ -16,6 +16,9 @@ import {
 } from '../../services/scheduleService';
 import { useTeacherDayCompletion } from '../../hooks/useTeacherDayCompletion';
 import type { TeacherStackParamList } from '../../navigation/types';
+import {
+  resolveScheduleSessionCode, scheduleLessonKey,
+} from '../../utils/scheduleSession';
 
 const DAY_ORDER: WeekDay[] = [
   'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
@@ -93,7 +96,8 @@ export default function TeacherEdtScreen() {
 
   const renderCard = ({ item: s }: { item: WeeklySlot }) => {
     const isToday = s.day === today
-    const appelFait = isToday && !!s.seance && attendanceDone.has(`${s.classe}|${s.seance}`)
+    const seance = resolveScheduleSessionCode(s)
+    const appelFait = isToday && !!seance && attendanceDone.has(`${s.classe}|${seance}`)
     const devoirPoste = isToday && homeworkPosted.has(s.classe)
     return (
       <TouchableOpacity
@@ -101,14 +105,14 @@ export default function TeacherEdtScreen() {
         // Tap = aller faire l'appel de cette séance (préréglé classe+séance).
         // Aujourd'hui uniquement : l'appel est toujours daté du jour.
         disabled={!isToday}
-        onPress={() => navigation.navigate('TeacherAttendance', { classe: s.classe, seance: s.seance })}
+        onPress={() => navigation.navigate('TeacherAttendance', { lessonKey: scheduleLessonKey(s) })}
         style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
       >
         <View style={styles.timeRail}>
           <Text style={[styles.startTime, { color: theme.text }]}>{s.startTime}</Text>
-          {s.seance ? (
+          {seance ? (
             <View style={[styles.seanceBadge, { backgroundColor: theme.primarySurface }]}>
-              <Text style={[styles.seanceText, { color: theme.primary }]}>{s.seance}</Text>
+              <Text style={[styles.seanceText, { color: theme.primary }]}>{seance}</Text>
             </View>
           ) : null}
           <Text style={[styles.endTime, { color: theme.textSoft }]}>{s.endTime}</Text>
@@ -194,7 +198,7 @@ export default function TeacherEdtScreen() {
 
           <FlatList
             data={activeItems}
-            keyExtractor={(s, i) => `${s.day}-${s.startTime}-${i}`}
+            keyExtractor={scheduleLessonKey}
             renderItem={renderCard}
             contentContainerStyle={{ paddingBottom: 24 }}
             refreshControl={<RefreshControl refreshing={loading} onRefresh={() => {}} tintColor={theme.primary} />}

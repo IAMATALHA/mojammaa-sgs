@@ -24,6 +24,7 @@ import TeacherClasseFolderScreen from '../screens/teacher/TeacherClasseFolderScr
 import TeacherClasseElevesScreen from '../screens/teacher/TeacherClasseElevesScreen'
 import TeacherNotesScreen from '../screens/teacher/TeacherNotesScreen'
 import TeacherComportementScreen from '../screens/teacher/TeacherComportementScreen'
+import TeacherPrayerScreen from '../screens/teacher/TeacherPrayerScreen'
 import TeacherRessourcesScreen from '../screens/teacher/TeacherRessourcesScreen'
 import TeacherStatsScreen from '../screens/teacher/TeacherStatsScreen'
 import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen'
@@ -112,6 +113,7 @@ export default function TeacherStack() {
       <Stack.Screen name="TeacherClasseEleves" component={TeacherClasseElevesScreen} />
       <Stack.Screen name="TeacherNotes" component={TeacherNotesScreen} />
       <Stack.Screen name="TeacherComportement" component={TeacherComportementScreen} />
+      <Stack.Screen name="TeacherPrayer" component={TeacherPrayerScreen} />
       <Stack.Screen name="TeacherRessources" component={TeacherRessourcesScreen} />
       <Stack.Screen name="TeacherDevoirsDetail" component={TeacherDevoirsScreen} />
       <Stack.Screen name="TeacherDevoirView" component={DevoirDetailScreen} />

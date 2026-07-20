@@ -103,7 +103,7 @@ export default function TeacherDevoirsScreen() {
     navigation.navigate('TeacherDevoirView', {
       devoir: {
         id: d.id, titre: d.titre, description: d.description, type: d.type,
-        classeId: d.classeId, teacherNom: d.teacherNom, dateLimite: d.dateLimite,
+        classeId: d.classeId, teacherId: d.teacherId, teacherNom: d.teacherNom, dateLimite: d.dateLimite,
         attachments: d.attachments,
       },
     })

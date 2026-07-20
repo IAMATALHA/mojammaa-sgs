@@ -59,17 +59,18 @@ function resolveMime(mime: string, filename: string): string {
 
 export async function uploadAttachment(
   localUri: string,
-  folder: 'devoirs' | 'notes-imports' | 'annonces' | 'ressources',
+  folder: 'devoirs' | 'homework-submissions' | 'notes-imports' | 'annonces' | 'ressources',
   teacherUid: string,
   filename: string,
   mime: string,
+  customMetadata?: Record<string, string>,
 ): Promise<Attachment> {
   const safe = sanitize(filename) || 'fichier'
   const resolvedMime = resolveMime(mime, safe)
   const path = `${folder}/${teacherUid}/${Date.now()}_${safe}`
   const fileRef = ref(storage, path)
   const blob = await localUriToBlob(localUri)
-  await uploadBytes(fileRef, blob, { contentType: resolvedMime })
+  await uploadBytes(fileRef, blob, { contentType: resolvedMime, customMetadata })
   const url = await getDownloadURL(fileRef)
   return { url, name: safe, mime: resolvedMime, size: (blob as any).size }
 }

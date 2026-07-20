@@ -12,7 +12,7 @@ import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '—'
-const ADMIN_WEB_URL = 'https://mojammaa-admin.vercel.app'
+const ADMIN_WEB_URL = 'https://www.mojammaa.com'
 
 export default function AdminSettingsScreen() {
   const theme = useTheme()
@@ -72,7 +72,7 @@ export default function AdminSettingsScreen() {
             <RowIcon bg={theme.accentSurface}><ExternalLink size={16} color={theme.accent} strokeWidth={2} /></RowIcon>
             <View style={{ flex: 1 }}>
               <Text style={[styles.rowTitle, { color: theme.text, fontFamily: theme.fonts.semibold }]}>{t('admin.openWebAdmin')}</Text>
-              <Text style={[styles.rowSub, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>mojammaa-admin.vercel.app</Text>
+              <Text style={[styles.rowSub, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>www.mojammaa.com</Text>
             </View>
             <ChevronRight size={16} color={theme.textMuted} strokeWidth={2} />
           </TouchableOpacity>

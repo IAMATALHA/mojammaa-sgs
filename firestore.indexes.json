@@ -575,6 +575,38 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "prayerClassSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "serviceDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "classe",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "prayerClassSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "serviceDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startedAt",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
