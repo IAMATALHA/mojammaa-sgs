@@ -13,7 +13,7 @@
 import type { NavigatorScreenParams, CompositeNavigationProp, RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
-import type { AppliedScope, StudentSegment } from '../types/stats'
+import type { AppliedScope, StudentProgressionQuery, StudentSegment } from '../types/stats'
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 export type AuthStackParamList = {
@@ -122,7 +122,13 @@ export type AdminStackParamList = {
   // Drill-downs des statistiques. Chacun reçoit le périmètre RENVOYÉ par le
   // serveur, jamais celui demandé par le client : c'est ce qui garantit que le
   // total de l'écran est exactement le chiffre de la tuile qui l'a ouvert.
-  AdminScopeStudents:   { scope: AppliedScope; segment: StudentSegment; band?: string }
+  AdminScopeStudents:   {
+    scope: AppliedScope
+    segment: StudentSegment
+    band?: string
+    side?: 'below' | 'passing'
+    progression?: StudentProgressionQuery
+  }
   AdminAttendanceStats: { scope: AppliedScope }
   AdminStudentFile:     { eleveId: string; scope: AppliedScope }
   AdminScopeHomework:   { scope: AppliedScope }

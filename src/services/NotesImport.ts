@@ -23,6 +23,7 @@ export interface ParsedNoteRow {
   prenom?:     string
   note:        number
   controles:   ControlNote[]
+  integratedActivity: number | null
   ignoredControls: ControlNote[]
   detectedControlsCount: number
   rawLine:     number
@@ -31,6 +32,13 @@ export interface ParsedNoteRow {
 export interface ParseNotesOptions {
   maxControls?: number | null
   maxGrade?: number
+  controlSlots?: ImportControlSlot[]
+}
+
+export interface ImportControlSlot {
+  slot: string
+  kind: string
+  label: string
 }
 
 // Défense en profondeur (batch sécurité 6, 2026-07-12) : le fichier importé est
@@ -52,6 +60,10 @@ export class NotesImportError extends Error {
 interface ControlSlot {
   label: string
   note: number | null
+  category: 'control' | 'integrated'
+  slot?: string
+  kind?: string
+  ordinal?: number
 }
 
 function normalize(s: any): string {
@@ -91,29 +103,138 @@ function controlLabel(value: string, index: number): string {
   return txt || `Contrôle ${index + 1}`
 }
 
+function isIntegratedActivitiesLabel(value: string): boolean {
+  const text = normalize(value)
+  return (
+    (text.includes('activite') && text.includes('integ')) ||
+    text.includes('integrated activ') ||
+    text.includes('انشطة مندمجة') ||
+    text.includes('الانشطة المندمجة') ||
+    text.includes('الأنشطة المندمجة')
+  )
+}
+
+function ordinalHint(value: string): number | null {
+  const text = normalize(value)
+  const digit = text.match(/(?:^|[^0-9])([1-4])(?:[^0-9]|$)/)
+  if (digit) return Number(digit[1])
+  if (/\b(first|premier|premiere|1er)\b/.test(text) || text.includes('الأول') || text.includes('الاول')) return 1
+  if (/\b(second|deuxieme|2e)\b/.test(text) || text.includes('الثاني')) return 2
+  if (/\b(third|troisieme|3e)\b/.test(text) || text.includes('الثالث')) return 3
+  if (/\b(fourth|quatrieme|4e)\b/.test(text) || text.includes('الرابع')) return 4
+  return null
+}
+
+function kindHint(value: string): string | null {
+  const text = normalize(value)
+  if (text.includes('comprehension') || text.includes('فهم')) return 'comprehension'
+  if (text.includes('production') || text.includes('expression ecrite') || text.includes('انشاء')) return 'production'
+  if (text.includes('court') || text.includes('short')) return 'short'
+  if (text.includes('final') || text.includes('global')) return 'final'
+  if (text.includes('ressource') || text.includes('resource')) return 'resource'
+  if (text.includes('bilan') || (text.includes('integration') && !text.includes('activit'))) return 'integration'
+  if (text.includes('cycle')) return 'cycle'
+  return null
+}
+
+/**
+ * Associe les colonnes du fichier aux slots réglementaires. Les libellés
+ * métier gagnent sur la position : « Production 2 » reste production_2 même
+ * si la colonne a été déplacée dans Excel. Un simple C1/C2 conserve le repli
+ * ordinal historique.
+ */
+export function assignExpectedControlSlots<T extends {
+  label: string
+  category: 'control' | 'integrated'
+}>(
+  columns: T[],
+  expected: ImportControlSlot[] = [],
+): Array<T & Pick<ControlSlot, 'slot' | 'kind' | 'ordinal'>> {
+  if (expected.length === 0) {
+    let controlIndex = 0
+    return columns.map(column => {
+      if (column.category === 'integrated') return { ...column }
+      controlIndex += 1
+      return { ...column, ordinal: controlIndex }
+    })
+  }
+
+  const used = new Set<string>()
+  let controlIndex = 0
+  return columns.map(column => {
+    if (column.category === 'integrated') return { ...column }
+    const fallbackIndex = controlIndex
+    controlIndex += 1
+    const normalizedLabel = normalize(column.label)
+    const hintedOrdinal = ordinalHint(column.label)
+    const hintedKind = kindHint(column.label)
+
+    let candidate = expected.find(slot =>
+      !used.has(slot.slot) && normalize(slot.label) === normalizedLabel)
+    if (!candidate && hintedKind) {
+      const sameKind = expected.filter(slot => slot.kind === hintedKind && !used.has(slot.slot))
+      candidate = hintedOrdinal != null
+        ? sameKind[hintedOrdinal - 1]
+        : sameKind[0]
+    }
+    if (!candidate && hintedOrdinal != null) {
+      const ordinalCandidate = expected[hintedOrdinal - 1]
+      if (ordinalCandidate && !used.has(ordinalCandidate.slot)) candidate = ordinalCandidate
+    }
+    if (!candidate) {
+      const positional = expected[fallbackIndex]
+      candidate = positional && !used.has(positional.slot)
+        ? positional
+        : expected.find(slot => !used.has(slot.slot))
+    }
+    if (!candidate) return { ...column }
+    used.add(candidate.slot)
+    return {
+      ...column,
+      slot: candidate.slot,
+      kind: candidate.kind,
+      ordinal: expected.findIndex(slot => slot.slot === candidate!.slot) + 1,
+      label: candidate.label,
+    }
+  })
+}
+
 function buildParsedRow(
   base: Pick<ParsedNoteRow, 'codeMassar' | 'nom' | 'prenom' | 'rawLine'>,
   slots: ControlSlot[],
   maxControls?: number | null,
 ): ParsedNoteRow | null {
-  const limit = typeof maxControls === 'number' ? Math.max(0, maxControls) : slots.length
-  const allowedSlots = slots.slice(0, limit)
-  const ignoredSlots = slots.slice(limit)
-  const allowedWithNotes = allowedSlots.filter(slot => slot.note != null)
+  const controlSlots = slots
+    .filter(slot => slot.category === 'control')
+    .sort((a, b) => (a.ordinal ?? Number.MAX_SAFE_INTEGER) - (b.ordinal ?? Number.MAX_SAFE_INTEGER))
+  const integratedSlots = slots.filter(slot => slot.category === 'integrated')
+  const limit = typeof maxControls === 'number' ? Math.max(0, maxControls) : controlSlots.length
+  const allowedSlots = controlSlots.slice(0, limit)
+  const ignoredSlots = controlSlots.slice(limit)
+  const allowedWithNotes = allowedSlots
+    .map((slot, index) => ({ ...slot, numero: slot.ordinal ?? index + 1 }))
+    .filter(slot => slot.note != null)
   const ignoredWithNotes = ignoredSlots.filter(slot => slot.note != null)
+  const integratedActivity = integratedSlots.find(slot => slot.note != null)?.note ?? null
   const values = allowedWithNotes.map(slot => slot.note as number)
-  const labels = allowedWithNotes.map(slot => slot.label)
   const ignoredValues = ignoredWithNotes.map(slot => slot.note as number)
   const ignoredLabels = ignoredWithNotes.map(slot => slot.label)
 
-  if (values.length === 0) return null
+  if (values.length === 0 && integratedActivity == null) return null
 
   return {
     ...base,
-    note: averageControlNotes(values),
-    controles: makeControlNotes(values, labels),
+    note: values.length > 0 ? averageControlNotes(values) : integratedActivity as number,
+    controles: allowedWithNotes.map(slot => ({
+      numero: slot.numero,
+      label: slot.label,
+      note: slot.note as number,
+      ...(slot.slot ? { slot: slot.slot } : {}),
+      ...(slot.kind ? { kind: slot.kind } : {}),
+    })),
+    integratedActivity,
     ignoredControls: makeControlNotes(ignoredValues, ignoredLabels),
-    detectedControlsCount: slots.length,
+    detectedControlsCount: controlSlots.length,
   }
 }
 
@@ -125,19 +246,25 @@ function findMassarSubHeaderRow(rows: any[][]): number {
   )
 }
 
-function parseMassarRows(rows: any[][], maxControls?: number | null, maxGrade = 20): ParsedNoteRow[] {
+function parseMassarRows(
+  rows: any[][],
+  maxControls?: number | null,
+  maxGrade = 20,
+  expectedSlots: ImportControlSlot[] = [],
+): ParsedNoteRow[] {
   const subHeaderIdx = findMassarSubHeaderRow(rows)
   if (subHeaderIdx < 1) return []
 
   const labelRow = rows[subHeaderIdx - 1] || []
   const subRow = rows[subHeaderIdx] || []
-  const noteColumns = subRow
+  const noteColumns = assignExpectedControlSlots(subRow
     .map((cell, col) => ({ cell: asText(cell), col }))
     .filter(item => item.cell.includes('النقطة'))
     .map((item, idx) => ({
       col: item.col,
       label: controlLabel(asText(labelRow[item.col]), idx),
-    }))
+      category: isIntegratedActivitiesLabel(asText(labelRow[item.col])) ? 'integrated' as const : 'control' as const,
+    })), expectedSlots)
 
   if (noteColumns.length === 0) return []
 
@@ -152,6 +279,10 @@ function parseMassarRows(rows: any[][], maxControls?: number | null, maxGrade = 
     const slots = noteColumns.map(column => ({
       label: column.label,
       note: parseGrade(row[column.col], maxGrade),
+      category: column.category,
+      slot: column.slot,
+      kind: column.kind,
+      ordinal: column.ordinal,
     }))
     const parsedRow = buildParsedRow({
       codeMassar,
@@ -168,6 +299,7 @@ function parseMassarRows(rows: any[][], maxControls?: number | null, maxGrade = 
 function isNoteHeader(value: string): boolean {
   const txt = normalize(value)
   return (
+    isIntegratedActivitiesLabel(value) ||
     txt.includes('note') ||
     txt.includes('controle') ||
     txt.includes('contrôle') ||
@@ -178,16 +310,25 @@ function isNoteHeader(value: string): boolean {
   )
 }
 
-function parseGenericHeaderRows(rows: any[][], maxControls?: number | null, maxGrade = 20): ParsedNoteRow[] {
+function parseGenericHeaderRows(
+  rows: any[][],
+  maxControls?: number | null,
+  maxGrade = 20,
+  expectedSlots: ImportControlSlot[] = [],
+): ParsedNoteRow[] {
   const headerIdx = rows.findIndex(row =>
     Array.isArray(row) && row.filter(cell => isNoteHeader(asText(cell))).length > 0,
   )
   if (headerIdx < 0) return []
 
   const header = rows[headerIdx] || []
-  const noteColumns = header
-    .map((cell, col) => ({ col, label: asText(cell) }))
-    .filter(item => isNoteHeader(item.label))
+  const noteColumns = assignExpectedControlSlots(header
+    .map((cell, col) => ({
+      col,
+      label: asText(cell),
+      category: isIntegratedActivitiesLabel(asText(cell)) ? 'integrated' as const : 'control' as const,
+    }))
+    .filter(item => isNoteHeader(item.label)), expectedSlots)
   if (noteColumns.length === 0) return []
 
   const codeIdx = header.findIndex(cell => normalize(cell).includes('massar') || normalize(cell).includes('code'))
@@ -211,6 +352,10 @@ function parseGenericHeaderRows(rows: any[][], maxControls?: number | null, maxG
     const slots = noteColumns.map((column, idx) => ({
       label: controlLabel(column.label, idx),
       note: parseGrade(row[column.col], maxGrade),
+      category: column.category,
+      slot: column.slot,
+      kind: column.kind,
+      ordinal: column.ordinal,
     }))
     const parsedRow = buildParsedRow({
       codeMassar,
@@ -224,7 +369,12 @@ function parseGenericHeaderRows(rows: any[][], maxControls?: number | null, maxG
   return parsed
 }
 
-function parseLooseRows(rows: any[][], maxControls?: number | null, maxGrade = 20): ParsedNoteRow[] {
+function parseLooseRows(
+  rows: any[][],
+  maxControls?: number | null,
+  maxGrade = 20,
+  expectedSlots: ImportControlSlot[] = [],
+): ParsedNoteRow[] {
   const parsed: ParsedNoteRow[] = []
   rows.forEach((row, idx) => {
     if (!Array.isArray(row) || row.length === 0) return
@@ -248,8 +398,12 @@ function parseLooseRows(rows: any[][], maxControls?: number | null, maxGrade = 2
     }
 
     const slots = values.map((note, noteIdx) => ({
-      label: `Contrôle ${noteIdx + 1}`,
+      label: expectedSlots[noteIdx]?.label || `Contrôle ${noteIdx + 1}`,
       note,
+      category: 'control' as const,
+      slot: expectedSlots[noteIdx]?.slot,
+      kind: expectedSlots[noteIdx]?.kind,
+      ordinal: noteIdx + 1,
     }))
     const parsedRow = buildParsedRow({
       codeMassar,
@@ -287,14 +441,15 @@ export async function parseNotesFile(uri: string, mime: string, options: ParseNo
   }
   const maxControls = options.maxControls
   const maxGrade = options.maxGrade ?? 20
+  const controlSlots = options.controlSlots || []
 
-  const massarRows = parseMassarRows(rows, maxControls, maxGrade)
+  const massarRows = parseMassarRows(rows, maxControls, maxGrade, controlSlots)
   if (massarRows.length > 0) return massarRows
 
-  const genericHeaderRows = parseGenericHeaderRows(rows, maxControls, maxGrade)
+  const genericHeaderRows = parseGenericHeaderRows(rows, maxControls, maxGrade, controlSlots)
   if (genericHeaderRows.length > 0) return genericHeaderRows
 
-  return parseLooseRows(rows, maxControls, maxGrade)
+  return parseLooseRows(rows, maxControls, maxGrade, controlSlots)
 }
 
 export function matchToEleve<E extends { id: string; nom: string; prenom: string; codeMassar?: string }>(

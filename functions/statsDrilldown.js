@@ -24,11 +24,12 @@
  */
 const { HttpsError } = require('firebase-functions/v2/https')
 const { evaluateFollowUp, buildFollowUpContext, gradeBands } = require('./schoolStats')
+const { normalizeText, subjectEntry } = require('./collegeEvaluation')
 
 const MAX_LIMIT = 100
 const DEFAULT_LIMIT = 50
 
-const STUDENT_SEGMENTS = new Set(['all', 'followup', 'recidivists', 'band', 'threshold'])
+const STUDENT_SEGMENTS = new Set(['all', 'followup', 'recidivists', 'band', 'threshold', 'progression'])
 const GRADE_BANDS = new Set(['<8', '8-10', '10-14', '14+'])
 const ATTENDANCE_TABS = new Set(['resume', 'absences', 'retards'])
 
@@ -80,6 +81,17 @@ function bandOf(average) {
   return '14+'
 }
 
+function progressionMatchesScope(selection, appliedSubject, semesterScope) {
+  if (!selection || !appliedSubject) return false
+  const exactSubject = normalizeText(selection.matiere) === normalizeText(appliedSubject)
+  const selectionEntry = subjectEntry(selection.matiere)
+  const appliedEntry = subjectEntry(appliedSubject)
+  const sameSubject = exactSubject
+    || Boolean(selectionEntry && appliedEntry && selectionEntry.key === appliedEntry.key)
+  const sameSemester = !semesterScope || selection.semestre === semesterScope
+  return sameSubject && sameSemester
+}
+
 /**
  * Tri déterministe : deux appels successifs sur des données inchangées
  * renvoient le même ordre, sinon la pagination par curseur sauterait ou
@@ -96,6 +108,19 @@ function sortStudents(rows, segment) {
       const byPriority = (rank[a.priority] ?? 3) - (rank[b.priority] ?? 3)
       if (byPriority !== 0) return byPriority
       if (b.score !== a.score) return b.score - a.score
+      return byName(a, b)
+    })
+  }
+  if (segment === 'progression') {
+    return rows.sort((a, b) => {
+      const aDelta = Number(a.progression?.delta) || 0
+      const bDelta = Number(b.progression?.delta) || 0
+      if (aDelta !== bDelta) {
+        // Les baisses les plus fortes d'abord ; pour une cohorte en progrès,
+        // l'ordre est inversé par l'appelant via des deltas tous positifs.
+        const outcome = a.progression?.outcome || b.progression?.outcome
+        return outcome === 'improved' ? bDelta - aDelta : aDelta - bDelta
+      }
       return byName(a, b)
     })
   }
@@ -128,6 +153,7 @@ module.exports = {
   boundedLimit,
   projectStudent,
   bandOf,
+  progressionMatchesScope,
   sortStudents,
   paginate,
   encodeCursor,

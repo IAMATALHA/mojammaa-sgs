@@ -222,6 +222,40 @@ async function test(name, fn) {
 const allow = (name, p) => test(`[AUTORISÉ] ${name}`, () => assertSucceeds(p))
 const deny  = (name, p) => test(`[REFUSÉ]  ${name}`, () => assertFails(p))
 
+const mathComponent = (ordinal, note, overrides = {}) => ({
+  slot: `written_${ordinal}`,
+  category: 'control',
+  kind: 'written',
+  ordinal,
+  label: `Contrôle écrit ${ordinal}`,
+  note,
+  bareme: 20,
+  ...overrides,
+})
+
+const structuredMathNote = (evaluations, overrides = {}) => ({
+  eleveId: 'e1',
+  classe: '1A',
+  cycle: 'college',
+  niveau: '1AC',
+  matiere: 'Maths',
+  note: evaluations.reduce((sum, item) => sum + Number(item.note || 0), 0) / evaluations.length,
+  bareme: 20,
+  schemaVersion: 2,
+  gradeSource: 'structured',
+  evaluationPolicyVersion: 'college-evaluation-2025-2026-v1',
+  subjectKey: 'mathematiques',
+  evaluations,
+  activitesIntegrees: null,
+  calculation: {
+    status: evaluations.length === 3 ? 'complete' : 'provisional',
+    completed: evaluations.length,
+    expected: 3,
+    completionRate: Math.round((evaluations.length / 3) * 100),
+  },
+  ...overrides,
+})
+
 console.log('\n── 1. Messages : enveloppe immuable ──')
 await allow('parent crée un message direct (flux compose parent)',
   addDoc(collection(asUser('parent1'), 'messages'), {
@@ -334,6 +368,174 @@ await test('[AUTORISÉ] import par chunk de 10 notes (taille RULES_SAFE_BATCH_SI
   }
   await assertSucceeds(batch.commit())
 })
+
+console.log('\n── 4a. Notes v2 : composantes bornées et rétrocompatibilité ──')
+await allow('prof crée une note v2 provisoire avec C1 seulement',
+  setDoc(doc(asUser('prof1'), 'notes/v2_provisional'),
+    structuredMathNote([mathComponent(1, 14)])))
+await allow('prof crée une note v2 complète C1/C2/C3',
+  setDoc(doc(asUser('prof1'), 'notes/v2_complete'),
+    structuredMathNote([
+      mathComponent(1, 10),
+      mathComponent(2, 12),
+      mathComponent(3, 14),
+    ])))
+await allow('prof met à jour une note v2 complète (flux modal/import)',
+  setDoc(doc(asUser('prof1'), 'notes/v2_complete'),
+    structuredMathNote([
+      mathComponent(1, 11),
+      mathComponent(2, 13),
+      mathComponent(3, 15),
+    ]), { merge: true }))
+await allow('admin crée une note v2 avec activité intégrée valide',
+  setDoc(doc(asUser('admin1'), 'notes/v2_integrated'), {
+    ...structuredMathNote([
+      mathComponent(1, 12),
+      {
+        slot: 'integrated_activities',
+        category: 'integrated',
+        kind: 'integrated_activity',
+        ordinal: 2,
+        label: 'Activités intégrées',
+        note: 16,
+        bareme: 20,
+      },
+    ], {
+      matiere: 'Arabe',
+      subjectKey: 'arabe',
+      note: 14,
+      activitesIntegrees: { note: 16, label: 'Activités intégrées' },
+      calculation: {
+        status: 'provisional', completed: 2, expected: 3, completionRate: 67,
+      },
+    }),
+  }))
+await deny('admin ne peut pas appliquer le schéma v2 collège au primaire AEP',
+  setDoc(doc(asUser('admin1'), 'notes/v2_primary_scale'), structuredMathNote([
+    mathComponent(1, 7, { bareme: 10 }),
+  ], {
+    classe: '5AEP-1',
+    cycle: 'primaire',
+    niveau: '5AEP',
+    note: 7,
+    bareme: 10,
+  })))
+await deny('admin ne peut pas déclarer une classe AEP sur 20',
+  setDoc(doc(asUser('admin1'), 'notes/v2_primary_wrong_scale'),
+    structuredMathNote([mathComponent(1, 14)], {
+      classe: '5AEP-1',
+      cycle: 'primaire',
+      niveau: '5AEP',
+      note: 14,
+      bareme: 20,
+    })))
+await deny('admin ne peut pas déclarer une classe non-AEP sur 10',
+  setDoc(doc(asUser('admin1'), 'notes/v2_college_wrong_scale'), structuredMathNote([
+    mathComponent(1, 7, { bareme: 10 }),
+  ], {
+    classe: '1APIC-1',
+    note: 7,
+    bareme: 10,
+  })))
+await deny('admin ne peut pas appliquer le schéma v2 collège au préscolaire',
+  setDoc(doc(asUser('admin1'), 'notes/v2_preschool'), structuredMathNote([
+    mathComponent(1, 12),
+  ], {
+    classe: 'GS-1',
+    cycle: 'prescolaire',
+    niveau: 'GS',
+    note: 12,
+  })))
+await deny('prof envoie une moyenne supérieure au barème',
+  setDoc(doc(asUser('prof1'), 'notes/v2_bad_average'),
+    structuredMathNote([mathComponent(1, 14)], { note: 21 })))
+await deny('prof envoie une composante négative',
+  setDoc(doc(asUser('prof1'), 'notes/v2_negative_component'),
+    structuredMathNote([mathComponent(1, -1)], { note: 0 })))
+await deny('prof envoie une composante sous forme de chaîne',
+  setDoc(doc(asUser('prof1'), 'notes/v2_string_component'),
+    structuredMathNote([mathComponent(1, '14')], { note: 14 })))
+await deny('prof envoie un barème non réglementaire',
+  setDoc(doc(asUser('prof1'), 'notes/v2_bad_scale'),
+    structuredMathNote([mathComponent(1, 10)], { bareme: 12 })))
+await deny('prof envoie une liste de composantes vide',
+  setDoc(doc(asUser('prof1'), 'notes/v2_empty'),
+    structuredMathNote([], {
+      note: 0,
+      calculation: { status: 'provisional', completed: 1, expected: 3, completionRate: 0 },
+    })))
+await deny('admin ne contourne pas la limite de cinq composantes',
+  setDoc(doc(asUser('admin1'), 'notes/v2_too_many'),
+    structuredMathNote(Array.from({ length: 6 }, (_, index) =>
+      mathComponent(index + 1, 10, { slot: `slot_${index + 1}`, ordinal: Math.min(index + 1, 5) })), {
+      calculation: { status: 'complete', completed: 5, expected: 5, completionRate: 100 },
+    })))
+await deny('prof envoie une catégorie de composante inconnue',
+  setDoc(doc(asUser('prof1'), 'notes/v2_bad_category'),
+    structuredMathNote([mathComponent(1, 14, { category: 'exam' })])))
+await deny('prof ajoute un champ libre dans une composante',
+  setDoc(doc(asUser('prof1'), 'notes/v2_extra_component_field'),
+    structuredMathNote([mathComponent(1, 14, { secret: 'x' })])))
+await deny('admin envoie une activité intégrée hors barème',
+  setDoc(doc(asUser('admin1'), 'notes/v2_bad_integrated'),
+    structuredMathNote([
+      mathComponent(1, 12),
+      {
+        slot: 'integrated_activities',
+        category: 'integrated',
+        kind: 'integrated_activity',
+        ordinal: 2,
+        label: 'Activités intégrées',
+        note: 25,
+        bareme: 20,
+      },
+    ], {
+      matiere: 'Arabe',
+      subjectKey: 'arabe',
+      note: 12,
+      activitesIntegrees: { note: 25, label: 'Activités intégrées' },
+      calculation: {
+        status: 'provisional', completed: 2, expected: 3, completionRate: 67,
+      },
+    })))
+await deny('prof duplique le même slot de contrôle',
+  setDoc(doc(asUser('prof1'), 'notes/v2_duplicate_slot'),
+    structuredMathNote([
+      mathComponent(1, 10),
+      mathComponent(2, 12, { slot: 'written_1' }),
+    ])))
+await deny('un document v2 ne peut pas être rétrogradé en legacy',
+  updateDoc(doc(asUser('prof1'), 'notes/v2_complete'), {
+    schemaVersion: deleteField(),
+    evaluations: deleteField(),
+    evaluationPolicyVersion: deleteField(),
+    subjectKey: deleteField(),
+    calculation: deleteField(),
+  }))
+for (const [field, value] of [
+  ['evaluationPolicyVersion', 'college-evaluation-2025-2026-v1'],
+  ['policyVersion', 'college-evaluation-2025-2026-v1'],
+  ['subjectKey', 'mathematiques'],
+  ['evaluations', [mathComponent(1, 14)]],
+]) {
+  await deny(`un document legacy sans schemaVersion ne peut pas porter ${field}`,
+    setDoc(doc(asUser('admin1'), `notes/legacy_hidden_${field}`), {
+      eleveId: 'e1',
+      classe: '1A',
+      matiere: 'Maths',
+      note: 14,
+      [field]: value,
+    }))
+  await deny(`un document schemaVersion 1 ne peut pas porter ${field}`,
+    setDoc(doc(asUser('admin1'), `notes/legacy_v1_hidden_${field}`), {
+      eleveId: 'e1',
+      classe: '1A',
+      matiere: 'Maths',
+      note: 14,
+      schemaVersion: 1,
+      [field]: value,
+    }))
+}
 
 console.log('\n── 5. Absences : mêmes garanties ──')
 await allow('prof enregistre l\'appel pour SON élève',

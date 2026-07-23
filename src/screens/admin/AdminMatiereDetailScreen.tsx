@@ -23,55 +23,18 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTranslation } from 'react-i18next'
 import {
   AlertTriangle, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, GraduationCap,
-  TrendingDown, TrendingUp, Users,
+  Users,
 } from 'lucide-react-native'
-import { collection, getDocs, query, where } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
-import { db } from '../../config/firebase'
-import { toDocs } from '../../services/firestore'
-import type { UserProfile } from '../../types'
+import { functions } from '../../config/firebase'
 import type { AdminStackParamList } from '../../navigation/types'
-import { currentAcademicPeriod } from '../../utils/academicPeriod'
-
-interface NoteRow {
-  id?: string
-  eleveId: string
-  eleveNom?: string
-  elevePrenom?: string
-  classe?: string
-  semestre?: string
-  matiere?: string
-  matiereLabel?: string
-  note?: unknown
-  bareme?: unknown
-}
-type ValidNote = NoteRow & { classe: string; matiereLabel: string; note: number; bareme: number; eq: number }
+import type { AppliedScope, ScopeStudent } from '../../types/stats'
+import { translatedFormula } from '../../utils/evaluationFormula'
 
 const isPrimaire = (classe: string) => /aep/i.test(classe)
 const baremeOf = (classe: string) => (isPrimaire(classe) ? 10 : 20)
-const asString = (value: unknown) => typeof value === 'string' ? value.trim() : ''
-const asNumber = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value.replace(',', '.'))
-    return Number.isFinite(parsed) ? parsed : null
-  }
-  return null
-}
-/** équivalent /20 pour comparer des classes de barèmes différents */
-const eq20 = (note: number, bareme: number) => note * (20 / bareme)
 const round1 = (v: number) => Math.round(v * 10) / 10
-const norm = (value: string) => value.trim().toLowerCase()
-
-function subjectOf(row: NoteRow): string {
-  return asString(row.matiereLabel) || asString(row.matiere)
-}
-
-function baremeOfNote(row: NoteRow): number {
-  const bareme = asNumber(row.bareme)
-  if (bareme === 10 || bareme === 20) return bareme
-  return baremeOf(asString(row.classe))
-}
 
 function tintFor(eq: number | null, theme: Theme) {
   if (eq == null) return theme.textMuted
@@ -84,22 +47,90 @@ function tintFor(eq: number | null, theme: Theme) {
 interface ClasseAgg {
   classe: string
   bareme: number
-  avg: number            // barème brut de la classe
-  avgEq: number          // équivalent /20 (tri + couleur)
-  success: number        // % élèves ≥ moitié
+  avg: number | null     // barème brut de la classe
+  avgEq: number | null   // équivalent /20 (tri + couleur)
+  success: number | null // % élèves ≥ moitié
   weakCount: number      // élèves < moitié
-  count: number          // élèves notés
+  gradedCount: number
+  enrolledCount: number
 }
 interface SubjectAgg {
   matiere: string
-  avgEq: number
-  success: number
+  avgEq: number | null
+  success: number | null
   weakCount: number      // élèves uniques sous la moyenne
   studentCount: number
   notesCount: number
 }
-interface WeakStudent { id: string; nom: string; classe: string; matiere: string; note: number; bareme: number; eq: number }
-interface WeakSubjectGroup { matiere: string; count: number; avgEq: number; students: WeakStudent[] }
+interface WeakStudent { id: string; nom: string; classe: string; note: number }
+interface TeacherLite { id: string; nom: string; prenom: string; matiere: string; classes: string[] }
+interface ProgressionTransition {
+  fromSlot: string
+  fromKind: string
+  fromLabel: string
+  toSlot: string
+  toKind: string
+  toLabel: string
+  fromAverage: number
+  toAverage: number
+  delta: number
+  comparableStudents: number
+  improved: number
+  stable: number
+  declined: number
+}
+interface ProgressionRow {
+  matiere: string
+  semestre: string
+  formula: 'weighted_blocks' | 'english_three_blocks'
+  integratedWeight: number
+  formulaLabel: string
+  controls: { slot: string; label: string; average: number; entered: number }[]
+  transitions: ProgressionTransition[]
+  documents: number
+  complete: number
+  provisional: number
+  componentsEntered: number
+  componentsExpected: number
+  coverageRate: number
+  comparableStudents: number
+  improved: number
+  stable: number
+  declined: number
+  latestDelta: number | null
+}
+interface GradeDetailsResult {
+  summary: {
+    average: number | null
+    successRate: number | null
+    belowThreshold: number
+    gradedStudents: number
+    notesCount: number
+    s1: number | null
+    s2: number | null
+  }
+  classes: {
+    name: string
+    studentCount: number
+    gradedStudents: number
+    avgNote: number | null
+    successRate: number | null
+    passingStudents: number
+    notesCount: number
+  }[]
+  subjects: {
+    name: string
+    notesCount: number
+    avgNote: number | null
+    successRate: number | null
+    gradedStudents: number
+    below10Count: number
+  }[]
+  weakStudents: ScopeStudent[]
+  teachers: TeacherLite[]
+  progression: ProgressionRow[]
+  applied: AppliedScope
+}
 
 export default function AdminMatiereDetailScreen() {
   const theme = useTheme()
@@ -111,20 +142,7 @@ export default function AdminMatiereDetailScreen() {
   const classeParam = route.params?.classe?.trim() || ''
   const scope = route.params?.scope
   const title = matiere || classeParam || t('admin.notesAnalysis')
-  // Le semestre vient du périmètre appliqué par le serveur quand l'écran est
-  // ouvert depuis les statistiques : sans ça, l'admin qui consulte « S1 »
-  // arriverait sur les notes du semestre courant et verrait d'autres chiffres
-  // que ceux de la tuile. `annee` laisse le semestre libre (S1 + S2).
-  const fallbackPeriod = currentAcademicPeriod()
-  const period = scope
-    ? {
-      academicYear: fallbackPeriod.academicYear,
-      semestre: scope.notesPeriod === 'annee' ? '' : scope.notesPeriod,
-    }
-    : fallbackPeriod
-
-  const [notes, setNotes] = useState<NoteRow[]>([])
-  const [teachers, setTeachers] = useState<UserProfile[]>([])
+  const [details, setDetails] = useState<GradeDetailsResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -132,176 +150,112 @@ export default function AdminMatiereDetailScreen() {
   const load = useCallback(async () => {
     setError(null)
     try {
-      const notesCol = collection(db, 'notes')
-      // Périmètre « année » = S1 + S2 : on n'ajoute alors AUCUNE contrainte de
-      // semestre. La poser à '' ne renverrait rien, et poser le semestre
-      // courant contredirait le total de la tuile.
-      const base = [
-        where('academicYear', '==', period.academicYear),
-        ...(period.semestre ? [where('semestre', '==', period.semestre)] : []),
-      ]
-      const noteReads = matiere
-        ? [
-          getDocs(query(notesCol, where('matiereLabel', '==', matiere), ...base)),
-          getDocs(query(notesCol, where('matiere', '==', matiere), ...base)),
-        ]
-        : classeParam
-          ? [getDocs(query(notesCol, where('classe', '==', classeParam), ...base))]
-          : [getDocs(query(notesCol, ...base))]
-      const [noteSnaps, usersSnap] = await Promise.all([
-        Promise.all(noteReads),
-        getDocs(query(collection(db, 'users'), where('role', '==', 'professeur'))),
-      ])
-      const merged = new Map<string, NoteRow>()
-      noteSnaps.forEach(snap => {
-        snap.docs.forEach(d => merged.set(d.id, { ...(d.data() as NoteRow), id: d.id }))
+      const baseScope: AppliedScope = scope || {
+        period: 'mois',
+        academicYear: '',
+        cycle: '',
+        niveau: '',
+        classe: '',
+        matiere: '',
+        notesPeriod: 'S1',
+        from: '',
+        to: '',
+      }
+      const response = await httpsCallable<
+        { scope: AppliedScope; matiere?: string; classe?: string },
+        GradeDetailsResult
+      >(functions, 'getStatsGradeDetails')({
+        scope: baseScope,
+        matiere: matiere || undefined,
+        classe: classeParam || undefined,
       })
-      const filtered = [...merged.values()].filter(row => {
-        if (matiere && norm(subjectOf(row)) !== norm(matiere)) return false
-        if (classeParam && asString(row.classe) !== classeParam) return false
-        return true
-      })
-      setNotes(filtered)
-      setTeachers(
-        toDocs<UserProfile>(usersSnap).filter(u => {
-          const matchesSubject = matiere ? norm(u.matiere || '') === norm(matiere) : true
-          const classes = Array.isArray(u.classes) ? u.classes : []
-          const matchesClass = classeParam ? u.classe === classeParam || classes.includes(classeParam) : true
-          return matchesSubject && matchesClass
-        }),
-      )
+      setDetails(response.data)
     } catch (e: any) {
       setError(e?.message || t('common.error'))
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [classeParam, matiere, period.academicYear, period.semestre, t])
+  }, [classeParam, matiere, scope, t])
 
   useEffect(() => { load() }, [load])
   const onRefresh = () => { setRefreshing(true); load() }
 
   const stats = useMemo(() => {
-    const valid = notes
-      .map(n => {
-        const classe = asString(n.classe)
-        const subject = subjectOf(n)
-        const note = asNumber(n.note)
-        const bareme = baremeOfNote(n)
-        if (!classe || !subject || note == null || note < 0 || note > bareme) return null
-        return {
-          ...n,
-          classe,
-          matiereLabel: subject,
-          note,
-          bareme,
-          eq: eq20(note, bareme),
-        }
-      })
-      .filter((n): n is ValidNote => n != null)
-
-    const studentAggs = (rows: ValidNote[]) => {
-      const byStudent = new Map<string, ValidNote[]>()
-      rows.forEach(row => {
-        const id = row.eleveId || row.id || `${row.classe}-${row.elevePrenom || ''}-${row.eleveNom || ''}`
-        if (!id) return
-        const bucket = byStudent.get(id) || []
-        bucket.push(row)
-        byStudent.set(id, bucket)
-      })
-      return [...byStudent.entries()].map(([id, bucket]) => {
-        const first = bucket[0]
-        const eq = bucket.reduce((sum, row) => sum + row.eq, 0) / bucket.length
-        const note = bucket.reduce((sum, row) => sum + row.note, 0) / bucket.length
-        return {
-          id,
-          nom: `${first.elevePrenom || ''} ${first.eleveNom || ''}`.trim() || first.eleveId || id,
-          classe: first.classe,
-          matiere: first.matiereLabel,
-          note: round1(note),
-          bareme: first.bareme,
-          eq: round1(eq),
-        }
-      })
-    }
-
-    // ── par classe ──
-    const byClasse = new Map<string, ValidNote[]>()
-    valid.forEach(n => {
-      const rows = byClasse.get(n.classe) || []
-      rows.push(n)
-      byClasse.set(n.classe, rows)
-    })
-    const classes: ClasseAgg[] = [...byClasse.entries()].map(([classe, rows]) => {
-      const bareme = baremeOf(classe)
-      const avg = rows.reduce((s, row) => s + row.note, 0) / rows.length
-      const avgEq = rows.reduce((s, row) => s + row.eq, 0) / rows.length
-      const students = studentAggs(rows)
+    const summary = details?.summary
+    const classes: ClasseAgg[] = (details?.classes || []).map(row => {
+      const bareme = baremeOf(row.name)
+      const avgEq = row.avgNote
       return {
-        classe, bareme,
-        avg: round1(avg),
-        avgEq: round1(avgEq),
-        success: students.length ? Math.round((students.filter(student => student.eq >= 10).length / students.length) * 100) : 0,
-        weakCount: students.filter(student => student.eq < 10).length,
-        count: students.length,
+        classe: row.name,
+        bareme,
+        avg: avgEq == null ? null : round1(avgEq * (bareme / 20)),
+        avgEq,
+        success: row.successRate,
+        weakCount: Math.max(0, row.gradedStudents - row.passingStudents),
+        gradedCount: row.gradedStudents,
+        enrolledCount: row.studentCount,
       }
-    }).sort((a, b) => a.avgEq - b.avgEq)   // la plus faible d'abord : là où agir
-
-    const bySubject = new Map<string, typeof valid>()
-    valid.forEach(n => {
-      const rows = bySubject.get(n.matiereLabel) || []
-      rows.push(n)
-      bySubject.set(n.matiereLabel, rows)
+    }).sort((a, b) => {
+      if (a.avgEq == null) return b.avgEq == null ? a.classe.localeCompare(b.classe, 'fr') : 1
+      if (b.avgEq == null) return -1
+      return a.avgEq - b.avgEq
     })
-    const subjects: SubjectAgg[] = [...bySubject.entries()].map(([subject, rows]) => {
-      const avgEq = rows.reduce((sum, row) => sum + row.eq, 0) / rows.length
-      const students = studentAggs(rows)
-      return {
-        matiere: subject,
-        avgEq: round1(avgEq),
-        success: students.length ? Math.round((students.filter(student => student.eq >= 10).length / students.length) * 100) : 0,
-        weakCount: students.filter(student => student.eq < 10).length,
-        studentCount: students.length,
-        notesCount: rows.length,
-      }
-    }).sort((a, b) => a.avgEq - b.avgEq || a.matiere.localeCompare(b.matiere, 'fr'))
-
-    // ── globaux (équivalent /20) ──
-    const eqAll = valid.map(n => n.eq)
-    const globalStudents = studentAggs(valid)
-    const schoolAvg = eqAll.length ? round1(eqAll.reduce((s, v) => s + v, 0) / eqAll.length) : null
-    const success = globalStudents.length ? Math.round((globalStudents.filter(student => student.eq >= 10).length / globalStudents.length) * 100) : null
-    const weakTotal = globalStudents.filter(student => student.eq < 10).length
-
-    // ── S1 vs S2 (équivalent /20) ──
-    const semAvg = (s: string) => {
-      const vals = valid.filter(n => n.semestre === s).map(n => n.eq)
-      return vals.length ? round1(vals.reduce((x, y) => x + y, 0) / vals.length) : null
+    const subjects: SubjectAgg[] = (details?.subjects || []).map(row => ({
+      matiere: row.name,
+      avgEq: row.avgNote,
+      success: row.successRate,
+      weakCount: row.below10Count,
+      studentCount: row.gradedStudents,
+      notesCount: row.notesCount,
+    })).sort((a, b) => {
+      if (a.avgEq == null) return b.avgEq == null ? a.matiere.localeCompare(b.matiere, 'fr') : 1
+      if (b.avgEq == null) return -1
+      return a.avgEq - b.avgEq || a.matiere.localeCompare(b.matiere, 'fr')
+    })
+    const weakStudents: WeakStudent[] = (details?.weakStudents || []).map(student => ({
+      id: student.id,
+      nom: `${student.prenom} ${student.nom}`.trim(),
+      classe: student.classe,
+      note: student.average ?? 0,
+    }))
+    return {
+      classes,
+      subjects,
+      schoolAvg: summary?.average ?? null,
+      success: summary?.successRate ?? null,
+      weakTotal: summary?.belowThreshold ?? 0,
+      notesCount: summary?.notesCount ?? 0,
+      weakest: weakStudents,
     }
-    const s1 = semAvg('S1'), s2 = semAvg('S2')
-    const delta = s1 != null && s2 != null ? round1(s2 - s1) : null
-
-    // ── élèves en difficulté, catégorisés par matière ──
-    const weakBySubject: WeakSubjectGroup[] = [...bySubject.entries()]
-      .map(([subject, rows]) => {
-        const students = studentAggs(rows)
-          .filter(student => student.eq < 10)
-          .sort((a, b) => a.eq - b.eq || a.nom.localeCompare(b.nom, 'fr'))
-        const avgEq = students.length ? round1(students.reduce((sum, student) => sum + student.eq, 0) / students.length) : 0
-        return { matiere: subject, count: students.length, avgEq, students }
-      })
-      .filter(group => group.count > 0)
-      .sort((a, b) => b.count - a.count || a.avgEq - b.avgEq || a.matiere.localeCompare(b.matiere, 'fr'))
-    const weakest = weakBySubject
-      .flatMap(group => group.students)
-      .sort((a, b) => a.eq - b.eq || a.matiere.localeCompare(b.matiere, 'fr'))
-      .slice(0, 12)
-
-    return { classes, subjects, schoolAvg, success, weakTotal, s1, s2, delta, notesCount: valid.length, weakBySubject, weakest }
-  }, [notes])
+  }, [details])
+  const teachers = details?.teachers || []
 
   const fontBold = isAr ? theme.fonts.arabicBold : theme.fonts.bold
   const fontSemi = isAr ? theme.fonts.arabicSemi : theme.fonts.semibold
+  const openProgression = (
+    row: ProgressionRow,
+    transition: ProgressionTransition,
+    outcome: 'improved' | 'stable' | 'declined',
+  ) => {
+    const applied = details?.applied || scope
+    if (!applied) return
+    navigation.navigate('AdminScopeStudents', {
+      // Le drill-down devient un véritable sous-périmètre matière. Le serveur
+      // refuse ensuite toute transition qui ne correspond pas à ce scope.
+      scope: { ...applied, matiere: row.matiere },
+      segment: 'progression',
+      progression: {
+        matiere: row.matiere,
+        semestre: row.semestre,
+        fromSlot: transition.fromSlot,
+        toSlot: transition.toSlot,
+        fromLabel: transition.fromLabel,
+        toLabel: transition.toLabel,
+        outcome,
+      },
+    })
+  }
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -341,25 +295,94 @@ export default function AdminMatiereDetailScreen() {
             <Kpi value={String(stats.weakTotal)} label={t('admin.below10')} color={stats.weakTotal > 0 ? theme.danger : theme.success} theme={theme} isAr={isAr} />
           </View>
 
-          {/* S1 → S2 */}
-          {stats.s1 != null && stats.s2 != null && (
+          {/* Progression intra-semestre — signal précoce, avant S1 → S2. */}
+          {(details?.progression || []).length > 0 ? (
             <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <View style={[styles.rowBetween, isAr && styles.rowReverse]}>
-                <Text style={[styles.cardTitle, { color: theme.text, fontFamily: fontBold }]}>S1 → S2</Text>
-                <View style={[styles.deltaPill, { backgroundColor: (stats.delta ?? 0) >= 0 ? theme.successSurface : theme.dangerSurface }]}>
-                  {(stats.delta ?? 0) >= 0
-                    ? <TrendingUp size={13} color={theme.success} strokeWidth={2.4} />
-                    : <TrendingDown size={13} color={theme.danger} strokeWidth={2.4} />}
-                  <Text style={{ color: (stats.delta ?? 0) >= 0 ? theme.success : theme.danger, fontFamily: theme.fonts.bold, fontSize: 12, marginStart: 4 }}>
-                    {(stats.delta ?? 0) > 0 ? '+' : ''}{stats.delta} pt
+              <Text style={[styles.cardTitle, { color: theme.text, fontFamily: fontBold }]}>
+                {t('admin.controlProgression')}
+              </Text>
+              <Text style={[styles.progressionLead, { color: theme.textSoft, fontFamily: fontSemi }]}>
+                {t('admin.controlProgressionLead')}
+              </Text>
+              {details!.progression.map(row => (
+                <View key={`${row.matiere}-${row.semestre}`} style={[styles.progressionBlock, { borderTopColor: theme.border }]}>
+                  <View style={[styles.rowBetween, isAr && styles.rowReverse]}>
+                    <Text numberOfLines={1} style={[styles.progressionTitle, { color: theme.text, fontFamily: fontBold }]}>
+                      {row.matiere} · {row.semestre}
+                    </Text>
+                    <Text style={[styles.coverageText, { color: theme.textMuted }]}>
+                      {t('admin.componentsCoverage', {
+                        entered: row.componentsEntered,
+                        expected: row.componentsExpected,
+                        percent: row.coverageRate,
+                      })}
+                    </Text>
+                  </View>
+                  {row.controls.length > 0 ? (
+                    <Text style={[styles.controlSequence, { color: theme.textSoft }]}>
+                      {row.controls
+                        .map(control => `${control.label} ${control.average}/20 · n=${control.entered}`)
+                        .join('   |   ')}
+                    </Text>
+                  ) : null}
+                  {(row.transitions || []).length === 0 ? (
+                    <Text style={[styles.noComparison, { color: theme.textMuted, fontFamily: fontSemi }]}>
+                      {t('admin.noComparisonYet')}
+                    </Text>
+                  ) : (row.transitions || []).map(transition => {
+                    const deltaColor = transition.delta > 0
+                      ? theme.success
+                      : transition.delta < 0 ? theme.danger : theme.textSoft
+                    const deltaSurface = transition.delta > 0
+                      ? theme.successSurface
+                      : transition.delta < 0 ? theme.dangerSurface : theme.surfaceAlt
+                    return (
+                      <View
+                        key={`${transition.fromSlot}-${transition.toSlot}`}
+                        style={[styles.transitionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                      >
+                        <View style={[styles.rowBetween, isAr && styles.rowReverse]}>
+                          <Text numberOfLines={2} style={[styles.transitionTitle, { color: theme.text, fontFamily: fontBold }]}>
+                            {transition.fromLabel} → {transition.toLabel}
+                          </Text>
+                          <View style={[styles.deltaPill, { backgroundColor: deltaSurface }]}>
+                            <Text style={{ color: deltaColor, fontFamily: theme.fonts.bold, fontSize: 11 }}>
+                              {transition.delta > 0 ? '+' : ''}{transition.delta} pt
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.transitionAverage, { color: theme.textSoft, fontFamily: fontSemi }]}>
+                          {transition.fromAverage}/20 → {transition.toAverage}/20 · {t('admin.comparableStudents', {
+                            count: transition.comparableStudents,
+                          })}
+                        </Text>
+                        <View style={styles.progressionMetrics}>
+                          <ProgressionOutcome
+                            label={t('admin.progressedCount', { count: transition.improved })}
+                            color={theme.success}
+                            onPress={() => openProgression(row, transition, 'improved')}
+                          />
+                          <ProgressionOutcome
+                            label={t('admin.stableCount', { count: transition.stable })}
+                            color={theme.textSoft}
+                            onPress={() => openProgression(row, transition, 'stable')}
+                          />
+                          <ProgressionOutcome
+                            label={t('admin.declinedCount', { count: transition.declined })}
+                            color={theme.danger}
+                            onPress={() => openProgression(row, transition, 'declined')}
+                          />
+                        </View>
+                      </View>
+                    )
+                  })}
+                  <Text style={[styles.formulaText, { color: theme.textMuted }]}>
+                    {translatedFormula(row.formula, row.integratedWeight, t)}
                   </Text>
                 </View>
-              </View>
-              <Text style={{ color: theme.textSoft, fontFamily: fontSemi, fontSize: 13, marginTop: 6 }}>
-                {stats.s1}/20 → {stats.s2}/20
-              </Text>
+              ))}
             </View>
-          )}
+          ) : null}
 
           {!matiere ? (
             <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -369,13 +392,16 @@ export default function AdminMatiereDetailScreen() {
               ) : stats.subjects.map(subject => {
                 const tint = tintFor(subject.avgEq, theme)
                 const displayBareme = classeParam ? baremeOf(classeParam) : 20
-                const displayAvg = classeParam ? round1(subject.avgEq * (displayBareme / 20)) : subject.avgEq
+                const displayAvg = subject.avgEq == null
+                  ? null
+                  : classeParam ? round1(subject.avgEq * (displayBareme / 20)) : subject.avgEq
                 return (
                   <Pressable
                     key={subject.matiere}
                     onPress={() => navigation.navigate('AdminMatiereDetail', {
                       matiere: subject.matiere,
                       classe: classeParam || undefined,
+                      scope: details?.applied || scope,
                     })}
                     accessibilityRole="button"
                     accessibilityLabel={subject.matiere}
@@ -391,16 +417,20 @@ export default function AdminMatiereDetailScreen() {
                           </View>
                         )}
                       </View>
-                      <View style={[styles.progressTrack, { backgroundColor: theme.surfaceAlt }]}>
-                        <View style={[styles.progressFill, { width: `${Math.max(3, Math.min(100, (subject.avgEq / 20) * 100))}%`, backgroundColor: tint }]} />
-                      </View>
+                      {subject.avgEq != null ? (
+                        <View style={[styles.progressTrack, { backgroundColor: theme.surfaceAlt }]}>
+                          <View style={[styles.progressFill, { width: `${Math.max(3, Math.min(100, (subject.avgEq / 20) * 100))}%`, backgroundColor: tint }]} />
+                        </View>
+                      ) : null}
                     </View>
                     <View style={styles.classNums}>
                       <Text style={{ color: tint, fontFamily: theme.fonts.black, fontSize: 16, fontVariant: ['tabular-nums'] }}>
-                        {displayAvg}<Text style={{ fontSize: 11, color: theme.textMuted }}>/{displayBareme}</Text>
+                        {displayAvg == null ? '—' : (
+                          <>{displayAvg}<Text style={{ fontSize: 11, color: theme.textMuted }}>/{displayBareme}</Text></>
+                        )}
                       </Text>
                       <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: fontSemi, fontSize: 10.5 }}>
-                        {subject.success}% · {subject.studentCount} {t('admin.eleves').toLowerCase()} · {subject.notesCount} {t('admin.notesShort')}
+                        {subject.success == null ? '—' : `${subject.success}%`} · {subject.studentCount} {t('admin.eleves').toLowerCase()} · {subject.notesCount} {t('admin.notesShort')}
                       </Text>
                     </View>
                   </Pressable>
@@ -422,6 +452,7 @@ export default function AdminMatiereDetailScreen() {
                     onPress={() => navigation.navigate('AdminMatiereDetail', {
                       matiere: matiere || undefined,
                       classe: c.classe,
+                      scope: details?.applied || scope,
                     })}
                     accessibilityRole="button"
                     accessibilityLabel={c.classe}
@@ -437,16 +468,20 @@ export default function AdminMatiereDetailScreen() {
                           </View>
                         )}
                       </View>
-                      <View style={[styles.progressTrack, { backgroundColor: theme.surfaceAlt }]}>
-                        <View style={[styles.progressFill, { width: `${Math.max(3, Math.min(100, (c.avgEq / 20) * 100))}%`, backgroundColor: tint }]} />
-                      </View>
+                      {c.avgEq != null ? (
+                        <View style={[styles.progressTrack, { backgroundColor: theme.surfaceAlt }]}>
+                          <View style={[styles.progressFill, { width: `${Math.max(3, Math.min(100, (c.avgEq / 20) * 100))}%`, backgroundColor: tint }]} />
+                        </View>
+                      ) : null}
                     </View>
                     <View style={styles.classNums}>
                       <Text style={{ color: tint, fontFamily: theme.fonts.black, fontSize: 16, fontVariant: ['tabular-nums'] }}>
-                        {c.avg}<Text style={{ fontSize: 11, color: theme.textMuted }}>/{c.bareme}</Text>
+                        {c.avg == null ? '—' : (
+                          <>{c.avg}<Text style={{ fontSize: 11, color: theme.textMuted }}>/{c.bareme}</Text></>
+                        )}
                       </Text>
                       <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: fontSemi, fontSize: 10.5 }}>
-                        {c.success}% · {c.count} {t('admin.eleves').toLowerCase()}
+                        {c.success == null ? '—' : `${c.success}%`} · {c.gradedCount}/{c.enrolledCount} {t('admin.eleves').toLowerCase()}
                       </Text>
                     </View>
                   </Pressable>
@@ -463,17 +498,15 @@ export default function AdminMatiereDetailScreen() {
               {teachers.length === 0 ? (
                 <Text style={{ color: theme.textSoft, fontSize: 13, marginTop: 8 }}>{t('common.noData')}</Text>
               ) : teachers.map(p => {
-                const classes = Array.isArray(p.classes) && p.classes.length > 0
-                  ? p.classes.join(' · ')
-                  : (p.classe || '—')
+                const classes = p.classes.length > 0 ? p.classes.join(' · ') : '—'
                 return (
-                  <View key={p.uid || p.email} style={[styles.teacherRow, { borderBottomColor: theme.border }, isAr && styles.rowReverse]}>
+                  <View key={p.id} style={[styles.teacherRow, { borderBottomColor: theme.border }, isAr && styles.rowReverse]}>
                     <View style={[styles.teacherIcon, { backgroundColor: theme.infoSurface }]}>
                       <GraduationCap size={15} color={theme.info} strokeWidth={2.2} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0, marginStart: 10 }}>
                       <Text numberOfLines={1} style={{ color: theme.text, fontFamily: fontBold, fontSize: 13.5 }}>
-                        {`${p.prenom || ''} ${p.nom || ''}`.trim() || p.email}
+                        {`${p.prenom || ''} ${p.nom || ''}`.trim() || p.matiere || t('admin.profs')}
                       </Text>
                       <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: fontSemi, fontSize: 11.5, marginTop: 1 }}>
                         {classes}
@@ -490,66 +523,61 @@ export default function AdminMatiereDetailScreen() {
             <Text style={[styles.cardTitle, { color: theme.text, fontFamily: fontBold }]}>{t('admin.strugglingStudents')}</Text>
             {stats.notesCount === 0 ? (
               <Text style={{ color: theme.textSoft, fontSize: 13, marginTop: 8 }}>{t('common.noData')}</Text>
-            ) : (() => {
-              if (stats.weakBySubject.length === 0) {
-                return (
-                  <View style={[styles.rowStart, { marginTop: 8 }]}>
-                    <CheckCircle2 size={15} color={theme.success} strokeWidth={2.2} />
-                    <Text style={{ color: theme.success, fontFamily: fontSemi, fontSize: 13, marginStart: 6 }}>
-                      {t('admin.noStrugglingStudents')}
-                    </Text>
-                  </View>
-                )
-              }
-              if (!matiere) {
-                return stats.weakBySubject.map(group => (
+            ) : stats.weakest.length === 0 ? (
+              <View style={[styles.rowStart, { marginTop: 8 }]}>
+                <CheckCircle2 size={15} color={theme.success} strokeWidth={2.2} />
+                <Text style={{ color: theme.success, fontFamily: fontSemi, fontSize: 13, marginStart: 6 }}>
+                  {t('admin.noStrugglingStudents')}
+                </Text>
+              </View>
+            ) : (
+              <>
+                {stats.weakest.map(w => (
                   <Pressable
-                    key={group.matiere}
-                    onPress={() => navigation.navigate('AdminMatiereDetail', {
-                      matiere: group.matiere,
-                      classe: classeParam || undefined,
-                    })}
+                    key={w.id}
+                    onPress={() => {
+                      const applied = details?.applied || scope
+                      if (applied) navigation.navigate('AdminStudentFile', { eleveId: w.id, scope: applied })
+                    }}
                     accessibilityRole="button"
-                    accessibilityLabel={`${group.matiere}, ${group.count} ${t('admin.eleves').toLowerCase()}`}
-                    style={({ pressed }) => [styles.weakSubjectRow, { borderBottomColor: theme.border }, pressed && styles.pressed]}
+                    accessibilityLabel={w.nom}
+                    accessibilityHint={t('admin.statsOpenStudentFile')}
+                    style={({ pressed }) => [
+                      styles.teacherRow,
+                      { borderBottomColor: theme.border },
+                      isAr && styles.rowReverse,
+                      pressed && styles.pressed,
+                    ]}
                   >
-                    <View style={[styles.weakSubjectIcon, { backgroundColor: theme.dangerSurface }]}>
-                      <AlertTriangle size={14} color={theme.danger} strokeWidth={2.3} />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text numberOfLines={1} style={{ color: theme.text, fontFamily: fontBold, fontSize: 14 }}>
-                        {group.matiere}
-                      </Text>
-                      <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: fontSemi, fontSize: 11.5, marginTop: 2 }}>
-                        {group.students.slice(0, 2).map(student => `${student.nom} · ${student.classe}`).join('  |  ')}
-                      </Text>
-                    </View>
-                    <View style={[styles.weakCountButton, { backgroundColor: theme.dangerSurface }]}>
-                      <Text style={{ color: theme.danger, fontFamily: theme.fonts.black, fontSize: 12, fontVariant: ['tabular-nums'] }}>
-                        {group.count}
-                      </Text>
-                      <Text style={{ color: theme.danger, fontFamily: fontSemi, fontSize: 10, marginStart: 3 }}>
-                        {t('admin.eleves').toLowerCase()}
-                      </Text>
-                      <ChevronRight size={13} color={theme.danger} strokeWidth={2.4} />
-                    </View>
-                  </Pressable>
-                ))
-              }
-              return stats.weakest.map((w, i) => (
-                <View key={`${w.nom}-${w.classe}-${i}`} style={[styles.teacherRow, { borderBottomColor: theme.border }, isAr && styles.rowReverse]}>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text numberOfLines={1} style={{ color: theme.text, fontFamily: fontBold, fontSize: 13.5 }}>{w.nom}</Text>
                     <Text numberOfLines={1} style={{ color: theme.textSoft, fontFamily: fontSemi, fontSize: 11.5, marginTop: 1 }}>
-                      {w.classe} · {w.matiere}
+                      {w.classe}
                     </Text>
                   </View>
                   <Text style={{ color: theme.danger, fontFamily: theme.fonts.black, fontSize: 15, fontVariant: ['tabular-nums'] }}>
-                    {w.note}<Text style={{ fontSize: 10.5, color: theme.textMuted }}>/{w.bareme}</Text>
+                    {w.note}<Text style={{ fontSize: 10.5, color: theme.textMuted }}>/20</Text>
                   </Text>
-                </View>
-              ))
-            })()}
+                  <ChevronRight size={14} color={theme.textMuted} style={{ marginStart: 7 }} />
+                </Pressable>
+                ))}
+                {stats.weakTotal > stats.weakest.length ? (
+                  <Pressable
+                    onPress={() => {
+                      const applied = details?.applied || scope
+                      if (applied) navigation.navigate('AdminScopeStudents', { scope: applied, segment: 'threshold' })
+                    }}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [styles.seeAllButton, pressed && styles.pressed]}
+                  >
+                    <Text style={{ color: theme.primary, fontFamily: fontBold, fontSize: 12.5 }}>
+                      {t('common.seeAll')} ({stats.weakTotal})
+                    </Text>
+                    <ChevronRight size={14} color={theme.primary} strokeWidth={2.4} />
+                  </Pressable>
+                ) : null}
+              </>
+            )}
           </View>
 
           <View style={[styles.rowStart, { justifyContent: 'center', marginTop: 4 }]}>
@@ -561,6 +589,24 @@ export default function AdminMatiereDetailScreen() {
         </ScrollView>
       )}
     </SafeAreaView>
+  )
+}
+
+function ProgressionOutcome({ label, color, onPress }: {
+  label: string
+  color: string
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.progressionMetricButton, pressed && styles.pressed]}
+    >
+      <Text style={[styles.progressionMetric, { color }]}>{label}</Text>
+      <ChevronRight size={11} color={color} />
+    </Pressable>
   )
 }
 
@@ -597,6 +643,26 @@ const styles = StyleSheet.create({
   rowStart: { flexDirection: 'row', alignItems: 'center' },
   rowReverse: { flexDirection: 'row-reverse' },
   deltaPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },
+  progressionLead: { fontSize: 11.5, lineHeight: 17, marginTop: 4 },
+  progressionBlock: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10, marginTop: 10, gap: 6 },
+  progressionTitle: { flex: 1, fontSize: 12.5, marginEnd: 8 },
+  controlSequence: { fontSize: 10.5, fontWeight: '700', lineHeight: 17 },
+  noComparison: { fontSize: 11.5, lineHeight: 17, paddingVertical: 5 },
+  transitionCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 9, gap: 5 },
+  transitionTitle: { flex: 1, minWidth: 0, fontSize: 11.5, lineHeight: 16, marginEnd: 8 },
+  transitionAverage: { fontSize: 10.5, lineHeight: 15 },
+  progressionMetrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  progressionMetricButton: {
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 7,
+    borderRadius: 8,
+  },
+  progressionMetric: { fontSize: 10, fontWeight: '800' },
+  coverageText: { fontSize: 9.5, fontWeight: '700' },
+  formulaText: { fontSize: 9.5, fontWeight: '600', lineHeight: 14 },
 
   classRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
   weakPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, marginStart: 8 },
@@ -604,10 +670,7 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 999 },
   classNums: { alignItems: 'flex-end', flexShrink: 0, maxWidth: 120 },
 
-  weakSubjectRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  weakSubjectIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  weakCountButton: { flexDirection: 'row', alignItems: 'center', borderRadius: 999, paddingVertical: 6, paddingHorizontal: 9, flexShrink: 0 },
-
   teacherRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth },
   teacherIcon: { width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  seeAllButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingTop: 10 },
 })

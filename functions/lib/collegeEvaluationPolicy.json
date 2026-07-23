@@ -1,0 +1,230 @@
+{
+  "academicYear": "2025-2026",
+  "version": "college-evaluation-2025-2026-v1",
+  "source": "Notes ministérielles 180-193",
+  "subjects": {
+    "arabe": {
+      "canonical": "Arabe",
+      "aliases": ["langue arabe", "arabe", "العربية"],
+      "formula": "weighted_blocks",
+      "controlsByLevel": {
+        "1AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" }
+        ],
+        "2AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" }
+        ],
+        "3AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" }
+        ]
+      },
+      "integratedWeightByLevel": { "1AC": 0.25, "2AC": 0.25, "3AC": 0.25 }
+    },
+    "francais": {
+      "canonical": "Français",
+      "aliases": ["francais", "langue francaise"],
+      "formula": "weighted_blocks",
+      "controlsByLevel": {
+        "1AC": [
+          { "slot": "comprehension_1", "kind": "comprehension", "label": "Compréhension et langue 1" },
+          { "slot": "production_1", "kind": "production", "label": "Production écrite 1" },
+          { "slot": "comprehension_2", "kind": "comprehension", "label": "Compréhension et langue 2" },
+          { "slot": "production_2", "kind": "production", "label": "Production écrite 2" }
+        ],
+        "2AC": [
+          { "slot": "comprehension_1", "kind": "comprehension", "label": "Compréhension et langue 1" },
+          { "slot": "production_1", "kind": "production", "label": "Production écrite 1" },
+          { "slot": "comprehension_2", "kind": "comprehension", "label": "Compréhension et langue 2" },
+          { "slot": "production_2", "kind": "production", "label": "Production écrite 2" }
+        ],
+        "3AC": [
+          { "slot": "comprehension_1", "kind": "comprehension", "label": "Compréhension et langue 1" },
+          { "slot": "production_1", "kind": "production", "label": "Production écrite 1" },
+          { "slot": "comprehension_2", "kind": "comprehension", "label": "Compréhension et langue 2" },
+          { "slot": "production_2", "kind": "production", "label": "Production écrite 2" }
+        ]
+      },
+      "integratedWeightByLevel": { "1AC": 0.2, "2AC": 0.2, "3AC": 0.2 }
+    },
+    "mathematiques": {
+      "canonical": "Mathématiques",
+      "aliases": ["mathematiques", "maths", "math", "الرياضيات"],
+      "formula": "weighted_blocks",
+      "controlsByLevel": {
+        "1AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" },
+          { "slot": "written_3", "kind": "written", "label": "Contrôle écrit 3" }
+        ],
+        "2AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" },
+          { "slot": "written_3", "kind": "written", "label": "Contrôle écrit 3" }
+        ],
+        "3AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" },
+          { "slot": "written_3", "kind": "written", "label": "Contrôle écrit 3" }
+        ]
+      },
+      "integratedWeightByLevel": { "1AC": 0, "2AC": 0, "3AC": 0 }
+    },
+    "histoire_geographie": {
+      "canonical": "Histoire Géographie",
+      "aliases": ["histoire geographie", "histoire-geo", "sociales", "الاجتماعيات"],
+      "formula": "weighted_blocks",
+      "controlsByLevel": {
+        "1AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" },
+          { "slot": "written_3", "kind": "written", "label": "Contrôle écrit 3" }
+        ],
+        "2AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" },
+          { "slot": "written_3", "kind": "written", "label": "Contrôle écrit 3" }
+        ],
+        "3AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" }
+        ]
+      },
+      "integratedWeightByLevel": { "1AC": 0.333333, "2AC": 0.333333, "3AC": 0.333333 }
+    },
+    "physique_chimie": {
+      "canonical": "Physique et Chimie",
+      "aliases": ["physique et chimie", "physique-chimie", "pc", "الفيزياء والكيمياء"],
+      "formula": "weighted_blocks",
+      "controlsByLevel": {
+        "1AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" },
+          { "slot": "written_3", "kind": "written", "label": "Contrôle écrit 3" }
+        ],
+        "2AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" },
+          { "slot": "written_3", "kind": "written", "label": "Contrôle écrit 3" }
+        ],
+        "3AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" },
+          { "slot": "written_3", "kind": "written", "label": "Contrôle écrit 3" }
+        ]
+      },
+      "integratedWeightByLevel": { "1AC": 0.25, "2AC": 0.25, "3AC": 0.25 }
+    },
+    "svt": {
+      "canonical": "Sciences de la Vie et de la Terre",
+      "aliases": ["sciences de la vie et de la terre", "svt", "علوم الحياة والارض"],
+      "formula": "weighted_blocks",
+      "controlsByLevel": {
+        "1AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" }
+        ],
+        "2AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" }
+        ],
+        "3AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" }
+        ]
+      },
+      "integratedWeightByLevel": { "1AC": 0.25, "2AC": 0.25, "3AC": 0.25 }
+    },
+    "education_islamique": {
+      "canonical": "Éducation Islamique",
+      "aliases": ["education islamique", "islamique", "التربية الاسلامية"],
+      "formula": "weighted_blocks",
+      "controlsByLevel": {
+        "1AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" }
+        ],
+        "2AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" }
+        ],
+        "3AC": [
+          { "slot": "written_1", "kind": "written", "label": "Contrôle écrit 1" },
+          { "slot": "written_2", "kind": "written", "label": "Contrôle écrit 2" }
+        ]
+      },
+      "integratedWeightByLevel": { "1AC": 0.333333, "2AC": 0.333333, "3AC": 0.333333 }
+    },
+    "anglais": {
+      "canonical": "Anglais",
+      "aliases": ["anglais", "english", "الانجليزية"],
+      "formula": "english_three_blocks",
+      "controlsByLevel": {
+        "1AC": [
+          { "slot": "short_1", "kind": "short", "label": "Contrôle court 1" },
+          { "slot": "short_2", "kind": "short", "label": "Contrôle court 2" },
+          { "slot": "final", "kind": "final", "label": "Contrôle global final" }
+        ],
+        "2AC": [
+          { "slot": "short_1", "kind": "short", "label": "Contrôle court 1" },
+          { "slot": "short_2", "kind": "short", "label": "Contrôle court 2" },
+          { "slot": "final", "kind": "final", "label": "Contrôle global final" }
+        ],
+        "3AC": [
+          { "slot": "short_1", "kind": "short", "label": "Contrôle court 1" },
+          { "slot": "short_2", "kind": "short", "label": "Contrôle court 2" },
+          { "slot": "final", "kind": "final", "label": "Contrôle global final" }
+        ]
+      },
+      "integratedWeightByLevel": { "1AC": 0.333333, "2AC": 0.333333, "3AC": 0.333333 }
+    },
+    "eps": {
+      "canonical": "Éducation Physique et Sportive",
+      "aliases": ["education physique et sportive", "eps", "sport", "التربية البدنية"],
+      "formula": "weighted_blocks",
+      "controlsByLevel": {
+        "1AC": [
+          { "slot": "cycle_1", "kind": "cycle", "label": "Cycle sportif 1" },
+          { "slot": "cycle_2", "kind": "cycle", "label": "Cycle sportif 2" },
+          { "slot": "cycle_3", "kind": "cycle", "label": "Cycle sportif 3" }
+        ],
+        "2AC": [
+          { "slot": "cycle_1", "kind": "cycle", "label": "Cycle sportif 1" },
+          { "slot": "cycle_2", "kind": "cycle", "label": "Cycle sportif 2" },
+          { "slot": "cycle_3", "kind": "cycle", "label": "Cycle sportif 3" }
+        ],
+        "3AC": [
+          { "slot": "cycle_1", "kind": "cycle", "label": "Cycle sportif 1" },
+          { "slot": "cycle_2", "kind": "cycle", "label": "Cycle sportif 2" },
+          { "slot": "cycle_3", "kind": "cycle", "label": "Cycle sportif 3" }
+        ]
+      },
+      "integratedWeightByLevel": { "1AC": 0.15, "2AC": 0.2, "3AC": 0.25 }
+    },
+    "informatique": {
+      "canonical": "Informatique",
+      "aliases": ["informatique", "info", "الاعلاميات"],
+      "formula": "weighted_blocks",
+      "controlsByLevel": {
+        "1AC": [
+          { "slot": "resource_1", "kind": "resource", "label": "Ressources 1" },
+          { "slot": "resource_2", "kind": "resource", "label": "Ressources 2" },
+          { "slot": "integration", "kind": "integration", "label": "Bilan d’intégration" }
+        ],
+        "2AC": [
+          { "slot": "resource_1", "kind": "resource", "label": "Ressources 1" },
+          { "slot": "resource_2", "kind": "resource", "label": "Ressources 2" },
+          { "slot": "integration", "kind": "integration", "label": "Bilan d’intégration" }
+        ],
+        "3AC": [
+          { "slot": "resource_1", "kind": "resource", "label": "Ressources 1" },
+          { "slot": "resource_2", "kind": "resource", "label": "Ressources 2" },
+          { "slot": "integration", "kind": "integration", "label": "Bilan d’intégration" }
+        ]
+      },
+      "integratedWeightByLevel": { "1AC": 0.2, "2AC": 0.2, "3AC": 0.2 }
+    }
+  }
+}

@@ -35,5 +35,10 @@ assert.equal(
   1,
   'un devoir non fait par un élève archivé ne doit pas créer une alerte courante',
 )
+assert.equal(
+  result.activeHomework,
+  0,
+  'le résumé planifié ne doit pas présenter un devoir échu comme actif',
+)
 
 console.log('schoolStats homework: archives exclues et statut explicite uniquement')

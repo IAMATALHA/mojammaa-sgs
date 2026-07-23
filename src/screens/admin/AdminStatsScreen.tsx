@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, RefreshControl, Modal,
 } from 'react-native'
@@ -17,6 +17,9 @@ import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { palette, chartColors } from '../../theme/designTokens'
 import { functions } from '../../config/firebase'
 import type { AdminDashboardNav } from '../../navigation/types'
+import type {
+  AppliedScope, StatsCycle, StatsFilterKey, StatsPeriod, StatsScope,
+} from '../../types/stats'
 
 type CollectionName = 'eleves' | 'users' | 'notes' | 'absences' | 'devoirs'
 type StatsView = 'niveaux' | 'subjects'
@@ -24,33 +27,7 @@ type StatsAction = 'absences' | 'devoirs' | 'niveaux' | 'subjects'
 /** Les quatre KPI du hero, chacun avec un écran de détail au même périmètre. */
 type ReportTile = 'students' | 'attendance' | 'average' | 'followup'
 type NotesTarget = { matiere?: string; classe?: string }
-type StatsPeriod = 'semaine' | 'mois' | 'S1' | 'S2' | 'annee'
-type StatsCycle = '' | 'prescolaire' | 'primaire' | 'college'
-type StatsFilterKey = 'cycle' | 'niveau' | 'classe' | 'matiere'
-
-interface StatsFilters {
-  period: StatsPeriod
-  cycle: StatsCycle
-  niveau: string
-  classe: string
-  matiere: string
-}
-
-/**
- * Périmètre effectivement appliqué par le serveur, renvoyé par
- * `getFilteredSchoolStats`. C'est le contrat unique passé aux écrans de
- * drill-down : chacun recalcule sur CE périmètre, donc son total est
- * nécessairement celui de la tuile qui l'a ouvert.
- *
- * `notesPeriod` est distinct de `period` : les notes n'ont pas de date
- * pédagogique, leur seule granularité fiable est le semestre. En vue
- * Semaine/Mois la moyenne couvre le semestre en cours, et l'UI doit le dire.
- */
-export interface AppliedScope extends StatsFilters {
-  notesPeriod: 'S1' | 'S2' | 'annee'
-  from: string
-  to: string
-}
+type StatsFilters = StatsScope
 
 interface FilterOption {
   value: string
@@ -124,7 +101,7 @@ interface ClassStats {
   niveau: string
   niveauGroup?: string
   studentCount: number
-  presenceRate: number
+  presenceRate: number | null
   attendanceCount?: number
   avgNote: number | null
   successRate: number | null
@@ -157,7 +134,7 @@ interface NiveauStats {
   studentCount: number
   avgNote: number | null
   successRate: number | null
-  presenceRate: number
+  presenceRate: number | null
   incidentsMonth: number
 }
 
@@ -168,7 +145,7 @@ interface DashboardData {
   totalParents: number
   absentsToday: number
   retardsToday: number
-  presenceRate: number
+  presenceRate: number | null
   attendanceCount?: number
   avgNote: number | null
   successRate: number | null
@@ -192,7 +169,6 @@ interface SnapshotCache {
 }
 
 const COLLECTIONS: CollectionName[] = ['eleves', 'users', 'notes', 'absences', 'devoirs']
-const RING = 124
 const RING_SM = 74
 const INITIAL_FILTERS: StatsFilters = {
   period: 'mois',
@@ -258,6 +234,10 @@ function isActiveHomework(row: DevoirRow, today: string): boolean {
 
 function formatNote(value: number | null): string {
   return value == null ? '—' : `${value}/20`
+}
+
+function usesTenPointScale(scope: Pick<StatsScope, 'cycle' | 'niveau' | 'classe'>): boolean {
+  return scope.cycle === 'primaire' || /aep/i.test(scope.niveau) || /aep/i.test(scope.classe)
 }
 
 function baremeFromNote(row: Pick<NoteRow, 'bareme' | 'cycle' | 'classe'>): 10 | 20 {
@@ -588,6 +568,7 @@ export default function AdminStatsScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [filters, setFilters] = useState<StatsFilters>(INITIAL_FILTERS)
   const [filterOptions, setFilterOptions] = useState<StatsFilterOptions>(EMPTY_FILTER_OPTIONS)
+  const statsRequestId = useRef(0)
   // A4 — périmètre RÉELLEMENT appliqué par le serveur. Les pastilles et les
   // drill-downs lisent ceci, jamais `filters` : le serveur clampe (période
   // inconnue → « mois »), et une pastille dessinée depuis le state local
@@ -623,7 +604,6 @@ export default function AdminStatsScreen() {
   // son total ne peut pas différer du chiffre qui vient d'être tapé.
   const openTile = useCallback((tile: ReportTile) => {
     if (!applied) return
-    void Haptics.selectionAsync()
     if (tile === 'students') {
       nav.navigate('AdminScopeStudents', { scope: applied, segment: 'all' })
       return
@@ -668,12 +648,19 @@ export default function AdminStatsScreen() {
     nav.navigate('AdminScopeStudents', {
       scope: { ...applied, classe },
       segment: 'threshold',
+      side: 'passing',
     })
+  }, [applied, nav])
+
+  const openAttendance = useCallback((classe: string) => {
+    if (!applied) return
+    nav.navigate('AdminAttendanceStats', { scope: { ...applied, classe } })
   }, [applied, nav])
 
   // Les collections nominatives restent côté serveur. La callable admin-only
   // renvoie uniquement les agrégats correspondant aux cinq filtres globaux.
   const loadStats = useCallback(async (nextFilters: StatsFilters, pullToRefresh = false) => {
+    const requestId = ++statsRequestId.current
     if (pullToRefresh) setRefreshing(true)
     else setLoading(true)
     try {
@@ -682,15 +669,19 @@ export default function AdminStatsScreen() {
         options: StatsFilterOptions
         applied: AppliedScope
       }>(functions, 'getFilteredSchoolStats')(nextFilters)
+      if (requestId !== statsRequestId.current) return
       setData(response.data.data)
       setFilterOptions(response.data.options || EMPTY_FILTER_OPTIONS)
       setApplied(response.data.applied || null)
       setError(null)
     } catch (err: any) {
+      if (requestId !== statsRequestId.current) return
       setError(err?.message || t('common.error'))
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      if (requestId === statsRequestId.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
   }, [t])
 
@@ -742,10 +733,16 @@ export default function AdminStatsScreen() {
           <>
             <GeneralReport
               data={data}
-              scope={applied ?? { ...filters, notesPeriod: 'annee', from: '', to: '' }}
+              scope={applied ?? {
+                ...filters,
+                academicYear: '',
+                notesPeriod: 'annee',
+                from: '',
+                to: '',
+              }}
               theme={theme}
               t={t}
-              onOpenScope={() => setPickerRequest('classe')}
+              onOpenScope={() => setPickerRequest('cycle')}
               onOpenPeriod={() => setPickerRequest('period')}
               onTile={openTile}
             />
@@ -773,6 +770,7 @@ export default function AdminStatsScreen() {
                   onOpenNotes={openNotes}
                   onOpenThreshold={openThreshold}
                   onOpenHomework={openHomework}
+                  onOpenAttendance={openAttendance}
                   theme={theme}
                   t={t}
                 />
@@ -808,10 +806,10 @@ function GeneralReport({ data, scope, theme, t, onOpenScope, onOpenPeriod, onTil
   const periodLabel = t(`admin.statsPeriod_${scope.period}`)
   const average = data.avgNote == null
     ? '—'
-    : scope.cycle === 'primaire'
+    : usesTenPointScale(scope)
       ? `${round1(data.avgNote / 2)}/10`
       : `${round1(data.avgNote)}/20`
-  const attendance = data.attendanceCount ? `${data.presenceRate}%` : '—'
+  const attendance = data.attendanceCount && data.presenceRate != null ? `${data.presenceRate}%` : '—'
   const toFollow = data.studentsToFollow || 0
 
   // Les notes n'ayant pas de date d'évaluation, la moyenne porte son propre
@@ -966,14 +964,13 @@ function StatsFilters({
   theme: Theme
   t: TFunction
 }) {
-  const [picker, setPicker] = useState<StatsFilterKey | null>(null)
+  const [picker, setPicker] = useState<StatsFilterKey | 'period' | null>(null)
 
-  // Ouverture pilotée depuis les pastilles du hero. « period » n'a pas de
-  // modale : la barre de périodes est déjà visible, on se contente de ne pas
-  // ouvrir de picker et de laisser l'appui servir de repère visuel.
+  // Ouverture pilotée depuis les pastilles du hero : le choix s'affiche dans
+  // la même modale que les autres filtres, y compris pour la période.
   useEffect(() => {
     if (!pickerRequest) return
-    if (pickerRequest !== 'period') setPicker(pickerRequest)
+    setPicker(pickerRequest)
     onPickerRequestHandled?.()
   }, [pickerRequest, onPickerRequestHandled])
   const periods: StatsPeriod[] = ['semaine', 'mois', 'S1', 'S2', 'annee']
@@ -1062,19 +1059,27 @@ function StatsFilters({
           {picker ? (
             <View style={[styles.pickerSheet, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.pickerHead}>
-                <Text style={[styles.pickerTitle, { color: theme.text }]}>{pickerTitles[picker]}</Text>
+                <Text style={[styles.pickerTitle, { color: theme.text }]}>
+                  {picker === 'period' ? t(`admin.statsPeriod_${value.period}`) : pickerTitles[picker]}
+                </Text>
                 <Pressable onPress={() => setPicker(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('admin.statsCloseFilter')}>
                   <X size={20} color={theme.textSoft} />
                 </Pressable>
               </View>
               <ScrollView style={styles.pickerList} showsVerticalScrollIndicator={false}>
-                {pickerOptions[picker].map(option => {
-                  const selected = value[picker] === option.value
+                {(picker === 'period'
+                  ? periods.map(period => ({ value: period, label: t(`admin.statsPeriod_${period}`) }))
+                  : pickerOptions[picker]
+                ).map(option => {
+                  const selected = picker === 'period'
+                    ? value.period === option.value
+                    : value[picker] === option.value
                   return (
                     <Pressable
                       key={`${picker}-${option.value || 'all'}`}
                       onPress={() => {
-                        onFilterChange(picker, option.value)
+                        if (picker === 'period') onPeriodChange(option.value as StatsPeriod)
+                        else onFilterChange(picker, option.value)
                         setPicker(null)
                       }}
                       accessibilityRole="button"
@@ -1092,41 +1097,6 @@ function StatsFilters({
         </View>
       </Modal>
     </>
-  )
-}
-
-function VisualHero({ data, theme, t, onAction, onOpenNotes }: {
-  data: DashboardData; theme: Theme; t: TFunction; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void
-}) {
-  const alerts = data.classStats.filter(item => item.healthScore < 58).length
-  return (
-    <View style={[styles.hero, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <Pressable
-        onPress={() => onAction('absences')}
-        accessibilityRole="button"
-        accessibilityLabel={t('admin.attendanceRate')}
-        style={({ pressed }) => [styles.heroMain, pressed && styles.pressed]}
-      >
-        <View style={[styles.livePill, { backgroundColor: theme.successSurface }]}>
-          <View style={[styles.liveDot, { backgroundColor: theme.info }]} />
-          <Text style={[styles.liveText, { color: theme.text }]}>{t('admin.live')}</Text>
-        </View>
-        <RingGauge
-          value={data.presenceRate}
-          color={data.presenceRate >= 92 ? theme.info : theme.danger}
-          trackColor={theme.surfaceAlt}
-          textColor={theme.text}
-          label={t('admin.attendanceRate')}
-          size={RING}
-          stroke={11}
-        />
-      </Pressable>
-      <View style={styles.heroTiles}>
-        <MiniTile icon={<TrendingUp size={18} color={theme.primary} />} value={formatNote(data.avgNote)} label={t('tabs.grades')} bg={theme.primarySurface} theme={theme} onPress={() => onOpenNotes()} />
-        <MiniTile icon={<AlertTriangle size={18} color={alerts > 0 ? theme.danger : theme.info} />} value={String(alerts)} label={t('admin.alerts')} bg={alerts > 0 ? theme.dangerSurface : theme.infoSurface} theme={theme} onPress={() => onAction('absences')} />
-        <MiniTile icon={<BookOpen size={18} color={theme.warning} />} value={String(data.subjectStats.length)} label={t('admin.viewSubjects')} bg={theme.warningSurface} theme={theme} onPress={() => onAction('subjects')} />
-      </View>
-    </View>
   )
 }
 
@@ -1190,8 +1160,20 @@ function NiveauxView({ data, onSelectNiveau, onOpenBand, theme, t }: { data: Das
                   <Text style={{ color: theme.primary, fontWeight: '900', fontSize: 18 }}>{formatNote(niv.avgNote)}</Text>
                   <Text style={{ color: theme.textSoft, fontWeight: '700', fontSize: 10, marginTop: 2 }}>{t('admin.avgGrade')}</Text>
                 </View>
-                <View style={[styles.niveauStat, { backgroundColor: niv.presenceRate >= 90 ? theme.infoSurface : theme.dangerSurface }]}>
-                  <Text style={{ color: niv.presenceRate >= 90 ? theme.info : theme.danger, fontWeight: '900', fontSize: 18 }}>{niv.presenceRate}%</Text>
+                <View style={[styles.niveauStat, {
+                  backgroundColor: niv.presenceRate == null
+                    ? theme.surface
+                    : niv.presenceRate >= 90 ? theme.infoSurface : theme.dangerSurface,
+                }]}>
+                  <Text style={{
+                    color: niv.presenceRate == null
+                      ? theme.textMuted
+                      : niv.presenceRate >= 90 ? theme.info : theme.danger,
+                    fontWeight: '900',
+                    fontSize: 18,
+                  }}>
+                    {niv.presenceRate == null ? '—' : `${niv.presenceRate}%`}
+                  </Text>
                   <Text style={{ color: theme.textSoft, fontWeight: '700', fontSize: 10, marginTop: 2 }}>{t('admin.attendanceRate')}</Text>
                 </View>
                 <View style={[styles.niveauStat, { backgroundColor: theme.warningSurface }]}>
@@ -1217,8 +1199,8 @@ function NiveauxView({ data, onSelectNiveau, onOpenBand, theme, t }: { data: Das
   )
 }
 
-function NiveauClassesView({ data, niveau, onBack, onAction, onOpenNotes, onOpenThreshold, onOpenHomework, theme, t }: {
-  data: DashboardData; niveau: string; onBack: () => void; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; onOpenThreshold: (classe: string) => void; onOpenHomework: (classe: string) => void; theme: Theme; t: TFunction
+function NiveauClassesView({ data, niveau, onBack, onAction, onOpenNotes, onOpenThreshold, onOpenHomework, onOpenAttendance, theme, t }: {
+  data: DashboardData; niveau: string; onBack: () => void; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; onOpenThreshold: (classe: string) => void; onOpenHomework: (classe: string) => void; onOpenAttendance: (classe: string) => void; theme: Theme; t: TFunction
 }) {
   const classes = data.classStats.filter(item => item.niveauGroup === niveau)
   const label = niveau === 'Autre' ? t('common.other') : niveau
@@ -1234,14 +1216,15 @@ function NiveauClassesView({ data, niveau, onBack, onAction, onOpenNotes, onOpen
           <EmptyText theme={theme} text={t('common.noData')} />
         ) : (
           classes.map(item => <ClassCardRich key={item.name} item={item} onAction={onAction} onOpenNotes={onOpenNotes}
-              onOpenThreshold={onOpenThreshold} onOpenHomework={onOpenHomework} theme={theme} t={t} />)
+              onOpenThreshold={onOpenThreshold} onOpenHomework={onOpenHomework}
+              onOpenAttendance={onOpenAttendance} theme={theme} t={t} />)
         )}
       </View>
     </>
   )
 }
 
-function ClassCardRich({ item, onAction, onOpenNotes, onOpenThreshold, onOpenHomework, theme, t }: { item: ClassStats; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; onOpenThreshold: (classe: string) => void; onOpenHomework: (classe: string) => void; theme: Theme; t: TFunction }) {
+function ClassCardRich({ item, onAction, onOpenNotes, onOpenThreshold, onOpenHomework, onOpenAttendance, theme, t }: { item: ClassStats; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; onOpenThreshold: (classe: string) => void; onOpenHomework: (classe: string) => void; onOpenAttendance: (classe: string) => void; theme: Theme; t: TFunction }) {
   const healthColor = item.healthScore >= 75 ? theme.info : item.healthScore >= 55 ? theme.warning : theme.danger
   return (
     <View style={[styles.classCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -1258,7 +1241,7 @@ function ClassCardRich({ item, onAction, onOpenNotes, onOpenThreshold, onOpenHom
 
       <View style={styles.classCardBody}>
         <Pressable
-          onPress={() => onAction('absences')}
+          onPress={() => onOpenAttendance(item.name)}
           accessibilityRole="button"
           accessibilityLabel={`${item.name} ${t('admin.attendanceRate')}`}
           style={({ pressed }) => pressed && styles.pressed}
@@ -1284,7 +1267,7 @@ function ClassCardRich({ item, onAction, onOpenNotes, onOpenThreshold, onOpenHom
 
       <View style={styles.classCardFooter}>
         <Pressable
-          onPress={() => onAction('absences')}
+          onPress={() => onOpenAttendance(item.name)}
           accessibilityRole="button"
           accessibilityLabel={`${item.incidentsMonth} ${t('tabs.absences')}`}
           style={({ pressed }) => [styles.incidentPill, { backgroundColor: theme.dangerSurface }, pressed && styles.pressed]}
@@ -1340,28 +1323,6 @@ function SubjectsView({ data, onOpenNotes, onOpenBand, theme, t }: { data: Dashb
   )
 }
 
-function MiniTile({ icon, value, label, bg, theme, onPress }: {
-  icon: React.ReactNode
-  value: string
-  label: string
-  bg: string
-  theme: Theme
-  onPress?: () => void
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={!onPress}
-      android_ripple={{ color: theme.border }}
-      style={({ pressed }) => [styles.miniTile, { backgroundColor: bg, opacity: pressed ? 0.85 : 1 }]}
-    >
-      {icon}
-      <Text numberOfLines={1} style={[styles.miniValue, { color: theme.text }]}>{value}</Text>
-      <Text numberOfLines={1} style={[styles.miniLabel, { color: theme.textSoft }]}>{label}</Text>
-    </Pressable>
-  )
-}
-
 function Kpi({ icon, value, label, bg, theme }: {
   icon: React.ReactNode
   value: string
@@ -1392,7 +1353,7 @@ function ChartCard({ title, theme, children }: {
 }
 
 function RingGauge({ value, color, trackColor, textColor, label, size, stroke }: {
-  value: number
+  value: number | null
   color: string
   trackColor: string
   textColor: string
@@ -1402,7 +1363,8 @@ function RingGauge({ value, color, trackColor, textColor, label, size, stroke }:
 }) {
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
-  const offset = circumference - (circumference * clamp(value)) / 100
+  const progress = value == null ? 0 : clamp(value)
+  const offset = circumference - (circumference * progress) / 100
 
   return (
     <View style={[styles.ringWrap, { width: size, height: size }]}>
@@ -1422,7 +1384,9 @@ function RingGauge({ value, color, trackColor, textColor, label, size, stroke }:
         />
       </Svg>
       <View style={styles.ringCenter}>
-        <Text style={[styles.ringValue, { color: textColor, fontSize: size > 90 ? 25 : 15 }]}>{clamp(value)}%</Text>
+        <Text style={[styles.ringValue, { color: textColor, fontSize: size > 90 ? 25 : 15 }]}>
+          {value == null ? '—' : `${progress}%`}
+        </Text>
         <Text numberOfLines={1} style={[styles.ringLabel, { color: textColor }]}>{label}</Text>
       </View>
     </View>
@@ -1547,7 +1511,7 @@ function ClassMap({ classes, theme, t }: { classes: ClassStats[]; theme: Theme; 
         {classes.map(item => {
           const size = bubbleSize(item.studentCount, minCount, maxCount)
           const x = `${clamp(((item.avgNote ?? 10) / 20) * 100, 12, 86)}%`
-          const y = `${clamp(item.presenceRate, 14, 82)}%`
+          const y = `${clamp(item.presenceRate ?? 50, 14, 82)}%`
           const color = scoreColor(item.healthScore, theme)
           return (
             <View
@@ -1679,16 +1643,6 @@ const styles = StyleSheet.create({
   pickerList: { flexGrow: 0 },
   pickerOption: { minHeight: 48, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   pickerOptionText: { flex: 1, fontSize: 13, fontWeight: '800' },
-
-  hero: { borderWidth: 1, borderRadius: 8, padding: 14, marginBottom: 12, flexDirection: 'row', gap: 12 },
-  heroMain: { width: 138, alignItems: 'center', justifyContent: 'center' },
-  livePill: { position: 'absolute', top: 0, left: 0, flexDirection: 'row', alignItems: 'center', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, zIndex: 1 },
-  liveDot: { width: 7, height: 7, borderRadius: 4, marginEnd: 5 },
-  liveText: { fontSize: 10, fontWeight: '900' },
-  heroTiles: { flex: 1, gap: 8 },
-  miniTile: { flex: 1, minHeight: 58, borderRadius: 8, padding: 10, justifyContent: 'center' },
-  miniValue: { fontSize: 18, fontWeight: '900', marginTop: 4, fontVariant: ['tabular-nums'] },
-  miniLabel: { fontSize: 10, fontWeight: '800', marginTop: 1 },
 
   tabs: { flexDirection: 'row', borderRadius: 8, padding: 4, marginBottom: 12, gap: 4 },
   tab: { flex: 1, minHeight: 42, borderRadius: 7, borderWidth: 1, borderColor: 'transparent', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 4 },

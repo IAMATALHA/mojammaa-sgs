@@ -10,11 +10,11 @@
  * Le total affiché en tête provient du serveur et n'est jamais recalculé ici :
  * c'est ce qui garantit qu'il est exactement le chiffre de la tuile tapée.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, TextInput, RefreshControl,
 } from 'react-native'
-import { httpsCallable } from 'firebase/functions'
+import { httpsCallable, type HttpsCallableResult } from 'firebase/functions'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTranslation } from 'react-i18next'
@@ -26,7 +26,7 @@ import { functions } from '../../config/firebase'
 import type { AdminStackParamList } from '../../navigation/types'
 import type {
   AppliedScope, FollowUpMetrics, FollowUpPriority, FollowUpReason,
-  ScopeStudent, ScopeStudentsResult,
+  ScopeStudent, ScopeStudentsResult, StudentProgressionQuery,
 } from '../../types/stats'
 
 const PAGE_SIZE = 50
@@ -38,51 +38,166 @@ export default function AdminScopeStudentsScreen() {
   const { t } = useTranslation()
   const nav = useNavigation<NativeStackNavigationProp<AdminStackParamList>>()
   const route = useRoute<RouteProp<AdminStackParamList, 'AdminScopeStudents'>>()
-  const { scope, segment, band } = route.params
+  const { scope, segment, band, side, progression } = route.params as typeof route.params & {
+    progression?: StudentProgressionQuery
+  }
 
   const [students, setStudents] = useState<ScopeStudent[]>([])
   const [total, setTotal] = useState<number | null>(null)
   const [cursor, setCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [loadingSearchPages, setLoadingSearchPages] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const loadingMoreRef = useRef(false)
+  const listGenerationRef = useRef(0)
 
   const load = useCallback(async (mode: 'initial' | 'more' | 'refresh', nextCursor?: string | null) => {
-    if (mode === 'more') setLoadingMore(true)
-    else if (mode === 'refresh') setRefreshing(true)
-    else setLoading(true)
+    if (mode === 'more') {
+      // FlatList peut appeler onEndReached deux fois avant le prochain rendu :
+      // un ref synchrone ferme cette fenêtre, contrairement au state seul.
+      if (loadingMoreRef.current) return
+      loadingMoreRef.current = true
+      setLoadingMore(true)
+    } else if (mode === 'refresh') {
+      setRefreshing(true)
+    } else {
+      setLoading(true)
+    }
+    const generation = mode === 'more'
+      ? listGenerationRef.current
+      : ++listGenerationRef.current
     try {
       const response = await httpsCallable<
-        { scope: AppliedScope; segment: string; band?: string; cursor?: string | null; limit: number },
+        {
+          scope: AppliedScope
+          segment: string
+          band?: string
+          side?: 'below' | 'passing'
+          progression?: StudentProgressionQuery
+          cursor?: string | null
+          limit: number
+        },
         ScopeStudentsResult
       >(functions, 'getStatsStudents')({
-        scope, segment, band, cursor: nextCursor ?? null, limit: PAGE_SIZE,
+        scope, segment, band, side, progression, cursor: nextCursor ?? null, limit: PAGE_SIZE,
       })
+      if (generation !== listGenerationRef.current) return
       const payload = response.data
-      setStudents(prev => (mode === 'more' ? [...prev, ...payload.students] : payload.students))
+      setStudents(prev => {
+        if (mode !== 'more') return payload.students
+        const ids = new Set(prev.map(row => row.id))
+        return [
+          ...prev,
+          ...payload.students.filter(row => {
+            if (ids.has(row.id)) return false
+            ids.add(row.id)
+            return true
+          }),
+        ]
+      })
       setTotal(payload.total)
       setCursor(payload.nextCursor)
       setError(null)
     } catch (err: any) {
-      setError(err?.message || t('common.error'))
+      if (generation === listGenerationRef.current) {
+        setError(err?.message || t('common.error'))
+      }
     } finally {
       setLoading(false)
+      loadingMoreRef.current = false
       setLoadingMore(false)
       setRefreshing(false)
     }
-  }, [scope, segment, band, t])
+  }, [scope, segment, band, side, progression, t])
 
   useEffect(() => { void load('initial') }, [load])
+
+  const searchActive = search.trim().length > 0
+
+  // La recherche reste locale (aucun nom n'est envoyé au serveur), mais elle
+  // porte sur TOUT le périmètre : dès que l'admin saisit un terme, les pages
+  // restantes sont chargées une par une. Le budget dépend du total annoncé
+  // par la première page, donc la boucle est finie même si un curseur serveur
+  // défectueux se répétait.
+  useEffect(() => {
+    if (!searchActive || !cursor || loading || loadingMore || refreshing) {
+      if (!searchActive || !cursor) setLoadingSearchPages(false)
+      return
+    }
+
+    let cancelled = false
+    const loadRemainingPages = async () => {
+      setLoadingSearchPages(true)
+      let nextCursor: string | null = cursor
+      let knownTotal = total ?? students.length + PAGE_SIZE
+      const fetched: ScopeStudent[] = []
+      const seenCursors = new Set<string>()
+      const pageBudget = Math.max(1, Math.ceil(knownTotal / PAGE_SIZE) + 1)
+
+      try {
+        for (let page = 0; page < pageBudget && nextCursor && !cancelled; page += 1) {
+          if (seenCursors.has(nextCursor)) break
+          seenCursors.add(nextCursor)
+          const fetchStudentsPage = httpsCallable<
+            {
+              scope: AppliedScope
+              segment: string
+              band?: string
+              side?: 'below' | 'passing'
+              progression?: StudentProgressionQuery
+              cursor?: string | null
+              limit: number
+            },
+            ScopeStudentsResult
+          >(functions, 'getStatsStudents')
+          const response: HttpsCallableResult<ScopeStudentsResult> = await fetchStudentsPage({
+            scope, segment, band, side, progression, cursor: nextCursor, limit: PAGE_SIZE,
+          })
+          fetched.push(...response.data.students)
+          knownTotal = response.data.total
+          nextCursor = response.data.nextCursor
+        }
+
+        if (cancelled) return
+        setStudents(previous => {
+          const ids = new Set(previous.map(row => row.id))
+          const additions = fetched.filter(row => {
+            if (ids.has(row.id)) return false
+            ids.add(row.id)
+            return true
+          })
+          return [...previous, ...additions]
+        })
+        setTotal(knownTotal)
+        setCursor(nextCursor)
+        setError(null)
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message || t('common.error'))
+      } finally {
+        if (!cancelled) setLoadingSearchPages(false)
+      }
+    }
+
+    void loadRemainingPages()
+    return () => { cancelled = true }
+  }, [
+    searchActive, cursor, loading, loadingMore, refreshing, total, students.length,
+    scope, segment, band, side, progression, t,
+  ])
 
   const title = useMemo(() => {
     if (segment === 'followup') return t('admin.statsToFollow')
     if (segment === 'recidivists') return t('admin.statsRecidivists')
     if (segment === 'band') return t('admin.statsBandTitle', { band })
-    if (segment === 'threshold') return t('admin.statsBelowThreshold')
+    if (segment === 'threshold') {
+      return side === 'passing' ? t('admin.statsPassingStudents') : t('admin.statsBelowThreshold')
+    }
+    if (segment === 'progression') return t('admin.statsProgressionStudents')
     return t('admin.statsStudents')
-  }, [segment, band, t])
+  }, [segment, band, side, t])
 
   // Recherche purement locale sur les lignes déjà reçues : filtrer côté serveur
   // demanderait d'envoyer la saisie de l'admin à chaque frappe, alors que les
@@ -94,9 +209,37 @@ export default function AdminScopeStudentsScreen() {
       `${row.prenom} ${row.nom} ${row.classe}`.toLowerCase().includes(needle))
   }, [students, search])
 
-  // Regroupement par classe — l'admin raisonne par classe, pas par ordre
-  // alphabétique global.
   const sections = useMemo(() => {
+    // La file « À suivre » garde l'ordre d'urgence du serveur à l'intérieur
+    // de chaque priorité. La regrouper par classe détruirait précisément cet
+    // ordre de décision.
+    if (segment === 'followup') {
+      const ranked = (['high', 'medium', 'low'] as FollowUpPriority[]).flatMap(priority => {
+        const rows = displayed.filter(row => row.priority === priority)
+        if (rows.length === 0) return []
+        return [
+          {
+            kind: 'header' as const,
+            id: `h-priority-${priority}`,
+            classe: t(`admin.priority_${priority}`),
+            count: rows.length,
+          },
+          ...rows.map(row => ({ kind: 'student' as const, id: row.id, student: row })),
+        ]
+      })
+      const unranked = displayed
+        .filter(row => !row.priority)
+        .map(row => ({ kind: 'student' as const, id: row.id, student: row }))
+      return [...ranked, ...unranked]
+    }
+
+    // La progression est déjà classée par le serveur selon l'amplitude du
+    // mouvement ; l'écran ne la retrie pas.
+    if (segment === 'progression') {
+      return displayed.map(row => ({ kind: 'student' as const, id: row.id, student: row }))
+    }
+
+    // Pour les listes de population, la classe reste le regroupement naturel.
     const byClass = new Map<string, ScopeStudent[]>()
     displayed.forEach(row => {
       const key = row.classe || t('common.other')
@@ -110,12 +253,22 @@ export default function AdminScopeStudentsScreen() {
         { kind: 'header' as const, id: `h-${classe}`, classe, count: rows.length },
         ...rows.map(row => ({ kind: 'student' as const, id: row.id, student: row })),
       ])
-  }, [displayed, t])
+  }, [displayed, segment, t])
 
   const scopeLabel = [
     scope.cycle ? t(`admin.statsCycle_${scope.cycle}`) : '',
-    scope.niveau, scope.classe,
+    scope.niveau, scope.classe, scope.matiere,
   ].filter(Boolean).join(' · ') || t('admin.statsWholeSchool')
+  const progressionEvidence = students.find(row => row.progression)?.progression
+  const progressionContext = progression
+    ? t('admin.statsProgressionScope', {
+      subject: progression.matiere,
+      semester: progression.semestre,
+      fromLabel: progression.fromLabel || progressionEvidence?.fromLabel || progression.fromSlot,
+      toLabel: progression.toLabel || progressionEvidence?.toLabel || progression.toSlot,
+      outcome: t(`admin.statsProgressionOutcome_${progression.outcome}`),
+    })
+    : ''
 
   return (
     <ScreenLayout title={title} showBack>
@@ -123,12 +276,33 @@ export default function AdminScopeStudentsScreen() {
         <Text numberOfLines={1} style={[styles.scopeText, { color: theme.textSoft }]}>
           {scopeLabel} · {t(`admin.statsPeriod_${scope.period}`)}
         </Text>
+        <Text numberOfLines={1} style={[styles.notesScopeText, { color: theme.textMuted }]}>
+          {t('admin.statsGradesScope', {
+            period: t(`admin.statsPeriod_${scope.notesPeriod}`),
+          })} · /20
+        </Text>
+        {progressionContext ? (
+          <Text numberOfLines={2} style={[styles.progressionScopeText, { color: theme.text }]}>
+            {progressionContext}
+          </Text>
+        ) : null}
         {total != null ? (
           <Text style={[styles.scopeTotal, { color: theme.primary }]}>
             {t('admin.statsCountStudents', { count: total })}
           </Text>
         ) : null}
       </View>
+      {loadingSearchPages ? (
+        <View style={styles.searchLoading}>
+          <ActivityIndicator size="small" color={theme.primary} />
+          <Text style={[styles.searchLoadingText, { color: theme.textSoft }]}>
+            {t('admin.statsLoadingAllStudents', {
+              loaded: students.length,
+              total: total ?? '…',
+            })}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={[styles.searchBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <Search size={16} color={theme.textMuted} />
@@ -151,6 +325,7 @@ export default function AdminScopeStudentsScreen() {
         <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
       ) : (
         <FlatList
+          contentInsetAdjustmentBehavior="automatic"
           data={sections}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.list}
@@ -177,6 +352,7 @@ export default function AdminScopeStudentsScreen() {
             return (
               <StudentRow
                 student={item.student}
+                subject={scope.matiere}
                 theme={theme}
                 t={t}
                 onPress={() => nav.navigate('AdminStudentFile', { eleveId: item.student.id, scope })}
@@ -189,8 +365,8 @@ export default function AdminScopeStudentsScreen() {
   )
 }
 
-function StudentRow({ student, theme, t, onPress }: {
-  student: ScopeStudent; theme: Theme; t: TFunction; onPress: () => void
+function StudentRow({ student, subject, theme, t, onPress }: {
+  student: ScopeStudent; subject: string; theme: Theme; t: TFunction; onPress: () => void
 }) {
   const reasons = (student.reasons || []).slice().sort()
   return (
@@ -222,12 +398,38 @@ function StudentRow({ student, theme, t, onPress }: {
             ))}
           </View>
         ) : null}
+        {student.progression ? (
+          <Text style={[styles.progressionEvidence, { color: theme.textSoft }]}>
+            {t('admin.statsProgressionEvidence', {
+              fromLabel: student.progression.fromLabel,
+              from: student.progression.from,
+              toLabel: student.progression.toLabel,
+              to: student.progression.to,
+              delta: `${student.progression.delta > 0 ? '+' : ''}${student.progression.delta}`,
+            })}
+          </Text>
+        ) : null}
       </View>
       <View style={styles.rowEnd}>
         {student.priority ? <PriorityDot priority={student.priority} theme={theme} /> : null}
-        <Text style={[styles.rowAverage, { color: theme.textSoft }]}>
-          {student.average == null ? '—' : `${student.average}`}
-        </Text>
+        <View style={styles.averageStack}>
+          <Text style={[styles.rowAverage, { color: theme.textSoft }]}>
+            {student.average == null ? '— /20' : `${student.average}/20`}
+          </Text>
+          <Text style={[styles.rowAverageLabel, { color: theme.textMuted }]}>
+            {t('admin.statsOverallAverageShort')}
+          </Text>
+          {subject && student.subjectAverage != null ? (
+            <>
+              <Text numberOfLines={1} style={[styles.rowSubjectAverage, { color: theme.primary }]}>
+                {student.subjectAverage}/20
+              </Text>
+              <Text numberOfLines={1} style={[styles.rowAverageLabel, { color: theme.textMuted }]}>
+                {t('admin.statsSubjectAverageShort')}
+              </Text>
+            </>
+          ) : null}
+        </View>
         <ChevronRight size={14} color={theme.textMuted} />
       </View>
     </Pressable>
@@ -250,6 +452,8 @@ function ReasonBadge({ reason, metrics, theme, t }: {
         return t('admin.reasonLowAverage', { average: m.average ?? '—' })
       case 'declining':
         return t('admin.reasonDeclining', { decline: m.decline ?? '—' })
+      case 'declining_controls':
+        return t('admin.reasonControlDeclining', { decline: m.controlDecline ?? '—' })
       case 'absenteeism':
         return t('admin.reasonAbsenteeism', { days: m.absentDays ?? 0, observed: m.observedDays ?? 0 })
       case 'homework_not_done':
@@ -262,7 +466,7 @@ function ReasonBadge({ reason, metrics, theme, t }: {
   })()
   const tone = reason === 'low_average' || reason === 'absenteeism'
     ? { bg: theme.dangerSurface, fg: theme.danger }
-    : reason === 'declining'
+    : reason === 'declining' || reason === 'declining_controls'
       ? { bg: theme.warningSurface, fg: theme.warning }
       : { bg: theme.infoSurface, fg: theme.info }
 
@@ -305,12 +509,19 @@ const styles = StyleSheet.create({
     marginHorizontal: 14, marginTop: 10, gap: 3,
   },
   scopeText: { fontSize: 11, fontWeight: '700' },
+  notesScopeText: { fontSize: 10, fontWeight: '700' },
+  progressionScopeText: { fontSize: 10.5, fontWeight: '800', lineHeight: 15 },
   scopeTotal: { fontSize: 13, fontWeight: '900' },
   searchBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10,
     paddingHorizontal: 11, marginHorizontal: 14, marginTop: 9, height: 40,
   },
   searchInput: { flex: 1, fontSize: 13, fontWeight: '600', paddingVertical: 0 },
+  searchLoading: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    paddingHorizontal: 16, paddingTop: 7,
+  },
+  searchLoadingText: { fontSize: 10.5, fontWeight: '700' },
   list: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 28 },
   groupHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -325,7 +536,11 @@ const styles = StyleSheet.create({
   rowMain: { flex: 1, gap: 5 },
   rowName: { fontSize: 13, fontWeight: '800' },
   rowEnd: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  averageStack: { alignItems: 'flex-end', gap: 1 },
   rowAverage: { fontSize: 13, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  rowAverageLabel: { fontSize: 8, fontWeight: '800', textTransform: 'uppercase' },
+  rowSubjectAverage: { fontSize: 9.5, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  progressionEvidence: { fontSize: 10, fontWeight: '700', lineHeight: 15 },
   priorityDot: { width: 7, height: 7, borderRadius: 4 },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   badge: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 },

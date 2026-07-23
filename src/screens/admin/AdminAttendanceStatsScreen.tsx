@@ -9,7 +9,7 @@
  * C'était le piège principal du lot : « 94 % · 6AEP · Année » ne doit jamais
  * ouvrir « école entière · aujourd'hui ».
  */
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, RefreshControl,
 } from 'react-native'
@@ -27,20 +27,20 @@ import type { AppliedScope, ScopeStudent } from '../../types/stats'
 
 type Tab = 'resume' | 'absences' | 'retards'
 
-interface AttendanceRow { date: string; student: ScopeStudent }
+interface AttendanceRow { id: string; date: string; student: ScopeStudent }
 
 interface ClassLine {
   name: string
-  presenceRate: number
+  presenceRate: number | null
   attendanceCount: number
   studentCount: number
 }
 
 interface AttendanceResult {
-  presenceRate: number
+  presenceRate: number | null
   attendanceCount: number
-  absentsToday: number
-  retardsToday: number
+  absenceRecords: number
+  lateRecords: number
   trend: { label: string; value: number }[]
   byClass: ClassLine[]
   rows: AttendanceRow[]
@@ -59,23 +59,52 @@ export default function AdminAttendanceStatsScreen() {
   const [tab, setTab] = useState<Tab>('resume')
   const [result, setResult] = useState<AttendanceResult | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const requestIdRef = useRef(0)
+  const loadingMoreRef = useRef(false)
 
-  const load = useCallback(async (nextTab: Tab, pullToRefresh = false) => {
-    if (pullToRefresh) setRefreshing(true)
-    else setLoading(true)
+  const load = useCallback(async (
+    nextTab: Tab,
+    mode: 'initial' | 'refresh' | 'more' = 'initial',
+    cursor: string | null = null,
+  ) => {
+    if (mode === 'more') {
+      if (loadingMoreRef.current || !cursor) return
+      loadingMoreRef.current = true
+      setLoadingMore(true)
+    } else if (mode === 'refresh') {
+      setRefreshing(true)
+    } else {
+      setLoading(true)
+    }
+    // Le dernier onglet demandé gagne toujours : une réponse Absences lente
+    // ne peut plus remplacer Retards après un changement rapide.
+    const requestId = ++requestIdRef.current
     try {
       const response = await httpsCallable<
-        { scope: AppliedScope; tab: Tab; limit: number }, AttendanceResult
-      >(functions, 'getStatsAttendanceDetails')({ scope, tab: nextTab, limit: 50 })
-      setResult(response.data)
+        { scope: AppliedScope; tab: Tab; cursor: string | null; limit: number }, AttendanceResult
+      >(functions, 'getStatsAttendanceDetails')({ scope, tab: nextTab, cursor, limit: 50 })
+      if (requestId !== requestIdRef.current) return
+      setResult(previous => {
+        if (mode !== 'more' || !previous) return response.data
+        const ids = new Set(previous.rows.map(row => row.id))
+        const additions = response.data.rows.filter(row => !row.id || !ids.has(row.id))
+        return { ...response.data, rows: [...previous.rows, ...additions] }
+      })
       setError(null)
     } catch (err: any) {
-      setError(err?.message || t('common.error'))
+      if (requestId === requestIdRef.current) {
+        setError(err?.message || t('common.error'))
+      }
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      if (mode === 'more') loadingMoreRef.current = false
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+        setLoadingMore(false)
+        setRefreshing(false)
+      }
     }
   }, [scope, t])
 
@@ -98,7 +127,7 @@ export default function AdminAttendanceStatsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => load(tab, true)} tintColor={theme.primary} />
+          <RefreshControl refreshing={refreshing} onRefresh={() => load(tab, 'refresh')} tintColor={theme.primary} />
         }
       >
         <View style={[styles.scopeBar, { backgroundColor: theme.primarySurface, borderColor: theme.border }]}>
@@ -106,7 +135,9 @@ export default function AdminAttendanceStatsScreen() {
             {scopeLabel} · {t(`admin.statsPeriod_${scope.period}`)}
           </Text>
           {result ? (
-            <Text style={[styles.scopeRate, { color: theme.primary }]}>{result.presenceRate}%</Text>
+            <Text style={[styles.scopeRate, { color: theme.primary }]}>
+              {result.presenceRate == null ? '—' : `${result.presenceRate}%`}
+            </Text>
           ) : null}
         </View>
 
@@ -150,7 +181,18 @@ export default function AdminAttendanceStatsScreen() {
               onOpenRecidivists={() => nav.navigate('AdminScopeStudents', { scope, segment: 'recidivists' })}
             />
           ) : (
-            <RowsView rows={result.rows} total={result.total} tab={tab} theme={theme} t={t} nav={nav} scope={scope} />
+            <RowsView
+              rows={result.rows}
+              total={result.total}
+              nextCursor={result.nextCursor}
+              loadingMore={loadingMore}
+              onLoadMore={() => load(tab, 'more', result.nextCursor)}
+              tab={tab}
+              theme={theme}
+              t={t}
+              nav={nav}
+              scope={scope}
+            />
           )
         ) : null}
       </ScrollView>
@@ -162,12 +204,28 @@ function ResumeView({ result, theme, t, onOpenRecidivists }: {
   result: AttendanceResult; theme: Theme; t: TFunction; onOpenRecidivists: () => void
 }) {
   const maxTrend = Math.max(1, ...result.trend.map(p => p.value))
+  const periodLabel = t(`admin.statsPeriod_${result.applied.period}`)
   return (
     <>
       <View style={styles.metricRow}>
-        <MetricCard icon={<Users size={16} color={theme.info} />} value={`${result.presenceRate}%`} label={t('admin.attendanceRate')} theme={theme} />
-        <MetricCard icon={<UserX size={16} color={theme.danger} />} value={String(result.absentsToday)} label={t('admin.statsAbsentsToday')} theme={theme} />
-        <MetricCard icon={<Clock size={16} color={theme.warning} />} value={String(result.retardsToday)} label={t('admin.statsLateToday')} theme={theme} />
+        <MetricCard
+          icon={<Users size={16} color={theme.info} />}
+          value={result.presenceRate == null ? '—' : `${result.presenceRate}%`}
+          label={t('admin.attendanceRate')}
+          theme={theme}
+        />
+        <MetricCard
+          icon={<UserX size={16} color={theme.danger} />}
+          value={String(result.absenceRecords)}
+          label={t('admin.statsAbsenceRecordsPeriod', { period: periodLabel })}
+          theme={theme}
+        />
+        <MetricCard
+          icon={<Clock size={16} color={theme.warning} />}
+          value={String(result.lateRecords)}
+          label={t('admin.statsLateRecordsPeriod', { period: periodLabel })}
+          theme={theme}
+        />
       </View>
 
       <Pressable
@@ -185,24 +243,30 @@ function ResumeView({ result, theme, t, onOpenRecidivists }: {
       </Pressable>
 
       <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <Text style={[styles.cardTitle, { color: theme.text }]}>{t('admin.statsTrend')}</Text>
-        <View style={styles.trendRow}>
-          {result.trend.map(point => (
-            <View key={point.label} style={styles.trendCol}>
-              <View style={styles.trendBarZone}>
-                <View style={[
-                  styles.trendBar,
-                  {
-                    height: `${Math.max(4, (point.value / maxTrend) * 100)}%`,
-                    backgroundColor: point.value > 0 ? theme.danger : theme.surfaceAlt,
-                  },
-                ]} />
+        <Text style={[styles.cardTitle, { color: theme.text }]}>
+          {t('admin.statsTrendPeriodEnd', { period: periodLabel })}
+        </Text>
+        {result.trend.length === 0 ? (
+          <Text style={[styles.cardLead, { color: theme.textSoft }]}>{t('common.noData')}</Text>
+        ) : (
+          <View style={styles.trendRow}>
+            {result.trend.map(point => (
+              <View key={point.label} style={styles.trendCol}>
+                <View style={styles.trendBarZone}>
+                  <View style={[
+                    styles.trendBar,
+                    {
+                      height: `${Math.max(4, (point.value / maxTrend) * 100)}%`,
+                      backgroundColor: point.value > 0 ? theme.danger : theme.surfaceAlt,
+                    },
+                  ]} />
+                </View>
+                <Text style={[styles.trendLabel, { color: theme.textMuted }]}>{point.label}</Text>
+                <Text style={[styles.trendValue, { color: theme.textSoft }]}>{point.value}</Text>
               </View>
-              <Text style={[styles.trendLabel, { color: theme.textMuted }]}>{point.label}</Text>
-              <Text style={[styles.trendValue, { color: theme.textSoft }]}>{point.value}</Text>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
       </View>
 
       <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -211,7 +275,11 @@ function ResumeView({ result, theme, t, onOpenRecidivists }: {
           <Text style={[styles.cardLead, { color: theme.textSoft }]}>{t('common.noData')}</Text>
         ) : (
           [...result.byClass]
-            .sort((a, b) => a.presenceRate - b.presenceRate)
+            .sort((a, b) => {
+              if (a.presenceRate == null) return b.presenceRate == null ? a.name.localeCompare(b.name, 'fr') : 1
+              if (b.presenceRate == null) return -1
+              return a.presenceRate - b.presenceRate
+            })
             .map(line => (
               <View key={line.name} style={styles.classLine}>
                 <Text numberOfLines={1} style={[styles.className, { color: theme.text }]}>{line.name}</Text>
@@ -219,12 +287,16 @@ function ResumeView({ result, theme, t, onOpenRecidivists }: {
                   <View style={[
                     styles.classFill,
                     {
-                      width: `${Math.min(100, Math.max(0, line.presenceRate))}%`,
-                      backgroundColor: line.presenceRate >= 92 ? theme.info : theme.danger,
+                      width: `${Math.min(100, Math.max(0, line.presenceRate ?? 0))}%`,
+                      backgroundColor: line.presenceRate == null
+                        ? theme.textMuted
+                        : line.presenceRate >= 92 ? theme.info : theme.danger,
                     },
                   ]} />
                 </View>
-                <Text style={[styles.classRate, { color: theme.textSoft }]}>{line.presenceRate}%</Text>
+                <Text style={[styles.classRate, { color: theme.textSoft }]}>
+                  {line.presenceRate == null ? '—' : `${line.presenceRate}%`}
+                </Text>
               </View>
             ))
         )}
@@ -233,9 +305,14 @@ function ResumeView({ result, theme, t, onOpenRecidivists }: {
   )
 }
 
-function RowsView({ rows, total, tab, theme, t, nav, scope }: {
+function RowsView({
+  rows, total, nextCursor, loadingMore, onLoadMore, tab, theme, t, nav, scope,
+}: {
   rows: AttendanceRow[]
   total: number
+  nextCursor: string | null
+  loadingMore: boolean
+  onLoadMore: () => void
   tab: Tab
   theme: Theme
   t: TFunction
@@ -259,7 +336,7 @@ function RowsView({ rows, total, tab, theme, t, nav, scope }: {
       </Text>
       {rows.map((row, index) => (
         <Pressable
-          key={`${row.student.id}-${row.date}-${index}`}
+          key={row.id || `${row.student.id}-${row.date}-${index}`}
           onPress={() => nav.navigate('AdminStudentFile', { eleveId: row.student.id, scope })}
           accessibilityRole="button"
           style={({ pressed }) => [
@@ -279,6 +356,22 @@ function RowsView({ rows, total, tab, theme, t, nav, scope }: {
           <ChevronRight size={14} color={theme.textMuted} />
         </Pressable>
       ))}
+      {nextCursor ? (
+        <Pressable
+          onPress={onLoadMore}
+          disabled={loadingMore}
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.loadMore,
+            { backgroundColor: theme.primarySurface, borderColor: theme.border },
+            pressed && styles.pressed,
+          ]}
+        >
+          {loadingMore
+            ? <ActivityIndicator size="small" color={theme.primary} />
+            : <Text style={[styles.loadMoreText, { color: theme.primary }]}>{t('common.seeMore')}</Text>}
+        </Pressable>
+      ) : null}
     </View>
   )
 }
@@ -327,6 +420,11 @@ const styles = StyleSheet.create({
   classRate: { width: 38, fontSize: 11, fontWeight: '900', textAlign: 'right' },
   rowsWrap: { gap: 6 },
   rowsCount: { fontSize: 11, fontWeight: '800', marginBottom: 2 },
+  loadMore: {
+    minHeight: 40, borderWidth: 1, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center', marginTop: 4,
+  },
+  loadMoreText: { fontSize: 12, fontWeight: '900' },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1, borderRadius: 10,
     paddingHorizontal: 11, paddingVertical: 9,

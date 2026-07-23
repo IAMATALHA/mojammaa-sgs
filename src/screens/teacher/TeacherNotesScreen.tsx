@@ -33,14 +33,21 @@ import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 import { parseNotesFile, matchToEleve, type ParsedNoteRow } from '../../services/NotesImport'
 import {
+  alignControlsWithRule,
   averageControlNotes,
+  buildEvaluationComponents,
+  calculateCollegeEvaluation,
   formatGrade,
+  getEvaluationRule,
   getExpectedControlsForSubject,
   makeControlNotes,
   type ControlNote,
+  type EvaluationRule,
+  type IntegratedActivityNote,
 } from '../../services/notesRules';
 import { currentAcademicPeriod } from '../../utils/academicPeriod'
 import { commitInChunks } from '../../utils/firestoreBatch'
+import { translatedFormula } from '../../utils/evaluationFormula'
 
 // Noms officiels de l'école (collège + primaire). Utilisé seulement comme
 // liste de secours : la matière du prof est verrouillée via profile.matiere.
@@ -70,6 +77,9 @@ interface NoteEntry {
   controlesCount: number
   controlesExpected: number | null
   controlesIgnored: number
+  integratedActivity: IntegratedActivityNote | null
+  calculationStatus: 'legacy' | 'provisional' | 'complete'
+  completionRate: number | null
 }
 
 function asNumber(v: unknown): number | null {
@@ -113,7 +123,14 @@ function placeholderWithBareme(label: string, bareme: number): string {
 }
 
 function readControlNotes(data: any, bareme: number): ControlNote[] {
-  const raw = Array.isArray(data?.controles) ? data.controles : Array.isArray(data?.controls) ? data.controls : []
+  const evaluations = Array.isArray(data?.evaluations)
+    ? data.evaluations.filter((item: any) => {
+      const category = String(item?.category || item?.type || '')
+      return category !== 'integrated' && category !== 'integrated_activity'
+    })
+    : null
+  const raw = evaluations
+    || (Array.isArray(data?.controles) ? data.controles : Array.isArray(data?.controls) ? data.controls : [])
   if (raw.length === 0) return []
   if (typeof raw[0] === 'number') {
     const values = raw
@@ -130,9 +147,32 @@ function readControlNotes(data: any, bareme: number): ControlNote[] {
         numero,
         label: String(item?.label || `Contrôle ${numero}`),
         note,
+        slot: String(item?.slot || item?.id || '') || undefined,
+        kind: String(item?.kind || item?.type || '') || undefined,
+        dateEvaluation: String(item?.dateEvaluation || item?.evaluationDate || '') || undefined,
       }
     })
     .filter((item: ControlNote | null): item is ControlNote => item != null)
+}
+
+function readIntegratedActivity(data: any, bareme: number): IntegratedActivityNote | null {
+  const evaluation = Array.isArray(data?.evaluations)
+    ? data.evaluations.find((item: any) => {
+      const category = String(item?.category || item?.type || '')
+      return category === 'integrated' || category === 'integrated_activity'
+    })
+    : null
+  const raw = evaluation
+    || data?.activitesIntegrees
+    || data?.integratedActivities
+    || data?.integratedActivity
+  const note = asNumber(raw && typeof raw === 'object' ? raw.note : raw)
+  if (note == null || note < 0 || note > bareme) return null
+  return {
+    note,
+    label: String(raw?.label || 'Activités intégrées'),
+    dateEvaluation: String(raw?.dateEvaluation || raw?.evaluationDate || '') || undefined,
+  }
 }
 
 function parseGradeInput(value: string, bareme: number): number | null {
@@ -144,6 +184,56 @@ function parseGradeInput(value: string, bareme: number): number | null {
 
 function noteDocId(eleveId: string, academicYear: string, semestre: string, matiere: string): string {
   return `${eleveId}_${academicYear}_${semestre}_${matiere}`.replace(/\//g, '_')
+}
+
+function structuredEvaluationPayload({
+  rule,
+  matiere,
+  classe,
+  bareme,
+  controles,
+  integratedActivity,
+}: {
+  rule: EvaluationRule
+  matiere: string
+  classe: string
+  bareme: 10 | 20
+  controles: ControlNote[]
+  integratedActivity: IntegratedActivityNote | null
+}): Record<string, unknown> {
+  const aligned = alignControlsWithRule(controles, rule)
+  const calculated = calculateCollegeEvaluation({
+    matiere,
+    classe,
+    controles: aligned,
+    integratedActivity,
+  })
+  if (!calculated || calculated.note == null) {
+    throw new Error('Aucune composante valide à enregistrer.')
+  }
+  return {
+    schemaVersion: 2,
+    gradeSource: 'structured',
+    // Niveau canonique de la politique : les règles refusent explicitement le
+    // schéma structuré hors collège et le calculateur peut relire la formule
+    // même si le libellé local de classe évolue.
+    niveau: rule.level,
+    evaluationPolicyVersion: rule.policyVersion,
+    subjectKey: rule.policyKey,
+    evaluations: buildEvaluationComponents(rule, aligned, integratedActivity, bareme),
+    controles: aligned,
+    controls: aligned.map(control => control.note),
+    controlesCount: calculated.controlsEntered,
+    controlesExpected: calculated.controlsExpected,
+    activitesIntegrees: integratedActivity,
+    note: calculated.note,
+    calculation: {
+      status: calculated.complete ? 'complete' : 'provisional',
+      completed: calculated.componentsEntered,
+      expected: calculated.componentsExpected,
+      completionRate: calculated.completionRate,
+    },
+  }
 }
 
 export default function TeacherNotesScreen() {
@@ -176,6 +266,13 @@ export default function TeacherNotesScreen() {
     () => getExpectedControlsForSubject(matiere, classe),
     [matiere, classe],
   )
+  const evaluationRule = useMemo(
+    () => getEvaluationRule(matiere, classe),
+    [matiere, classe],
+  )
+  const officialFormula = evaluationRule
+    ? translatedFormula(evaluationRule.formula, evaluationRule.integratedWeight, t)
+    : ''
 
   const load = useCallback(async () => {
     if (!classe) { setLoading(false); return }
@@ -217,12 +314,27 @@ export default function TeacherNotesScreen() {
           controlesCount?:    unknown
           controlesExpected?: unknown
           controlesIgnored?:  unknown
+          schemaVersion?:      unknown
+          calculation?:        unknown
+          evaluations?:        unknown
+          activitesIntegrees?: unknown
         }>(d)
-        const controles = readControlNotes(data, bareme)
+        const controles = alignControlsWithRule(readControlNotes(data, bareme), evaluationRule)
+        const integratedActivity = readIntegratedActivity(data, bareme)
+        const structured = asNumber(data.schemaVersion) != null && Number(data.schemaVersion) >= 2
+        const calculated = structured
+          ? calculateCollegeEvaluation({
+            matiere,
+            classe,
+            controles,
+            integratedActivity,
+          })
+          : null
         const rawNote = asNumber(data.note)
-        const note = rawNote != null && rawNote >= 0 && rawNote <= bareme
+        const note = calculated?.note
+          ?? (rawNote != null && rawNote >= 0 && rawNote <= bareme
           ? rawNote
-          : (controles.length > 0 ? averageControlNotes(controles.map(item => item.note)) : '')
+          : (controles.length > 0 ? averageControlNotes(controles.map(item => item.note)) : ''))
         map.set(data.eleveId, {
           id:       d.id,
           eleveId:  data.eleveId,
@@ -234,6 +346,11 @@ export default function TeacherNotesScreen() {
           controlesCount: asNumber(data.controlesCount) ?? controles.length,
           controlesExpected: asNumber(data.controlesExpected),
           controlesIgnored: asNumber(data.controlesIgnored) ?? 0,
+          integratedActivity,
+          calculationStatus: structured
+            ? (calculated?.complete ? 'complete' : 'provisional')
+            : 'legacy',
+          completionRate: calculated?.completionRate ?? null,
         })
       })
       setNotes(map)
@@ -242,7 +359,7 @@ export default function TeacherNotesScreen() {
     } finally {
       setLoading(false)
     }
-  }, [bareme, classe, matiere, period.academicYear, semestre])
+  }, [bareme, classe, evaluationRule, matiere, period.academicYear, semestre])
 
   useEffect(() => { load() }, [load])
 
@@ -268,6 +385,7 @@ export default function TeacherNotesScreen() {
       const parsed: ParsedNoteRow[] = await parseNotesFile(a.uri, a.mimeType || '', {
         maxControls: expectedControls,
         maxGrade: bareme,
+        controlSlots: evaluationRule?.controls,
       })
 
       if (parsed.length === 0) {
@@ -322,6 +440,24 @@ export default function TeacherNotesScreen() {
                 // règles par batch — l'import d'une classe entière échouerait.
                 await commitInChunks(db, matched, (batch, { row, eleve }) => {
                   const docId = notes.get(eleve.id)?.id || noteDocId(eleve.id, period.academicYear, semestre, matiere)
+                  const integratedActivity = row.integratedActivity == null
+                    ? null
+                    : { note: row.integratedActivity, label: 'Activités intégrées' }
+                  const gradePayload = evaluationRule
+                    ? structuredEvaluationPayload({
+                      rule: evaluationRule,
+                      matiere,
+                      classe,
+                      bareme,
+                      controles: row.controles,
+                      integratedActivity,
+                    })
+                    : {
+                      note: row.note,
+                      controles: row.controles,
+                      controlesCount: row.controles.length,
+                      controlesExpected: expectedControls ?? row.detectedControlsCount,
+                    }
                   batch.set(doc(db, 'notes', docId), {
                     eleveId:      eleve.id,
                     eleveNom:     eleve.nom,
@@ -333,11 +469,8 @@ export default function TeacherNotesScreen() {
                     semestre,
                     matiere,
                     matiereLabel: matiere,
-                    note:         row.note,
                     bareme,
-                    controles:    row.controles,
-                    controlesCount: row.controles.length,
-                    controlesExpected: expectedControls ?? row.detectedControlsCount,
+                    ...gradePayload,
                     controlesIgnored: row.ignoredControls.length,
                     importedAt:   serverTimestamp(),
                     importedBy:   profile.uid,
@@ -355,7 +488,7 @@ export default function TeacherNotesScreen() {
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || t('teacher.readFailed'))
     }
-  }, [profile, classe, cycle, bareme, matiere, notes, period.academicYear, semestre, expectedControls, t, load])
+  }, [profile, classe, cycle, bareme, matiere, notes, period.academicYear, semestre, expectedControls, evaluationRule, t, load])
 
   const Chip = ({ value, active, onPress }: { value: string; active: boolean; onPress: () => void }) => (
     <TouchableOpacity onPress={onPress}
@@ -377,6 +510,11 @@ export default function TeacherNotesScreen() {
     const controlsLabel = expected != null
       ? t('teacher.controlsCountExpected', { count: controlCount, expected })
       : t('teacher.controlsCount', { count: controlCount })
+    const structuredLabel = noteEntry?.calculationStatus !== 'legacy' && noteEntry?.completionRate != null
+      ? t(noteEntry.calculationStatus === 'complete'
+        ? 'teacher.evaluationComplete'
+        : 'teacher.evaluationProvisional', { percent: noteEntry.completionRate })
+      : ''
     return (
       <TouchableOpacity
         onPress={() => setEditEleve(item)}
@@ -391,6 +529,14 @@ export default function TeacherNotesScreen() {
           ) : null}
           {hasNote && controlCount > 0 ? (
             <Text style={[styles.eleveSub, { color: theme.textSoft }]}>{controlsLabel}</Text>
+          ) : null}
+          {structuredLabel ? (
+            <Text style={[
+              styles.eleveSub,
+              { color: noteEntry?.calculationStatus === 'complete' ? theme.success : theme.warning },
+            ]}>
+              {structuredLabel}
+            </Text>
           ) : null}
         </View>
         {hasNote ? (
@@ -451,6 +597,11 @@ export default function TeacherNotesScreen() {
             {` · /${bareme}`}
             {expectedControls != null ? ` · ${t('teacher.controlsCount', { count: expectedControls })}` : ''}
           </Text>
+          {evaluationRule ? (
+            <Text style={{ color: theme.textSoft, fontSize: 11, fontWeight: '600', lineHeight: 16, marginTop: 4 }}>
+              {officialFormula}
+            </Text>
+          ) : null}
         </View>
 
         <TouchableOpacity
@@ -495,6 +646,7 @@ export default function TeacherNotesScreen() {
         cycle={cycle}
         teacherUid={profile?.uid || ''}
         expectedControls={expectedControls}
+        evaluationRule={evaluationRule}
         onClose={() => setEditEleve(null)}
         onSaved={() => { setEditEleve(null); load() }}
       />
@@ -504,7 +656,8 @@ export default function TeacherNotesScreen() {
 
 // ─── Edit note modal ─────────────────────────────────────────────────────────
 function EditNoteModal({
-  visible, eleve, existing, matiere, academicYear, semestre, classe, bareme, cycle, teacherUid, expectedControls, onClose, onSaved,
+  visible, eleve, existing, matiere, academicYear, semestre, classe, bareme, cycle, teacherUid,
+  expectedControls, evaluationRule, onClose, onSaved,
 }: {
   visible:    boolean
   eleve:      EleveLite | null
@@ -517,27 +670,122 @@ function EditNoteModal({
   cycle:      'prescolaire' | 'primaire' | 'college'
   teacherUid: string
   expectedControls?: number | null
+  evaluationRule: EvaluationRule | null
   onClose:    () => void
   onSaved:    () => void
 }) {
   const theme = useTheme()
   const { t } = useTranslation()
+  const officialFormula = evaluationRule
+    ? translatedFormula(evaluationRule.formula, evaluationRule.integratedWeight, t)
+    : ''
   const [value,  setValue]  = useState('')
+  const [controlValues, setControlValues] = useState<Record<string, string>>({})
+  const [integratedValue, setIntegratedValue] = useState('')
   const [saving, setSaving] = useState(false)
   const [err,    setErr]    = useState('')
 
   useEffect(() => {
-    if (visible && existing) setValue(String(existing.note ?? ''))
-    else if (visible) setValue('')
+    if (!visible) return
+    if (existing) setValue(String(existing.note ?? ''))
+    else setValue('')
+    if (evaluationRule) {
+      const bySlot = new Map((existing?.controles || []).map(control => [control.slot, control]))
+      const values: Record<string, string> = {}
+      evaluationRule.controls.forEach((slot, index) => {
+        const control = bySlot.get(slot.slot)
+          || existing?.controles.find(item => item.numero === index + 1)
+        values[slot.slot] = control ? String(control.note) : ''
+      })
+      setControlValues(values)
+      setIntegratedValue(existing?.integratedActivity
+        ? String(existing.integratedActivity.note)
+        : '')
+    } else {
+      setControlValues({})
+      setIntegratedValue('')
+    }
     setErr('')
-  }, [visible, existing])
+  }, [visible, existing, evaluationRule])
+
+  const draft = useMemo(() => {
+    if (!evaluationRule) return null
+    const controles = evaluationRule.controls.flatMap((slot, index) => {
+      const note = parseGradeInput(controlValues[slot.slot] || '', bareme)
+      if (note == null) return []
+      return [{
+        numero: index + 1,
+        slot: slot.slot,
+        kind: slot.kind,
+        label: slot.label,
+        note,
+      }]
+    })
+    const integratedNote = parseGradeInput(integratedValue, bareme)
+    return calculateCollegeEvaluation({
+      matiere,
+      classe,
+      controles,
+      integratedActivity: integratedNote == null
+        ? null
+        : { note: integratedNote, label: 'Activités intégrées' },
+    })
+  }, [bareme, classe, controlValues, evaluationRule, integratedValue, matiere])
 
   const submit = async () => {
     if (!eleve) return
-    const num = parseGradeInput(value, bareme)
-    if (num == null) {
-      setErr(labelWithBareme(t('teacher.invalidNote'), bareme))
-      return
+    let gradePayload: Record<string, unknown>
+    if (evaluationRule) {
+      const invalidControl = evaluationRule.controls.find(slot => {
+        const raw = controlValues[slot.slot]?.trim() || ''
+        return raw.length > 0 && parseGradeInput(raw, bareme) == null
+      })
+      const integratedRaw = integratedValue.trim()
+      if (invalidControl || (integratedRaw && parseGradeInput(integratedRaw, bareme) == null)) {
+        setErr(labelWithBareme(t('teacher.invalidNote'), bareme))
+        return
+      }
+      const controles = evaluationRule.controls.flatMap((slot, index) => {
+        const note = parseGradeInput(controlValues[slot.slot] || '', bareme)
+        if (note == null) return []
+        return [{
+          numero: index + 1,
+          slot: slot.slot,
+          kind: slot.kind,
+          label: slot.label,
+          note,
+        }]
+      })
+      const integratedNote = parseGradeInput(integratedValue, bareme)
+      if (controles.length === 0 && integratedNote == null) {
+        setErr(t('teacher.enterAtLeastOneComponent'))
+        return
+      }
+      gradePayload = structuredEvaluationPayload({
+        rule: evaluationRule,
+        matiere,
+        classe,
+        bareme,
+        controles,
+        integratedActivity: integratedNote == null
+          ? null
+          : { note: integratedNote, label: 'Activités intégrées' },
+      })
+    } else {
+      const num = parseGradeInput(value, bareme)
+      if (num == null) {
+        setErr(labelWithBareme(t('teacher.invalidNote'), bareme))
+        return
+      }
+      gradePayload = {
+        gradeSource: 'legacy_summary',
+        note: num,
+        controles: [{ numero: 1, label: 'Contrôle 1', note: num }],
+        controlesCount: 1,
+        controlesExpected: expectedControls ?? 1,
+        controlesIgnored: 0,
+        controls: [num],
+      }
     }
     setSaving(true); setErr('')
     try {
@@ -553,17 +801,9 @@ function EditNoteModal({
         semestre,
         matiere,
         matiereLabel: matiere,
-        note: num,
         bareme,
-        controles: [{
-          numero: 1,
-          label: 'Contrôle 1',
-          note: num,
-        }],
-        controlesCount: 1,
-        controlesExpected: expectedControls ?? 1,
+        ...gradePayload,
         controlesIgnored: 0,
-        controls: [num],
         importedAt: serverTimestamp(),
         importedBy: teacherUid,
       }, { merge: true })
@@ -591,7 +831,7 @@ function EditNoteModal({
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.modalBody}>
+        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.modalBody}>
           {eleve && (
             <View style={[styles.eleveCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <Text style={[styles.eleveTitle, { color: theme.text }]}>
@@ -609,18 +849,112 @@ function EditNoteModal({
             </View>
           ) : null}
 
-          <Text style={[styles.label, { color: theme.textSoft }]}>{labelWithBareme(t('teacher.noteLabel'), bareme)}</Text>
-          <TextInput
-            value={value}
-            onChangeText={setValue}
-            accessibilityLabel={labelWithBareme(t('teacher.noteLabel'), bareme)}
-            placeholder={placeholderWithBareme(t('teacher.notePlaceholder'), bareme)}
-            placeholderTextColor={theme.textSoft}
-            style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.white, fontSize: 28, textAlign: 'center', fontWeight: '700' }]}
-            keyboardType="numeric"
-            maxLength={5}
-            autoFocus
-          />
+          {evaluationRule ? (
+            <>
+              <View style={[styles.formulaCard, { backgroundColor: theme.primarySurface, borderColor: theme.primaryBorder }]}>
+                <Text style={[styles.formulaTitle, { color: theme.primary }]}>
+                  {t('teacher.officialCalculation')}
+                </Text>
+                <Text style={[styles.formulaText, { color: theme.text }]}>
+                  {officialFormula}
+                </Text>
+              </View>
+
+              {evaluationRule.controls.map((slot, index) => (
+                <View key={slot.slot} style={styles.componentField}>
+                  <Text style={[styles.componentLabel, { color: theme.textSoft }]}>
+                    {slot.label} · /{bareme}
+                  </Text>
+                  <TextInput
+                    value={controlValues[slot.slot] || ''}
+                    onChangeText={next => setControlValues(current => ({ ...current, [slot.slot]: next }))}
+                    accessibilityLabel={`${slot.label} sur ${bareme}`}
+                    placeholder="—"
+                    placeholderTextColor={theme.textSoft}
+                    style={[styles.componentInput, {
+                      borderColor: theme.border,
+                      color: theme.text,
+                      backgroundColor: theme.white,
+                    }]}
+                    keyboardType="decimal-pad"
+                    maxLength={5}
+                    autoFocus={index === 0}
+                  />
+                </View>
+              ))}
+
+              {evaluationRule.integratedRequired ? (
+                <View style={styles.componentField}>
+                  <Text style={[styles.componentLabel, { color: theme.textSoft }]}>
+                    {t('teacher.integratedActivities')} · {Math.round(evaluationRule.integratedWeight * 100)} % · /{bareme}
+                  </Text>
+                  <TextInput
+                    value={integratedValue}
+                    onChangeText={setIntegratedValue}
+                    accessibilityLabel={`${t('teacher.integratedActivities')} sur ${bareme}`}
+                    placeholder="—"
+                    placeholderTextColor={theme.textSoft}
+                    style={[styles.componentInput, {
+                      borderColor: theme.border,
+                      color: theme.text,
+                      backgroundColor: theme.white,
+                    }]}
+                    keyboardType="decimal-pad"
+                    maxLength={5}
+                  />
+                </View>
+              ) : null}
+
+              {draft?.note != null ? (
+                <View style={[styles.previewCard, {
+                  backgroundColor: draft.complete ? theme.successSurface : theme.warningSurface,
+                }]}>
+                  <View>
+                    <Text style={[styles.previewLabel, {
+                      color: draft.complete ? theme.success : theme.warning,
+                    }]}>
+                      {draft.complete ? t('teacher.finalAverage') : t('teacher.provisionalAverage')}
+                    </Text>
+                    <Text style={[styles.previewCoverage, { color: theme.textSoft }]}>
+                      {t('teacher.componentsCoverage', {
+                        completed: draft.componentsEntered,
+                        expected: draft.componentsExpected,
+                      })}
+                    </Text>
+                  </View>
+                  <Text style={[styles.previewValue, {
+                    color: draft.complete ? theme.success : theme.warning,
+                  }]}>
+                    {formatGrade(draft.note)}/{bareme}
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Text style={[styles.label, { color: theme.textSoft }]}>
+                {labelWithBareme(t('teacher.noteLabel'), bareme)}
+              </Text>
+              <TextInput
+                value={value}
+                onChangeText={setValue}
+                accessibilityLabel={labelWithBareme(t('teacher.noteLabel'), bareme)}
+                placeholder={placeholderWithBareme(t('teacher.notePlaceholder'), bareme)}
+                placeholderTextColor={theme.textSoft}
+                style={[styles.input, {
+                  borderColor: theme.border,
+                  color: theme.text,
+                  backgroundColor: theme.white,
+                  fontSize: 28,
+                  textAlign: 'center',
+                  fontWeight: '700',
+                }]}
+                keyboardType="decimal-pad"
+                maxLength={5}
+                autoFocus
+              />
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
@@ -647,8 +981,24 @@ const styles = StyleSheet.create({
   // Modal
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1 },
   modalTitle:  { fontSize: 16, fontWeight: '700' },
-  modalBody:   { padding: 20 },
+  modalBody:   { padding: 20, paddingBottom: 40 },
   eleveCard:   { padding: 14, borderRadius: 10, borderWidth: 1, marginBottom: 16 },
   eleveTitle:  { fontSize: 16, fontWeight: '800', marginBottom: 4 },
   input:       { borderWidth: 1, borderRadius: 10, padding: 16 },
+  formulaCard: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 16, gap: 4 },
+  formulaTitle: { fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.4 },
+  formulaText: { fontSize: 12, fontWeight: '700', lineHeight: 18 },
+  componentField: { marginBottom: 12, gap: 6 },
+  componentLabel: { fontSize: 11, fontWeight: '800' },
+  componentInput: {
+    borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, minHeight: 48,
+    fontSize: 20, fontWeight: '800', textAlign: 'center', fontVariant: ['tabular-nums'],
+  },
+  previewCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, marginTop: 4,
+  },
+  previewLabel: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  previewCoverage: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+  previewValue: { fontSize: 21, fontWeight: '900', fontVariant: ['tabular-nums'] },
 });

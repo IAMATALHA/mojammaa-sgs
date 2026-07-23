@@ -37,7 +37,7 @@ const CLES_BASE = [
   'Éducation Physique et Sportive',
 ]
 /** Enseignées mais sans aucune note à ce jour — clés à confirmer à la 1re saisie. */
-const CLES_ATTENDUES = ['Éducation islamique', 'Informatique']
+const CLES_ATTENDUES = ['Éducation Islamique', 'Informatique']
 
 function eleve(id, niveau) {
   return { id, codeMassar: id, classe: `${niveau}-1`, niveau, cycle: 'college' }

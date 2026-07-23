@@ -1,26 +1,101 @@
+import policyJson from '../../functions/lib/collegeEvaluationPolicy.json'
+
+export type CollegeLevel = '1AC' | '2AC' | '3AC'
+
+export interface ControlSlot {
+  slot: string
+  kind: string
+  label: string
+}
+
 export interface ControlNote {
   numero: number
   label: string
   note: number
+  slot?: string
+  kind?: string
+  dateEvaluation?: string
 }
 
-type CollegeLevel = '1AC' | '2AC' | '3AC'
-
-const COLLEGE_CONTROLS: Record<string, Record<CollegeLevel, number>> = {
-  arabe: { '1AC': 2, '2AC': 2, '3AC': 2 },
-  francais: { '1AC': 4, '2AC': 4, '3AC': 4 },
-  sociales: { '1AC': 3, '2AC': 3, '3AC': 2 },
-  mathematiques: { '1AC': 3, '2AC': 3, '3AC': 3 },
-  svt: { '1AC': 2, '2AC': 2, '3AC': 3 },
-  physiqueChimie: { '1AC': 3, '2AC': 3, '3AC': 3 },
-  educationIslamique: { '1AC': 2, '2AC': 2, '3AC': 2 },
-  eps: { '1AC': 3, '2AC': 3, '3AC': 3 },
-  educationFamiliale: { '1AC': 2, '2AC': 2, '3AC': 2 },
-  artsPlastiques: { '1AC': 2, '2AC': 2, '3AC': 2 },
-  educationMusicale: { '1AC': 2, '2AC': 2, '3AC': 2 },
-  informatique: { '1AC': 3, '2AC': 3, '3AC': 3 },
-  anglaisEspagnol: { '1AC': 0, '2AC': 0, '3AC': 2 },
+export interface IntegratedActivityNote {
+  note: number
+  label: string
+  dateEvaluation?: string
 }
+
+export interface EvaluationComponent {
+  slot: string
+  category: 'control' | 'integrated'
+  kind: string
+  ordinal: number
+  label: string
+  note: number
+  bareme: 10 | 20
+  evaluationDate?: string
+}
+
+interface PolicySubject {
+  canonical: string
+  aliases: string[]
+  formula: 'weighted_blocks' | 'english_three_blocks'
+  controlsByLevel: Record<CollegeLevel, ControlSlot[]>
+  integratedWeightByLevel: Record<CollegeLevel, number>
+}
+
+interface CollegePolicy {
+  academicYear: string
+  version: string
+  source: string
+  subjects: Record<string, PolicySubject>
+}
+
+export interface EvaluationRule {
+  policyVersion: string
+  policyKey: string
+  canonicalSubject: string
+  level: CollegeLevel
+  formula: PolicySubject['formula']
+  formulaLabel: string
+  controls: ControlSlot[]
+  integratedWeight: number
+  integratedRequired: boolean
+}
+
+export interface ControlProgressionStep {
+  fromSlot: string
+  fromKind: string
+  fromLabel: string
+  from: number
+  toSlot: string
+  toKind: string
+  toLabel: string
+  to: number
+  delta: number
+}
+
+export interface EvaluationResult {
+  note: number | null
+  writtenAverage: number | null
+  integratedActivitiesNote: number | null
+  complete: boolean
+  provisional: boolean
+  completionRate: number
+  controlsExpected: number
+  controlsEntered: number
+  componentsExpected: number
+  componentsEntered: number
+  formulaLabel: string
+  progression: {
+    steps: ControlProgressionStep[]
+    comparableSteps: ControlProgressionStep[]
+    first: number | null
+    latest: number | null
+    delta: number | null
+    latestDelta: number | null
+  }
+}
+
+export const COLLEGE_EVALUATION_POLICY = policyJson as CollegePolicy
 
 function normalizeLabel(value: unknown): string {
   return String(value || '')
@@ -28,8 +103,15 @@ function normalizeLabel(value: unknown): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[’']/g, ' ')
+    .replace(/[^a-z0-9\u0600-\u06ff]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function average(values: number[]): number | null {
+  return values.length > 0
+    ? values.reduce((sum, value) => sum + value, 0) / values.length
+    : null
 }
 
 export function getCollegeLevelFromClasse(classe?: string, niveau?: string): CollegeLevel | null {
@@ -41,33 +123,52 @@ export function getCollegeLevelFromClasse(classe?: string, niveau?: string): Col
 }
 
 export function getSubjectRulesKey(matiere: string): string | null {
-  const value = normalizeLabel(matiere)
-
-  if (!value) return null
-  if (value.includes('physique') && (value.includes('chimie') || value.includes('pc'))) return 'physiqueChimie'
-  if (value.includes('فيزياء') || value.includes('كيمياء')) return 'physiqueChimie'
-  if (value.includes('mathematique') || value.includes('math') || value.includes('رياض')) return 'mathematiques'
-  if (value.includes('svt') || value.includes('vie') || value.includes('terre') || value.includes('علوم الحياة')) return 'svt'
-  if (value.includes('franc')) return 'francais'
-  if (value.includes('arab') || value.includes('عربية') || value.includes('العربية')) return 'arabe'
-  if (value.includes('histoire') || value.includes('geo') || value.includes('social') || value.includes('اجتماع')) return 'sociales'
-  if (value.includes('islam') || value.includes('اسلام')) return 'educationIslamique'
-  if (value.includes('education physique') || value.includes('eps') || value.includes('sport') || value.includes('بدنية')) return 'eps'
-  if (value.includes('familiale') || value.includes('اسرية') || value.includes('أسرية')) return 'educationFamiliale'
-  if (value.includes('musique') || value.includes('موسيقى') || value.includes('موسيقية')) return 'educationMusicale'
-  if (value.includes('arts') || value.includes('artistique') || value.includes('plastique') || value.includes('تشكيلية')) return 'artsPlastiques'
-  if (value.includes('informatique') || value.includes('اعلاميات') || value.includes('إعلاميات')) return 'informatique'
-  if (value.includes('anglais') || value.includes('english') || value.includes('espagnol') || value.includes('انجليزي') || value.includes('اسباني')) return 'anglaisEspagnol'
-  if (value.includes('physique')) return 'physiqueChimie'
-
+  const needle = normalizeLabel(matiere)
+  if (!needle) return null
+  for (const [key, subject] of Object.entries(COLLEGE_EVALUATION_POLICY.subjects)) {
+    const labels = [subject.canonical, ...subject.aliases].map(normalizeLabel)
+    if (labels.includes(needle)) return key
+  }
   return null
 }
 
-export function getExpectedControlsForSubject(matiere: string, classe?: string, niveau?: string): number | null {
+function formulaLabel(subject: PolicySubject, level: CollegeLevel): string {
+  const integratedWeight = subject.integratedWeightByLevel[level] || 0
+  if (subject.formula === 'english_three_blocks') {
+    return '(moyenne des contrôles courts + contrôle final + activités intégrées) ÷ 3'
+  }
+  if (integratedWeight > 0) {
+    return `moyenne des évaluations × ${Math.round((1 - integratedWeight) * 100)} % + activités intégrées × ${Math.round(integratedWeight * 100)} %`
+  }
+  return 'moyenne des contrôles écrits'
+}
+
+export function getEvaluationRule(
+  matiere: string,
+  classe?: string,
+  niveau?: string,
+): EvaluationRule | null {
   const level = getCollegeLevelFromClasse(classe, niveau)
   const key = getSubjectRulesKey(matiere)
   if (!level || !key) return null
-  return COLLEGE_CONTROLS[key]?.[level] ?? null
+  const subject = COLLEGE_EVALUATION_POLICY.subjects[key]
+  const controls = subject.controlsByLevel[level] || []
+  const integratedWeight = subject.integratedWeightByLevel[level] || 0
+  return {
+    policyVersion: COLLEGE_EVALUATION_POLICY.version,
+    policyKey: key,
+    canonicalSubject: subject.canonical,
+    level,
+    formula: subject.formula,
+    formulaLabel: formulaLabel(subject, level),
+    controls,
+    integratedWeight,
+    integratedRequired: integratedWeight > 0,
+  }
+}
+
+export function getExpectedControlsForSubject(matiere: string, classe?: string, niveau?: string): number | null {
+  return getEvaluationRule(matiere, classe, niveau)?.controls.length ?? null
 }
 
 export function roundGrade(value: number): number {
@@ -75,18 +176,193 @@ export function roundGrade(value: number): number {
 }
 
 export function averageControlNotes(notes: number[]): number {
-  if (notes.length === 0) return 0
-  return roundGrade(notes.reduce((sum, value) => sum + value, 0) / notes.length)
+  return roundGrade(average(notes) ?? 0)
 }
 
 export function formatGrade(value: number): string {
   return roundGrade(value).toFixed(2).replace(/\.?0+$/, '')
 }
 
-export function makeControlNotes(values: number[], labels?: string[]): ControlNote[] {
+export function makeControlNotes(values: number[], labels?: string[], slots?: ControlSlot[]): ControlNote[] {
   return values.map((note, idx) => ({
     numero: idx + 1,
-    label: labels?.[idx] || `Contrôle ${idx + 1}`,
+    label: labels?.[idx] || slots?.[idx]?.label || `Contrôle ${idx + 1}`,
     note: roundGrade(note),
+    ...(slots?.[idx]?.slot ? { slot: slots[idx].slot, kind: slots[idx].kind } : {}),
   }))
+}
+
+export function alignControlsWithRule(
+  controles: ControlNote[],
+  rule: EvaluationRule | null,
+): ControlNote[] {
+  if (!rule) return controles.map((control, index) => ({ ...control, numero: index + 1 }))
+  const expectedSlots = new Set(rule.controls.map(slot => slot.slot))
+  const bySlot = new Map<string, ControlNote>()
+  controles.forEach(control => {
+    if (!control.slot || !expectedSlots.has(control.slot) || bySlot.has(control.slot)) return
+    bySlot.set(control.slot, control)
+  })
+  return rule.controls.flatMap((slot, index) => {
+    const existing = bySlot.get(slot.slot)
+      || controles.find(control => !control.slot && control.numero === index + 1)
+    if (!existing) return []
+    return [{
+      ...existing,
+      numero: index + 1,
+      slot: slot.slot,
+      kind: slot.kind,
+      label: slot.label,
+    }]
+  })
+}
+
+function progressionStep(from: ControlNote, to: ControlNote): ControlProgressionStep {
+  return {
+    fromSlot: from.slot || `control_${from.numero}`,
+    fromKind: from.kind || 'written',
+    fromLabel: from.label,
+    from: roundGrade(from.note),
+    toSlot: to.slot || `control_${to.numero}`,
+    toKind: to.kind || 'written',
+    toLabel: to.label,
+    to: roundGrade(to.note),
+    delta: roundGrade(to.note - from.note),
+  }
+}
+
+function controlProgression(
+  controls: ControlNote[],
+  rule: EvaluationRule,
+): EvaluationResult['progression'] {
+  const bySlot = new Map(controls.flatMap(control =>
+    control.slot ? [[control.slot, control] as const] : []))
+  const steps: ControlProgressionStep[] = []
+  for (let index = 1; index < rule.controls.length; index += 1) {
+    const from = bySlot.get(rule.controls[index - 1].slot)
+    const to = bySlot.get(rule.controls[index].slot)
+    if (from && to) steps.push(progressionStep(from, to))
+  }
+
+  const comparableSteps: ControlProgressionStep[] = []
+  const slotsByKind = new Map<string, ControlSlot[]>()
+  rule.controls.forEach(slot => {
+    const rows = slotsByKind.get(slot.kind) || []
+    rows.push(slot)
+    slotsByKind.set(slot.kind, rows)
+  })
+  slotsByKind.forEach(slots => {
+    for (let index = 1; index < slots.length; index += 1) {
+      const from = bySlot.get(slots[index - 1].slot)
+      const to = bySlot.get(slots[index].slot)
+      if (from && to) comparableSteps.push(progressionStep(from, to))
+    }
+  })
+  comparableSteps.sort((a, b) =>
+    rule.controls.findIndex(slot => slot.slot === a.toSlot)
+    - rule.controls.findIndex(slot => slot.slot === b.toSlot))
+
+  const first = controls[0]
+  const latest = controls[controls.length - 1]
+  return {
+    steps,
+    comparableSteps,
+    first: first ? roundGrade(first.note) : null,
+    latest: latest ? roundGrade(latest.note) : null,
+    delta: steps.length > 0 && first && latest && first !== latest
+      ? roundGrade(latest.note - first.note)
+      : null,
+    latestDelta: comparableSteps.length > 0
+      ? comparableSteps[comparableSteps.length - 1].delta
+      : null,
+  }
+}
+
+export function calculateCollegeEvaluation({
+  matiere,
+  classe,
+  niveau,
+  controles,
+  integratedActivity,
+}: {
+  matiere: string
+  classe?: string
+  niveau?: string
+  controles: ControlNote[]
+  integratedActivity?: IntegratedActivityNote | null
+}): EvaluationResult | null {
+  const rule = getEvaluationRule(matiere, classe, niveau)
+  if (!rule) return null
+  const aligned = alignControlsWithRule(controles, rule)
+  const writtenAverage = average(aligned.map(control => control.note))
+  const integratedNote = integratedActivity?.note ?? null
+
+  let note: number | null
+  if (rule.formula === 'english_three_blocks') {
+    const shortAverage = average(aligned.filter(control => control.kind === 'short').map(control => control.note))
+    const finalNote = aligned.find(control => control.kind === 'final')?.note ?? null
+    note = average([shortAverage, finalNote, integratedNote].filter((value): value is number => value != null))
+  } else if (writtenAverage != null && integratedNote != null && rule.integratedRequired) {
+    note = (writtenAverage * (1 - rule.integratedWeight)) + (integratedNote * rule.integratedWeight)
+  } else {
+    // Une composante future absente ne vaut jamais zéro. La moyenne courante
+    // est provisoire et se calcule uniquement sur ce qui est réellement saisi.
+    note = writtenAverage ?? integratedNote
+  }
+
+  const complete = aligned.length >= rule.controls.length
+    && (!rule.integratedRequired || integratedNote != null)
+  const expected = rule.controls.length + (rule.integratedRequired ? 1 : 0)
+  const entered = Math.min(aligned.length, rule.controls.length)
+    + (rule.integratedRequired && integratedNote != null ? 1 : 0)
+
+  return {
+    note: note == null ? null : roundGrade(note),
+    writtenAverage: writtenAverage == null ? null : roundGrade(writtenAverage),
+    integratedActivitiesNote: integratedNote,
+    complete,
+    provisional: note != null && !complete,
+    completionRate: expected > 0 ? Math.round((entered / expected) * 100) : 0,
+    controlsExpected: rule.controls.length,
+    controlsEntered: Math.min(aligned.length, rule.controls.length),
+    componentsExpected: expected,
+    componentsEntered: entered,
+    formulaLabel: rule.formulaLabel,
+    progression: controlProgression(aligned, rule),
+  }
+}
+
+export function buildEvaluationComponents(
+  rule: EvaluationRule,
+  controles: ControlNote[],
+  integratedActivity: IntegratedActivityNote | null,
+  bareme: 10 | 20,
+): EvaluationComponent[] {
+  const aligned = alignControlsWithRule(controles, rule)
+  const controls: EvaluationComponent[] = aligned.map((control, index) => ({
+    slot: control.slot || rule.controls[index]?.slot || `control_${index + 1}`,
+    category: 'control',
+    kind: control.kind || rule.controls[index]?.kind || 'written',
+    ordinal: index + 1,
+    label: control.label,
+    note: roundGrade(control.note),
+    bareme,
+    ...(control.dateEvaluation ? { evaluationDate: control.dateEvaluation } : {}),
+  }))
+  if (!integratedActivity) return controls
+  return [
+    ...controls,
+    {
+      slot: 'integrated_activities',
+      category: 'integrated',
+      kind: 'integrated_activity',
+      ordinal: rule.controls.length + 1,
+      label: integratedActivity.label,
+      note: roundGrade(integratedActivity.note),
+      bareme,
+      ...(integratedActivity.dateEvaluation
+        ? { evaluationDate: integratedActivity.dateEvaluation }
+        : {}),
+    },
+  ]
 }

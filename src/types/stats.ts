@@ -32,6 +32,7 @@ export interface StatsScope {
  * à une moyenne hebdomadaire.
  */
 export interface AppliedScope extends StatsScope {
+  academicYear: string
   notesPeriod: 'S1' | 'S2' | 'annee'
   from: string
   to: string
@@ -47,12 +48,13 @@ export interface AppliedScope extends StatsScope {
  * « Sous le seuil » est l'union des deux bandes basses, « réussissant » celle
  * des deux hautes ; aucun second calcul n'est possible, donc aucune divergence.
  */
-export type StudentSegment = 'all' | 'followup' | 'recidivists' | 'band' | 'threshold'
+export type StudentSegment = 'all' | 'followup' | 'recidivists' | 'band' | 'threshold' | 'progression'
 
 export type GradeBandLabel = '<8' | '8-10' | '10-14' | '14+'
 
 export type FollowUpReason =
   | 'low_average'
+  | 'declining_controls'
   | 'declining'
   | 'absenteeism'
   | 'homework_not_done'
@@ -60,12 +62,44 @@ export type FollowUpReason =
 
 export type FollowUpPriority = 'low' | 'medium' | 'high'
 
+export type StudentProgressionOutcome = 'improved' | 'stable' | 'declined'
+
+/** Paire de contrôles sélectionnée dans le drill-down de progression. */
+export interface StudentProgressionQuery {
+  matiere: string
+  semestre: string
+  fromSlot: string
+  toSlot: string
+  /** Libellés d'affichage uniquement ; le serveur valide les slots officiels. */
+  fromLabel?: string
+  toLabel?: string
+  outcome: StudentProgressionOutcome
+}
+
+/** Preuve nominative minimale renvoyée pour une paire comparable. */
+export interface StudentProgressionEvidence {
+  matiere: string
+  semestre: string
+  fromLabel: string
+  toLabel: string
+  from: number
+  to: number
+  delta: number
+  outcome: StudentProgressionOutcome
+}
+
 /** Valeurs qui justifient chaque badge — le détail doit porter sa propre preuve. */
 export interface FollowUpMetrics {
   average?: number
   semesterS1?: number
   semesterS2?: number
   decline?: number
+  controlSubject?: string
+  controlFromLabel?: string
+  controlToLabel?: string
+  controlFrom?: number
+  controlTo?: number
+  controlDecline?: number
   /** Numérateur ET dénominateur : le badge affiche « 3 j. / 24 j. observés ». */
   absentDays?: number
   observedDays?: number
@@ -87,10 +121,14 @@ export interface ScopeStudent {
   prenom: string
   classe: string
   niveau: string
+  /** Moyenne générale du périmètre, toujours normalisée sur 20. */
   average: number | null
+  /** Moyenne de la matière filtrée, distincte de la moyenne générale. */
+  subjectAverage?: number | null
   reasons?: FollowUpReason[]
   metrics?: FollowUpMetrics
   priority?: FollowUpPriority
+  progression?: StudentProgressionEvidence
 }
 
 export interface ScopeStudentsResult {

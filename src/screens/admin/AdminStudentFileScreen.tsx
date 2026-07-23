@@ -29,11 +29,39 @@ import type { AdminStackParamList } from '../../navigation/types'
 import type {
   AppliedScope, FollowUpMetrics, FollowUpPriority, FollowUpReason, ScopeStudent,
 } from '../../types/stats'
+import { translatedFormula } from '../../utils/evaluationFormula'
 
-interface SubjectLine { matiere: string; average: number; notesCount: number }
+interface SubjectSemester {
+  semestre: string
+  note: number
+  status: 'legacy' | 'provisional' | 'complete'
+  completionRate: number
+  formula?: 'weighted_blocks' | 'english_three_blocks'
+  integratedWeight?: number
+  formulaLabel: string
+  controls: { slot: string; label: string; note: number }[]
+  integratedActivitiesNote: number | null
+  latestDelta: number | null
+  latestFromLabel?: string
+  latestToLabel?: string
+  latestTransition?: {
+    fromLabel: string
+    toLabel: string
+    delta: number
+  } | null
+}
+interface SubjectLine {
+  matiere: string
+  average: number
+  notesCount: number
+  semesters: SubjectSemester[]
+}
 
 interface StudentFile {
   student: ScopeStudent
+  /** Contrat progressif : les anciennes callables ne renvoient que student.average. */
+  overallAverage?: number | null
+  subjectAverage?: number | null
   bySubject: SubjectLine[]
   attendance: { absentDays: number; observedDays: number; lateCount: number }
   followUp: { reasons: FollowUpReason[]; metrics: FollowUpMetrics; priority: FollowUpPriority } | null
@@ -71,10 +99,14 @@ export default function AdminStudentFileScreen() {
   useEffect(() => { void load() }, [load])
 
   const name = file ? `${file.student.prenom} ${file.student.nom}`.trim() : t('admin.statsStudentFile')
+  const overallAverage = file ? file.overallAverage ?? file.student.average : null
+  const subjectAverage = file ? file.subjectAverage ?? file.student.subjectAverage : null
+  const appliedScope = file?.applied ?? scope
 
   return (
     <ScreenLayout title={name} showBack>
       <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -101,12 +133,34 @@ export default function AdminStudentFileScreen() {
               </View>
               <View style={styles.identityAverage}>
                 <Text style={[styles.identityAverageValue, { color: theme.primary }]}>
-                  {file.student.average == null ? '—' : file.student.average}
+                  {overallAverage == null ? '— /20' : `${overallAverage}/20`}
                 </Text>
                 <Text style={[styles.identityAverageLabel, { color: theme.textMuted }]}>
-                  {t('admin.avgGrade')}
+                  {t('admin.statsOverallAverage')}
                 </Text>
+                {appliedScope.matiere && subjectAverage != null ? (
+                  <>
+                    <Text style={[styles.identitySubjectValue, { color: theme.text }]}>
+                      {subjectAverage}/20
+                    </Text>
+                    <Text numberOfLines={1} style={[styles.identityAverageLabel, { color: theme.textMuted }]}>
+                      {appliedScope.matiere}
+                    </Text>
+                  </>
+                ) : null}
               </View>
+            </View>
+
+            <View style={[styles.scopeLine, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text numberOfLines={2} style={[styles.scopeLineText, { color: theme.textSoft }]}>
+                {[
+                  appliedScope.matiere,
+                  t('admin.statsGradesScope', {
+                    period: t(`admin.statsPeriod_${appliedScope.notesPeriod}`),
+                  }),
+                  '/20',
+                ].filter(Boolean).join(' · ')}
+              </Text>
             </View>
 
             {file.followUp ? (
@@ -123,6 +177,11 @@ export default function AdminStudentFileScreen() {
                 <CalendarCheck size={16} color={theme.info} />
                 <Text style={[styles.cardTitle, { color: theme.text }]}>{t('admin.statsAttendance')}</Text>
               </View>
+              <Text style={[styles.attendanceScope, { color: theme.textMuted }]}>
+                {t('admin.statsAttendanceScope', {
+                  period: t(`admin.statsPeriod_${appliedScope.period}`),
+                })}
+              </Text>
               <View style={styles.metricRow}>
                 <Metric
                   value={String(file.attendance.absentDays)}
@@ -153,19 +212,77 @@ export default function AdminStudentFileScreen() {
                 // Trié du plus faible au plus fort côté serveur : ce que l'admin
                 // cherche ici, c'est où l'élève décroche.
                 file.bySubject.map(line => (
-                  <View key={line.matiere} style={styles.subjectLine}>
-                    <Text numberOfLines={1} style={[styles.subjectName, { color: theme.text }]}>
-                      {line.matiere}
-                    </Text>
-                    <Text style={[styles.subjectCount, { color: theme.textMuted }]}>
-                      {t('admin.statsNotesCount', { count: line.notesCount })}
-                    </Text>
-                    <Text style={[
-                      styles.subjectAverage,
-                      { color: line.average < 10 ? theme.danger : theme.text },
-                    ]}>
-                      {line.average}
-                    </Text>
+                  <View key={line.matiere} style={[styles.subjectBlock, { borderBottomColor: theme.border }]}>
+                    <View style={styles.subjectLine}>
+                      <Text numberOfLines={1} style={[styles.subjectName, { color: theme.text }]}>
+                        {line.matiere}
+                      </Text>
+                      <Text style={[styles.subjectCount, { color: theme.textMuted }]}>
+                        {t('admin.statsNotesCount', { count: line.notesCount })}
+                      </Text>
+                      <Text style={[
+                        styles.subjectAverage,
+                        { color: line.average < 10 ? theme.danger : theme.text },
+                      ]}>
+                        {line.average}/20
+                      </Text>
+                    </View>
+                    {line.semesters.map(semester => {
+                      const latest = semester.latestTransition
+                      const latestDelta = latest?.delta ?? semester.latestDelta
+                      const latestFromLabel = latest?.fromLabel ?? semester.latestFromLabel
+                      const latestToLabel = latest?.toLabel ?? semester.latestToLabel
+                      return (
+                      <View key={`${line.matiere}-${semester.semestre}`} style={styles.trajectory}>
+                        <View style={styles.trajectoryHead}>
+                          <Text style={[styles.trajectorySemester, { color: theme.textSoft }]}>
+                            {semester.semestre}
+                          </Text>
+                          <Text style={[styles.trajectoryStatus, {
+                            color: semester.status === 'complete'
+                              ? theme.success
+                              : semester.status === 'provisional' ? theme.warning : theme.textMuted,
+                          }]}>
+                            {semester.status === 'complete'
+                              ? t('admin.evaluationComplete')
+                              : semester.status === 'provisional'
+                                ? t('admin.evaluationProvisional', { percent: semester.completionRate })
+                                : t('admin.evaluationLegacy')}
+                          </Text>
+                        </View>
+                        {semester.controls.length > 0 ? (
+                          <Text style={[styles.trajectoryControls, { color: theme.text }]}>
+                            {semester.controls.map(control => `${control.label} ${control.note}/20`).join('  ·  ')}
+                          </Text>
+                        ) : null}
+                        {latestDelta != null && latestFromLabel && latestToLabel ? (
+                          <Text style={[styles.trajectoryDelta, {
+                            color: latestDelta < 0
+                              ? theme.danger
+                              : latestDelta > 0 ? theme.success : theme.textSoft,
+                          }]}>
+                            {t('admin.statsLatestControlDelta', {
+                              fromLabel: latestFromLabel,
+                              toLabel: latestToLabel,
+                              delta: `${latestDelta > 0 ? '+' : ''}${latestDelta}`,
+                            })}
+                          </Text>
+                        ) : null}
+                        {semester.integratedActivitiesNote != null ? (
+                          <Text style={[styles.trajectoryMeta, { color: theme.textSoft }]}>
+                            {t('admin.integratedActivities')}: {semester.integratedActivitiesNote}/20
+                          </Text>
+                        ) : null}
+                        {semester.status !== 'legacy' ? (
+                          <Text style={[styles.trajectoryMeta, { color: theme.textMuted }]}>
+                            {semester.formula
+                              ? translatedFormula(semester.formula, semester.integratedWeight ?? 0, t)
+                              : semester.formulaLabel}
+                          </Text>
+                        ) : null}
+                      </View>
+                      )
+                    })}
                   </View>
                 ))
               )}
@@ -215,6 +332,15 @@ function ReasonLine({ reason, metrics, theme, t }: {
         return t('admin.evidenceDeclining', {
           s1: metrics.semesterS1 ?? '—', s2: metrics.semesterS2 ?? '—', decline: metrics.decline ?? '—',
         })
+      case 'declining_controls':
+        return t('admin.evidenceControlDeclining', {
+          subject: metrics.controlSubject ?? '—',
+          fromLabel: metrics.controlFromLabel ?? '—',
+          toLabel: metrics.controlToLabel ?? '—',
+          from: metrics.controlFrom ?? '—',
+          to: metrics.controlTo ?? '—',
+          decline: metrics.controlDecline ?? '—',
+        })
       case 'absenteeism':
         return t('admin.evidenceAbsenteeism', {
           days: metrics.absentDays ?? 0, observed: metrics.observedDays ?? 0,
@@ -262,10 +388,16 @@ const styles = StyleSheet.create({
   identityAverage: { alignItems: 'flex-end' },
   identityAverageValue: { fontSize: 21, fontWeight: '900', fontVariant: ['tabular-nums'] },
   identityAverageLabel: { fontSize: 9, fontWeight: '800', textTransform: 'uppercase' },
+  identitySubjectValue: {
+    fontSize: 13, fontWeight: '900', paddingTop: 4, fontVariant: ['tabular-nums'],
+  },
+  scopeLine: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8 },
+  scopeLineText: { fontSize: 10.5, fontWeight: '800' },
   card: { borderWidth: 1, borderRadius: 12, padding: 13, gap: 8 },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   cardTitle: { flex: 1, fontSize: 13, fontWeight: '900' },
   cardLead: { fontSize: 12, fontWeight: '600', lineHeight: 18 },
+  attendanceScope: { fontSize: 10, fontWeight: '700' },
   priorityPill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
   priorityText: { fontSize: 9, fontWeight: '900', color: '#FFFFFF', textTransform: 'uppercase' },
   reasonLine: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: 4 },
@@ -277,7 +409,15 @@ const styles = StyleSheet.create({
   metricValue: { fontSize: 19, fontWeight: '900', fontVariant: ['tabular-nums'] },
   metricLabel: { fontSize: 9, fontWeight: '800', textAlign: 'center', textTransform: 'uppercase' },
   subjectLine: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 5 },
+  subjectBlock: { borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 4 },
   subjectName: { flex: 1, fontSize: 12, fontWeight: '700' },
   subjectCount: { fontSize: 10, fontWeight: '700' },
   subjectAverage: { fontSize: 13, fontWeight: '900', minWidth: 34, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  trajectory: { paddingStart: 8, paddingBottom: 8, gap: 3 },
+  trajectoryHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  trajectorySemester: { fontSize: 10, fontWeight: '900' },
+  trajectoryStatus: { fontSize: 9.5, fontWeight: '800' },
+  trajectoryControls: { fontSize: 10.5, fontWeight: '800', lineHeight: 16 },
+  trajectoryDelta: { fontSize: 10, fontWeight: '900', lineHeight: 15 },
+  trajectoryMeta: { fontSize: 9.5, fontWeight: '600', lineHeight: 14 },
 })

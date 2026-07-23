@@ -14,7 +14,8 @@ import drill from '../../functions/statsDrilldown.js'
 
 const {
   requireAdmin, boundedLimit, projectStudent, bandOf, sortStudents, paginate,
-  encodeCursor, decodeCursor, MAX_LIMIT, DEFAULT_LIMIT,
+  encodeCursor, decodeCursor, progressionMatchesScope,
+  STUDENT_SEGMENTS, MAX_LIMIT, DEFAULT_LIMIT,
 } = drill
 
 /** Faux Firestore : seule `users/{uid}.role` compte pour le gate. */
@@ -163,6 +164,36 @@ async function expectRejection(promise, expectedCode, message) {
   assert.equal(bandOf(20), '14+')
 }
 
+// ── 4b. Une transition ne peut pas sortir du périmètre appliqué ────────────
+{
+  const selection = { matiere: 'Mathématiques', semestre: 'S1' }
+  assert.equal(
+    progressionMatchesScope(selection, 'Maths', 'S1'),
+    true,
+    'un alias canonique de la même matière reste valide',
+  )
+  assert.equal(
+    progressionMatchesScope(selection, 'Français', 'S1'),
+    false,
+    'une autre matière est refusée',
+  )
+  assert.equal(
+    progressionMatchesScope(selection, 'Mathématiques', 'S2'),
+    false,
+    'un autre semestre est refusé',
+  )
+  assert.equal(
+    progressionMatchesScope(selection, '', 'S1'),
+    false,
+    'une progression nominative exige un scope matière explicite',
+  )
+  assert.equal(
+    progressionMatchesScope({ ...selection, semestre: 'S2' }, 'Mathématiques', null),
+    true,
+    'la vue annuelle autorise chaque semestre, sans les mélanger',
+  )
+}
+
 // ── 5. Tri déterministe ────────────────────────────────────────────────────
 {
   const make = (id, classe, nom, priority, score) => ({
@@ -189,6 +220,18 @@ async function expectRejection(promise, expectedCode, message) {
     sortStudents([...rows], 'all').map(r => r.student.id),
     all.map(r => r.student.id),
     'tri stable entre deux appels',
+  )
+
+  assert.ok(STUDENT_SEGMENTS.has('progression'), 'la cohorte progression est un segment reconnu')
+  const progression = [
+    { ...make('p1', '1A', 'A', undefined, 0), progression: { delta: 1, outcome: 'improved' } },
+    { ...make('p3', '1A', 'C', undefined, 0), progression: { delta: 3, outcome: 'improved' } },
+    { ...make('p2', '1A', 'B', undefined, 0), progression: { delta: 2, outcome: 'improved' } },
+  ]
+  assert.deepEqual(
+    sortStudents(progression, 'progression').map(row => row.student.id),
+    ['p3', 'p2', 'p1'],
+    'les progrès les plus marqués apparaissent en premier',
   )
 }
 

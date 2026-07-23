@@ -21,6 +21,12 @@ const logger = require('firebase-functions/logger')
 const { claimEmailSlot, claimGlobalSlot } = require('./resetThrottle')
 const { computeClassStats, statsDocId } = require('./classStats')
 const { computeSchoolStats } = require('./schoolStats')
+const {
+  calculateCollegeEvaluation,
+  normalizeText: normalizeSubjectText,
+  subjectEntry,
+} = require('./collegeEvaluation')
+const { gradeProgress, gradeProgressStudents } = require('./gradeProgress')
 const drill = require('./statsDrilldown')
 const { buildSlotDocs } = require('./emploiDuTempsSync')
 const {
@@ -696,12 +702,51 @@ exports.onNoteWritten = onDocumentWritten('notes/{noteId}', async (event) => {
   // alors le bon groupe dirty.
   if (event.data?.after?.exists && await stampPeriodFields(event.data.after, null)) return
 
+  // Schéma v2 : les composantes sont la source canonique et `note` reste un
+  // résumé matérialisé pour les anciens clients. Le serveur recalcule ce résumé
+  // afin qu'un client modifié ne puisse pas envoyer une note incohérente avec
+  // C1/C2/C3 et les activités intégrées.
+  if (event.data?.after?.exists && Number(after?.schemaVersion) === 2) {
+    const evaluated = calculateCollegeEvaluation(after)
+    const desiredCalculation = {
+      status: evaluated.note == null ? 'empty' : evaluated.complete ? 'complete' : 'provisional',
+      completed: evaluated.componentsEntered,
+      expected: evaluated.componentsExpected,
+      completionRate: evaluated.completionRate,
+    }
+    const currentCalculation = after.calculation && typeof after.calculation === 'object'
+      ? {
+        status: after.calculation.status,
+        completed: after.calculation.completed,
+        expected: after.calculation.expected,
+        completionRate: after.calculation.completionRate,
+      }
+      : null
+    const derivedMatches = after.note === evaluated.note
+      && after.evaluationPolicyVersion === evaluated.policyVersion
+      && after.controlesCount === evaluated.controlsEntered
+      && after.controlesExpected === evaluated.controlsExpected
+      && JSON.stringify(currentCalculation) === JSON.stringify(desiredCalculation)
+    if (!derivedMatches) {
+      await event.data.after.ref.set({
+        gradeSource: 'structured',
+        evaluationPolicyVersion: evaluated.policyVersion,
+        note: evaluated.note,
+        controlesCount: evaluated.controlsEntered,
+        controlesExpected: evaluated.controlsExpected,
+        calculation: { ...desiredCalculation, computedAt: FieldValue.serverTimestamp() },
+      }, { merge: true })
+      return
+    }
+  }
+
   // Champs qui influencent réellement computeClassStats() (cf. classStats.js) :
   // le reste (eleveNom, codeMassar, demo, importedBy, importedAt, updatedAt…)
   // n'a aucun effet sur l'agrégat — ignorer ces écritures évite de marquer
   // "dirty" pour rien (ex: un script qui ne fait que retoucher updatedAt).
   const pick = (n) => (n ? JSON.stringify([
-    n.note, n.controles, n.bareme, n.cycle, n.academicYear, n.classe, n.semestre,
+    n.note, n.controles, n.evaluations, n.activitesIntegrees, n.schemaVersion,
+    n.evaluationPolicyVersion, n.bareme, n.cycle, n.academicYear, n.classe, n.semestre,
     n.matiereLabel, n.matiere, n.eleveId,
   ]) : '')
   if (pick(before) === pick(after)) return
@@ -865,7 +910,10 @@ async function stampPeriodFields(snap, dateValue) {
   const patch = {}
   for (const field of missing) patch[field] = period[field]
   await snap.ref.set(patch, { merge: true })
-  logger.info('period fields stamped', { path: snap.ref.path, ...patch })
+  // L'ID d'un document `notes` peut contenir le code Massar. Ne jamais
+  // journaliser `snap.ref.path` : la collection suffit au diagnostic et les
+  // champs de période permettent de corréler le comportement sans PII.
+  logger.info('period fields stamped', { collection: snap.ref.parent.id, ...patch })
   return true
 }
 
@@ -1027,26 +1075,47 @@ async function resolveScope(filters) {
   const scopeClasses = new Set(scopeEleves.map((row) => statsFilterText(row.classe)).filter(Boolean))
 
   const scopedNotes = allNotes.filter((row) => statsRowInScope(row, scopeIds, scopeClasses, knownStudentIds))
+  const selectedSubjectEntry = subjectEntry(matiere)
+  const noteSubjectValues = (row) => [
+    statsFilterText(row.matiere),
+    statsFilterText(row.subject),
+    statsFilterText(row.matiereLabel),
+  ].filter(Boolean)
+  const subjectMatches = (row) => {
+    if (!matiere) return true
+    const requested = normalizeSubjectText(matiere)
+    return noteSubjectValues(row).some((value) => {
+      if (normalizeSubjectText(value) === requested) return true
+      const entry = subjectEntry(value)
+      return selectedSubjectEntry && entry && entry.key === selectedSubjectEntry.key
+    })
+  }
   const subjectMap = new Map()
   scopedNotes.forEach((row) => {
     const key = statsFilterText(row.matiere) || statsFilterText(row.subject) || statsFilterText(row.matiereLabel)
-    if (key) subjectMap.set(key, statsFilterText(row.matiereLabel) || statsFilterText(row.subject) || key)
+    if (key) {
+      const entry = subjectEntry(key)
+        || subjectEntry(row.matiereLabel)
+        || subjectEntry(row.subject)
+      subjectMap.set(key, entry?.canonical || statsFilterText(row.matiereLabel) || statsFilterText(row.subject) || key)
+    }
   })
   const subjectOptions = [...subjectMap.entries()]
     .map(([value, label]) => ({ value, label }))
     .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
-  const selectedNotes = scopedNotes.filter((row) => {
-    if (!matiere) return true
-    const key = statsFilterText(row.matiere) || statsFilterText(row.subject) || statsFilterText(row.matiereLabel)
-    return key === matiere
-  })
+  const selectedNotes = scopedNotes.filter(subjectMatches)
 
   const selectedAbsences = toRows(absencesSnap).filter((row) =>
     statsRowInScope(row, scopeIds, scopeClasses, knownStudentIds))
   const selectedDevoirs = toRows(devoirsSnap).filter((row) => {
     const due = statsFilterText(row.dateLimite)
     const rowClass = statsFilterText(row.classeId) || statsFilterText(row.classe)
-    return scopeClasses.has(rowClass) && due >= range.from && due <= range.to
+    // La métrique et son drill-down décrivent les devoirs DONT L'ÉCHÉANCE
+    // tombe dans la période. Conserver les devoirs échus est indispensable :
+    // leurs non-rendus alimentent précisément la file « À suivre ».
+    return scopeClasses.has(rowClass)
+      && due >= range.from
+      && due <= range.to
   })
   // A6 — avant, `homeworkSubmissions` etait lue INTEGRALEMENT a chaque
   // changement de filtre, puis jetee a 95 %. La collection croit en
@@ -1070,7 +1139,15 @@ async function resolveScope(filters) {
 
   return {
     cacheBase,
-    computeOptions: { semestre: range.semestre, periodAttendance: true },
+    computeOptions: {
+      semestre: range.semestre,
+      periodAttendance: true,
+      homeworkAlreadyScoped: true,
+      // Une période historique doit montrer ses sept derniers jours, pas les
+      // sept jours du calendrier actuel (qui produiraient une fausse série à 0).
+      trendStartDate: range.from,
+      trendEndDate: range.to < casablancaToday() ? range.to : casablancaToday(),
+    },
     scopeEleves,
     elevesSnap,
     range,
@@ -1084,6 +1161,7 @@ async function resolveScope(filters) {
     // et une pastille dessinee depuis le state mentirait sur le calcul reel.
     applied: {
       period: periodName,
+      academicYear: range.academicYear,
       cycle,
       niveau,
       classe,
@@ -1094,6 +1172,8 @@ async function resolveScope(filters) {
     },
   }
 }
+
+const PROGRESSION_OUTCOMES = new Set(['improved', 'stable', 'declined'])
 
 async function filteredSchoolStats(filters) {
   const scope = await resolveScope(filters)
@@ -1181,6 +1261,27 @@ exports.getStatsStudents = onCall(async (request) => {
   const scopeInput = raw.scope && typeof raw.scope === 'object' ? raw.scope : {}
   const segment = drill.STUDENT_SEGMENTS.has(raw.segment) ? raw.segment : 'all'
   const limit = drill.boundedLimit(raw.limit)
+  const rawProgression = raw.progression && typeof raw.progression === 'object'
+    ? raw.progression
+    : {}
+  const progressionSelection = segment === 'progression'
+    ? {
+      matiere: statsFilterText(rawProgression.matiere),
+      semestre: statsFilterText(rawProgression.semestre, 2),
+      fromSlot: statsFilterText(rawProgression.fromSlot),
+      toSlot: statsFilterText(rawProgression.toSlot),
+      outcome: statsFilterText(rawProgression.outcome, 10),
+    }
+    : null
+  if (progressionSelection && (
+    !progressionSelection.matiere
+    || !['S1', 'S2'].includes(progressionSelection.semestre)
+    || !progressionSelection.fromSlot
+    || !progressionSelection.toSlot
+    || !PROGRESSION_OUTCOMES.has(progressionSelection.outcome)
+  )) {
+    throw new HttpsError('invalid-argument', 'Valid progression transition required.')
+  }
 
   const scope = await resolveScope({
     period: statsFilterText(scopeInput.period, 10),
@@ -1189,6 +1290,18 @@ exports.getStatsStudents = onCall(async (request) => {
     classe: statsFilterText(scopeInput.classe),
     matiere: statsFilterText(scopeInput.matiere),
   })
+  if (progressionSelection && (
+    !drill.progressionMatchesScope(
+      progressionSelection,
+      scope.applied.matiere,
+      scope.computeOptions.semestre,
+    )
+  )) {
+    throw new HttpsError(
+      'invalid-argument',
+      'Progression transition must match the applied subject and semester.',
+    )
+  }
 
   // `includeFollowUpStudents` n'est demandé que pour le segment qui en a besoin :
   // les autres n'ont aucune raison de matérialiser une liste nominative.
@@ -1198,14 +1311,34 @@ exports.getStatsStudents = onCall(async (request) => {
     includeFollowUpStudents: needsFollowUp,
     includeStudentIndex: true,
   })
+  // Dès qu'une matière est sélectionnée, `data` porte sa moyenne. Le segment
+  // (bande, seuil, progression...) reste bien sélectionné avec cette moyenne,
+  // mais la ligne affiche deux mesures non ambiguës : moyenne GÉNÉRALE puis
+  // moyenne de la matière. Sans filtre matière, `data` est déjà global.
+  const needsOverallAverage = Boolean(scope.applied.matiere)
+  const overallData = needsOverallAverage
+    ? computeSchoolStats({
+      ...scope.cacheBase,
+      notes: scope.cacheBase.followUpNotes,
+    }, {
+      ...scope.computeOptions,
+      includeStudentIndex: true,
+    })
+    : data
 
   const averageById = new Map(
     (data.studentAveragesById || []).map((row) => [row.eleveId, row.average]),
+  )
+  const overallAverageById = new Map(
+    (overallData.studentAveragesById || []).map((row) => [row.eleveId, row.average]),
   )
   const followUpById = new Map(
     (data.followUpStudents || []).map((row) => [row.eleveId, row]),
   )
   const recidivistIds = new Set(data.recidivistIds || [])
+  const progressionById = progressionSelection
+    ? gradeProgressStudents(scope.cacheBase.notes, progressionSelection)
+    : new Map()
 
   const band = drill.GRADE_BANDS.has(raw.band) ? raw.band : null
   const side = raw.side === 'passing' ? 'passing' : 'below'
@@ -1215,6 +1348,7 @@ exports.getStatsStudents = onCall(async (request) => {
     if (segment === 'followup') return followUpById.has(eleve.id)
     if (segment === 'recidivists') return recidivistIds.has(eleve.id)
     if (segment === 'band') return band != null && drill.bandOf(average) === band
+    if (segment === 'progression') return progressionById.has(eleve.id)
     if (segment === 'threshold') {
       if (average == null) return false
       return side === 'passing' ? average >= 10 : average < 10
@@ -1227,14 +1361,20 @@ exports.getStatsStudents = onCall(async (request) => {
     .map((eleve) => {
       const doc = docById.get(eleve.id)
       if (!doc) return null
-      const average = averageById.has(eleve.id) ? averageById.get(eleve.id) : null
+      const scopeAverage = averageById.has(eleve.id) ? averageById.get(eleve.id) : null
+      const average = needsOverallAverage
+        ? (overallAverageById.has(eleve.id) ? overallAverageById.get(eleve.id) : null)
+        : scopeAverage
       const followUp = followUpById.get(eleve.id)
+      const progression = progressionById.get(eleve.id)
       return {
         student: drill.projectStudent(doc, average),
+        subjectAverage: needsOverallAverage ? scopeAverage : undefined,
         priority: followUp ? followUp.priority : undefined,
         score: followUp ? followUp.score : 0,
         reasons: followUp ? followUp.reasons : undefined,
         metrics: followUp ? followUp.metrics : undefined,
+        progression,
       }
     })
     .filter(Boolean)
@@ -1253,7 +1393,9 @@ exports.getStatsStudents = onCall(async (request) => {
   return {
     students: page.map((row) => ({
       ...row.student,
+      ...(row.subjectAverage != null ? { subjectAverage: row.subjectAverage } : {}),
       ...(row.reasons ? { reasons: row.reasons, metrics: row.metrics, priority: row.priority } : {}),
+      ...(row.progression ? { progression: row.progression } : {}),
     })),
     total: rows.length,
     nextCursor,
@@ -1294,7 +1436,11 @@ exports.getStatsAttendanceDetails = onCall(async (request) => {
       .map((row) => {
         const doc = docById.get(String(row.eleveId || ''))
         if (!doc) return null
-        return { date: String(row.date || ''), student: drill.projectStudent(doc, null) }
+        return {
+          id: String(row.id || ''),
+          date: String(row.date || ''),
+          student: drill.projectStudent(doc, null),
+        }
       })
       .filter(Boolean)
       .sort((a, b) => (b.date.localeCompare(a.date))
@@ -1312,8 +1458,8 @@ exports.getStatsAttendanceDetails = onCall(async (request) => {
   return {
     presenceRate: data.presenceRate,
     attendanceCount: data.attendanceCount,
-    absentsToday: data.absentsToday,
-    retardsToday: data.retardsToday,
+    absenceRecords: data.absenceRecords,
+    lateRecords: data.lateRecords,
     trend: data.absenceTrend,
     byClass: data.classStats.map((row) => ({
       name: row.name,
@@ -1324,6 +1470,123 @@ exports.getStatsAttendanceDetails = onCall(async (request) => {
     rows: page,
     total: rows.length,
     nextCursor,
+    applied: scope.applied,
+  }
+})
+
+/**
+ * Analyse des résultats — destination unique de la tuile « Moyenne ».
+ *
+ * Contrairement à l'ancien écran qui relisait Firestore côté téléphone, cette
+ * callable repart de `resolveScope`, exactement comme le hero. Cycle, niveau,
+ * classe, matière et période ne peuvent donc plus diverger après le tap.
+ */
+exports.getStatsGradeDetails = onCall(async (request) => {
+  const uid = await drill.requireAdmin(db, request)
+  const raw = request.data && typeof request.data === 'object' ? request.data : {}
+  const scopeInput = raw.scope && typeof raw.scope === 'object' ? raw.scope : {}
+  const requestedSubject = statsFilterText(raw.matiere) || statsFilterText(scopeInput.matiere)
+  const requestedClass = statsFilterText(raw.classe) || statsFilterText(scopeInput.classe)
+  const scope = await resolveScope({
+    period: statsFilterText(scopeInput.period, 10),
+    cycle: statsFilterText(scopeInput.cycle, 20),
+    niveau: statsFilterText(scopeInput.niveau),
+    classe: requestedClass,
+    matiere: requestedSubject,
+  })
+  const data = computeSchoolStats(scope.cacheBase, {
+    ...scope.computeOptions,
+    includeStudentIndex: true,
+  })
+
+  const averageById = new Map(
+    (data.studentAveragesById || []).map((row) => [row.eleveId, row.average]),
+  )
+  const docById = new Map(scope.elevesSnap.docs.map((doc) => [doc.id, doc]))
+  const allWeakStudents = scope.scopeEleves
+    .filter((eleve) => (averageById.get(eleve.id) ?? 20) < 10)
+    .map((eleve) => {
+      const doc = docById.get(eleve.id)
+      return doc ? drill.projectStudent(doc, averageById.get(eleve.id)) : null
+    })
+    .filter(Boolean)
+    .sort((a, b) => (a.average - b.average)
+      || a.classe.localeCompare(b.classe, 'fr')
+      || a.nom.localeCompare(b.nom, 'fr'))
+  // Aperçu nominatif volontairement court. Le compteur reste exhaustif et le
+  // client ouvre getStatsStudents(segment=threshold) pour la liste paginée.
+  const weakStudents = allWeakStudents.slice(0, 12)
+
+  const scopedClassNames = new Set(
+    scope.scopeEleves.map((row) => statsFilterText(row.classe)).filter(Boolean),
+  )
+  const requestedSubjectEntry = subjectEntry(requestedSubject)
+  const teacherSubjectMatches = (row) => {
+    if (!requestedSubject) return true
+    const teacherSubject = statsFilterText(row.matiere)
+    if (normalizeSubjectText(teacherSubject) === normalizeSubjectText(requestedSubject)) return true
+    const teacherEntry = subjectEntry(teacherSubject)
+    return requestedSubjectEntry && teacherEntry && teacherEntry.key === requestedSubjectEntry.key
+  }
+  const teachers = scope.cacheBase.users
+    .filter((row) => String(row.role || '') === 'professeur')
+    .filter(teacherSubjectMatches)
+    .filter((row) => {
+      // Une vue cycle/niveau ne doit jamais faire remonter les professeurs
+      // d'autres classes. La projection reste strictement minimale, sans email.
+      const classes = [
+        statsFilterText(row.classe),
+        ...(Array.isArray(row.classes) ? row.classes.map((value) => statsFilterText(value)) : []),
+      ].filter(Boolean)
+      if (scopedClassNames.size === 0) return false
+      return classes.some((className) => scopedClassNames.has(className))
+    })
+    .map((row) => ({
+      id: row.id,
+      nom: String(row.nom || ''),
+      prenom: String(row.prenom || ''),
+      matiere: String(row.matiere || ''),
+      classes: [
+        statsFilterText(row.classe),
+        ...(Array.isArray(row.classes) ? row.classes.map((value) => statsFilterText(value)) : []),
+      ]
+        .filter((className) => className && scopedClassNames.has(className))
+        .filter((className, index, rows) => rows.indexOf(className) === index),
+    }))
+    .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
+
+  const progression = gradeProgress(
+    scope.cacheBase.notes,
+    scope.computeOptions.semestre,
+  )
+
+  logger.info('stats drilldown grades', {
+    by: uid,
+    period: scope.applied.period,
+    subjects: data.subjectStats.length,
+    classes: data.classStats.length,
+    structuredSeries: progression.length,
+  })
+
+  return {
+    summary: {
+      average: data.avgNote,
+      successRate: data.successRate,
+      belowThreshold: allWeakStudents.length,
+      gradedStudents: data.gradedStudents,
+      notesCount: data.notesCount,
+      // S1→S2 n'est pas présenté comme une « progression » : ces deux
+      // agrégats ne garantissent pas une cohorte appariée et arrivent trop tard
+      // pour l'intervention pédagogique. Les transitions C1→C2→C3 ci-dessous
+      // sont, elles, appariées élève par élève.
+      s1: null,
+      s2: null,
+    },
+    classes: data.classStats,
+    subjects: data.subjectStats,
+    weakStudents,
+    teachers,
+    progression,
     applied: scope.applied,
   }
 })
@@ -1348,7 +1611,8 @@ exports.getStatsStudentFile = onCall(async (request) => {
     matiere: statsFilterText(scopeInput.matiere),
   })
 
-  const doc = scope.elevesSnap.docs.find((row) => row.id === eleveId)
+  const inScope = scope.scopeEleves.some((row) => row.id === eleveId)
+  const doc = inScope ? scope.elevesSnap.docs.find((row) => row.id === eleveId) : null
   // Un élève hors périmètre ou archivé est traité comme inexistant : on ne
   // confirme pas l'existence d'un ID qu'on refuse de servir.
   if (!doc || doc.get('active') === false) {
@@ -1357,33 +1621,79 @@ exports.getStatsStudentFile = onCall(async (request) => {
 
   const data = computeSchoolStats(scope.cacheBase, {
     ...scope.computeOptions,
+    includeStudentIndex: true,
+  })
+  const overallData = computeSchoolStats({
+    ...scope.cacheBase,
+    notes: scope.cacheBase.followUpNotes,
+  }, {
+    ...scope.computeOptions,
     includeFollowUpStudents: true,
     includeStudentIndex: true,
   })
-  const average = (data.studentAveragesById || []).find((row) => row.eleveId === eleveId)
-  const followUp = (data.followUpStudents || []).find((row) => row.eleveId === eleveId)
+  const scopeAverage = (data.studentAveragesById || []).find((row) => row.eleveId === eleveId)
+  const overallAverage = (overallData.studentAveragesById || []).find((row) => row.eleveId === eleveId)
+  const followUp = (overallData.followUpStudents || []).find((row) => row.eleveId === eleveId)
 
-  // Notes de l'élève, agrégées PAR MATIÈRE. Les notes individuelles ne sont pas
-  // renvoyées : le dossier sert à décider d'un accompagnement, pas à rejouer le
-  // carnet de notes.
+  // Notes de l'élève, agrégées PAR MATIÈRE. Les composantes C1/C2/C3 ne sortent
+  // que par cette callable admin-only ; elles ne sont jamais ajoutées au hero.
   const bySubjectMap = new Map()
   scope.cacheBase.followUpNotes
     .filter((row) => String(row.eleveId || '') === eleveId)
+    .filter((row) => !scope.computeOptions.semestre
+      || String(row.semestre || '') === scope.computeOptions.semestre)
     .forEach((row) => {
       const key = statsFilterText(row.matiereLabel) || statsFilterText(row.matiere) || statsFilterText(row.subject)
       if (!key) return
-      const value = Number(row.note)
-      if (!Number.isFinite(value)) return
-      const current = bySubjectMap.get(key) || { matiere: key, sum: 0, count: 0 }
-      current.sum += value
+      const evaluation = calculateCollegeEvaluation(row)
+      const value = Number(evaluation.note)
+      const bareme = Number(row.bareme) === 10 || String(row.cycle || '') === 'primaire'
+        || /aep/i.test(String(row.classe || '')) ? 10 : 20
+      if (!Number.isFinite(value) || value < 0 || value > bareme) return
+      const value20 = value * (20 / bareme)
+      const canonicalKey = evaluation.canonicalSubject || key
+      const current = bySubjectMap.get(canonicalKey) || {
+        matiere: canonicalKey,
+        sum: 0,
+        count: 0,
+        semesters: [],
+      }
+      const comparableSteps = evaluation.progression?.comparableSteps || []
+      const latestComparable = comparableSteps[comparableSteps.length - 1] || null
+      current.sum += value20
       current.count++
-      bySubjectMap.set(key, current)
+      current.semesters.push({
+        semestre: String(row.semestre || ''),
+        note: Math.round(value20 * 10) / 10,
+        status: evaluation.policyVersion
+          ? (evaluation.complete ? 'complete' : 'provisional')
+          : 'legacy',
+        completionRate: evaluation.completionRate,
+        formula: evaluation.formula,
+        integratedWeight: evaluation.integratedWeight,
+        formulaLabel: evaluation.formulaLabel,
+        controls: (evaluation.controls || []).map((control) => ({
+          slot: control.slot,
+          label: control.label,
+          note: Math.round((control.note * (20 / bareme)) * 10) / 10,
+        })),
+        integratedActivitiesNote: evaluation.integratedActivitiesNote == null
+          ? null
+          : Math.round((evaluation.integratedActivitiesNote * (20 / bareme)) * 10) / 10,
+        latestDelta: evaluation.progression?.latestDelta == null
+          ? null
+          : Math.round((evaluation.progression.latestDelta * (20 / bareme)) * 10) / 10,
+        latestFromLabel: latestComparable?.fromLabel || null,
+        latestToLabel: latestComparable?.toLabel || null,
+      })
+      bySubjectMap.set(canonicalKey, current)
     })
   const bySubject = [...bySubjectMap.values()]
     .map((row) => ({
       matiere: row.matiere,
       average: Math.round((row.sum / row.count) * 10) / 10,
       notesCount: row.count,
+      semesters: row.semesters.sort((a, b) => a.semestre.localeCompare(b.semestre)),
     }))
     .sort((a, b) => a.average - b.average)
 
@@ -1402,7 +1712,12 @@ exports.getStatsStudentFile = onCall(async (request) => {
   })
 
   return {
-    student: drill.projectStudent(doc, average ? average.average : null),
+    student: {
+      ...drill.projectStudent(doc, overallAverage ? overallAverage.average : null),
+      ...(scope.applied.matiere && scopeAverage
+        ? { subjectAverage: scopeAverage.average }
+        : {}),
+    },
     bySubject,
     attendance: {
       absentDays: absentDates.size,

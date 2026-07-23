@@ -182,4 +182,165 @@ function note(id, eleveId, value, semestre, matiere = 'math') {
   assert.equal(fallback.studentsToFollow, 1, 'e1 sous 10 sur le seul périmètre math')
 }
 
-console.log('schoolStats invariants : distribution par élève, prédicat unique, PII, absentéisme 3/5/10 %, matière neutre')
+// ── Progression : seulement des composantes réellement comparables ─────────
+{
+  const component = (slot, kind, ordinal, label, value) => ({
+    slot, category: 'control', kind, ordinal, label, note: value, bareme: 20,
+  })
+  const students = [
+    { id: 'fr', codeMassar: 'fr', classe: '1APIC-1', niveau: '1APIC' },
+    { id: 'gap', codeMassar: 'gap', classe: '1APIC-1', niveau: '1APIC' },
+  ]
+  const notes = [
+    {
+      id: 'fr-note',
+      eleveId: 'fr',
+      classe: '1APIC-1',
+      semestre: 'S1',
+      matiere: 'Français',
+      bareme: 20,
+      schemaVersion: 2,
+      evaluationPolicyVersion: 'college-evaluation-2025-2026-v1',
+      evaluations: [
+        component('comprehension_1', 'comprehension', 1, 'Compréhension et langue 1', 16),
+        component('production_1', 'production', 2, 'Production écrite 1', 12),
+        component('comprehension_2', 'comprehension', 3, 'Compréhension et langue 2', 12),
+        component('production_2', 'production', 4, 'Production écrite 2', 12),
+      ],
+    },
+    {
+      id: 'gap-note',
+      eleveId: 'gap',
+      classe: '1APIC-1',
+      semestre: 'S1',
+      matiere: 'Mathématiques',
+      bareme: 20,
+      schemaVersion: 2,
+      evaluationPolicyVersion: 'college-evaluation-2025-2026-v1',
+      evaluations: [
+        component('written_1', 'written', 1, 'Contrôle écrit 1', 16),
+        component('written_3', 'written', 3, 'Contrôle écrit 3', 10),
+      ],
+    },
+  ]
+  const result = computeSchoolStats({
+    eleves: students,
+    users: [],
+    notes,
+    absences: [],
+    devoirs: [],
+    homeworkSubmissions: [],
+  }, { includeFollowUpStudents: true, semestre: 'S1' })
+
+  const french = result.followUpStudents.find(row => row.eleveId === 'fr')
+  assert.ok(french?.reasons.includes('declining_controls'))
+  assert.equal(french.metrics.controlFromLabel, 'Compréhension et langue 1')
+  assert.equal(french.metrics.controlToLabel, 'Compréhension et langue 2')
+  assert.equal(
+    result.followUpStudents.some(row => row.eleveId === 'gap'),
+    false,
+    'C1 + C3 sans C2 ne fabrique aucune baisse adjacente',
+  )
+}
+
+// ── Matières : alias canonisés avant regroupement ET coefficient ───────────
+{
+  const result = computeSchoolStats({
+    eleves: [{ id: 'e1', codeMassar: 'e1', classe: '1AC-1', niveau: '1AC' }],
+    users: [],
+    notes: [
+      note('m1', 'e1', 10, 'S1', 'Maths'),
+      note('m2', 'e1', 14, 'S2', 'Mathématiques'),
+      note('eps', 'e1', 20, 'S1', 'EPS'),
+    ],
+    coefficients: {
+      matieres: {},
+      parNiveau: {
+        '1AC': {
+          Mathématiques: 5,
+          'Éducation Physique et Sportive': 2,
+        },
+      },
+    },
+    absences: [],
+    devoirs: [],
+    homeworkSubmissions: [],
+  })
+
+  // Maths = moyenne annuelle 12, appliquée une seule fois au coefficient 5.
+  assert.equal(result.avgNote, 14.3)
+  assert.equal(
+    result.subjectStats.filter((row) => row.name === 'Mathématiques').length,
+    1,
+    'Maths et Mathématiques alimentent une seule matière canonique',
+  )
+  assert.equal(
+    result.subjectStats.find((row) => row.name === 'Mathématiques').notesCount,
+    2,
+  )
+}
+
+// ── Présence : aucune observation n'est ni 0 %, ni 100 % ───────────────────
+{
+  const result = computeSchoolStats({
+    eleves: [eleve('e1')],
+    users: [],
+    notes: [],
+    absences: [],
+    devoirs: [],
+    homeworkSubmissions: [],
+  }, { periodAttendance: true })
+
+  assert.equal(result.attendanceCount, 0)
+  assert.equal(result.presenceRate, null)
+  assert.equal(result.classStats[0].presenceRate, null)
+  assert.equal(result.niveauStats[0].presenceRate, null)
+}
+
+// ── Assiduité historique : compteurs et tendance restent dans la période ───
+{
+  const result = computeSchoolStats({
+    eleves: [eleve('e1')],
+    users: [],
+    notes: [],
+    absences: [
+      { id: 'a1', eleveId: 'e1', classe: '1A', date: '2026-01-30', statut: 'absent' },
+      { id: 'a2', eleveId: 'e1', classe: '1A', date: '2026-01-31', statut: 'retard' },
+    ],
+    devoirs: [],
+    homeworkSubmissions: [],
+  }, {
+    periodAttendance: true,
+    trendStartDate: '2026-01-29',
+    trendEndDate: '2026-01-31',
+  })
+
+  assert.equal(result.absenceRecords, 1)
+  assert.equal(result.lateRecords, 1)
+  assert.deepEqual(result.absenceTrend.map((row) => row.label), ['29', '30', '31'])
+  assert.deepEqual(result.absenceTrend.map((row) => row.value), [0, 1, 1])
+}
+
+// ── Devoirs : le tableau reçu est déjà borné par resolveScope ───────────────
+{
+  const cache = {
+    eleves: [eleve('e1')],
+    users: [],
+    notes: [],
+    absences: [],
+    devoirs: [
+      { id: 'past-but-in-scope', classeId: '1A', dateLimite: '2000-01-01' },
+      { id: 'future', classeId: '1A', dateLimite: '2999-01-01' },
+    ],
+    homeworkSubmissions: [],
+  }
+  const scheduledSummary = computeSchoolStats(cache)
+  assert.equal(scheduledSummary.activeHomework, 1)
+  assert.equal(scheduledSummary.classStats[0].activeHomework, 1)
+
+  const filteredPeriod = computeSchoolStats(cache, { homeworkAlreadyScoped: true })
+  assert.equal(filteredPeriod.activeHomework, 2)
+  assert.equal(filteredPeriod.classStats[0].activeHomework, 2)
+}
+
+console.log('schoolStats invariants : distribution, suivi, PII, absentéisme, matière et progression comparable')

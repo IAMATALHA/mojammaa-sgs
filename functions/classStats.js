@@ -5,11 +5,12 @@
  * MIROIR de la normalisation client (src/services/notesService.ts →
  * docToNote) et des formules de useParentNotes : garder les trois en
  * phase si l'un change.
- *  - note : champ `note` (number ou string à virgule), sinon moyenne des
- *    `controles` valides (arrondie 2 déc.) ; rejet hors barème de la classe.
+ *  - note : résumé legacy ou résultat de la politique d'évaluation v2 ;
+ *    rejet hors barème de la classe.
  *  - clé matière : `matiereLabel` sinon `matiere` (trim).
  *  - moyennes : moyenne des valeurs brutes, arrondi 1 décimale.
  */
+const { calculateCollegeEvaluation, collegeLevel } = require('./collegeEvaluation')
 
 function asNumber(v) {
   if (typeof v === 'number' && Number.isFinite(v)) return v
@@ -25,7 +26,6 @@ function asString(v) {
 }
 
 const round1 = (v) => Math.round(v * 10) / 10
-const round2 = (v) => Math.round(v * 100) / 100
 
 function baremeFromData(data) {
   const explicit = asNumber(data.bareme)
@@ -36,24 +36,45 @@ function baremeFromData(data) {
   return 20
 }
 
+function inferredClassBareme(data) {
+  const cycle = asString(data.cycle).toLowerCase()
+  const classe = asString(data.classe)
+  const niveau = asString(data.niveau)
+  if (cycle === 'primaire' || /aep/i.test(`${classe} ${niveau}`)) return 10
+  if (
+    cycle === 'college'
+    || cycle === 'collège'
+    || collegeLevel(classe, niveau)
+    || /\b(?:ac|apic|asc)\b/i.test(`${classe} ${niveau}`)
+  ) return 20
+  return null
+}
+
 function inferBareme(noteDocs) {
-  const primary = noteDocs.some((data) => baremeFromData(data) === 10)
-  return primary ? 10 : 20
+  const classVotes = noteDocs
+    .map(inferredClassBareme)
+    .filter((value) => value === 10 || value === 20)
+  if (classVotes.length > 0) {
+    const primaryVotes = classVotes.filter((value) => value === 10).length
+    return primaryVotes > classVotes.length / 2 ? 10 : 20
+  }
+
+  // Dernier recours pour d'anciens documents sans classe/cycle : majorité des
+  // barèmes explicites. Une seule saisie /10 ne peut plus faire basculer tout
+  // un agrégat collège.
+  const explicit = noteDocs
+    .map((data) => asNumber(data.bareme))
+    .filter((value) => value === 10 || value === 20)
+  const primaryVotes = explicit.filter((value) => value === 10).length
+  return explicit.length > 0 && primaryVotes > explicit.length / 2 ? 10 : 20
 }
 
 /** Valeur de note d'un doc `notes`, ou null si invalide. */
-function noteValue(data, bareme) {
-  const controles = Array.isArray(data.controles)
-    ? data.controles
-        .map((c) => asNumber(c && c.note))
-        .filter((n) => n != null && n >= 0 && n <= bareme)
-    : []
-  let note = asNumber(data.note)
-  if (note == null && controles.length > 0) {
-    note = round2(controles.reduce((s, v) => s + v, 0) / controles.length)
-  }
-  if (note == null || note < 0 || note > bareme) return null
-  return note
+function noteValue(data, expectedBareme) {
+  const note = asNumber(calculateCollegeEvaluation(data).note)
+  const sourceBareme = baremeFromData(data)
+  if (note == null || note < 0 || note > sourceBareme) return null
+  return note * (expectedBareme / sourceBareme)
 }
 
 function subjectKey(data) {

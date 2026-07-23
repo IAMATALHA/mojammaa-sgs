@@ -10,10 +10,8 @@
  * heatScore, niveauGroup, tendances 5/7 jours, bandes de notes…).
  *
  * Normalisation des notes alignée sur le mapping onSnapshot du client :
- *   note    = asNumber(note), convertie en équivalent /20 pour les agrégats
- *             école entière. Une note primaire /10 compte donc x2.
- *             Volontairement PAS la moyenne des `controles`
- *             (contrairement à classStats.js) pour rester identique au client.
+ *   note    = résumé legacy ou résultat du schéma d'évaluation v2, converti
+ *             en équivalent /20. Une note primaire /10 compte donc x2.
  *   subject = matiereLabel || matiere || subject.
  *
  * Coefficients marocains (cache.coefficients = settings/coefficients, même
@@ -24,6 +22,11 @@
  * simples : un coefficient ne compare que des matières entre elles, il n'a
  * pas de sens en isolant une seule matière.
  */
+const {
+  calculateCollegeEvaluation,
+  normalizeText,
+  subjectEntry,
+} = require('./collegeEvaluation')
 
 function asString(v) {
   return typeof v === 'string' ? v.trim() : ''
@@ -45,17 +48,38 @@ const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v))
  * Coefficients marocains (settings/coefficients : { matieres: {matiere: coef},
  * parNiveau: {niveau: {matiere: coef}} }). Résolution PAR ÉLÈVE, miroir exact
  * de coefOf dans mojammaa-admin/src/pages/Statistiques.tsx : parNiveau[niveau]
- * > matieres (global) > 1. Clé = `matiere` brute (pas matiereLabel).
+ * > matieres (global) > 1. Les clés sont d'abord canonisées afin que
+ * « Maths », « Mathématiques » et leurs variantes ne deviennent pas plusieurs
+ * matières avec des coefficients différents.
  */
 function makeCoefOf(coefficients) {
   const matieres = (coefficients && coefficients.matieres) || {}
   const parNiveau = (coefficients && coefficients.parNiveau) || {}
+  const normalizedMap = (values) => new Map(Object.entries(values).map(([key, value]) => [
+    normalizeText(canonicalSubject(key)),
+    value,
+  ]))
+  const globalBySubject = normalizedMap(matieres)
+  const byLevel = new Map(Object.entries(parNiveau).map(([niveau, values]) => [
+    niveau,
+    normalizedMap(values || {}),
+  ]))
   return (matiere, niveau) => {
-    const n = niveau ? parNiveau[niveau] && parNiveau[niveau][matiere] : undefined
+    const key = normalizeText(canonicalSubject(matiere))
+    const n = niveau ? byLevel.get(niveau)?.get(key) : undefined
     if (n !== undefined && n > 0) return n
-    const g = matieres[matiere]
+    const g = globalBySubject.get(key)
     return g > 0 ? g : 1
   }
+}
+
+function canonicalSubject(...values) {
+  const candidates = values.map(asString).filter(Boolean)
+  for (const value of candidates) {
+    const entry = subjectEntry(value)
+    if (entry) return entry.canonical
+  }
+  return candidates[0] || ''
 }
 
 /** Moyenne pondérée Σ(note×coef)/Σ(coef) — replie sur la moyenne simple si aucun coef. */
@@ -75,28 +99,55 @@ function baremeFromData(data) {
 }
 
 function normalizedNote20(data) {
-  const note = asNumber(data.note)
+  const evaluated = calculateCollegeEvaluation(data)
+  const note = asNumber(evaluated.note)
   if (note == null) return null
   const bareme = baremeFromData(data)
   if (note < 0 || note > bareme) return null
   return note * (20 / bareme)
 }
 
+/**
+ * Un coefficient décrit le poids d'une MATIÈRE, pas le nombre de documents de
+ * cette matière. En vue annuelle, S1 et S2 sont donc d'abord moyennés au sein
+ * de la matière, puis le coefficient n'est appliqué qu'une seule fois.
+ */
+function subjectWeightedPairs(rows) {
+  const bySubject = new Map()
+  rows.forEach((row) => {
+    const key = row.matiere || row.subject
+    if (!key || row.note == null) return
+    const group = bySubject.get(key) || { values: [], coefficient: row.coef }
+    group.values.push(row.note)
+    bySubject.set(key, group)
+  })
+  return [...bySubject.values()].map((group) => ({
+    v: group.values.reduce((sum, value) => sum + value, 0) / group.values.length,
+    c: group.coefficient,
+  }))
+}
+
 function todayISO() {
   return new Date().toISOString().split('T')[0]
 }
 
-function monthStartISO() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+function lastDays(count, endISO = todayISO()) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(endISO)
+  const end = match
+    ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12))
+    : new Date()
+  return Array.from({ length: count }, (_, index) => {
+    const d = new Date(end)
+    d.setUTCDate(d.getUTCDate() - (count - 1 - index))
+    return { iso: d.toISOString().split('T')[0], label: String(d.getUTCDate()).padStart(2, '0') }
+  })
 }
 
-function lastDays(count) {
-  return Array.from({ length: count }, (_, index) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (count - 1 - index))
-    return { iso: d.toISOString().split('T')[0], label: String(d.getDate()).padStart(2, '0') }
-  })
+function inclusiveDaySpan(fromISO, toISO) {
+  const from = Date.parse(`${fromISO}T12:00:00Z`)
+  const to = Date.parse(`${toISO}T12:00:00Z`)
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return 0
+  return Math.floor((to - from) / 86400000) + 1
 }
 
 const isAbsent = (statut) => statut === 'absent'
@@ -154,9 +205,38 @@ const ABSENTEEISM_MIN_RATIO = 0.1
 const FOLLOW_UP_WEIGHTS = {
   low_average: 3,
   absenteeism: 3,
+  declining_controls: 2,
   declining: 2,
   homework_not_done: 1,
   homework_not_submitted: 1,
+}
+
+function controlDeclinesByStudent(rows, semScope) {
+  const result = new Map()
+  ;(rows || []).forEach((row) => {
+    const eleveId = asString(row.eleveId)
+    const semestre = asString(row.semestre)
+    if (!eleveId || (semScope && semestre !== semScope)) return
+    const evaluation = row.evaluation || calculateCollegeEvaluation(row)
+    const steps = evaluation?.progression?.comparableSteps || []
+    steps.forEach((step) => {
+      // Le calculateur ne fournit ici que des paires pédagogiquement
+      // comparables : C1→C2, C2→C3, compréhension 1→2, etc. Un final anglais
+      // ou un bilan d'intégration reste visible, sans produire de faux signal.
+      if (step.delta > -FOLLOW_UP_DECLINE_POINTS) return
+      const candidate = {
+        matiere: evaluation.canonicalSubject || asString(row.matiereLabel) || asString(row.matiere),
+        fromLabel: step.fromLabel,
+        toLabel: step.toLabel,
+        from: round1(step.from),
+        to: round1(step.to),
+        decline: round1(-step.delta),
+      }
+      const current = result.get(eleveId)
+      if (!current || candidate.decline > current.decline) result.set(eleveId, candidate)
+    })
+  })
+  return result
 }
 
 function followUpPriority(score) {
@@ -184,11 +264,14 @@ function buildFollowUpContext(opts) {
       ...shared,
       notesByEleve: opts.fallbackNotesByEleve,
       semesterNotesByEleve: opts.fallbackSemesterNotesByEleve,
+      controlDeclinesByEleve: opts.fallbackControlDeclinesByEleve,
     }
   }
 
   const notesByEleve = new Map()
   const semesterNotesByEleve = new Map()
+  const currentRowsByEleve = new Map()
+  const semesterRowsByEleve = new Map()
 
   opts.followUpNotes
     .filter(opts.belongsToActiveEleve)
@@ -198,21 +281,42 @@ function buildFollowUpContext(opts) {
       const note = normalizedNote20(row)
       if (note == null || note < 0 || note > 20) return
       const semestre = asString(row.semestre)
-      const pair = { v: note, c: opts.coefOf(asString(row.matiere), opts.eleveNiveauById.get(eleveId)) }
+      const matiere = canonicalSubject(row.matiere, row.matiereLabel, row.subject)
+      const normalizedRow = {
+        matiere,
+        subject: matiere,
+        note,
+        coef: opts.coefOf(matiere, opts.eleveNiveauById.get(eleveId)),
+      }
 
       if (!opts.semScope || semestre === opts.semScope) {
-        const rows = notesByEleve.get(eleveId) || []
-        rows.push(pair)
-        notesByEleve.set(eleveId, rows)
+        const rows = currentRowsByEleve.get(eleveId) || []
+        rows.push(normalizedRow)
+        currentRowsByEleve.set(eleveId, rows)
       }
       if (semestre === 'S1' || semestre === 'S2') {
-        const rows = semesterNotesByEleve.get(eleveId) || { S1: [], S2: [] }
-        rows[semestre].push(pair)
-        semesterNotesByEleve.set(eleveId, rows)
+        const rows = semesterRowsByEleve.get(eleveId) || { S1: [], S2: [] }
+        rows[semestre].push(normalizedRow)
+        semesterRowsByEleve.set(eleveId, rows)
       }
     })
 
-  return { ...shared, notesByEleve, semesterNotesByEleve }
+  currentRowsByEleve.forEach((rows, eleveId) => {
+    notesByEleve.set(eleveId, subjectWeightedPairs(rows))
+  })
+  semesterRowsByEleve.forEach((rows, eleveId) => {
+    semesterNotesByEleve.set(eleveId, {
+      S1: subjectWeightedPairs(rows.S1),
+      S2: subjectWeightedPairs(rows.S2),
+    })
+  })
+
+  return {
+    ...shared,
+    notesByEleve,
+    semesterNotesByEleve,
+    controlDeclinesByEleve: controlDeclinesByStudent(opts.followUpNotes, opts.semScope),
+  }
 }
 
 /**
@@ -237,6 +341,7 @@ function evaluateFollowUp(eleve, ctx) {
   const absentDays = ctx.absentDatesByEleve.get(eleve.id)?.size || 0
   const observedDays = ctx.observedDatesByEleve.get(eleve.id)?.size || 0
   const homework = ctx.homeworkAlertsByEleve.get(eleve.id)
+  const controlDecline = ctx.controlDeclinesByEleve?.get(eleve.id)
 
   const reasons = []
   const metrics = {}
@@ -245,7 +350,15 @@ function evaluateFollowUp(eleve, ctx) {
     reasons.push('low_average')
     metrics.average = round1(comparisonAvg)
   }
-  if (s1 != null && s2 != null && s2 - s1 <= -FOLLOW_UP_DECLINE_POINTS) {
+  if (controlDecline) {
+    reasons.push('declining_controls')
+    metrics.controlSubject = controlDecline.matiere
+    metrics.controlFromLabel = controlDecline.fromLabel
+    metrics.controlToLabel = controlDecline.toLabel
+    metrics.controlFrom = controlDecline.from
+    metrics.controlTo = controlDecline.to
+    metrics.controlDecline = controlDecline.decline
+  } else if (s1 != null && s2 != null && s2 - s1 <= -FOLLOW_UP_DECLINE_POINTS) {
     reasons.push('declining')
     metrics.semesterS1 = round1(s1)
     metrics.semesterS2 = round1(s2)
@@ -284,8 +397,9 @@ function evaluateFollowUp(eleve, ctx) {
 /**
  * @param cache { eleves, users, notes, absences, devoirs, homeworkSubmissions } — tableaux de docs
  *   bruts avec `.id` et leurs champs (équivalent de snap.docs.map(d => ({id, ...data}))).
- * @param options { semestre?: 'S1'|'S2' } — période des résultats. Les deux
- *   semestres restent disponibles pour détecter une baisse S1 → S2.
+ * @param options { semestre?: 'S1'|'S2', homeworkAlreadyScoped?: boolean,
+ *   trendStartDate?: string, trendEndDate?: string } — période des résultats. Les deux semestres
+ *   restent disponibles pour détecter une baisse S1 → S2.
  * @returns DashboardData (même forme que côté client) — chaque classStats
  *   porte en plus `niveauGroup` pour le drill-down niveau → classe.
  */
@@ -293,6 +407,16 @@ function computeSchoolStats(cache, options = {}) {
   const today = todayISO()
   const semScope = options.semestre === 'S1' || options.semestre === 'S2' ? options.semestre : null
   const periodAttendance = options.periodAttendance === true
+  const homeworkAlreadyScoped = options.homeworkAlreadyScoped === true
+  const trendEndDate = /^\d{4}-\d{2}-\d{2}$/.test(options.trendEndDate || '')
+    ? options.trendEndDate
+    : today
+  const trendStartDate = /^\d{4}-\d{2}-\d{2}$/.test(options.trendStartDate || '')
+    ? options.trendStartDate
+    : null
+  const trendSpan = trendStartDate
+    ? inclusiveDaySpan(trendStartDate, trendEndDate)
+    : null
   // Opt-in strict : voir la note PII sur `followUpStudents` dans le retour.
   const includeFollowUpStudents = options.includeFollowUpStudents === true
   // Index élève → moyenne / récidive. Porte des `eleveId` (= codes Massar),
@@ -325,16 +449,23 @@ function computeSchoolStats(cache, options = {}) {
   const coefOf = makeCoefOf(cache.coefficients)
   const notes = (cache.notes || []).filter(belongsToActiveEleve).map((d) => {
     const eleveId = asString(d.eleveId)
-    const matiere = asString(d.matiere)
+    const evaluation = calculateCollegeEvaluation(d)
+    const matiere = canonicalSubject(
+      evaluation.canonicalSubject,
+      d.matiere,
+      d.matiereLabel,
+      d.subject,
+    )
     return {
       id: d.id,
       eleveId,
       classe: asString(d.classe),
-      subject: asString(d.matiereLabel) || matiere || asString(d.subject),
+      subject: matiere,
       matiere,
       semestre: asString(d.semestre),
       note: normalizedNote20(d),
       coef: coefOf(matiere, eleveNiveauById.get(eleveId)),
+      evaluation,
     }
   })
   const absences = (cache.absences || []).filter(belongsToActiveEleve).map((d) => ({
@@ -344,6 +475,13 @@ function computeSchoolStats(cache, options = {}) {
   const devoirs = (cache.devoirs || []).map((d) => ({
     id: d.id, classeId: asString(d.classeId) || asString(d.classe), dateLimite: asString(d.dateLimite),
   }))
+  // `resolveScope` fournit déjà les devoirs dont l'échéance tombe dans la
+  // période demandée, y compris les échus nécessaires au suivi. Le résumé
+  // planifié, lui, charge toute l'année et doit conserver le sens historique
+  // de « Devoirs actifs » : échéance aujourd'hui ou future.
+  const countedHomework = homeworkAlreadyScoped
+    ? devoirs
+    : devoirs.filter((row) => isActiveHomework(row.dateLimite, today))
   const homeworkSubmissions = (cache.homeworkSubmissions || [])
     .filter(belongsToActiveEleve)
     .map((d) => ({
@@ -359,6 +497,8 @@ function computeSchoolStats(cache, options = {}) {
   const classStudents = new Map()
   const notesByEleve = new Map()
   const semesterNotesByEleve = new Map()
+  const noteRowsByEleve = new Map()
+  const semesterRowsByEleve = new Map()
   const notesByClass = new Map()
   const notesBySubject = new Map()
   const todayAbsentEleves = new Set()
@@ -383,9 +523,9 @@ function computeSchoolStats(cache, options = {}) {
 
   validNotes.forEach((note) => {
     if (note.eleveId) {
-      const rows = notesByEleve.get(note.eleveId) || []
-      rows.push({ v: note.note, c: note.coef })
-      notesByEleve.set(note.eleveId, rows)
+      const rows = noteRowsByEleve.get(note.eleveId) || []
+      rows.push(note)
+      noteRowsByEleve.set(note.eleveId, rows)
     }
     if (note.classe) {
       const rows = notesByClass.get(note.classe) || []
@@ -401,16 +541,26 @@ function computeSchoolStats(cache, options = {}) {
 
   allValidNotes.forEach((note) => {
     if (!note.eleveId || (note.semestre !== 'S1' && note.semestre !== 'S2')) return
-    const rows = semesterNotesByEleve.get(note.eleveId) || { S1: [], S2: [] }
-    rows[note.semestre].push({ v: note.note, c: note.coef })
-    semesterNotesByEleve.set(note.eleveId, rows)
+    const rows = semesterRowsByEleve.get(note.eleveId) || { S1: [], S2: [] }
+    rows[note.semestre].push(note)
+    semesterRowsByEleve.set(note.eleveId, rows)
   })
 
-  const trendDays = lastDays(5)
+  noteRowsByEleve.forEach((rows, eleveId) => {
+    notesByEleve.set(eleveId, subjectWeightedPairs(rows))
+  })
+  semesterRowsByEleve.forEach((rows, eleveId) => {
+    semesterNotesByEleve.set(eleveId, {
+      S1: subjectWeightedPairs(rows.S1),
+      S2: subjectWeightedPairs(rows.S2),
+    })
+  })
+
+  const trendDays = lastDays(trendSpan == null ? 5 : Math.min(5, trendSpan), trendEndDate)
   const trendByClass = new Map()
 
   absences.forEach((absence) => {
-    if (absence.classe) {
+    if (absence.classe && (periodAttendance || absence.date === today)) {
       const attendance = attendanceByClass.get(absence.classe) || { total: 0, present: 0 }
       attendance.total++
       if (isPresent(absence.statut)) attendance.present++
@@ -463,8 +613,8 @@ function computeSchoolStats(cache, options = {}) {
     }
   })
 
-  devoirs.forEach((devoir) => {
-    if (!devoir.classeId || !isActiveHomework(devoir.dateLimite, today)) return
+  countedHomework.forEach((devoir) => {
+    if (!devoir.classeId) return
     activeHomeworkByClass.set(devoir.classeId, (activeHomeworkByClass.get(devoir.classeId) || 0) + 1)
   })
 
@@ -514,6 +664,7 @@ function computeSchoolStats(cache, options = {}) {
   const followUpCtx = buildFollowUpContext({
     fallbackNotesByEleve: notesByEleve,
     fallbackSemesterNotesByEleve: semesterNotesByEleve,
+    fallbackControlDeclinesByEleve: controlDeclinesByStudent(notes, semScope),
     followUpNotes: cache.followUpNotes,
     semScope,
     coefOf,
@@ -547,17 +698,17 @@ function computeSchoolStats(cache, options = {}) {
       if (note.subject) subjects.add(note.subject)
       if (!note.eleveId || note.note == null) return
       const rows = classNotesByEleve.get(note.eleveId) || []
-      rows.push({ v: note.note, c: note.coef })
+      rows.push(note)
       classNotesByEleve.set(note.eleveId, rows)
     })
 
     // Moyenne pondérée par élève, puis moyennée sur la classe (miroir école-entière ci-dessus).
-    const averages = [...classNotesByEleve.values()].map((pairs) => weightedAvg(pairs))
+    const averages = [...classNotesByEleve.values()].map((rows) => weightedAvg(subjectWeightedPairs(rows)))
     const attendance = attendanceByClass.get(name) || { total: 0, present: 0 }
     const absencesToday = absentTodayByClass.get(name)?.size || 0
-    const presenceRate = periodAttendance
-      ? (attendance.total > 0 ? Math.round((attendance.present / attendance.total) * 100) : 100)
-      : (students.length > 0 ? Math.round(((students.length - absencesToday) / students.length) * 100) : 100)
+    const presenceRate = attendance.total > 0
+      ? Math.round((attendance.present / attendance.total) * 100)
+      : null
     const classAvg = averages.length > 0 ? round1(averages.reduce((s, v) => s + v, 0) / averages.length) : null
     const passingStudents = averages.filter((v) => v >= 10).length
     const classSuccess = averages.length > 0
@@ -575,8 +726,8 @@ function computeSchoolStats(cache, options = {}) {
       niveau,
       niveauGroup: niveau || name.replace(/[-\d]/g, '').trim() || 'Autre',
       studentCount: students.length,
-      presenceRate: clamp(presenceRate),
-      attendanceCount: periodAttendance ? attendance.total : students.length,
+      presenceRate,
+      attendanceCount: attendance.total,
       avgNote: classAvg,
       successRate: classSuccess,
       absencesToday,
@@ -586,7 +737,7 @@ function computeSchoolStats(cache, options = {}) {
       notesCount: classNoteValues.length,
       gradedStudents: averages.length,
       passingStudents,
-      healthScore: clamp(Math.round((presenceRate * 0.38) + (noteScore * 0.34) + (successScore * 0.18) + (coverageScore * 0.10) - incidentsPenalty)),
+      healthScore: clamp(Math.round(((presenceRate ?? 55) * 0.38) + (noteScore * 0.34) + (successScore * 0.18) + (coverageScore * 0.10) - incidentsPenalty)),
       trend: trendDays.map((day) => ({ label: day.label, value: classTrend?.get(day.iso)?.size || 0 })),
     }
   }).sort((a, b) => a.healthScore - b.healthScore || a.name.localeCompare(b.name, 'fr'))
@@ -603,17 +754,25 @@ function computeSchoolStats(cache, options = {}) {
         byEleve.set(note.eleveId, rows)
       }
       if (note.classe && note.note != null) {
-        const rows = byClass.get(note.classe) || []
+        const students = byClass.get(note.classe) || new Map()
+        const rows = students.get(note.eleveId) || []
         rows.push(note.note)
-        byClass.set(note.classe, rows)
+        students.set(note.eleveId, rows)
+        byClass.set(note.classe, students)
       }
     })
 
     const averages = [...byEleve.values()].map((rows) => rows.reduce((s, v) => s + v, 0) / rows.length)
     const classAverages = [...byClass.entries()]
-      .map(([className, rows]) => ({ className, avg: rows.reduce((s, v) => s + v, 0) / rows.length }))
+      .map(([className, students]) => {
+        const rows = [...students.values()].map((values) =>
+          values.reduce((sum, value) => sum + value, 0) / values.length)
+        return { className, avg: rows.reduce((sum, value) => sum + value, 0) / rows.length }
+      })
       .sort((a, b) => a.avg - b.avg)
-    const subjectAvg = values.length > 0 ? round1(values.reduce((s, v) => s + v, 0) / values.length) : null
+    const subjectAvg = averages.length > 0
+      ? round1(averages.reduce((sum, value) => sum + value, 0) / averages.length)
+      : null
     const subjectSuccess = averages.length > 0
       ? Math.round((averages.filter((v) => v >= 10).length / averages.length) * 100)
       : null
@@ -627,6 +786,7 @@ function computeSchoolStats(cache, options = {}) {
       classesCount: byClass.size,
       avgNote: subjectAvg,
       successRate: subjectSuccess,
+      gradedStudents: averages.length,
       below10Count: averages.filter((v) => v < 10).length,
       strongestClass: classAverages[classAverages.length - 1]?.className || '—',
       weakestClass: classAverages[0]?.className || '—',
@@ -653,7 +813,7 @@ function computeSchoolStats(cache, options = {}) {
     })
   })
 
-  const days = lastDays(7)
+  const days = lastDays(trendSpan == null ? 7 : Math.min(7, trendSpan), trendEndDate)
   const trendSets = new Map()
   days.forEach((day) => trendSets.set(day.iso, new Set()))
   absences.forEach((absence) => {
@@ -674,8 +834,8 @@ function computeSchoolStats(cache, options = {}) {
     const totalIncidents = classes.reduce((s, c) => s + c.incidentsMonth, 0)
     const attendanceWeight = classes.reduce((s, c) => s + c.attendanceCount, 0)
     const avgPresence = attendanceWeight > 0
-      ? Math.round(classes.reduce((s, c) => s + c.presenceRate * c.attendanceCount, 0) / attendanceWeight)
-      : 100
+      ? Math.round(classes.reduce((s, c) => s + ((c.presenceRate || 0) * c.attendanceCount), 0) / attendanceWeight)
+      : null
     return {
       name,
       classCount: classes.length,
@@ -688,8 +848,13 @@ function computeSchoolStats(cache, options = {}) {
     }
   }).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
 
-  const attendanceCount = periodAttendance ? absences.length : eleves.length
-  const presentCount = absences.filter((row) => isPresent(row.statut)).length
+  const attendanceRows = periodAttendance
+    ? absences
+    : absences.filter((row) => row.date === today)
+  const attendanceCount = attendanceRows.length
+  const presentCount = attendanceRows.filter((row) => isPresent(row.statut)).length
+  const absenceRecords = attendanceRows.filter((row) => isAbsent(row.statut)).length
+  const lateRecords = attendanceRows.filter((row) => isLate(row.statut)).length
 
   return {
     totalEleves: eleves.length,
@@ -699,14 +864,16 @@ function computeSchoolStats(cache, options = {}) {
     absentsToday: todayAbsentEleves.size,
     retardsToday: todayLateEleves.size,
     presenceRate: periodAttendance
-      ? (attendanceCount > 0 ? Math.round((presentCount / attendanceCount) * 100) : 0)
-      : (eleves.length > 0 ? Math.round(((eleves.length - todayAbsentEleves.size) / eleves.length) * 100) : 100),
+      ? (attendanceCount > 0 ? Math.round((presentCount / attendanceCount) * 100) : null)
+      : (attendanceCount > 0 ? Math.round((presentCount / attendanceCount) * 100) : null),
     attendanceCount,
+    absenceRecords,
+    lateRecords,
     avgNote,
     successRate,
     studentsToFollow,
     notesCount: validNotes.length,
-    activeHomework: devoirs.filter((d) => isActiveHomework(d.dateLimite, today)).length,
+    activeHomework: countedHomework.length,
     absenceTrend: days.map((day) => ({ label: day.label, value: trendSets.get(day.iso)?.size || 0 })),
     // A9/E6 — réparti sur les MOYENNES PAR ÉLÈVE, pas sur les documents de
     // notes. Avant : un élève à 13 notes pesait 13 fois ici et 1 fois dans

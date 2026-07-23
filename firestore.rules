@@ -143,6 +143,104 @@ service cloud.firestore {
     function untouched(fields) {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
+    // ── Notes structurées collège (schemaVersion 2) ─────────
+    //
+    // Les documents historiques n'ont pas de schemaVersion : ils restent
+    // lisibles et modifiables sans migration fictive. En revanche, dès qu'un
+    // client annonce le schéma v2, les composantes deviennent la source de
+    // vérité et doivent être bornées avant même le recalcul serveur.
+    function validEvaluationComponent(item, bareme) {
+      return item is map
+        && item.keys().hasAll([
+          'slot', 'category', 'kind', 'ordinal', 'label', 'note', 'bareme'
+        ])
+        && item.keys().hasOnly([
+          'slot', 'category', 'kind', 'ordinal', 'label', 'note', 'bareme',
+          'evaluationDate'
+        ])
+        && item.slot is string
+        && item.category in ['control', 'integrated']
+        && item.kind is string
+        && item.ordinal is int
+        && item.ordinal >= 1
+        && item.ordinal <= 5
+        && item.label is string
+        && item.note is number
+        && item.note >= 0
+        && item.note <= bareme
+        && item.bareme == bareme
+        && (
+          (item.category == 'integrated'
+            && item.slot == 'integrated_activities'
+            && item.kind == 'integrated_activity')
+          || (item.category == 'control' && item.slot != 'integrated_activities')
+        );
+    }
+    function validEvaluationAt(data, index) {
+      return data.evaluations.size() <= index
+        || validEvaluationComponent(data.evaluations[index], data.bareme);
+    }
+    function distinctEvaluationSlots(data) {
+      return (data.evaluations.size() <= 1 || data.evaluations[0].slot != data.evaluations[1].slot)
+        && (data.evaluations.size() <= 2 || (
+          data.evaluations[0].slot != data.evaluations[2].slot
+          && data.evaluations[1].slot != data.evaluations[2].slot
+        ))
+        && (data.evaluations.size() <= 3 || (
+          data.evaluations[0].slot != data.evaluations[3].slot
+          && data.evaluations[1].slot != data.evaluations[3].slot
+          && data.evaluations[2].slot != data.evaluations[3].slot
+        ))
+        && (data.evaluations.size() <= 4 || (
+          data.evaluations[0].slot != data.evaluations[4].slot
+          && data.evaluations[1].slot != data.evaluations[4].slot
+          && data.evaluations[2].slot != data.evaluations[4].slot
+          && data.evaluations[3].slot != data.evaluations[4].slot
+        ));
+    }
+    function validCollegeStructuredScope(data) {
+      // Le schéma v2 implémente actuellement la politique réglementaire du
+      // collège uniquement. Primaire et préscolaire restent en schéma legacy
+      // jusqu'à disposer de leur propre politique : accepter AEP ici ferait
+      // matérialiser une note v2 que le calculateur serveur ne sait pas relire.
+      return data.cycle == 'college'
+        && data.niveau in ['1AC', '2AC', '3AC']
+        && data.classe is string
+        && !data.classe.matches('.*[Aa][Ee][Pp].*')
+        && !data.classe.matches('.*([Pp][Ss]|[Gg][Ss]).*')
+        && data.bareme == 20;
+    }
+    function validStructuredNote(data) {
+      return data.schemaVersion == 2
+        && validCollegeStructuredScope(data)
+        && data.note is number
+        && data.note >= 0
+        && data.note <= data.bareme
+        && data.evaluationPolicyVersion is string
+        && data.subjectKey is string
+        && data.evaluations is list
+        && data.evaluations.size() > 0
+        && data.evaluations.size() <= 5
+        && validEvaluationAt(data, 0)
+        && validEvaluationAt(data, 1)
+        && validEvaluationAt(data, 2)
+        && validEvaluationAt(data, 3)
+        && validEvaluationAt(data, 4)
+        && distinctEvaluationSlots(data);
+    }
+    function validLegacyNote(data) {
+      return (!data.keys().hasAny(['schemaVersion']) || data.schemaVersion == 1)
+        && !data.keys().hasAny([
+          'evaluationPolicyVersion', 'policyVersion', 'subjectKey', 'evaluations'
+        ]);
+    }
+    function validNoteDocument(data) {
+      return validLegacyNote(data) || validStructuredNote(data);
+    }
+    function validNoteSchemaTransition() {
+      return resource.data.get('schemaVersion', 1) != 2
+        || request.resource.data.get('schemaVersion', 1) == 2;
+    }
     // Un champ tableau ne peut évoluer qu'en AJOUTANT son propre uid
     // (ou rester inchangé). Utilisé pour readBy/deletedBy des messages :
     // pas de retrait, pas d'ajout d'un autre uid, pas de réécriture.
@@ -259,16 +357,22 @@ service cloud.firestore {
       //    plus s'approprier une note hors périmètre en réécrivant sa classe.
       //    (L'app réécrit ces champs à l'identique via set+merge → inchangés,
       //    donc hors affectedKeys : aucun flux existant n'est cassé.)
-      allow create: if isAdmin() || (
-        teacherTeaches(request.resource.data.classe)
-        && request.resource.data.matiere == myDoc().matiere
-        && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe)
+      allow create: if validNoteDocument(request.resource.data) && (
+        isAdmin() || (
+          teacherTeaches(request.resource.data.classe)
+          && request.resource.data.matiere == myDoc().matiere
+          && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe)
+        )
       );
-      allow update: if isAdmin() || (
-        teacherTeaches(resource.data.classe)
-        && resource.data.matiere == myDoc().matiere
-        && untouched(['eleveId', 'classe', 'matiere'])
-      );
+      allow update: if validNoteDocument(request.resource.data)
+        && validNoteSchemaTransition()
+        && (
+          isAdmin() || (
+            teacherTeaches(resource.data.classe)
+            && resource.data.matiere == myDoc().matiere
+            && untouched(['eleveId', 'classe', 'matiere'])
+          )
+        );
       allow delete: if isSuperAdmin();
     }
 
