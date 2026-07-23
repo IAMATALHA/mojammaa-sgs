@@ -13,6 +13,7 @@
 import type { NavigatorScreenParams, CompositeNavigationProp, RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
+import type { AppliedScope, StudentSegment } from '../types/stats'
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 export type AuthStackParamList = {
@@ -110,15 +111,21 @@ export type AdminTabsParamList = {
 
 export type AdminStackParamList = {
   AdminTabs:      NavigatorScreenParams<AdminTabsParamList> | undefined
-  AdminStats:     undefined
   AdminEdt:       undefined
   AdminCalendar:  undefined
   AdminAbsences:  undefined
   AdminRollCalls: undefined
   AdminDevoirs:   undefined
   AdminDevoirView: DevoirDetailParams
-  AdminMatiereDetail: { matiere?: string; classe?: string } | undefined
+  AdminMatiereDetail: { matiere?: string; classe?: string; scope?: AppliedScope } | undefined
   AdminUsers:     undefined
+  // Drill-downs des statistiques. Chacun reçoit le périmètre RENVOYÉ par le
+  // serveur, jamais celui demandé par le client : c'est ce qui garantit que le
+  // total de l'écran est exactement le chiffre de la tuile qui l'a ouvert.
+  AdminScopeStudents:   { scope: AppliedScope; segment: StudentSegment; band?: string }
+  AdminAttendanceStats: { scope: AppliedScope }
+  AdminStudentFile:     { eleveId: string; scope: AppliedScope }
+  AdminScopeHomework:   { scope: AppliedScope }
   AdminPickup:    undefined
   AdminPrayer:    undefined
 }

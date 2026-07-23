@@ -653,6 +653,16 @@ export default function AdminStatsScreen() {
 
   // Taux de réussite d'une classe → les élèves qui le composent. Le périmètre
   // est resserré sur cette classe pour que le total corresponde au taux tapé.
+  // Devoirs d'une CLASSE : le périmètre est resserré sur elle, la période est
+  // celle du hero. Sans ça l'écran listerait les devoirs de toute l'école.
+  const openHomework = useCallback((classe?: string) => {
+    if (!applied) return
+    void Haptics.selectionAsync()
+    nav.navigate('AdminScopeHomework', {
+      scope: classe ? { ...applied, classe } : applied,
+    })
+  }, [applied, nav])
+
   const openThreshold = useCallback((classe: string) => {
     if (!applied) return
     nav.navigate('AdminScopeStudents', {
@@ -762,6 +772,7 @@ export default function AdminStatsScreen() {
                   onAction={handleStatsAction}
                   onOpenNotes={openNotes}
                   onOpenThreshold={openThreshold}
+                  onOpenHomework={openHomework}
                   theme={theme}
                   t={t}
                 />
@@ -1206,8 +1217,8 @@ function NiveauxView({ data, onSelectNiveau, onOpenBand, theme, t }: { data: Das
   )
 }
 
-function NiveauClassesView({ data, niveau, onBack, onAction, onOpenNotes, onOpenThreshold, theme, t }: {
-  data: DashboardData; niveau: string; onBack: () => void; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; onOpenThreshold: (classe: string) => void; theme: Theme; t: TFunction
+function NiveauClassesView({ data, niveau, onBack, onAction, onOpenNotes, onOpenThreshold, onOpenHomework, theme, t }: {
+  data: DashboardData; niveau: string; onBack: () => void; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; onOpenThreshold: (classe: string) => void; onOpenHomework: (classe: string) => void; theme: Theme; t: TFunction
 }) {
   const classes = data.classStats.filter(item => item.niveauGroup === niveau)
   const label = niveau === 'Autre' ? t('common.other') : niveau
@@ -1223,14 +1234,14 @@ function NiveauClassesView({ data, niveau, onBack, onAction, onOpenNotes, onOpen
           <EmptyText theme={theme} text={t('common.noData')} />
         ) : (
           classes.map(item => <ClassCardRich key={item.name} item={item} onAction={onAction} onOpenNotes={onOpenNotes}
-              onOpenThreshold={onOpenThreshold} theme={theme} t={t} />)
+              onOpenThreshold={onOpenThreshold} onOpenHomework={onOpenHomework} theme={theme} t={t} />)
         )}
       </View>
     </>
   )
 }
 
-function ClassCardRich({ item, onAction, onOpenNotes, onOpenThreshold, theme, t }: { item: ClassStats; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; onOpenThreshold: (classe: string) => void; theme: Theme; t: TFunction }) {
+function ClassCardRich({ item, onAction, onOpenNotes, onOpenThreshold, onOpenHomework, theme, t }: { item: ClassStats; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; onOpenThreshold: (classe: string) => void; onOpenHomework: (classe: string) => void; theme: Theme; t: TFunction }) {
   const healthColor = item.healthScore >= 75 ? theme.info : item.healthScore >= 55 ? theme.warning : theme.danger
   return (
     <View style={[styles.classCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -1259,7 +1270,7 @@ function ClassCardRich({ item, onAction, onOpenNotes, onOpenThreshold, theme, t 
           {/* Le taux de reussite d'une classe ouvre les eleves qui le composent,
               pas l'analyse des notes : c'est le seuil qui est en cause. */}
           <MetricLine icon={<CheckCircle2 size={14} color={theme.info} />} label={t('admin.successRate')} value={item.successRate == null ? '—' : `${item.successRate}%`} theme={theme} onPress={() => onOpenThreshold(item.name)} />
-          <MetricLine icon={<BookOpen size={14} color={theme.warning} />} label={t('admin.homeworkShort')} value={String(item.activeHomework)} theme={theme} onPress={() => onAction('devoirs')} />
+          <MetricLine icon={<BookOpen size={14} color={theme.warning} />} label={t('admin.homeworkShort')} value={String(item.activeHomework)} theme={theme} onPress={() => onOpenHomework(item.name)} />
         </View>
       </View>
 

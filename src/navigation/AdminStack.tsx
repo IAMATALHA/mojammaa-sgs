@@ -26,6 +26,7 @@ import AdminMatiereDetailScreen from '../screens/admin/AdminMatiereDetailScreen'
 import AdminScopeStudentsScreen from '../screens/admin/AdminScopeStudentsScreen'
 import AdminStudentFileScreen from '../screens/admin/AdminStudentFileScreen'
 import AdminAttendanceStatsScreen from '../screens/admin/AdminAttendanceStatsScreen'
+import AdminScopeHomeworkScreen from '../screens/admin/AdminScopeHomeworkScreen'
 import AdminPickupScreen from '../screens/admin/admin-pickup-screen'
 import AdminPrayerScreen from '../screens/admin/AdminPrayerScreen'
 import type { AdminTabsParamList, AdminStackParamList } from './types'
@@ -98,6 +99,7 @@ export default function AdminStack() {
       <Stack.Screen name="AdminScopeStudents" component={AdminScopeStudentsScreen} />
       <Stack.Screen name="AdminStudentFile" component={AdminStudentFileScreen} />
       <Stack.Screen name="AdminAttendanceStats" component={AdminAttendanceStatsScreen} />
+      <Stack.Screen name="AdminScopeHomework" component={AdminScopeHomeworkScreen} />
       <Stack.Screen name="AdminPickup" component={AdminPickupScreen} />
       <Stack.Screen name="AdminPrayer" component={AdminPrayerScreen} />
     </Stack.Navigator>
