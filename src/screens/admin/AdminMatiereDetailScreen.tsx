@@ -109,8 +109,19 @@ export default function AdminMatiereDetailScreen() {
   const route = useRoute<RouteProp<AdminStackParamList, 'AdminMatiereDetail'>>()
   const matiere = route.params?.matiere?.trim() || ''
   const classeParam = route.params?.classe?.trim() || ''
+  const scope = route.params?.scope
   const title = matiere || classeParam || t('admin.notesAnalysis')
-  const period = currentAcademicPeriod()
+  // Le semestre vient du périmètre appliqué par le serveur quand l'écran est
+  // ouvert depuis les statistiques : sans ça, l'admin qui consulte « S1 »
+  // arriverait sur les notes du semestre courant et verrait d'autres chiffres
+  // que ceux de la tuile. `annee` laisse le semestre libre (S1 + S2).
+  const fallbackPeriod = currentAcademicPeriod()
+  const period = scope
+    ? {
+      academicYear: fallbackPeriod.academicYear,
+      semestre: scope.notesPeriod === 'annee' ? '' : scope.notesPeriod,
+    }
+    : fallbackPeriod
 
   const [notes, setNotes] = useState<NoteRow[]>([])
   const [teachers, setTeachers] = useState<UserProfile[]>([])
@@ -122,14 +133,21 @@ export default function AdminMatiereDetailScreen() {
     setError(null)
     try {
       const notesCol = collection(db, 'notes')
+      // Périmètre « année » = S1 + S2 : on n'ajoute alors AUCUNE contrainte de
+      // semestre. La poser à '' ne renverrait rien, et poser le semestre
+      // courant contredirait le total de la tuile.
+      const base = [
+        where('academicYear', '==', period.academicYear),
+        ...(period.semestre ? [where('semestre', '==', period.semestre)] : []),
+      ]
       const noteReads = matiere
         ? [
-          getDocs(query(notesCol, where('matiereLabel', '==', matiere), where('academicYear', '==', period.academicYear), where('semestre', '==', period.semestre))),
-          getDocs(query(notesCol, where('matiere', '==', matiere), where('academicYear', '==', period.academicYear), where('semestre', '==', period.semestre))),
+          getDocs(query(notesCol, where('matiereLabel', '==', matiere), ...base)),
+          getDocs(query(notesCol, where('matiere', '==', matiere), ...base)),
         ]
         : classeParam
-          ? [getDocs(query(notesCol, where('classe', '==', classeParam), where('academicYear', '==', period.academicYear), where('semestre', '==', period.semestre)))]
-          : [getDocs(query(notesCol, where('academicYear', '==', period.academicYear), where('semestre', '==', period.semestre)))]
+          ? [getDocs(query(notesCol, where('classe', '==', classeParam), ...base))]
+          : [getDocs(query(notesCol, ...base))]
       const [noteSnaps, usersSnap] = await Promise.all([
         Promise.all(noteReads),
         getDocs(query(collection(db, 'users'), where('role', '==', 'professeur'))),

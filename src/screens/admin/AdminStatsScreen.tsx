@@ -8,9 +8,10 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import {
   AlertTriangle, Award, BarChart3, BookOpen, CheckCircle2,
-  ChevronLeft, ChevronRight, Filter, TrendingUp, Users, X, type LucideIcon,
+  ChevronDown, ChevronLeft, ChevronRight, Filter, TrendingUp, Users, X, type LucideIcon,
 } from 'lucide-react-native'
 import Svg, { Circle } from 'react-native-svg'
+import * as Haptics from 'expo-haptics'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { palette, chartColors } from '../../theme/designTokens'
@@ -20,6 +21,8 @@ import type { AdminDashboardNav } from '../../navigation/types'
 type CollectionName = 'eleves' | 'users' | 'notes' | 'absences' | 'devoirs'
 type StatsView = 'niveaux' | 'subjects'
 type StatsAction = 'absences' | 'devoirs' | 'niveaux' | 'subjects'
+/** Les quatre KPI du hero, chacun avec un écran de détail au même périmètre. */
+type ReportTile = 'students' | 'attendance' | 'average' | 'followup'
 type NotesTarget = { matiere?: string; classe?: string }
 type StatsPeriod = 'semaine' | 'mois' | 'S1' | 'S2' | 'annee'
 type StatsCycle = '' | 'prescolaire' | 'primaire' | 'college'
@@ -31,6 +34,22 @@ interface StatsFilters {
   niveau: string
   classe: string
   matiere: string
+}
+
+/**
+ * Périmètre effectivement appliqué par le serveur, renvoyé par
+ * `getFilteredSchoolStats`. C'est le contrat unique passé aux écrans de
+ * drill-down : chacun recalcule sur CE périmètre, donc son total est
+ * nécessairement celui de la tuile qui l'a ouvert.
+ *
+ * `notesPeriod` est distinct de `period` : les notes n'ont pas de date
+ * pédagogique, leur seule granularité fiable est le semestre. En vue
+ * Semaine/Mois la moyenne couvre le semestre en cours, et l'UI doit le dire.
+ */
+export interface AppliedScope extends StatsFilters {
+  notesPeriod: 'S1' | 'S2' | 'annee'
+  from: string
+  to: string
 }
 
 interface FilterOption {
@@ -569,6 +588,15 @@ export default function AdminStatsScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [filters, setFilters] = useState<StatsFilters>(INITIAL_FILTERS)
   const [filterOptions, setFilterOptions] = useState<StatsFilterOptions>(EMPTY_FILTER_OPTIONS)
+  // A4 — périmètre RÉELLEMENT appliqué par le serveur. Les pastilles et les
+  // drill-downs lisent ceci, jamais `filters` : le serveur clampe (période
+  // inconnue → « mois »), et une pastille dessinée depuis le state local
+  // afficherait un périmètre que le calcul n'a pas utilisé.
+  const [applied, setApplied] = useState<AppliedScope | null>(null)
+  // Les pastilles de périmètre/période sont des raccourcis vers les sélecteurs
+  // qui vivent dans `StatsFilters` : on remonte la demande plutôt que de
+  // dupliquer les pickers.
+  const [pickerRequest, setPickerRequest] = useState<StatsFilterKey | 'period' | null>(null)
 
   const handleStatsAction = useCallback((action: StatsAction) => {
     if (action === 'absences') {
@@ -584,8 +612,54 @@ export default function AdminStatsScreen() {
   }, [nav])
 
   const openNotes = useCallback((target?: NotesTarget) => {
-    nav.navigate('AdminMatiereDetail', target)
-  }, [nav])
+    // Le périmètre appliqué accompagne TOUS les drill-downs de notes. Sans lui,
+    // AdminMatiereDetail retombe sur le semestre courant : un admin consultant
+    // « S1 » verrait les notes de S2 et donc une autre moyenne que la tuile.
+    nav.navigate('AdminMatiereDetail', { ...target, scope: applied ?? undefined })
+  }, [applied, nav])
+
+  // Chaque tuile emporte le périmètre RENVOYÉ PAR LE SERVEUR. C'est ce qui
+  // garantit l'invariant : l'écran de détail recalcule sur le même scope, donc
+  // son total ne peut pas différer du chiffre qui vient d'être tapé.
+  const openTile = useCallback((tile: ReportTile) => {
+    if (!applied) return
+    void Haptics.selectionAsync()
+    if (tile === 'students') {
+      nav.navigate('AdminScopeStudents', { scope: applied, segment: 'all' })
+      return
+    }
+    if (tile === 'attendance') {
+      nav.navigate('AdminAttendanceStats', { scope: applied })
+      return
+    }
+    if (tile === 'average') {
+      nav.navigate('AdminMatiereDetail', {
+        matiere: applied.matiere || undefined,
+        classe: applied.classe || undefined,
+        scope: applied,
+      })
+      return
+    }
+    nav.navigate('AdminScopeStudents', { scope: applied, segment: 'followup' })
+  }, [applied, nav])
+
+  // Les bandes de la distribution partagent le partitionnement de `successRate`
+  // (borne ≥10) : ouvrir une bande, c'est ouvrir exactement les élèves comptés
+  // dedans, sans second calcul.
+  const openBand = useCallback((band: string) => {
+    if (!applied) return
+    nav.navigate('AdminScopeStudents', { scope: applied, segment: 'band', band })
+  }, [applied, nav])
+
+  // Taux de réussite d'une classe → les élèves qui le composent. Le périmètre
+  // est resserré sur cette classe pour que le total corresponde au taux tapé.
+  const openThreshold = useCallback((classe: string) => {
+    if (!applied) return
+    nav.navigate('AdminScopeStudents', {
+      scope: { ...applied, classe },
+      segment: 'threshold',
+    })
+  }, [applied, nav])
 
   // Les collections nominatives restent côté serveur. La callable admin-only
   // renvoie uniquement les agrégats correspondant aux cinq filtres globaux.
@@ -596,9 +670,11 @@ export default function AdminStatsScreen() {
       const response = await httpsCallable<StatsFilters, {
         data: DashboardData
         options: StatsFilterOptions
+        applied: AppliedScope
       }>(functions, 'getFilteredSchoolStats')(nextFilters)
       setData(response.data.data)
       setFilterOptions(response.data.options || EMPTY_FILTER_OPTIONS)
+      setApplied(response.data.applied || null)
       setError(null)
     } catch (err: any) {
       setError(err?.message || t('common.error'))
@@ -656,9 +732,12 @@ export default function AdminStatsScreen() {
           <>
             <GeneralReport
               data={data}
-              filters={filters}
+              scope={applied ?? { ...filters, notesPeriod: 'annee', from: '', to: '' }}
               theme={theme}
               t={t}
+              onOpenScope={() => setPickerRequest('classe')}
+              onOpenPeriod={() => setPickerRequest('period')}
+              onTile={openTile}
             />
             <StatsFilters
               value={filters}
@@ -667,11 +746,13 @@ export default function AdminStatsScreen() {
               onPeriodChange={changePeriod}
               onFilterChange={changeFilter}
               onClear={clearFilters}
+              pickerRequest={pickerRequest}
+              onPickerRequestHandled={() => setPickerRequest(null)}
               theme={theme}
               t={t}
             />
             <ViewTabs value={view} onChange={(v) => { setView(v); setSelectedNiveau(null) }} theme={theme} t={t} />
-            {view === 'subjects' ? <SubjectsView data={data} onOpenNotes={openNotes} theme={theme} t={t} /> : null}
+            {view === 'subjects' ? <SubjectsView data={data} onOpenNotes={openNotes} onOpenBand={openBand} theme={theme} t={t} /> : null}
             {view === 'niveaux' ? (
               selectedNiveau != null ? (
                 <NiveauClassesView
@@ -680,11 +761,12 @@ export default function AdminStatsScreen() {
                   onBack={() => setSelectedNiveau(null)}
                   onAction={handleStatsAction}
                   onOpenNotes={openNotes}
+                  onOpenThreshold={openThreshold}
                   theme={theme}
                   t={t}
                 />
               ) : (
-                <NiveauxView data={data} onSelectNiveau={setSelectedNiveau} theme={theme} t={t} />
+                <NiveauxView data={data} onSelectNiveau={setSelectedNiveau} onOpenBand={openBand} theme={theme} t={t} />
               )
             ) : null}
           </>
@@ -696,23 +778,38 @@ export default function AdminStatsScreen() {
   )
 }
 
-function GeneralReport({ data, filters, theme, t }: {
+function GeneralReport({ data, scope, theme, t, onOpenScope, onOpenPeriod, onTile }: {
   data: DashboardData
-  filters: StatsFilters
+  scope: AppliedScope
   theme: Theme
   t: TFunction
+  onOpenScope: () => void
+  onOpenPeriod: () => void
+  onTile: (tile: ReportTile) => void
 }) {
-  const subjectLabel = filters.matiere || ''
-  const scopeLabel = [filters.cycle ? t(`admin.statsCycle_${filters.cycle}`) : '', filters.niveau, filters.classe, subjectLabel]
+  // A2 — la matière ne figure PLUS dans la pastille globale. Le serveur ne
+  // l'applique qu'aux notes : sur les trois autres tuiles elle promettait un
+  // filtrage qui n'avait pas lieu. Elle est désormais portée par la seule
+  // métrique qui la respecte, la moyenne.
+  const scopeLabel = [scope.cycle ? t(`admin.statsCycle_${scope.cycle}`) : '', scope.niveau, scope.classe]
     .filter(Boolean)
     .join(' · ') || t('admin.statsWholeSchool')
-  const periodLabel = t(`admin.statsPeriod_${filters.period}`)
+  const periodLabel = t(`admin.statsPeriod_${scope.period}`)
   const average = data.avgNote == null
     ? '—'
-    : filters.cycle === 'primaire'
+    : scope.cycle === 'primaire'
       ? `${round1(data.avgNote / 2)}/10`
       : `${round1(data.avgNote)}/20`
   const attendance = data.attendanceCount ? `${data.presenceRate}%` : '—'
+  const toFollow = data.studentsToFollow || 0
+
+  // Les notes n'ayant pas de date d'évaluation, la moyenne porte son propre
+  // libellé de période : « S2 en cours » plutôt que « Cette semaine », qui
+  // laisserait croire à une moyenne hebdomadaire qui n'existe pas.
+  const notesScopeLabel = scope.notesPeriod === 'annee'
+    ? t('admin.statsPeriod_annee')
+    : t('admin.statsNotesSemesterOngoing', { semester: scope.notesPeriod })
+  const averageNote = [scope.matiere, notesScopeLabel].filter(Boolean).join(' · ')
 
   return (
     <View style={[styles.report, { backgroundColor: theme.primarySurface, borderColor: theme.border }]}>
@@ -721,12 +818,8 @@ function GeneralReport({ data, filters, theme, t }: {
         <Text selectable style={[styles.reportTitle, { color: theme.text }]}>{t('admin.statsReportTitle')}</Text>
         <Text selectable style={[styles.reportLead, { color: theme.textSoft }]}>{t('admin.statsReportLead')}</Text>
         <View style={styles.reportScopeRow}>
-          <View style={[styles.reportScopePill, { backgroundColor: theme.card }]}>
-            <Text numberOfLines={1} style={[styles.reportScopeText, { color: theme.textSoft }]}>{scopeLabel}</Text>
-          </View>
-          <View style={[styles.reportScopePill, { backgroundColor: theme.card }]}>
-            <Text numberOfLines={1} style={[styles.reportScopeText, { color: theme.textSoft }]}>{periodLabel}</Text>
-          </View>
+          <ScopePill label={scopeLabel} onPress={onOpenScope} theme={theme} t={t} />
+          <ScopePill label={periodLabel} onPress={onOpenPeriod} theme={theme} t={t} />
         </View>
       </View>
       <View style={styles.reportGrid}>
@@ -736,6 +829,8 @@ function GeneralReport({ data, filters, theme, t }: {
           label={t('admin.statsStudents')}
           tone={theme.card}
           theme={theme}
+          onPress={() => onTile('students')}
+          hint={t('admin.statsOpenStudents')}
         />
         <ReportMetric
           icon={<CheckCircle2 size={17} color={theme.info} />}
@@ -743,55 +838,133 @@ function GeneralReport({ data, filters, theme, t }: {
           label={t('admin.statsAttendance')}
           tone={theme.card}
           theme={theme}
+          onPress={() => onTile('attendance')}
+          hint={t('admin.statsOpenAttendance')}
         />
         <ReportMetric
           icon={<BarChart3 size={17} color={theme.primary} />}
           value={average}
           label={t('admin.statsAverage')}
+          note={averageNote}
           tone={theme.card}
           theme={theme}
+          onPress={() => onTile('average')}
+          hint={t('admin.statsOpenNotes')}
         />
         <ReportMetric
-          icon={<AlertTriangle size={17} color={(data.studentsToFollow || 0) > 0 ? theme.danger : theme.info} />}
-          value={String(data.studentsToFollow || 0)}
+          icon={<AlertTriangle size={17} color={toFollow > 0 ? theme.danger : theme.info} />}
+          value={String(toFollow)}
           label={t('admin.statsToFollow')}
           tone={theme.card}
           theme={theme}
+          onPress={() => onTile('followup')}
+          hint={t('admin.statsOpenFollowUp')}
         />
       </View>
     </View>
   )
 }
 
-function ReportMetric({ icon, value, label, tone, theme }: {
+function ScopePill({ label, onPress, theme, t }: {
+  label: string; onPress: () => void; theme: Theme; t: TFunction
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={t('admin.statsChangeScope', { scope: label })}
+      style={({ pressed }) => [
+        styles.reportScopePill,
+        { backgroundColor: theme.card },
+        pressed && styles.pressedTile,
+      ]}
+    >
+      <Text numberOfLines={1} style={[styles.reportScopeText, { color: theme.textSoft }]}>{label}</Text>
+      <ChevronDown size={12} color={theme.textMuted} />
+    </Pressable>
+  )
+}
+
+/**
+ * Tuile de KPI. Entièrement tactile — pas de chevron ajouté : la carte elle-même
+ * est la cible, et l'appui la réduit légèrement. Une valeur `0` reste cliquable
+ * et ouvre un état vide explicatif, sinon l'admin ne saurait pas distinguer
+ * « rien à signaler » de « écran cassé ».
+ */
+function ReportMetric({ icon, value, label, note, tone, theme, onPress, hint }: {
   icon: React.ReactNode
   value: string
   label: string
+  note?: string
   tone: string
   theme: Theme
+  onPress?: () => void
+  hint?: string
 }) {
-  return (
-    <View style={[styles.reportMetric, { backgroundColor: tone, borderColor: theme.border }]}>
+  const body = (
+    <>
       <View style={styles.reportMetricHead}>
         <Text numberOfLines={1} style={[styles.reportMetricLabel, { color: theme.textSoft }]}>{label}</Text>
         {icon}
       </View>
       <Text selectable style={[styles.reportMetricValue, { color: theme.text }]}>{value}</Text>
-    </View>
+      {note ? (
+        <Text numberOfLines={1} style={[styles.reportMetricNote, { color: theme.textMuted }]}>{note}</Text>
+      ) : null}
+    </>
+  )
+
+  if (!onPress) {
+    return (
+      <View style={[styles.reportMetric, { backgroundColor: tone, borderColor: theme.border }]}>{body}</View>
+    )
+  }
+
+  return (
+    <Pressable
+      onPress={() => {
+        void Haptics.selectionAsync()
+        onPress()
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={`${label} ${value}`}
+      accessibilityHint={hint}
+      style={({ pressed }) => [
+        styles.reportMetric,
+        { backgroundColor: tone, borderColor: theme.border },
+        pressed && styles.pressedTile,
+      ]}
+    >
+      {body}
+    </Pressable>
   )
 }
 
-function StatsFilters({ value, options, loading, onPeriodChange, onFilterChange, onClear, theme, t }: {
+function StatsFilters({
+  value, options, loading, onPeriodChange, onFilterChange, onClear,
+  pickerRequest, onPickerRequestHandled, theme, t,
+}: {
   value: StatsFilters
   options: StatsFilterOptions
   loading: boolean
   onPeriodChange: (period: StatsPeriod) => void
   onFilterChange: (key: StatsFilterKey, value: string) => void
   onClear: () => void
+  pickerRequest?: StatsFilterKey | 'period' | null
+  onPickerRequestHandled?: () => void
   theme: Theme
   t: TFunction
 }) {
   const [picker, setPicker] = useState<StatsFilterKey | null>(null)
+
+  // Ouverture pilotée depuis les pastilles du hero. « period » n'a pas de
+  // modale : la barre de périodes est déjà visible, on se contente de ne pas
+  // ouvrir de picker et de laisser l'appui servir de repère visuel.
+  useEffect(() => {
+    if (!pickerRequest) return
+    if (pickerRequest !== 'period') setPicker(pickerRequest)
+    onPickerRequestHandled?.()
+  }, [pickerRequest, onPickerRequestHandled])
   const periods: StatsPeriod[] = ['semaine', 'mois', 'S1', 'S2', 'annee']
   const cycleOptions: FilterOption[] = [
     { value: '', label: t('admin.statsAllCycles') },
@@ -980,7 +1153,7 @@ function ViewTabs({ value, onChange, theme, t }: {
   )
 }
 
-function NiveauxView({ data, onSelectNiveau, theme, t }: { data: DashboardData; onSelectNiveau: (niveau: string) => void; theme: Theme; t: TFunction }) {
+function NiveauxView({ data, onSelectNiveau, onOpenBand, theme, t }: { data: DashboardData; onSelectNiveau: (niveau: string) => void; onOpenBand?: (band: string) => void; theme: Theme; t: TFunction }) {
   const COLORS = chartColors
   return (
     <>
@@ -1027,14 +1200,14 @@ function NiveauxView({ data, onSelectNiveau, theme, t }: { data: DashboardData; 
       )}
 
       <ChartCard title={t('tabs.grades')} theme={theme}>
-        <DistributionBars bands={data.gradeDistribution} theme={theme} />
+        <DistributionBars bands={data.gradeDistribution} theme={theme} t={t} onOpenBand={onOpenBand} />
       </ChartCard>
     </>
   )
 }
 
-function NiveauClassesView({ data, niveau, onBack, onAction, onOpenNotes, theme, t }: {
-  data: DashboardData; niveau: string; onBack: () => void; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; theme: Theme; t: TFunction
+function NiveauClassesView({ data, niveau, onBack, onAction, onOpenNotes, onOpenThreshold, theme, t }: {
+  data: DashboardData; niveau: string; onBack: () => void; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; onOpenThreshold: (classe: string) => void; theme: Theme; t: TFunction
 }) {
   const classes = data.classStats.filter(item => item.niveauGroup === niveau)
   const label = niveau === 'Autre' ? t('common.other') : niveau
@@ -1049,14 +1222,15 @@ function NiveauClassesView({ data, niveau, onBack, onAction, onOpenNotes, theme,
         {classes.length === 0 ? (
           <EmptyText theme={theme} text={t('common.noData')} />
         ) : (
-          classes.map(item => <ClassCardRich key={item.name} item={item} onAction={onAction} onOpenNotes={onOpenNotes} theme={theme} t={t} />)
+          classes.map(item => <ClassCardRich key={item.name} item={item} onAction={onAction} onOpenNotes={onOpenNotes}
+              onOpenThreshold={onOpenThreshold} theme={theme} t={t} />)
         )}
       </View>
     </>
   )
 }
 
-function ClassCardRich({ item, onAction, onOpenNotes, theme, t }: { item: ClassStats; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; theme: Theme; t: TFunction }) {
+function ClassCardRich({ item, onAction, onOpenNotes, onOpenThreshold, theme, t }: { item: ClassStats; onAction: (action: StatsAction) => void; onOpenNotes: (target?: NotesTarget) => void; onOpenThreshold: (classe: string) => void; theme: Theme; t: TFunction }) {
   const healthColor = item.healthScore >= 75 ? theme.info : item.healthScore >= 55 ? theme.warning : theme.danger
   return (
     <View style={[styles.classCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -1082,7 +1256,9 @@ function ClassCardRich({ item, onAction, onOpenNotes, theme, t }: { item: ClassS
         </Pressable>
         <View style={styles.classCardMetrics}>
           <MetricLine icon={<TrendingUp size={14} color={theme.primary} />} label={t('admin.avgGrade')} value={formatNote(item.avgNote)} theme={theme} onPress={() => onOpenNotes({ classe: item.name })} />
-          <MetricLine icon={<CheckCircle2 size={14} color={theme.info} />} label={t('admin.successRate')} value={item.successRate == null ? '—' : `${item.successRate}%`} theme={theme} onPress={() => onOpenNotes({ classe: item.name })} />
+          {/* Le taux de reussite d'une classe ouvre les eleves qui le composent,
+              pas l'analyse des notes : c'est le seuil qui est en cause. */}
+          <MetricLine icon={<CheckCircle2 size={14} color={theme.info} />} label={t('admin.successRate')} value={item.successRate == null ? '—' : `${item.successRate}%`} theme={theme} onPress={() => onOpenThreshold(item.name)} />
           <MetricLine icon={<BookOpen size={14} color={theme.warning} />} label={t('admin.homeworkShort')} value={String(item.activeHomework)} theme={theme} onPress={() => onAction('devoirs')} />
         </View>
       </View>
@@ -1139,7 +1315,7 @@ function MetricLine({ icon, label, value, theme, onPress }: { icon: React.ReactN
   )
 }
 
-function SubjectsView({ data, onOpenNotes, theme, t }: { data: DashboardData; onOpenNotes: (target?: NotesTarget) => void; theme: Theme; t: TFunction }) {
+function SubjectsView({ data, onOpenNotes, onOpenBand, theme, t }: { data: DashboardData; onOpenNotes: (target?: NotesTarget) => void; onOpenBand?: (band: string) => void; theme: Theme; t: TFunction }) {
   return (
     <>
       <View style={styles.subjectList}>
@@ -1282,19 +1458,47 @@ function MiniTrend({ points, color, mutedColor, textColor }: { points: TrendPoin
   )
 }
 
-function DistributionBars({ bands, theme }: { bands: GradeBand[]; theme: Theme }) {
+/**
+ * Chaque bande ouvre exactement les élèves qu'elle compte. Depuis A9 la
+ * distribution partitionne les ÉLÈVES (borne ≥10, la même que `successRate`),
+ * donc « ouvrir une bande » ne demande aucun second calcul : le segment `band`
+ * de la callable relit le même partitionnement.
+ */
+function DistributionBars({ bands, theme, t, onOpenBand }: {
+  bands: GradeBand[]; theme: Theme; t: TFunction; onOpenBand?: (band: string) => void
+}) {
   const max = Math.max(1, ...bands.map(item => item.value))
   return (
     <View style={styles.distribution}>
-      {bands.map(item => (
-        <View key={item.label} style={styles.distributionRow}>
-          <Text style={[styles.distributionLabel, { color: theme.textSoft }]}>{item.label}</Text>
-          <View style={[styles.distributionTrack, { backgroundColor: theme.surfaceAlt }]}>
-            <View style={[styles.distributionFill, { width: `${Math.max(5, (item.value / max) * 100)}%`, backgroundColor: item.color }]} />
-          </View>
-          <Text style={[styles.distributionValue, { color: theme.text }]}>{item.value}</Text>
-        </View>
-      ))}
+      {bands.map(item => {
+        const row = (
+          <>
+            <Text style={[styles.distributionLabel, { color: theme.textSoft }]}>{item.label}</Text>
+            <View style={[styles.distributionTrack, { backgroundColor: theme.surfaceAlt }]}>
+              <View style={[styles.distributionFill, { width: `${Math.max(5, (item.value / max) * 100)}%`, backgroundColor: item.color }]} />
+            </View>
+            <Text style={[styles.distributionValue, { color: theme.text }]}>{item.value}</Text>
+          </>
+        )
+        if (!onOpenBand) {
+          return <View key={item.label} style={styles.distributionRow}>{row}</View>
+        }
+        return (
+          <Pressable
+            key={item.label}
+            onPress={() => {
+              void Haptics.selectionAsync()
+              onOpenBand(item.label)
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.label} — ${item.value}`}
+            accessibilityHint={t('admin.statsOpenBand')}
+            style={({ pressed }) => [styles.distributionRow, pressed && styles.pressedTile]}
+          >
+            {row}
+          </Pressable>
+        )
+      })}
     </View>
   )
 }
@@ -1428,13 +1632,20 @@ const styles = StyleSheet.create({
   reportTitle: { fontSize: 25, lineHeight: 31, fontWeight: '900', marginTop: 7 },
   reportLead: { fontSize: 13, lineHeight: 19, fontWeight: '600', marginTop: 5 },
   reportScopeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 11 },
-  reportScopePill: { maxWidth: '100%', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  reportScopePill: {
+    maxWidth: '100%', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+  },
   reportScopeText: { fontSize: 10, fontWeight: '800' },
   reportGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   reportMetric: { width: '48.5%', minHeight: 82, borderWidth: 1, borderRadius: 12, padding: 11, justifyContent: 'space-between' },
   reportMetricHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
   reportMetricLabel: { flex: 1, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
   reportMetricValue: { fontSize: 22, fontWeight: '900', marginTop: 8, fontVariant: ['tabular-nums'] },
+  reportMetricNote: { fontSize: 9, fontWeight: '700', marginTop: 3 },
+  // Appui : réduction + atténuation, identiques sur les quatre tuiles et les
+  // pastilles, pour que « ceci s'ouvre » se lise sans chevron surajouté.
+  pressedTile: { opacity: 0.72, transform: [{ scale: 0.975 }] },
 
   filtersCard: { borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 12 },
   filtersHead: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 9 },

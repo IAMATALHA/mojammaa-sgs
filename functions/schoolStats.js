@@ -134,6 +134,153 @@ function gradeBands(values) {
   ]
 }
 
+// ── Élèves à suivre — prédicat UNIQUE ────────────────────────────────────
+// `computeSchoolStats` en tire le compteur `studentsToFollow`, la callable de
+// drill-down en tire la liste. Toute divergence entre les deux serait un bug
+// visible par l'admin (« 23 à suivre » puis 19 lignes) : un seul prédicat,
+// deux consommateurs, verrouillé par un test d'invariant.
+
+const FOLLOW_UP_LOW_AVERAGE = 10        // /20
+const FOLLOW_UP_DECLINE_POINTS = 2      // baisse S1 → S2, en points
+// E2 — l'absentéisme ne peut pas être un seuil absolu : « 3 absences » ne veut
+// pas dire la même chose sur une semaine et sur une année. Trois conditions
+// cumulatives, dont un plancher d'observations qui neutralise les débuts de
+// période où deux journées relevées suffiraient à déclencher l'alerte.
+const ABSENTEEISM_MIN_DAYS = 3
+const ABSENTEEISM_MIN_OBSERVED = 5
+const ABSENTEEISM_MIN_RATIO = 0.1
+
+// Poids déterministes : même entrée → même priorité, aucun classement flou.
+const FOLLOW_UP_WEIGHTS = {
+  low_average: 3,
+  absenteeism: 3,
+  declining: 2,
+  homework_not_done: 1,
+  homework_not_submitted: 1,
+}
+
+function followUpPriority(score) {
+  if (score >= 5) return 'high'
+  if (score >= 3) return 'medium'
+  return 'low'
+}
+
+/**
+ * Construit le contexte du prédicat de suivi.
+ *
+ * `followUpNotes` (optionnel) = notes du périmètre SANS filtre matière. Quand
+ * il est absent — recalcul planifié, qui ne filtre jamais — on réutilise les
+ * maps déjà construites : le résultat est alors strictement identique, sans
+ * second passage sur les notes.
+ */
+function buildFollowUpContext(opts) {
+  const shared = {
+    absentDatesByEleve: opts.absentDatesByEleve,
+    observedDatesByEleve: opts.observedDatesByEleve,
+    homeworkAlertsByEleve: opts.homeworkAlertsByEleve,
+  }
+  if (!Array.isArray(opts.followUpNotes)) {
+    return {
+      ...shared,
+      notesByEleve: opts.fallbackNotesByEleve,
+      semesterNotesByEleve: opts.fallbackSemesterNotesByEleve,
+    }
+  }
+
+  const notesByEleve = new Map()
+  const semesterNotesByEleve = new Map()
+
+  opts.followUpNotes
+    .filter(opts.belongsToActiveEleve)
+    .forEach((row) => {
+      const eleveId = asString(row.eleveId)
+      if (!eleveId) return
+      const note = normalizedNote20(row)
+      if (note == null || note < 0 || note > 20) return
+      const semestre = asString(row.semestre)
+      const pair = { v: note, c: opts.coefOf(asString(row.matiere), opts.eleveNiveauById.get(eleveId)) }
+
+      if (!opts.semScope || semestre === opts.semScope) {
+        const rows = notesByEleve.get(eleveId) || []
+        rows.push(pair)
+        notesByEleve.set(eleveId, rows)
+      }
+      if (semestre === 'S1' || semestre === 'S2') {
+        const rows = semesterNotesByEleve.get(eleveId) || { S1: [], S2: [] }
+        rows[semestre].push(pair)
+        semesterNotesByEleve.set(eleveId, rows)
+      }
+    })
+
+  return { ...shared, notesByEleve, semesterNotesByEleve }
+}
+
+/**
+ * Évalue un élève pour la file « à suivre ».
+ *
+ * @param eleve { id, classe, niveau }
+ * @param ctx { notesByEleve, semesterNotesByEleve, absentDatesByEleve,
+ *              observedDatesByEleve, homeworkAlertsByEleve }
+ *   `notesByEleve` / `semesterNotesByEleve` sont les notes de PÉRIMÈTRE, jamais
+ *   filtrées par matière (A3) : le suivi d'un élève est global, sinon le
+ *   compteur changerait en sélectionnant une matière et deviendrait inexplicable.
+ * @returns null si rien à signaler, sinon { reasons[], metrics, priority }
+ */
+function evaluateFollowUp(eleve, ctx) {
+  const currentPairs = ctx.notesByEleve.get(eleve.id) || []
+  const currentAvg = currentPairs.length > 0 ? weightedAvg(currentPairs) : null
+  const semesters = ctx.semesterNotesByEleve.get(eleve.id) || { S1: [], S2: [] }
+  const s1 = semesters.S1.length > 0 ? weightedAvg(semesters.S1) : null
+  const s2 = semesters.S2.length > 0 ? weightedAvg(semesters.S2) : null
+  const comparisonAvg = currentAvg ?? s2 ?? s1
+
+  const absentDays = ctx.absentDatesByEleve.get(eleve.id)?.size || 0
+  const observedDays = ctx.observedDatesByEleve.get(eleve.id)?.size || 0
+  const homework = ctx.homeworkAlertsByEleve.get(eleve.id)
+
+  const reasons = []
+  const metrics = {}
+
+  if (comparisonAvg != null && comparisonAvg < FOLLOW_UP_LOW_AVERAGE) {
+    reasons.push('low_average')
+    metrics.average = round1(comparisonAvg)
+  }
+  if (s1 != null && s2 != null && s2 - s1 <= -FOLLOW_UP_DECLINE_POINTS) {
+    reasons.push('declining')
+    metrics.semesterS1 = round1(s1)
+    metrics.semesterS2 = round1(s2)
+    metrics.decline = round1(s1 - s2)
+  }
+  if (
+    absentDays >= ABSENTEEISM_MIN_DAYS
+    && observedDays >= ABSENTEEISM_MIN_OBSERVED
+    && absentDays / observedDays >= ABSENTEEISM_MIN_RATIO
+  ) {
+    reasons.push('absenteeism')
+    // Numérateur ET dénominateur remontent au client : le badge affiche
+    // « 3 j. / 24 j. observés · ce mois », jamais un pourcentage nu qui
+    // inviterait à le comparer au taux d'assiduité du hero (calculé, lui,
+    // sur des lignes de relevé et non sur des journées).
+    metrics.absentDays = absentDays
+    metrics.observedDays = observedDays
+  }
+  // `homeworkAlertsByEleve` porte déjà des compteurs ({ notDone, notSubmitted }),
+  // truthy dès la première alerte : la valeur EST la preuve à afficher.
+  if (homework?.notDone) {
+    reasons.push('homework_not_done')
+    metrics.homeworkNotDone = homework.notDone
+  }
+  if (homework?.notSubmitted) {
+    reasons.push('homework_not_submitted')
+    metrics.homeworkNotSubmitted = homework.notSubmitted
+  }
+
+  if (reasons.length === 0) return null
+
+  const score = reasons.reduce((sum, reason) => sum + (FOLLOW_UP_WEIGHTS[reason] || 0), 0)
+  return { reasons, metrics, priority: followUpPriority(score), score }
+}
+
 /**
  * @param cache { eleves, users, notes, absences, devoirs, homeworkSubmissions } — tableaux de docs
  *   bruts avec `.id` et leurs champs (équivalent de snap.docs.map(d => ({id, ...data}))).
@@ -146,6 +293,12 @@ function computeSchoolStats(cache, options = {}) {
   const today = todayISO()
   const semScope = options.semestre === 'S1' || options.semestre === 'S2' ? options.semestre : null
   const periodAttendance = options.periodAttendance === true
+  // Opt-in strict : voir la note PII sur `followUpStudents` dans le retour.
+  const includeFollowUpStudents = options.includeFollowUpStudents === true
+  // Index élève → moyenne / récidive. Porte des `eleveId` (= codes Massar),
+  // donc même règle : jamais dans le payload du hero, seulement les callables
+  // de drill-down qui doivent segmenter une liste nominative.
+  const includeStudentIndex = options.includeStudentIndex === true
 
   // ── normalisation (miroir du mapping onSnapshot client) ──
   const eleves = (cache.eleves || [])
@@ -213,6 +366,11 @@ function computeSchoolStats(cache, options = {}) {
   const absentTodayByClass = new Map()
   const attendanceByClass = new Map()
   const absentDatesByEleve = new Map()
+  // A10 — dénominateur du critère d'absentéisme. Symétrique de
+  // `absentDatesByEleve` : un Set de DATES, pas un compteur de lignes. Si
+  // l'assiduité est relevée par cours, un élève a plusieurs lignes le même
+  // jour ; les compter gonflerait le dénominateur et masquerait l'absentéisme.
+  const observedDatesByEleve = new Map()
   const incidentsMonthByClass = new Map()
   const activeHomeworkByClass = new Map()
 
@@ -257,6 +415,15 @@ function computeSchoolStats(cache, options = {}) {
       attendance.total++
       if (isPresent(absence.statut)) attendance.present++
       attendanceByClass.set(absence.classe, attendance)
+    }
+
+    // Journées d'assiduité observées, tous statuts confondus (présent, retard,
+    // absent). Placé AVANT le filtre ci-dessous : une journée où l'élève était
+    // présent compte au dénominateur, sinon le ratio vaudrait toujours 100 %.
+    if (absence.eleveId && absence.date) {
+      const observed = observedDatesByEleve.get(absence.eleveId) || new Set()
+      observed.add(absence.date)
+      observedDatesByEleve.set(absence.eleveId, observed)
     }
 
     if (!isAbsent(absence.statut) && !isLate(absence.statut)) return
@@ -340,21 +507,35 @@ function computeSchoolStats(cache, options = {}) {
     })
   })
 
-  let studentsToFollow = 0
-  eleves.forEach((eleve) => {
-    const currentPairs = notesByEleve.get(eleve.id) || []
-    const currentAvg = currentPairs.length > 0 ? weightedAvg(currentPairs) : null
-    const semesters = semesterNotesByEleve.get(eleve.id) || { S1: [], S2: [] }
-    const s1 = semesters.S1.length > 0 ? weightedAvg(semesters.S1) : null
-    const s2 = semesters.S2.length > 0 ? weightedAvg(semesters.S2) : null
-    const comparisonAvg = currentAvg ?? s2 ?? s1
-    const declining = s1 != null && s2 != null && s2 - s1 <= -2
-    const absenteeism = (absentDatesByEleve.get(eleve.id)?.size || 0) >= 3
-    const homework = homeworkAlertsByEleve.get(eleve.id)
-    if ((comparisonAvg != null && comparisonAvg < 10) || declining || absenteeism || homework?.notDone || homework?.notSubmitted) {
-      studentsToFollow++
-    }
+  // A3 — le suivi d'un élève est GLOBAL : il ne doit pas changer quand l'admin
+  // filtre sur une matière. `followUpNotes` porte les notes de périmètre sans
+  // filtre matière ; en son absence (recalcul planifié, qui ne filtre rien) on
+  // retombe sur `notes`, strictement équivalent.
+  const followUpCtx = buildFollowUpContext({
+    fallbackNotesByEleve: notesByEleve,
+    fallbackSemesterNotesByEleve: semesterNotesByEleve,
+    followUpNotes: cache.followUpNotes,
+    semScope,
+    coefOf,
+    eleveNiveauById,
+    belongsToActiveEleve,
+    absentDatesByEleve,
+    observedDatesByEleve,
+    homeworkAlertsByEleve,
   })
+
+  const followUpStudents = []
+  // « Récidivistes » = exactement les élèves porteurs du motif d'absentéisme.
+  // Dérivé du même verdict que le compteur : la liste ne peut pas contenir un
+  // élève que le prédicat n'aurait pas signalé.
+  const recidivistIds = []
+  eleves.forEach((eleve) => {
+    const verdict = evaluateFollowUp(eleve, followUpCtx)
+    if (!verdict) return
+    followUpStudents.push({ eleveId: eleve.id, ...verdict })
+    if (verdict.reasons.includes('absenteeism')) recidivistIds.push(eleve.id)
+  })
+  const studentsToFollow = followUpStudents.length
 
   const classStats = [...classStudents.entries()].map(([name, students]) => {
     const classNotes = notesByClass.get(name) || []
@@ -527,7 +708,26 @@ function computeSchoolStats(cache, options = {}) {
     notesCount: validNotes.length,
     activeHomework: devoirs.filter((d) => isActiveHomework(d.dateLimite, today)).length,
     absenceTrend: days.map((day) => ({ label: day.label, value: trendSets.get(day.iso)?.size || 0 })),
-    gradeDistribution: gradeBands(validNotes.map((r) => r.note)),
+    // A9/E6 — réparti sur les MOYENNES PAR ÉLÈVE, pas sur les documents de
+    // notes. Avant : un élève à 13 notes pesait 13 fois ici et 1 fois dans
+    // `avgNote`, donc la distribution ne pouvait pas être réconciliée avec les
+    // deux KPI affichés à côté d'elle. Désormais la borne des bandes (≥10)
+    // coïncide avec le seuil de `successRate`, ce qui rend structurels :
+    //   Σ bandes = élèves notés ; bandes hautes = successRate × élèves / 100.
+    gradeDistribution: gradeBands(studentAverages),
+    gradedStudents: studentAverages.length,
+    // PII — `followUpStudents` porte des `eleveId`, or l'ID d'un élève EST son
+    // code Massar (DATA_MODEL : « Document ID = codeMassar »). Il ne sort JAMAIS
+    // par défaut : le hero, qui alimente le téléphone, ne reçoit que le
+    // compteur. Seule la callable de drill-down admin-only demande la liste.
+    ...(includeFollowUpStudents ? { followUpStudents } : {}),
+    ...(includeStudentIndex ? {
+      studentAveragesById: [...notesByEleve.entries()].map(([eleveId, pairs]) => ({
+        eleveId,
+        average: round1(weightedAvg(pairs)),
+      })),
+      recidivistIds,
+    } : {}),
     classStats,
     subjectStats,
     matrixClasses,
@@ -537,4 +737,13 @@ function computeSchoolStats(cache, options = {}) {
   }
 }
 
-module.exports = { computeSchoolStats }
+module.exports = {
+  computeSchoolStats,
+  evaluateFollowUp,
+  buildFollowUpContext,
+  gradeBands,
+  FOLLOW_UP_WEIGHTS,
+  ABSENTEEISM_MIN_DAYS,
+  ABSENTEEISM_MIN_OBSERVED,
+  ABSENTEEISM_MIN_RATIO,
+}

@@ -21,6 +21,7 @@ const logger = require('firebase-functions/logger')
 const { claimEmailSlot, claimGlobalSlot } = require('./resetThrottle')
 const { computeClassStats, statsDocId } = require('./classStats')
 const { computeSchoolStats } = require('./schoolStats')
+const drill = require('./statsDrilldown')
 const { buildSlotDocs } = require('./emploiDuTempsSync')
 const {
   TransportTransitionError,
@@ -929,15 +930,34 @@ function shiftISODate(value, days) {
   return date.toISOString().slice(0, 10)
 }
 
+// A1/F1 — les notes n'ont AUCUNE date pedagogique : `createdAt` est la date de
+// saisie (un prof qui saisit trois mois de controles un dimanche les horodate
+// tous ce dimanche-la), et DATA_MODEL ne declare aucun `dateEvaluation`. Leur
+// seule granularite fiable est le semestre.
+//
+// Avant, `semaine` et `mois` posaient `semestre: null`, ce qui laissait passer
+// TOUTES les notes de l'annee : le hero affichait « Cette semaine » a cote
+// d'une moyenne annuelle. Desormais ces deux periodes retombent sur le semestre
+// EN COURS, et `notesPeriod` dit explicitement ce que la moyenne couvre.
+// `annee` reste volontairement sans semestre : les deux semestres y sont agreges.
 function statsDateRange(periodName) {
   const today = casablancaToday()
   const academic = academicPeriodForValue(today)
   const startYear = Number(academic.academicYear.slice(0, 4))
-  if (periodName === 'semaine') return { ...academic, from: shiftISODate(today, -7), to: today, semestre: null }
-  if (periodName === 'mois') return { ...academic, from: `${today.slice(0, 7)}-01`, to: today, semestre: null }
-  if (periodName === 'S1') return { ...academic, from: `${startYear}-09-01`, to: `${startYear + 1}-01-31`, semestre: 'S1' }
-  if (periodName === 'S2') return { ...academic, from: `${startYear + 1}-02-01`, to: `${startYear + 1}-07-10`, semestre: 'S2' }
-  return { ...academic, from: `${startYear}-09-01`, to: today, semestre: null }
+  const currentSemestre = academic.semestre === 'S1' || academic.semestre === 'S2' ? academic.semestre : 'S1'
+  if (periodName === 'semaine') {
+    return { ...academic, from: shiftISODate(today, -7), to: today, semestre: currentSemestre, notesPeriod: currentSemestre }
+  }
+  if (periodName === 'mois') {
+    return { ...academic, from: `${today.slice(0, 7)}-01`, to: today, semestre: currentSemestre, notesPeriod: currentSemestre }
+  }
+  if (periodName === 'S1') {
+    return { ...academic, from: `${startYear}-09-01`, to: `${startYear + 1}-01-31`, semestre: 'S1', notesPeriod: 'S1' }
+  }
+  if (periodName === 'S2') {
+    return { ...academic, from: `${startYear + 1}-02-01`, to: `${startYear + 1}-07-10`, semestre: 'S2', notesPeriod: 'S2' }
+  }
+  return { ...academic, from: `${startYear}-09-01`, to: today, semestre: null, notesPeriod: 'annee' }
 }
 
 function statsRowInScope(row, scopeIds, scopeClasses, knownStudentIds) {
@@ -947,7 +967,30 @@ function statsRowInScope(row, scopeIds, scopeClasses, knownStudentIds) {
   return scopeClasses.has(statsFilterText(row.classe) || statsFilterText(row.classeId))
 }
 
-async function filteredSchoolStats(filters) {
+// Firestore plafonne `in` a 30 valeurs. Les devoirs d'un perimetre-classe se
+// comptent en dizaines sur l'annee : une a deux requetes au lieu d'un scan.
+const SUBMISSIONS_IN_CHUNK = 30
+
+async function submissionsForDevoirs(devoirIds) {
+  const ids = [...new Set(devoirIds.filter(Boolean))]
+  if (ids.length === 0) return []
+  const chunks = []
+  for (let i = 0; i < ids.length; i += SUBMISSIONS_IN_CHUNK) {
+    chunks.push(ids.slice(i, i + SUBMISSIONS_IN_CHUNK))
+  }
+  const snaps = await Promise.all(
+    chunks.map((chunk) => db.collection('homeworkSubmissions').where('homeworkId', 'in', chunk).get()),
+  )
+  return snaps.flatMap((snap) => snap.docs.map((row) => ({ id: row.id, ...row.data() })))
+}
+
+/**
+ * Resolution du perimetre — SOURCE UNIQUE pour le hero et pour tous les
+ * drill-downs. Toute la garantie « le total du detail est le chiffre de la
+ * tuile » repose la-dessus : il n'existe qu'un seul chemin qui traduit
+ * (periode, cycle, niveau, classe, matiere) en jeux de documents.
+ */
+async function resolveScope(filters) {
   const periodName = STATS_PERIODS.has(filters.period) ? filters.period : 'mois'
   const cycle = STATS_CYCLES.has(filters.cycle) ? filters.cycle : ''
   const niveau = statsFilterText(filters.niveau)
@@ -955,13 +998,12 @@ async function filteredSchoolStats(filters) {
   const matiere = statsFilterText(filters.matiere)
   const range = statsDateRange(periodName)
 
-  const [elevesSnap, usersSnap, notesSnap, absencesSnap, devoirsSnap, submissionsSnap, coefDoc] = await Promise.all([
+  const [elevesSnap, usersSnap, notesSnap, absencesSnap, devoirsSnap, coefDoc] = await Promise.all([
     db.collection('eleves').get(),
     db.collection('users').get(),
     db.collection('notes').where('academicYear', '==', range.academicYear).get(),
     db.collection('absences').where('date', '>=', range.from).where('date', '<=', range.to).get(),
     db.collection('devoirs').where('academicYear', '==', range.academicYear).get(),
-    db.collection('homeworkSubmissions').get(),
     db.collection('settings').doc('coefficients').get(),
   ])
   const toRows = (snap) => snap.docs.map((row) => ({ id: row.id, ...row.data() }))
@@ -1006,27 +1048,59 @@ async function filteredSchoolStats(filters) {
     const rowClass = statsFilterText(row.classeId) || statsFilterText(row.classe)
     return scopeClasses.has(rowClass) && due >= range.from && due <= range.to
   })
-  const devoirIds = new Set(selectedDevoirs.map((row) => row.id))
-  const selectedSubmissions = toRows(submissionsSnap).filter((row) => devoirIds.has(statsFilterText(row.homeworkId)))
+  // A6 — avant, `homeworkSubmissions` etait lue INTEGRALEMENT a chaque
+  // changement de filtre, puis jetee a 95 %. La collection croit en
+  // eleves x devoirs x annees et ne porte pas `academicYear` (DATA_MODEL), donc
+  // on ne peut pas la borner par l'annee : on part des devoirs deja reduits au
+  // perimetre et on ne lit que leurs soumissions.
+  const selectedSubmissions = await submissionsForDevoirs(selectedDevoirs.map((row) => row.id))
 
-  const data = computeSchoolStats({
+  const cacheBase = {
     eleves: scopeEleves,
     users: toRows(usersSnap),
     notes: selectedNotes,
+    // A3 — le suivi d'un eleve est global : `scopedNotes` ignore le filtre
+    // matiere, sinon « A suivre » changerait en selectionnant une matiere.
+    followUpNotes: scopedNotes,
     absences: selectedAbsences,
     devoirs: selectedDevoirs,
     homeworkSubmissions: selectedSubmissions,
     coefficients: coefDoc.exists ? coefDoc.data() : null,
-  }, { semestre: range.semestre, periodAttendance: true })
+  }
 
   return {
-    data,
+    cacheBase,
+    computeOptions: { semestre: range.semestre, periodAttendance: true },
+    scopeEleves,
+    elevesSnap,
+    range,
     options: {
       niveaux: niveauOptions,
       classes: classeOptions,
       matieres: subjectOptions,
     },
-    applied: { period: periodName, cycle, niveau, classe, matiere },
+    // A4 — c'est CET objet qui doit piloter l'affichage du perimetre, pas le
+    // state local du client : le serveur clampe (periode inconnue -> « mois »),
+    // et une pastille dessinee depuis le state mentirait sur le calcul reel.
+    applied: {
+      period: periodName,
+      cycle,
+      niveau,
+      classe,
+      matiere,
+      notesPeriod: range.notesPeriod,
+      from: range.from,
+      to: range.to,
+    },
+  }
+}
+
+async function filteredSchoolStats(filters) {
+  const scope = await resolveScope(filters)
+  return {
+    data: computeSchoolStats(scope.cacheBase, scope.computeOptions),
+    options: scope.options,
+    applied: scope.applied,
   }
 }
 
@@ -1081,6 +1155,341 @@ exports.getFilteredSchoolStats = onCall(async (request) => {
     classes: result.data.totalClasses,
   })
   return result
+})
+
+// ── Drill-downs statistiques (admin only, seuls endpoints nominatifs) ────
+//
+// Chacun repart de `resolveScope`, la même fonction que le hero, puis de
+// `computeSchoolStats` avec le même cache. Le total renvoyé est donc le chiffre
+// de la tuile par construction — aucun recalcul parallèle ne peut dériver.
+//
+// Les logs ne portent JAMAIS d'identifiant d'élève : l'ID d'un élève est son
+// code Massar. On ne journalise que l'uid appelant, le segment et des volumes.
+
+/**
+ * Liste d'élèves du périmètre, tous segments confondus.
+ *
+ * Un seul endpoint pour « les élèves », « à suivre », « les récidivistes »,
+ * « une bande de notes » et « sous / au-dessus du seuil » : tous renvoient le
+ * même objet élève dans le même périmètre. Les fusionner donne un seul gate
+ * admin, une seule projection PII et un seul point d'audit.
+ */
+exports.getStatsStudents = onCall(async (request) => {
+  const uid = await drill.requireAdmin(db, request)
+
+  const raw = request.data && typeof request.data === 'object' ? request.data : {}
+  const scopeInput = raw.scope && typeof raw.scope === 'object' ? raw.scope : {}
+  const segment = drill.STUDENT_SEGMENTS.has(raw.segment) ? raw.segment : 'all'
+  const limit = drill.boundedLimit(raw.limit)
+
+  const scope = await resolveScope({
+    period: statsFilterText(scopeInput.period, 10),
+    cycle: statsFilterText(scopeInput.cycle, 20),
+    niveau: statsFilterText(scopeInput.niveau),
+    classe: statsFilterText(scopeInput.classe),
+    matiere: statsFilterText(scopeInput.matiere),
+  })
+
+  // `includeFollowUpStudents` n'est demandé que pour le segment qui en a besoin :
+  // les autres n'ont aucune raison de matérialiser une liste nominative.
+  const needsFollowUp = segment === 'followup'
+  const data = computeSchoolStats(scope.cacheBase, {
+    ...scope.computeOptions,
+    includeFollowUpStudents: needsFollowUp,
+    includeStudentIndex: true,
+  })
+
+  const averageById = new Map(
+    (data.studentAveragesById || []).map((row) => [row.eleveId, row.average]),
+  )
+  const followUpById = new Map(
+    (data.followUpStudents || []).map((row) => [row.eleveId, row]),
+  )
+  const recidivistIds = new Set(data.recidivistIds || [])
+
+  const band = drill.GRADE_BANDS.has(raw.band) ? raw.band : null
+  const side = raw.side === 'passing' ? 'passing' : 'below'
+
+  const selected = scope.scopeEleves.filter((eleve) => {
+    const average = averageById.has(eleve.id) ? averageById.get(eleve.id) : null
+    if (segment === 'followup') return followUpById.has(eleve.id)
+    if (segment === 'recidivists') return recidivistIds.has(eleve.id)
+    if (segment === 'band') return band != null && drill.bandOf(average) === band
+    if (segment === 'threshold') {
+      if (average == null) return false
+      return side === 'passing' ? average >= 10 : average < 10
+    }
+    return true
+  })
+
+  const docById = new Map(scope.elevesSnap.docs.map((doc) => [doc.id, doc]))
+  const rows = selected
+    .map((eleve) => {
+      const doc = docById.get(eleve.id)
+      if (!doc) return null
+      const average = averageById.has(eleve.id) ? averageById.get(eleve.id) : null
+      const followUp = followUpById.get(eleve.id)
+      return {
+        student: drill.projectStudent(doc, average),
+        priority: followUp ? followUp.priority : undefined,
+        score: followUp ? followUp.score : 0,
+        reasons: followUp ? followUp.reasons : undefined,
+        metrics: followUp ? followUp.metrics : undefined,
+      }
+    })
+    .filter(Boolean)
+
+  drill.sortStudents(rows, segment)
+  const { page, nextCursor } = drill.paginate(rows, raw.cursor, limit)
+
+  logger.info('stats drilldown students', {
+    by: uid,
+    segment,
+    period: scope.applied.period,
+    returned: page.length,
+    total: rows.length,
+  })
+
+  return {
+    students: page.map((row) => ({
+      ...row.student,
+      ...(row.reasons ? { reasons: row.reasons, metrics: row.metrics, priority: row.priority } : {}),
+    })),
+    total: rows.length,
+    nextCursor,
+    applied: scope.applied,
+  }
+})
+
+/**
+ * Analyse d'assiduité — écran statistique, distinct de l'outil opérationnel
+ * « absences du jour ». Même taux, même période, même périmètre que la tuile.
+ */
+exports.getStatsAttendanceDetails = onCall(async (request) => {
+  const uid = await drill.requireAdmin(db, request)
+
+  const raw = request.data && typeof request.data === 'object' ? request.data : {}
+  const scopeInput = raw.scope && typeof raw.scope === 'object' ? raw.scope : {}
+  const tab = drill.ATTENDANCE_TABS.has(raw.tab) ? raw.tab : 'resume'
+  const limit = drill.boundedLimit(raw.limit)
+
+  const scope = await resolveScope({
+    period: statsFilterText(scopeInput.period, 10),
+    cycle: statsFilterText(scopeInput.cycle, 20),
+    niveau: statsFilterText(scopeInput.niveau),
+    classe: statsFilterText(scopeInput.classe),
+    matiere: statsFilterText(scopeInput.matiere),
+  })
+  const data = computeSchoolStats(scope.cacheBase, scope.computeOptions)
+
+  const docById = new Map(scope.elevesSnap.docs.map((doc) => [doc.id, doc]))
+  const wanted = tab === 'retards' ? 'retard' : 'absent'
+  const rows = tab === 'resume'
+    ? []
+    : scope.cacheBase.absences
+      .filter((row) => {
+        const statut = String(row.statut || '')
+        return wanted === 'retard' ? (statut === 'retard' || statut === 'late') : statut === 'absent'
+      })
+      .map((row) => {
+        const doc = docById.get(String(row.eleveId || ''))
+        if (!doc) return null
+        return { date: String(row.date || ''), student: drill.projectStudent(doc, null) }
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.date.localeCompare(a.date))
+        || a.student.classe.localeCompare(b.student.classe, 'fr'))
+
+  const { page, nextCursor } = drill.paginate(rows, raw.cursor, limit)
+
+  logger.info('stats drilldown attendance', {
+    by: uid,
+    tab,
+    period: scope.applied.period,
+    returned: page.length,
+  })
+
+  return {
+    presenceRate: data.presenceRate,
+    attendanceCount: data.attendanceCount,
+    absentsToday: data.absentsToday,
+    retardsToday: data.retardsToday,
+    trend: data.absenceTrend,
+    byClass: data.classStats.map((row) => ({
+      name: row.name,
+      presenceRate: row.presenceRate,
+      attendanceCount: row.attendanceCount,
+      studentCount: row.studentCount,
+    })),
+    rows: page,
+    total: rows.length,
+    nextCursor,
+    applied: scope.applied,
+  }
+})
+
+/**
+ * Dossier élève 360° — l'endpoint le plus sensible du lot : un élève, toutes
+ * ses métriques. Strictement admin, projection minimale, aucun log nominatif.
+ */
+exports.getStatsStudentFile = onCall(async (request) => {
+  const uid = await drill.requireAdmin(db, request)
+
+  const raw = request.data && typeof request.data === 'object' ? request.data : {}
+  const eleveId = statsFilterText(raw.eleveId, 64)
+  if (!eleveId) throw new HttpsError('invalid-argument', 'Student id required.')
+  const scopeInput = raw.scope && typeof raw.scope === 'object' ? raw.scope : {}
+
+  const scope = await resolveScope({
+    period: statsFilterText(scopeInput.period, 10),
+    cycle: statsFilterText(scopeInput.cycle, 20),
+    niveau: statsFilterText(scopeInput.niveau),
+    classe: statsFilterText(scopeInput.classe),
+    matiere: statsFilterText(scopeInput.matiere),
+  })
+
+  const doc = scope.elevesSnap.docs.find((row) => row.id === eleveId)
+  // Un élève hors périmètre ou archivé est traité comme inexistant : on ne
+  // confirme pas l'existence d'un ID qu'on refuse de servir.
+  if (!doc || doc.get('active') === false) {
+    throw new HttpsError('not-found', 'Student not found in scope.')
+  }
+
+  const data = computeSchoolStats(scope.cacheBase, {
+    ...scope.computeOptions,
+    includeFollowUpStudents: true,
+    includeStudentIndex: true,
+  })
+  const average = (data.studentAveragesById || []).find((row) => row.eleveId === eleveId)
+  const followUp = (data.followUpStudents || []).find((row) => row.eleveId === eleveId)
+
+  // Notes de l'élève, agrégées PAR MATIÈRE. Les notes individuelles ne sont pas
+  // renvoyées : le dossier sert à décider d'un accompagnement, pas à rejouer le
+  // carnet de notes.
+  const bySubjectMap = new Map()
+  scope.cacheBase.followUpNotes
+    .filter((row) => String(row.eleveId || '') === eleveId)
+    .forEach((row) => {
+      const key = statsFilterText(row.matiereLabel) || statsFilterText(row.matiere) || statsFilterText(row.subject)
+      if (!key) return
+      const value = Number(row.note)
+      if (!Number.isFinite(value)) return
+      const current = bySubjectMap.get(key) || { matiere: key, sum: 0, count: 0 }
+      current.sum += value
+      current.count++
+      bySubjectMap.set(key, current)
+    })
+  const bySubject = [...bySubjectMap.values()]
+    .map((row) => ({
+      matiere: row.matiere,
+      average: Math.round((row.sum / row.count) * 10) / 10,
+      notesCount: row.count,
+    }))
+    .sort((a, b) => a.average - b.average)
+
+  const absencesOfStudent = scope.cacheBase.absences
+    .filter((row) => String(row.eleveId || '') === eleveId)
+  const absentDates = new Set(
+    absencesOfStudent.filter((row) => String(row.statut) === 'absent').map((row) => String(row.date)),
+  )
+  const observedDates = new Set(absencesOfStudent.map((row) => String(row.date)).filter(Boolean))
+
+  logger.info('stats drilldown student file', {
+    by: uid,
+    period: scope.applied.period,
+    subjects: bySubject.length,
+    flagged: followUp ? followUp.reasons.length : 0,
+  })
+
+  return {
+    student: drill.projectStudent(doc, average ? average.average : null),
+    bySubject,
+    attendance: {
+      absentDays: absentDates.size,
+      observedDays: observedDates.size,
+      lateCount: absencesOfStudent.filter((row) => {
+        const statut = String(row.statut)
+        return statut === 'retard' || statut === 'late'
+      }).length,
+    },
+    followUp: followUp
+      ? { reasons: followUp.reasons, metrics: followUp.metrics, priority: followUp.priority }
+      : null,
+    applied: scope.applied,
+  }
+})
+
+/**
+ * Devoirs du perimetre — 4e drill-down.
+ *
+ * Meme perimetre et meme bornage que la tuile : `resolveScope` a deja reduit
+ * les devoirs a ceux dont l'echeance tombe dans la periode ET dont la classe
+ * appartient au perimetre. Le compteur affiche et la liste renvoyee sortent
+ * donc du meme tableau, pas de deux requetes qui pourraient diverger.
+ *
+ * Les soumissions sont deja chargees par lots de 30 sur `homeworkId` : on ne
+ * relit rien, on agrege ce que le perimetre a produit.
+ */
+exports.getStatsHomework = onCall(async (request) => {
+  const uid = await drill.requireAdmin(db, request)
+
+  const raw = request.data && typeof request.data === 'object' ? request.data : {}
+  const scopeInput = raw.scope && typeof raw.scope === 'object' ? raw.scope : {}
+  const limit = drill.boundedLimit(raw.limit)
+
+  const scope = await resolveScope({
+    period: statsFilterText(scopeInput.period, 10),
+    cycle: statsFilterText(scopeInput.cycle, 20),
+    niveau: statsFilterText(scopeInput.niveau),
+    classe: statsFilterText(scopeInput.classe),
+    matiere: statsFilterText(scopeInput.matiere),
+  })
+
+  // Soumissions regroupees par devoir pour compter les rendus sans jamais
+  // exposer QUI a rendu : cet ecran parle de devoirs, pas d'eleves.
+  const submittedByHomework = new Map()
+  scope.cacheBase.homeworkSubmissions.forEach((row) => {
+    const homeworkId = statsFilterText(row.homeworkId)
+    if (!homeworkId) return
+    const status = String(row.status || '').toLowerCase()
+    const current = submittedByHomework.get(homeworkId) || { total: 0, done: 0 }
+    current.total++
+    if (status === 'submitted' || status === 'submitted_late' || status === 'graded') current.done++
+    submittedByHomework.set(homeworkId, current)
+  })
+
+  const rows = scope.cacheBase.devoirs
+    .map((devoir) => {
+      const counts = submittedByHomework.get(devoir.id) || { total: 0, done: 0 }
+      return {
+        id: devoir.id,
+        titre: String(devoir.titre || devoir.title || ''),
+        classe: statsFilterText(devoir.classeId) || statsFilterText(devoir.classe),
+        matiere: statsFilterText(devoir.matiereLabel) || statsFilterText(devoir.matiere),
+        dateLimite: statsFilterText(devoir.dateLimite),
+        submissions: counts.total,
+        submitted: counts.done,
+      }
+    })
+    // Tri deterministe : echeance la plus proche d'abord, puis id pour departager,
+    // sinon deux pages successives pourraient sauter une ligne.
+    .sort((a, b) => a.dateLimite.localeCompare(b.dateLimite) || a.id.localeCompare(b.id))
+
+  const { page, nextCursor } = drill.paginate(rows, raw.cursor, limit)
+
+  logger.info('stats drilldown homework', {
+    by: uid,
+    period: scope.applied.period,
+    returned: page.length,
+    total: rows.length,
+  })
+
+  return {
+    homework: page,
+    total: rows.length,
+    nextCursor,
+    applied: scope.applied,
+  }
 })
 
 // ── Transport scolaire : transitions d'état transactionnelles ────────────
