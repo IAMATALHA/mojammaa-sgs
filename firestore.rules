@@ -741,6 +741,42 @@ service cloud.firestore {
 
     // ── infos scolaires non nominatives (lisibles par tous les connectés) ──
     match /emploiDuTemps/{docId}  { allow read: if isSignedIn(); allow write: if isAdmin(); }
+
+    // ── Générateur intelligent d'emploi du temps (admin web) ─────────────
+    // Ajouté le 24/07/2026 : ces collections existaient côté code depuis la
+    // livraison du générateur, mais leurs règles n'avaient été écrites que dans
+    // la COPIE périmée mojammaa-admin/firestore.rules, jamais déployée. Le
+    // default deny final refusait donc la lecture de la config et l'écran
+    // affichait « Le générateur n'a pas pu être chargé ».
+    //
+    // La config ne contient que des identifiants de ressources et des
+    // contraintes. Brouillons, jobs et versions sont produits par l'Admin SDK :
+    // le client admin les observe en lecture seule et ne peut ni falsifier un
+    // résultat validé ni le marquer publié lui-même.
+    match /timetableConfigs/{configId} {
+      allow read, create, update: if isAdmin();
+      allow delete: if false;
+    }
+    match /timetableDrafts/{draftId} {
+      allow read:  if isAdmin();
+      allow write: if false;
+    }
+    match /timetableJobs/{jobId} {
+      // Le navigateur observe uniquement l'état. Création, leases, retries,
+      // annulation et finalisation passent toutes par des fonctions Admin SDK.
+      allow read:  if isAdmin();
+      allow write: if false;
+    }
+    match /timetableVersions/{versionId} {
+      allow read:  if isAdmin();
+      allow write: if false;
+
+      match /schedules/{teacherId} {
+        allow read:  if isAdmin();
+        allow write: if false;
+      }
+    }
+
     // evenements : calendrier scolaire. Lecture PUBLIQUE (non connectés inclus) —
     // l'agenda du site web public (mojammaa-admin/SchoolHome) interroge cette
     // collection sans authentification ; ce sont des infos non sensibles (titre,
