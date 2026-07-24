@@ -1704,11 +1704,31 @@ exports.getStatsStudentFile = onCall(async (request) => {
   )
   const observedDates = new Set(absencesOfStudent.map((row) => String(row.date)).filter(Boolean))
 
+  // Comportement (mérites + avertissements) — informatif, borné à la période.
+  // Requête par eleveId seul (index simple) puis filtre date en mémoire : un
+  // élève a peu de comportements, pas besoin d'index composite.
+  const behaviorSnap = await db.collection('comportements').where('eleveId', '==', eleveId).get()
+  const behavior = behaviorSnap.docs
+    .map((d) => d.data())
+    .filter((row) => {
+      const date = statsFilterText(row.date)
+      return date >= scope.range.from && date <= scope.range.to
+    })
+    .map((row) => ({
+      kind: statsFilterText(row.kind),
+      reason: statsFilterText(row.reason),
+      comment: statsFilterText(row.comment, 300),
+      date: statsFilterText(row.date),
+      teacher: statsFilterText(row.teacherNom),
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date))
+
   logger.info('stats drilldown student file', {
     by: uid,
     period: scope.applied.period,
     subjects: bySubject.length,
     flagged: followUp ? followUp.reasons.length : 0,
+    behavior: behavior.length,
   })
 
   return {
@@ -1730,6 +1750,7 @@ exports.getStatsStudentFile = onCall(async (request) => {
     followUp: followUp
       ? { reasons: followUp.reasons, metrics: followUp.metrics, priority: followUp.priority }
       : null,
+    behavior,
     applied: scope.applied,
   }
 })
