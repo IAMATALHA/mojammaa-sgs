@@ -422,9 +422,24 @@ service cloud.firestore {
     // Maintenus par la CF onNoteWritten (Admin SDK) : moyennes de classe par
     // matière + tableau TRIÉ de moyennes d'élèves sans identifiants. C'est ce
     // que lit l'écran Notes parent pour moyenne/rang (au lieu des notes brutes
-    // de toute la classe). Non nominatif → lisible par tout connecté.
+    // de toute la classe).
+    //
+    // Durci 2026-07-25 (audit) : l'ancienne règle ouvrait CHAQUE classe à tout
+    // compte connecté. « Anonyme » ne veut pas dire « non ré-identifiable » :
+    // `studentAvgs` est un tableau trié de moyennes individuelles, donc dans une
+    // classe à faible effectif — ou en s'ancrant sur la moyenne de son propre
+    // enfant — on remonte à des élèves nommés. On borne donc au périmètre réel :
+    //   - responsable légal → les classes de SES enfants (guardianAccess,
+    //     document dérivé serveur des liens eleves.parentUid) ;
+    //   - prof → les classes qu'il enseigne ; admin → tout.
+    // Le doc porte bien `classe` (cf. refreshClassStats : ref.set({ academicYear,
+    // classe, semestre, ...stats })) et le client fait un getDoc DIRECT
+    // (notesService.getClassStats), pas une requête — aucun problème de
+    // prouvabilité, contrairement aux collections listées.
     match /classStats/{statId} {
-      allow read:  if isSignedIn();
+      allow read:  if isAdmin()
+                   || guardianHasClass(resource.data.classe)
+                   || teacherTeaches(resource.data.classe);
       allow write: if false;
     }
 
@@ -725,8 +740,25 @@ service cloud.firestore {
     // uniquement — les PARENTS n'y ont PAS accès (ce sont des notes internes).
     // Création signée (createdBy == auteur) ; un prof ne modifie que les
     // siennes, l'admin gère tout.
+    // Durci 2026-07-25 (audit) : `isAdmin() || isTeacher()` donnait à CHAQUE
+    // professeur le journal de suivi nominatif de TOUTE l'école — classes qu'il
+    // n'enseigne pas incluses, et notes internes de ses collègues. C'est le
+    // contenu le plus sensible du système après les notes.
+    //
+    // Trois statements SÉPARÉS (même raison que `messages`) : l'analyseur de
+    // requêtes de prod évalue chaque statement indépendamment, donc un client
+    // peut prouver son droit avec celui qui correspond à son filtre.
+    // ⚠️ CONSÉQUENCE pour un futur client prof : une requête `where('eleveId',
+    // '==', X)` seule sera REFUSÉE (les rules ne peuvent pas prouver la classe
+    // ni l'auteur depuis ce filtre). Le prof doit scoper sa requête, p.ex.
+    // `where('createdBy','==',uid)` ou `where('classe','in', sesClasses)`.
+    // Aucun flux n'est cassé aujourd'hui : le composant SuiviEleve du
+    // back-office web n'est monté nulle part (vérifié 2026-07-25), la
+    // collection n'a donc aucun lecteur vivant.
     match /suivis/{suiviId} {
-      allow read:   if isAdmin() || isTeacher();
+      allow read:   if isAdmin();
+      allow read:   if isTeacher() && resource.data.createdBy == myUid();
+      allow read:   if isTeacher() && teacherTeaches(resource.data.classe);
       allow create: if (isAdmin() || isTeacher())
         && request.resource.data.createdBy == myUid();
       allow update: if isAdmin() || (isTeacher() && resource.data.createdBy == myUid());
@@ -1181,12 +1213,21 @@ service cloud.firestore {
     }
 
     // ── auditLog (journal d'audit — Phase 2) ─────────────────
-    // Append-only & inviolable : chaque connecté peut écrire une entrée EN SON
-    // NOM ; seul un superadmin peut lire ; aucune modification/suppression.
+    // Lecture superadmin, aucune modification/suppression.
+    //
+    // Durci 2026-07-25 (audit) : le create client (`actorUid == myUid()` pour
+    // seule contrainte) était la seule garantie — ni `hasOnly` sur les champs,
+    // ni horodatage serveur, ni borne de taille. N'importe quel compte connecté
+    // pouvait donc injecter des entrées arbitraires dans le journal censé faire
+    // FOI (action, cible, date au choix) et le noyer sans limite de volume.
+    // Un journal d'audit falsifiable par ceux qu'il surveille ne vaut rien :
+    // l'écriture passe désormais exclusivement par l'Admin SDK (Cloud Function),
+    // qui contourne les règles. Vérifié 2026-07-25 : AUCUN écrivain côté client
+    // ni script (grep `auditLog` sur src/, functions/, scripts/) → ce verrou ne
+    // casse rien et ne fait que rendre la Phase 2 correcte par construction.
     match /auditLog/{logId} {
-      allow read:   if isSuperAdmin();
-      allow create: if isSignedIn() && request.resource.data.actorUid == myUid();
-      allow update, delete: if false;
+      allow read:  if isSuperAdmin();
+      allow write: if false;
     }
 
     // ── Default deny ─────────────────────────────────────────

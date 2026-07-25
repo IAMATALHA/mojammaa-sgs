@@ -18,6 +18,7 @@ const { initializeApp } = require('firebase-admin/app')
 const { getFirestore, FieldPath, FieldValue } = require('firebase-admin/firestore')
 const { getAuth } = require('firebase-admin/auth')
 const logger = require('firebase-functions/logger')
+const { createHash } = require('node:crypto')
 const { claimEmailSlot, claimGlobalSlot } = require('./resetThrottle')
 const { computeClassStats, statsDocId } = require('./classStats')
 const { computeSchoolStats } = require('./schoolStats')
@@ -2035,6 +2036,18 @@ function brandedResetEmailHtml(link) {
   </div>`
 }
 
+// Empreinte NON RÉVERSIBLE d'un e-mail, pour les journaux (RGPD / loi 09-08).
+// Cloud Logging conserve ses entrées 30 jours et est lisible par tout compte
+// ayant le rôle Logs Viewer sur le projet : y écrire l'e-mail en clair fait de
+// chaque tentative de reset une donnée personnelle stockée hors périmètre.
+// 12 hex suffisent pour corréler plusieurs lignes d'un même incident (« qui a
+// déclenché le plafond global ? ») sans jamais réidentifier la personne depuis
+// le journal seul. Le commit c9bdd5f avait déjà retiré liens et oobCodes ;
+// l'e-mail était le dernier reliquat (audit 2026-07-25).
+function emailFingerprint(email) {
+  return createHash('sha256').update(String(email)).digest('hex').slice(0, 12)
+}
+
 exports.sendBrandedPasswordReset = onCall(
   { secrets: [RESEND_API_KEY] },
   async (request) => {
@@ -2042,6 +2055,7 @@ exports.sendBrandedPasswordReset = onCall(
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new HttpsError('invalid-argument', 'Email invalide.')
     }
+    const emailHash = emailFingerprint(email)
 
     // Anti-spam TRANSACTIONNEL (durci 2026-07-12). L'ancien schéma
     // get → (send) → set laissait passer des requêtes PARALLÈLES (toutes
@@ -2055,7 +2069,7 @@ exports.sendBrandedPasswordReset = onCall(
     const claimedEmail = await claimEmailSlot(db, email, RESET_COOLDOWN_MS)
     if (!claimedEmail) {
       // Ne révèle rien : même réponse que le cas "succès" côté client.
-      logger.info('Password reset throttled (per-email cooldown)', { email })
+      logger.info('Password reset throttled (per-email cooldown)', { emailHash })
       return { ok: true }
     }
 
@@ -2071,10 +2085,10 @@ exports.sendBrandedPasswordReset = onCall(
       // On avale aussi ce cas générique : le pire scénario côté UX est un
       // silence (comme un vrai email inconnu), jamais une fuite d'info.
       if (err && (err.code === 'auth/user-not-found' || err.code === 'auth/internal-error')) {
-        logger.info('Password reset link generation failed (treated as unknown email)', { email, code: err.code })
+        logger.info('Password reset link generation failed (treated as unknown email)', { emailHash, code: err.code })
         return { ok: true }
       }
-      logger.error('generatePasswordResetLink failed', { email, error: String(err) })
+      logger.error('generatePasswordResetLink failed', { emailHash, error: String(err) })
       throw new HttpsError('internal', "Erreur lors de la génération du lien.")
     }
 
@@ -2083,7 +2097,7 @@ exports.sendBrandedPasswordReset = onCall(
     //    les resets légitimes. Borne le quota Resend contre un spam de masse.
     const underGlobalCap = await claimGlobalSlot(db, RESET_GLOBAL_WINDOW_MS, RESET_GLOBAL_MAX)
     if (!underGlobalCap) {
-      logger.warn('Password reset global cap hit — send suppressed', { email })
+      logger.warn('Password reset global cap hit — send suppressed', { emailHash })
       return { ok: true }
     }
 
@@ -2105,11 +2119,11 @@ exports.sendBrandedPasswordReset = onCall(
     })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
-      logger.error('Resend send failed', { email, status: res.status, body })
+      logger.error('Resend send failed', { emailHash, status: res.status, body })
       throw new HttpsError('internal', "Erreur lors de l'envoi de l'email.")
     }
     // Cooldown déjà réservé dans la transaction ci-dessus (avant l'envoi).
-    logger.info('Branded password reset email sent', { email })
+    logger.info('Branded password reset email sent', { emailHash })
     return { ok: true }
   },
 )

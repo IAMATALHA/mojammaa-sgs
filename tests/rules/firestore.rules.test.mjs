@@ -1369,6 +1369,90 @@ await deny('une session returned est terminale',
 await deny('aucun client, même admin, ne supprime une session',
   deleteDoc(doc(asUser('admin1'), 'prayerClassSessions/2026-07-16_1A')))
 
+// ══════════════════════════════════════════════════════════════════════════
+//  Durcissement 2026-07-25 (audit) — classStats, suivis, auditLog
+// ══════════════════════════════════════════════════════════════════════════
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore()
+  const seed = (path, data) => setDoc(doc(db, path), data)
+  await Promise.all([
+    // Agrégats de classe : le doc porte `classe` (cf. refreshClassStats).
+    seed('classStats/2026-2027__1A__S1', {
+      academicYear: '2026-2027', classe: '1A', semestre: 'S1',
+      subjectAvgs: { Maths: 12.5 }, studentAvgs: [9, 12, 16], students: 3,
+      notesCount: 9, bareme: 20, updatedAt: new Date(),
+    }),
+    seed('classStats/2026-2027__2B__S1', {
+      academicYear: '2026-2027', classe: '2B', semestre: 'S1',
+      subjectAvgs: { PC: 11 }, studentAvgs: [8, 11, 14], students: 3,
+      notesCount: 9, bareme: 20, updatedAt: new Date(),
+    }),
+    // Journal de suivi : nominatif et sensible (notes internes).
+    seed('suivis/s1A', {
+      eleveId: 'e1', eleveNom: 'A A', classe: '1A', type: 'contact',
+      note: 'Entretien avec le responsable légal', statut: 'ouvert',
+      createdBy: 'prof1', createdByNom: 'Prof Un', createdAt: new Date(),
+    }),
+    seed('suivis/s2B', {
+      eleveId: 'e2', eleveNom: 'B B', classe: '2B', type: 'convocation',
+      note: 'Plan d’accompagnement', statut: 'ouvert',
+      createdBy: 'prof2', createdByNom: 'Prof Deux', createdAt: new Date(),
+    }),
+    seed('auditLog/entry1', {
+      actorUid: 'admin1', action: 'test', at: new Date(),
+    }),
+  ])
+})
+
+// classStats — un agrégat « anonyme » reste ré-identifiable en petit effectif :
+// il ne doit sortir que du périmètre réel du lecteur.
+await allow('parent lit l’agrégat de la classe de SON enfant',
+  getDoc(doc(asUser('parent1'), 'classStats/2026-2027__1A__S1')))
+await deny('parent ne lit PAS l’agrégat d’une autre classe',
+  getDoc(doc(asUser('parent1'), 'classStats/2026-2027__2B__S1')))
+await allow('prof lit l’agrégat d’une classe qu’il enseigne',
+  getDoc(doc(asUser('prof1'), 'classStats/2026-2027__1A__S1')))
+await deny('prof ne lit PAS l’agrégat d’une classe qu’il n’enseigne pas',
+  getDoc(doc(asUser('prof2'), 'classStats/2026-2027__1A__S1')))
+await allow('admin lit n’importe quel agrégat',
+  getDoc(doc(asUser('admin1'), 'classStats/2026-2027__2B__S1')))
+await deny('chauffeur sans enfant ne lit aucun agrégat',
+  getDoc(doc(asUser('driver2'), 'classStats/2026-2027__1A__S1')))
+await deny('aucun client n’écrit un agrégat (Admin SDK uniquement)',
+  setDoc(doc(asUser('admin1'), 'classStats/2026-2027__1A__S1'), { notesCount: 0 }))
+
+// suivis — registre interne : chaque prof était capable de lire TOUTE l’école.
+await allow('admin lit tout le journal de suivi',
+  getDoc(doc(asUser('admin1'), 'suivis/s2B')))
+await allow('prof lit le suivi qu’il a lui-même créé',
+  getDoc(doc(asUser('prof1'), 'suivis/s1A')))
+await allow('prof lit le suivi d’un collègue sur une classe qu’il enseigne',
+  getDoc(doc(asUser('profSameClass'), 'suivis/s1A')))
+await deny('prof ne lit PAS le suivi d’une classe qu’il n’enseigne pas',
+  getDoc(doc(asUser('prof2'), 'suivis/s1A')))
+await deny('parent n’accède jamais au journal de suivi',
+  getDoc(doc(asUser('parent1'), 'suivis/s1A')))
+await deny('responsable légal (compte prof) n’accède pas au suivi via sa capacité parent',
+  getDoc(doc(asUser('driverParent'), 'suivis/s1A')))
+
+// auditLog — un journal falsifiable par ceux qu’il surveille ne vaut rien.
+await deny('parent n’injecte plus d’entrée dans le journal d’audit',
+  addDoc(collection(asUser('parent1'), 'auditLog'), {
+    actorUid: 'parent1', action: 'faux', at: new Date(),
+  }))
+await deny('prof n’injecte plus d’entrée dans le journal d’audit',
+  addDoc(collection(asUser('prof1'), 'auditLog'), {
+    actorUid: 'prof1', action: 'faux', at: new Date(),
+  }))
+await deny('même l’admin n’écrit pas dans le journal d’audit',
+  addDoc(collection(asUser('admin1'), 'auditLog'), {
+    actorUid: 'admin1', action: 'faux', at: new Date(),
+  }))
+await deny('un non-superadmin ne lit pas le journal d’audit',
+  getDoc(doc(asUser('admin1'), 'auditLog/entry1')))
+await allow('le superadmin lit le journal d’audit',
+  getDoc(doc(asUser('super1'), 'auditLog/entry1')))
+
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)
 if (failed.length) {
