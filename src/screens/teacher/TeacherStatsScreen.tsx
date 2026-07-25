@@ -309,11 +309,19 @@ export default function TeacherStatsScreen() {
       ? weightedAvgRows.reduce((sum, item) => sum + (item.avg20 || 0) * item.gradedStudents, 0) /
         weightedAvgRows.reduce((sum, item) => sum + item.gradedStudents, 0)
       : null
+    // Le hero agrège plusieurs classes : il n'annonce un barème que si elles le
+    // partagent (un prof de primaire lit /10). Dès qu'il mélange les cycles, la
+    // seule échelle honnête pour un chiffre unique est l'équivalent /20 — les
+    // cartes de classe, elles, gardent chacune le sien (`avgDisplay`).
+    const baremes = new Set(weightedAvgRows.map(item => item.bareme))
+    const bareme: 10 | 20 = baremes.size === 1 ? [...baremes][0] : 20
     return {
       totalStudents,
       totalAbsences,
       coverage: totalExpected > 0 ? Math.round((totalGraded / totalExpected) * 100) : 0,
       avg20: avg20 == null ? null : round1(avg20),
+      bareme,
+      avgDisplay: avg20 == null ? null : round1(avg20 * (bareme / 20)),
       strongest: classStats[0],
       focus: classStats.length > 0 ? classStats[classStats.length - 1] : undefined,
     }
@@ -377,7 +385,9 @@ export default function TeacherStatsScreen() {
                     {subject || t('teacher.perfYourSubject')}
                   </Text>
                   <Text style={[styles.heroTitle, { fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.black }]}>
-                    {summary.avg20 == null ? t('teacher.perfNoAverage') : <><AnimatedCounter value={summary.avg20} decimals={1} />/20</>}
+                    {summary.avgDisplay == null
+                      ? t('teacher.perfNoAverage')
+                      : <><AnimatedCounter value={summary.avgDisplay} decimals={1} />/{summary.bareme}</>}
                   </Text>
                   <Text style={[styles.heroSub, { fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium }]}>
                     {t('teacher.perfHeroSubtitle', { classes: classStats.length, students: summary.totalStudents })}

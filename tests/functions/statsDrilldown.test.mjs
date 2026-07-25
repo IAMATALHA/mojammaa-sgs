@@ -105,8 +105,16 @@ async function expectRejection(promise, expectedCode, message) {
   const projected = projectStudent(doc, 12.5)
   assert.deepEqual(
     Object.keys(projected).sort(),
-    ['average', 'classe', 'id', 'niveau', 'nom', 'prenom'].sort(),
+    // `bareme` est déduit du cycle/classe, pas lu sur la fiche : il dit dans
+    // quelle échelle afficher `average`, il n'ajoute aucune donnée nominative.
+    ['average', 'bareme', 'classe', 'id', 'niveau', 'nom', 'prenom'].sort(),
     'la projection est une liste blanche stricte',
+  )
+  assert.equal(projected.bareme, 20, '1APIC est du collège → /20')
+  assert.equal(
+    projectStudent({ id: 'x', data: () => ({ cycle: 'primaire', classe: 'CE2-A' }) }, 7).bareme,
+    10,
+    'primaire → /10 même sans motif AEP dans le nom de classe',
   )
 
   const serialized = JSON.stringify(projected)

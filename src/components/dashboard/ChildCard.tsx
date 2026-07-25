@@ -62,7 +62,7 @@ export default function ChildCard({ child, onPress }: ChildCardProps) {
             <View style={styles.badgesRow}>
               <Stat
                 icon={<TrendingUp size={12} color={theme.green} strokeWidth={1.9} />}
-                value={`${child.averageGrade.toFixed(1)}/20`}
+                value={`${child.averageGrade.toFixed(1)}/${child.bareme}`}
                 label="Moyenne"
                 tone={theme.greenSurface}
                 theme={theme}

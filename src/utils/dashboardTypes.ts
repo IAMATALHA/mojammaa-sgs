@@ -40,7 +40,10 @@ export interface Child {
   level:        string
   avatarColor:  string
   attendance:   number   // 0-100
-  averageGrade: number   // 0-20 (FR) — keep 0-100 if you prefer
+  /** Moyenne DANS LE BARÈME DE L'ÉLÈVE (`bareme`), pas systématiquement /20. */
+  averageGrade: number
+  /** Système marocain : primaire /10, collège /20. */
+  bareme:       10 | 20
   pendingHomework: number
 }
 

@@ -22,6 +22,7 @@ import type { TFunction } from 'i18next'
 import { AlertTriangle, ChevronRight, Search, TrendingDown, Users } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
+import { displayBareme, toDisplayScale } from '../../utils/gradeScale'
 import { functions } from '../../config/firebase'
 import type { AdminStackParamList } from '../../navigation/types'
 import type {
@@ -259,6 +260,11 @@ export default function AdminScopeStudentsScreen() {
     scope.cycle ? t(`admin.statsCycle_${scope.cycle}`) : '',
     scope.niveau, scope.classe, scope.matiere,
   ].filter(Boolean).join(' · ') || t('admin.statsWholeSchool')
+  // Périmètre homogène = un cycle, un niveau ou une classe est épinglé ; sinon
+  // la liste mêle les barèmes et l'en-tête n'en annonce aucun.
+  const scopeBareme = scope.cycle || scope.niveau || scope.classe
+    ? displayBareme({ cycle: scope.cycle, classe: scope.classe, niveau: scope.niveau })
+    : null
   const progressionEvidence = students.find(row => row.progression)?.progression
   const progressionContext = progression
     ? t('admin.statsProgressionScope', {
@@ -277,9 +283,13 @@ export default function AdminScopeStudentsScreen() {
           {scopeLabel} · {t(`admin.statsPeriod_${scope.period}`)}
         </Text>
         <Text numberOfLines={1} style={[styles.notesScopeText, { color: theme.textMuted }]}>
-          {t('admin.statsGradesScope', {
-            period: t(`admin.statsPeriod_${scope.notesPeriod}`),
-          })} · /20
+          {[
+            t('admin.statsGradesScope', { period: t(`admin.statsPeriod_${scope.notesPeriod}`) }),
+            // Barème annoncé en tête UNIQUEMENT si le périmètre est homogène :
+            // « tout l'établissement » mêle primaire /10 et collège /20, et
+            // chaque ligne porte alors le sien.
+            scopeBareme ? `/${scopeBareme}` : null,
+          ].filter(Boolean).join(' · ')}
         </Text>
         {progressionContext ? (
           <Text numberOfLines={2} style={[styles.progressionScopeText, { color: theme.text }]}>
@@ -369,6 +379,11 @@ function StudentRow({ student, subject, theme, t, onPress }: {
   student: ScopeStudent; subject: string; theme: Theme; t: TFunction; onPress: () => void
 }) {
   const reasons = (student.reasons || []).slice().sort()
+  // Une liste de périmètre large mélange les cycles : le barème se décide PAR
+  // LIGNE, jamais pour l'écran. Les valeurs arrivent sur 20 (comparables entre
+  // elles), on les réexprime dans celui de l'élève au rendu.
+  const bareme = displayBareme(student)
+  const shown = (value: number | null | undefined) => toDisplayScale(value, bareme)
   return (
     <Pressable
       onPress={onPress}
@@ -392,6 +407,7 @@ function StudentRow({ student, subject, theme, t, onPress }: {
                 key={reason}
                 reason={reason}
                 metrics={student.metrics}
+                bareme={bareme}
                 theme={theme}
                 t={t}
               />
@@ -402,10 +418,10 @@ function StudentRow({ student, subject, theme, t, onPress }: {
           <Text style={[styles.progressionEvidence, { color: theme.textSoft }]}>
             {t('admin.statsProgressionEvidence', {
               fromLabel: student.progression.fromLabel,
-              from: student.progression.from,
+              from: shown(student.progression.from),
               toLabel: student.progression.toLabel,
-              to: student.progression.to,
-              delta: `${student.progression.delta > 0 ? '+' : ''}${student.progression.delta}`,
+              to: shown(student.progression.to),
+              delta: `${student.progression.delta > 0 ? '+' : ''}${shown(student.progression.delta)}`,
             })}
           </Text>
         ) : null}
@@ -414,7 +430,7 @@ function StudentRow({ student, subject, theme, t, onPress }: {
         {student.priority ? <PriorityDot priority={student.priority} theme={theme} /> : null}
         <View style={styles.averageStack}>
           <Text style={[styles.rowAverage, { color: theme.textSoft }]}>
-            {student.average == null ? '— /20' : `${student.average}/20`}
+            {student.average == null ? `— /${bareme}` : `${shown(student.average)}/${bareme}`}
           </Text>
           <Text style={[styles.rowAverageLabel, { color: theme.textMuted }]}>
             {t('admin.statsOverallAverageShort')}
@@ -422,7 +438,7 @@ function StudentRow({ student, subject, theme, t, onPress }: {
           {subject && student.subjectAverage != null ? (
             <>
               <Text numberOfLines={1} style={[styles.rowSubjectAverage, { color: theme.primary }]}>
-                {student.subjectAverage}/20
+                {shown(student.subjectAverage)}/{bareme}
               </Text>
               <Text numberOfLines={1} style={[styles.rowAverageLabel, { color: theme.textMuted }]}>
                 {t('admin.statsSubjectAverageShort')}
@@ -442,18 +458,19 @@ function StudentRow({ student, subject, theme, t, onPress }: {
  * l'alerte est sévère, et le même badge signifierait des choses différentes
  * selon la période consultée.
  */
-function ReasonBadge({ reason, metrics, theme, t }: {
-  reason: FollowUpReason; metrics?: FollowUpMetrics; theme: Theme; t: TFunction
+function ReasonBadge({ reason, metrics, bareme, theme, t }: {
+  reason: FollowUpReason; metrics?: FollowUpMetrics; bareme: 10 | 20; theme: Theme; t: TFunction
 }) {
   const m = metrics || {}
+  const shown = (value: number | null | undefined) => toDisplayScale(value, bareme) ?? '—'
   const label = (() => {
     switch (reason) {
       case 'low_average':
-        return t('admin.reasonLowAverage', { average: m.average ?? '—' })
+        return t('admin.reasonLowAverage', { average: shown(m.average) })
       case 'declining':
-        return t('admin.reasonDeclining', { decline: m.decline ?? '—' })
+        return t('admin.reasonDeclining', { decline: shown(m.decline) })
       case 'declining_controls':
-        return t('admin.reasonControlDeclining', { decline: m.controlDecline ?? '—' })
+        return t('admin.reasonControlDeclining', { decline: shown(m.controlDecline) })
       case 'absenteeism':
         return t('admin.reasonAbsenteeism', { days: m.absentDays ?? 0, observed: m.observedDays ?? 0 })
       case 'homework_not_done':

@@ -25,7 +25,9 @@ function load(relPath, requireShim = () => { throw new Error('no deps expected')
   return shim.exports
 }
 
-const { resolveBareme, noteOn20, weightedAverage } = load('../../src/utils/gradeScale.ts')
+const {
+  resolveBareme, noteOn20, weightedAverage, displayBareme, toDisplayScale,
+} = load('../../src/utils/gradeScale.ts')
 const { makeCoefOf } = load('../../src/services/coefficientsService.ts', id => {
   if (id === 'firebase/firestore') return { doc: () => {}, getDoc: async () => {} }
   if (id === '../config/firebase') return { db: {} }
@@ -60,6 +62,36 @@ assert.equal(noteOn20(-1, { bareme: 20 }), null, 'note négative écartée')
 const mixed = [noteOn20(8, { bareme: 10 }), noteOn20(18, { bareme: 20 })]
 assert.deepEqual(mixed, [16, 18])
 assert.equal(mixed.reduce((s, v) => s + v, 0) / mixed.length, 17)
+
+// ── displayBareme : échelle d'AFFICHAGE (primaire /10, collège /20) ───────
+assert.equal(displayBareme({ bareme: 10 }), 10, 'barème serveur prioritaire')
+assert.equal(displayBareme({ bareme: 20, cycle: 'primaire' }), 20, 'serveur > heuristique')
+assert.equal(displayBareme({ cycle: 'primaire' }), 10, 'cycle primaire → /10')
+assert.equal(displayBareme({ cycle: 'college', classe: '1AC-A' }), 20, 'collège → /20')
+assert.equal(displayBareme({ classe: '3AEP-A' }), 10, 'motif AEP dans la classe')
+assert.equal(displayBareme({ niveau: '4AEP' }), 10, 'motif AEP dans le niveau')
+assert.equal(displayBareme({}), 20, 'indéterminé → /20, comme le serveur')
+
+// ── toDisplayScale : la moyenne interne reste /20, l'affichage suit ───────
+assert.equal(toDisplayScale(14.4, 10), 7.2, 'primaire : 14,4/20 se lit 7,2/10')
+assert.equal(toDisplayScale(14.4, 20), 14.4, 'collège : inchangé')
+assert.equal(toDisplayScale(null, 10), null, 'valeur absente reste absente')
+
+// LE défaut visé : la carte du tableau de bord annonçait la moyenne normalisée
+// telle quelle (14,4/20) alors que le bulletin du MÊME enfant de primaire
+// affichait 7,2/10. Un seul chiffre, un seul barème.
+const on20 = 14.4
+assert.equal(
+  toDisplayScale(on20, displayBareme({ cycle: 'primaire', classe: 'CE2-A' })), 7.2,
+  'carte et bulletin convergent en primaire',
+)
+assert.equal(
+  toDisplayScale(on20, displayBareme({ cycle: 'college', classe: '1AC-A' })), 14.4,
+  'le collège reste sur 20',
+)
+
+// Un seuil ne se convertit pas tout seul : sous 10/20 se dit sous 5/10.
+assert.equal(toDisplayScale(10, 10), 5, 'seuil d’alerte réexprimé en primaire')
 
 // ── weightedAverage ───────────────────────────────────────────────────────
 assert.equal(weightedAverage([]), null, 'aucune matière → null')

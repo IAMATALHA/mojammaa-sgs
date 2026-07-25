@@ -120,4 +120,4 @@ function statsDocId(academicYear, classe, semestre) {
   return `${academicYear}__${classe}__${semestre}`.replace(/\//g, '_')
 }
 
-module.exports = { computeClassStats, statsDocId }
+module.exports = { computeClassStats, statsDocId, inferredClassBareme }

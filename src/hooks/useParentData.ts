@@ -11,7 +11,7 @@ import { subscribeChunked } from '../services/chunkedQuery'
 import { db } from '../config/firebase'
 import type { Child } from '../utils/dashboardTypes'
 import { currentAcademicPeriod, localISODate } from '../utils/academicPeriod'
-import { noteOn20 } from '../utils/gradeScale'
+import { displayBareme, noteOn20, toDisplayScale } from '../utils/gradeScale'
 import { palette } from '../theme/designTokens'
 import {
   homeworkSubmissionId,
@@ -39,8 +39,6 @@ function hashOf(s: string): number {
   for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0
   return h
 }
-
-function round1(v: number): number { return Math.round(v * 10) / 10 }
 
 export function useParentData(): ParentData {
   const period = currentAcademicPeriod()
@@ -132,10 +130,20 @@ export function useParentData(): ParentData {
       const notesOn20 = childNotes
         .map(note => noteOn20(note.note, note, e.classe))
         .filter((note): note is number => note != null)
+      // La carte affiche la moyenne dans le barème de l'élève (primaire /10),
+      // comme son bulletin : c'est le même enfant sur deux écrans, il ne peut
+      // pas y lire deux chiffres différents. L'agrégation reste sur 20 — une
+      // matière peut mélanger des saisies /10 et /20.
+      const bareme = displayBareme({
+        cycle: childNotes.find(note => note.cycle)?.cycle,
+        classe: e.classe,
+        niveau: e.niveau,
+      })
       const avgGrade = notesOn20.length > 0
-        ? round1(notesOn20.reduce((s, n) => s + n, 0) / notesOn20.length)
+        ? toDisplayScale(notesOn20.reduce((s, n) => s + n, 0) / notesOn20.length, bareme) ?? 0
         : 0
       return {
+        bareme,
         id: e.codeMassar,
         firstName: e.prenomLatin || e.prenom || '',
         lastName: e.nomLatin || e.nom || '',

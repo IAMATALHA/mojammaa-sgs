@@ -141,7 +141,7 @@ function ChildSlide({
             <ChildMetric
               icon={<TrendingUp size={14} color={theme.primary} strokeWidth={2.4} />}
               label={t('parent.average')}
-              value={isPreschool ? 'Compétences' : `${child.averageGrade.toFixed(1)}/20`}
+              value={isPreschool ? 'Compétences' : `${child.averageGrade.toFixed(1)}/${child.bareme}`}
               color={theme.primary}
               bg={theme.primarySurface}
             />

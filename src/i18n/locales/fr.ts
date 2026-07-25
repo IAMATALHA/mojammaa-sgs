@@ -557,7 +557,7 @@ const fr = {
     reasonAbsenteeism: '{{days}} j. / {{observed}} obs.',
     reasonHomeworkNotDone: '{{count}} non fait(s)',
     reasonHomeworkNotSubmitted: '{{count}} non rendu(s)',
-    evidenceLowAverage: 'Moyenne pondérée de {{average}}/20, sous le seuil de 10.',
+    evidenceLowAverage: 'Moyenne pondérée de {{average}}/{{bareme}}, sous le seuil de {{threshold}}.',
     evidenceDeclining: 'S1 {{s1}} → S2 {{s2}}, soit une baisse de {{decline}} points.',
     evidenceControlDeclining: '{{subject}} · {{fromLabel}} {{from}} → {{toLabel}} {{to}}, soit une baisse de {{decline}} points.',
     evaluationComplete: 'Complet',

@@ -25,6 +25,7 @@
 const { HttpsError } = require('firebase-functions/v2/https')
 const { evaluateFollowUp, buildFollowUpContext, gradeBands } = require('./schoolStats')
 const { normalizeText, subjectEntry } = require('./collegeEvaluation')
+const { inferredClassBareme } = require('./classStats')
 
 const MAX_LIMIT = 100
 const DEFAULT_LIMIT = 50
@@ -70,6 +71,11 @@ function projectStudent(doc, average) {
     classe: String(data.classe || ''),
     niveau: String(data.niveau || ''),
     average: average == null ? null : average,
+    // `average` reste normalisée sur 20 (les périmètres mélangent les cycles) ;
+    // `bareme` dit dans quelle échelle la RÉAFFICHER — primaire /10, collège
+    // /20. Le serveur tranche parce que lui a le cycle de la fiche élève ; le
+    // client n'a que le nom de la classe.
+    bareme: inferredClassBareme(data) || 20,
   }
 }
 

@@ -62,7 +62,7 @@ interface SubjectAgg {
   studentCount: number
   notesCount: number
 }
-interface WeakStudent { id: string; nom: string; classe: string; note: number }
+interface WeakStudent { id: string; nom: string; classe: string; note: number; bareme: 10 | 20 }
 interface TeacherLite { id: string; nom: string; prenom: string; matiere: string; classes: string[] }
 interface ProgressionTransition {
   fromSlot: string
@@ -213,12 +213,19 @@ export default function AdminMatiereDetailScreen() {
       if (b.avgEq == null) return -1
       return a.avgEq - b.avgEq || a.matiere.localeCompare(b.matiere, 'fr')
     })
-    const weakStudents: WeakStudent[] = (details?.weakStudents || []).map(student => ({
-      id: student.id,
-      nom: `${student.prenom} ${student.nom}`.trim(),
-      classe: student.classe,
-      note: student.average ?? 0,
-    }))
+    // Un aperçu inter-classes peut mêler primaire et collège : chaque ligne est
+    // affichée dans SON barème. Le serveur le tranche (il a le cycle) ; le repli
+    // sur le nom de classe couvre les anciennes callables.
+    const weakStudents: WeakStudent[] = (details?.weakStudents || []).map(student => {
+      const bareme = student.bareme ?? baremeOf(student.classe)
+      return {
+        id: student.id,
+        nom: `${student.prenom} ${student.nom}`.trim(),
+        classe: student.classe,
+        bareme,
+        note: round1((student.average ?? 0) * (bareme / 20)),
+      }
+    })
     return {
       classes,
       subjects,
@@ -556,7 +563,7 @@ export default function AdminMatiereDetailScreen() {
                     </Text>
                   </View>
                   <Text style={{ color: theme.danger, fontFamily: theme.fonts.black, fontSize: 15, fontVariant: ['tabular-nums'] }}>
-                    {w.note}<Text style={{ fontSize: 10.5, color: theme.textMuted }}>/20</Text>
+                    {w.note}<Text style={{ fontSize: 10.5, color: theme.textMuted }}>/{w.bareme}</Text>
                   </Text>
                   <ChevronRight size={14} color={theme.textMuted} style={{ marginStart: 7 }} />
                 </Pressable>

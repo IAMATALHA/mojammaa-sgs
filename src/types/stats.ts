@@ -123,6 +123,12 @@ export interface ScopeStudent {
   niveau: string
   /** Moyenne générale du périmètre, toujours normalisée sur 20. */
   average: number | null
+  /**
+   * Barème d'AFFICHAGE de cet élève — primaire /10, collège /20. Tranché par le
+   * serveur, qui a le cycle de la fiche. Contrat progressif : absent des
+   * anciennes callables, d'où le repli heuristique de `displayBareme`.
+   */
+  bareme?: 10 | 20
   /** Moyenne de la matière filtrée, distincte de la moyenne générale. */
   subjectAverage?: number | null
   reasons?: FollowUpReason[]

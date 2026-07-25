@@ -557,7 +557,7 @@ const ar = {
     reasonAbsenteeism: '{{days}} ي. / {{observed}} مسجلة',
     reasonHomeworkNotDone: '{{count}} غير منجز',
     reasonHomeworkNotSubmitted: '{{count}} غير مسلم',
-    evidenceLowAverage: 'معدل مرجح {{average}}/20، دون عتبة 10.',
+    evidenceLowAverage: 'معدل مرجح {{average}}/{{bareme}}، دون عتبة {{threshold}}.',
     evidenceDeclining: 'الدورة 1 {{s1}} ← الدورة 2 {{s2}}، أي تراجع بـ {{decline}} نقط.',
     evidenceControlDeclining: '{{subject}} · {{fromLabel}} {{from}} ← {{toLabel}} {{to}}، أي تراجع بـ {{decline}} نقط.',
     evaluationComplete: 'مكتمل',

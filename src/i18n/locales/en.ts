@@ -557,7 +557,7 @@ const en = {
     reasonAbsenteeism: '{{days}} d. / {{observed}} obs.',
     reasonHomeworkNotDone: '{{count}} not done',
     reasonHomeworkNotSubmitted: '{{count}} not submitted',
-    evidenceLowAverage: 'Weighted average of {{average}}/20, below the threshold of 10.',
+    evidenceLowAverage: 'Weighted average of {{average}}/{{bareme}}, below the threshold of {{threshold}}.',
     evidenceDeclining: 'S1 {{s1}} → S2 {{s2}}, a drop of {{decline}} points.',
     evidenceControlDeclining: '{{subject}} · {{fromLabel}} {{from}} → {{toLabel}} {{to}}, a drop of {{decline}} points.',
     evaluationComplete: 'Complete',

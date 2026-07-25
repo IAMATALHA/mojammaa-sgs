@@ -30,6 +30,7 @@ import type {
   AppliedScope, FollowUpMetrics, FollowUpPriority, FollowUpReason, ScopeStudent,
 } from '../../types/stats'
 import { translatedFormula } from '../../utils/evaluationFormula'
+import { displayBareme, toDisplayScale } from '../../utils/gradeScale'
 
 interface SubjectSemester {
   semestre: string
@@ -99,9 +100,17 @@ export default function AdminStudentFileScreen() {
   useEffect(() => { void load() }, [load])
 
   const name = file ? `${file.student.prenom} ${file.student.nom}`.trim() : t('admin.statsStudentFile')
-  const overallAverage = file ? file.overallAverage ?? file.student.average : null
-  const subjectAverage = file ? file.subjectAverage ?? file.student.subjectAverage : null
   const appliedScope = file?.applied ?? scope
+
+  // Le serveur renvoie TOUT normalisé sur 20 (moyennes, contrôles, activités
+  // intégrées, deltas) : c'est ce qui permet de comparer des cycles entre eux.
+  // L'admin, lui, doit lire le chiffre du cahier de l'élève — un primaire est
+  // noté /10. On convertit donc au rendu, et seulement au rendu : les seuils
+  // (< 10) restent comparés sur 20.
+  const bareme = file ? displayBareme(file.student) : 20
+  const onScale = (value: number | null | undefined) => toDisplayScale(value, bareme)
+  const overallAverage = file ? onScale(file.overallAverage ?? file.student.average) : null
+  const subjectAverage = file ? onScale(file.subjectAverage ?? file.student.subjectAverage) : null
 
   return (
     <ScreenLayout title={name} showBack>
@@ -133,7 +142,7 @@ export default function AdminStudentFileScreen() {
               </View>
               <View style={styles.identityAverage}>
                 <Text style={[styles.identityAverageValue, { color: theme.primary }]}>
-                  {overallAverage == null ? '— /20' : `${overallAverage}/20`}
+                  {overallAverage == null ? `— /${bareme}` : `${overallAverage}/${bareme}`}
                 </Text>
                 <Text style={[styles.identityAverageLabel, { color: theme.textMuted }]}>
                   {t('admin.statsOverallAverage')}
@@ -141,7 +150,7 @@ export default function AdminStudentFileScreen() {
                 {appliedScope.matiere && subjectAverage != null ? (
                   <>
                     <Text style={[styles.identitySubjectValue, { color: theme.text }]}>
-                      {subjectAverage}/20
+                      {subjectAverage}/{bareme}
                     </Text>
                     <Text numberOfLines={1} style={[styles.identityAverageLabel, { color: theme.textMuted }]}>
                       {appliedScope.matiere}
@@ -158,13 +167,13 @@ export default function AdminStudentFileScreen() {
                   t('admin.statsGradesScope', {
                     period: t(`admin.statsPeriod_${appliedScope.notesPeriod}`),
                   }),
-                  '/20',
+                  `/${bareme}`,
                 ].filter(Boolean).join(' · ')}
               </Text>
             </View>
 
             {file.followUp ? (
-              <FollowUpCard followUp={file.followUp} theme={theme} t={t} />
+              <FollowUpCard followUp={file.followUp} bareme={bareme} theme={theme} t={t} />
             ) : (
               <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <Text style={[styles.cardTitle, { color: theme.text }]}>{t('admin.statsNoAlert')}</Text>
@@ -224,7 +233,7 @@ export default function AdminStudentFileScreen() {
                         styles.subjectAverage,
                         { color: line.average < 10 ? theme.danger : theme.text },
                       ]}>
-                        {line.average}/20
+                        {onScale(line.average)}/{bareme}
                       </Text>
                     </View>
                     {line.semesters.map(semester => {
@@ -252,7 +261,9 @@ export default function AdminStudentFileScreen() {
                         </View>
                         {semester.controls.length > 0 ? (
                           <Text style={[styles.trajectoryControls, { color: theme.text }]}>
-                            {semester.controls.map(control => `${control.label} ${control.note}/20`).join('  ·  ')}
+                            {semester.controls
+                              .map(control => `${control.label} ${onScale(control.note)}/${bareme}`)
+                              .join('  ·  ')}
                           </Text>
                         ) : null}
                         {latestDelta != null && latestFromLabel && latestToLabel ? (
@@ -264,13 +275,15 @@ export default function AdminStudentFileScreen() {
                             {t('admin.statsLatestControlDelta', {
                               fromLabel: latestFromLabel,
                               toLabel: latestToLabel,
-                              delta: `${latestDelta > 0 ? '+' : ''}${latestDelta}`,
+                              // Un écart se convertit comme une note : +2 points
+                              // sur 20 valent +1 sur 10.
+                              delta: `${latestDelta > 0 ? '+' : ''}${onScale(latestDelta)}`,
                             })}
                           </Text>
                         ) : null}
                         {semester.integratedActivitiesNote != null ? (
                           <Text style={[styles.trajectoryMeta, { color: theme.textSoft }]}>
-                            {t('admin.integratedActivities')}: {semester.integratedActivitiesNote}/20
+                            {t('admin.integratedActivities')}: {onScale(semester.integratedActivitiesNote)}/{bareme}
                           </Text>
                         ) : null}
                         {semester.status !== 'legacy' ? (
@@ -294,8 +307,8 @@ export default function AdminStudentFileScreen() {
   )
 }
 
-function FollowUpCard({ followUp, theme, t }: {
-  followUp: NonNullable<StudentFile['followUp']>; theme: Theme; t: TFunction
+function FollowUpCard({ followUp, bareme, theme, t }: {
+  followUp: NonNullable<StudentFile['followUp']>; bareme: 10 | 20; theme: Theme; t: TFunction
 }) {
   const tone = followUp.priority === 'high'
     ? { bg: theme.dangerSurface, fg: theme.danger }
@@ -313,7 +326,7 @@ function FollowUpCard({ followUp, theme, t }: {
         </View>
       </View>
       {followUp.reasons.map(reason => (
-        <ReasonLine key={reason} reason={reason} metrics={followUp.metrics} theme={theme} t={t} />
+        <ReasonLine key={reason} reason={reason} metrics={followUp.metrics} bareme={bareme} theme={theme} t={t} />
       ))}
     </View>
   )
@@ -321,25 +334,34 @@ function FollowUpCard({ followUp, theme, t }: {
 
 /** Chaque motif est accompagné de la valeur qui l'a déclenché — sinon l'admin
  *  doit croire l'application sur parole. */
-function ReasonLine({ reason, metrics, theme, t }: {
-  reason: FollowUpReason; metrics: FollowUpMetrics; theme: Theme; t: TFunction
+function ReasonLine({ reason, metrics, bareme, theme, t }: {
+  reason: FollowUpReason; metrics: FollowUpMetrics; bareme: 10 | 20; theme: Theme; t: TFunction
 }) {
+  // Les métriques de signalement arrivent sur 20, comme le reste. Le motif est
+  // une PREUVE montrée à l'admin : elle doit être libellée dans le barème de
+  // l'élève, seuil compris — « sous 10/20 » se dit « sous 5/10 » en primaire.
+  const shown = (value: number | null | undefined) => toDisplayScale(value, bareme) ?? '—'
+
   const evidence = (() => {
     switch (reason) {
       case 'low_average':
-        return t('admin.evidenceLowAverage', { average: metrics.average ?? '—' })
+        return t('admin.evidenceLowAverage', {
+          average: shown(metrics.average),
+          bareme,
+          threshold: bareme === 10 ? 5 : 10,
+        })
       case 'declining':
         return t('admin.evidenceDeclining', {
-          s1: metrics.semesterS1 ?? '—', s2: metrics.semesterS2 ?? '—', decline: metrics.decline ?? '—',
+          s1: shown(metrics.semesterS1), s2: shown(metrics.semesterS2), decline: shown(metrics.decline),
         })
       case 'declining_controls':
         return t('admin.evidenceControlDeclining', {
           subject: metrics.controlSubject ?? '—',
           fromLabel: metrics.controlFromLabel ?? '—',
           toLabel: metrics.controlToLabel ?? '—',
-          from: metrics.controlFrom ?? '—',
-          to: metrics.controlTo ?? '—',
-          decline: metrics.controlDecline ?? '—',
+          from: shown(metrics.controlFrom),
+          to: shown(metrics.controlTo),
+          decline: shown(metrics.controlDecline),
         })
       case 'absenteeism':
         return t('admin.evidenceAbsenteeism', {

@@ -14,6 +14,7 @@ import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 import type { AdminDashboardNav } from '../../navigation/types'
 import { currentAcademicPeriod, localISODate } from '../../utils/academicPeriod'
+import { displayBareme, toDisplayScale } from '../../utils/gradeScale'
 
 type CollectionName = 'eleves' | 'notes' | 'absences' | 'devoirs'
 
@@ -63,7 +64,10 @@ interface ClasseStat {
   niveau: string
   eleveCount: number
   presenceRate: number
+  /** Moyenne de classe normalisée sur 20 — comparable d'un cycle à l'autre. */
   avgNote: number | null
+  /** Échelle d'AFFICHAGE de `avgNote` : primaire /10, collège /20. */
+  bareme: 10 | 20
   successRate: number | null
   notesCount: number
   absentsToday: number
@@ -261,6 +265,14 @@ function buildClassStats(cache: SnapshotCache): ClasseStat[] {
       eleveCount: students.length,
       presenceRate: clamp(presenceRate),
       avgNote,
+      // `avgNote` reste sur 20 pour que le score de santé et le classement des
+      // classes comparent la même grandeur d'un cycle à l'autre ; `bareme` dit
+      // dans quelle échelle l'AFFICHER — une classe de primaire se lit /10.
+      bareme: displayBareme({
+        cycle: classNotes.find(note => note.cycle)?.cycle,
+        classe: name,
+        niveau,
+      }),
       successRate,
       notesCount: noteValues.length,
       absentsToday,
@@ -490,7 +502,7 @@ function ClassCard({ item, nav, theme, t }: { item: ClasseStat; nav: AdminDashbo
           <RingGauge value={item.presenceRate} color={healthColor} trackColor={theme.surfaceAlt} textColor={theme.text} label={t('admin.attendanceRate')} />
         </Pressable>
         <View style={styles.metricColumn}>
-          <MetricRow icon={<TrendingUp size={15} color={theme.primary} />} label={t('admin.avgGrade')} value={item.avgNote == null ? '—' : `${item.avgNote}/20`} theme={theme} onPress={goNotes} />
+          <MetricRow icon={<TrendingUp size={15} color={theme.primary} />} label={t('admin.avgGrade')} value={item.avgNote == null ? '—' : `${toDisplayScale(item.avgNote, item.bareme)}/${item.bareme}`} theme={theme} onPress={goNotes} />
           <MetricRow icon={<CheckCircle2 size={15} color={theme.info} />} label={t('admin.successRate')} value={item.successRate == null ? '—' : `${item.successRate}%`} theme={theme} onPress={goNotes} />
           <MetricRow icon={<BookOpen size={15} color={theme.warning} />} label={t('admin.homeworkShort')} value={item.activeHomework} theme={theme} onPress={goDevoirs} />
         </View>
