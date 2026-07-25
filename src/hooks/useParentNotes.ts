@@ -6,7 +6,9 @@ import {
   type ClassStatsDoc,
   type CompetenceValue,
 } from '../services/notesService'
+import { getCoefficients, makeCoefOf, type CoefOf } from '../services/coefficientsService'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
+import { noteOn20, resolveBareme, weightedAverage } from '../utils/gradeScale'
 
 export type ParentNotesScope = 'semester' | 'academicYear'
 
@@ -78,12 +80,24 @@ export function useParentNotes(
   eleveId: string | undefined,
   classe: string | undefined,
   scope: ParentNotesScope = 'semester',
+  niveau?: string,
 ) {
   const period = currentAcademicPeriod()
   const [notes, setNotes] = useState<NoteDoc[]>([])
   const [classStats, setClassStats] = useState<ClassStatsDoc | null>(null)
+  const [coefOf, setCoefOf] = useState<CoefOf | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Coefficients ministériels — mêmes valeurs que l'administration.
+  // `setState(fn)` interpréterait une fonction comme un updater : on l'emballe.
+  useEffect(() => {
+    let cancelled = false
+    getCoefficients().then(doc => {
+      if (!cancelled) setCoefOf(() => makeCoefOf(doc))
+    })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (!eleveId) { setNotes([]); setLoading(false); return }
@@ -128,12 +142,22 @@ export function useParentNotes(
     const prevNotes = prevSemestre ? notes.filter(n => n.semestre === prevSemestre && typeof n.note === 'number') : []
     if (currentNotes.length === 0) return null
 
+    // Barème d'AFFICHAGE (primaire /10, collège /20). Les agrégats de classe
+    // sont déjà exprimés dans `classStats.bareme` : on s'y aligne pour que la
+    // comparaison élève ↔ classe porte sur la même échelle.
+    const bareme: 10 | 20 = classStats?.bareme
+      || resolveBareme(currentNotes[0], classe)
+    const toDisplay = (on20: number) => on20 * (bareme / 20)
+
+    // Les notes sont agrégées SUR 20 quel que soit leur barème d'origine : une
+    // matière peut mélanger des saisies /10 et /20, et les moyenner brutes
+    // donnait un résultat sans signification.
     const bySubject = new Map<string, number[]>()
     const ctrlBySubject = new Map<string, number[]>()
     currentNotes.forEach(n => {
-      const list = bySubject.get(n.matiere) || []
-      list.push(n.note as number)
-      bySubject.set(n.matiere, list)
+      const value = noteOn20(n.note, n, classe)
+      if (value == null) return
+      bySubject.set(n.matiere, [...(bySubject.get(n.matiere) || []), value])
       if (Array.isArray(n.controles) && n.controles.length > 0) {
         // ControlNote peut être un nombre brut ou un objet { note, … }
         const vals = n.controles
@@ -142,12 +166,13 @@ export function useParentNotes(
         ctrlBySubject.set(n.matiere, [...(ctrlBySubject.get(n.matiere) || []), ...vals])
       }
     })
+    if (bySubject.size === 0) return null
 
     const prevBySubject = new Map<string, number[]>()
     prevNotes.forEach(n => {
-      const list = prevBySubject.get(n.matiere) || []
-      list.push(n.note as number)
-      prevBySubject.set(n.matiere, list)
+      const value = noteOn20(n.note, n, classe)
+      if (value == null) return
+      prevBySubject.set(n.matiere, [...(prevBySubject.get(n.matiere) || []), value])
     })
 
     // Agrégat serveur (mêmes formules round1 que l'ancien calcul local —
@@ -157,41 +182,61 @@ export function useParentNotes(
     )
     const classStudentAvgs: number[] = classStats ? classStats.studentAvgs : []
 
+    // Moyennes par matière, sur 20, avant conversion pour l'affichage.
+    const avgOn20BySubject = new Map<string, number>()
     const subjects: SubjectGradeReal[] = [...bySubject.entries()].map(([subj, vals]) => {
-      const avg = round1(vals.reduce((s, v) => s + v, 0) / vals.length)
+      const avgOn20 = vals.reduce((s, v) => s + v, 0) / vals.length
+      avgOn20BySubject.set(subj, avgOn20)
+      const avg = round1(toDisplay(avgOn20))
       const classAvg = classAvgBySubject.get(subj) ?? avg
       const prevVals = prevBySubject.get(subj)
       let trend: 'up' | 'down' | 'flat' = 'flat'
       if (prevVals && prevVals.length > 0) {
-        const prevAvg = prevVals.reduce((s, v) => s + v, 0) / prevVals.length
+        const prevAvg = toDisplay(prevVals.reduce((s, v) => s + v, 0) / prevVals.length)
         if (avg - prevAvg > 0.5) trend = 'up'
         else if (prevAvg - avg > 0.5) trend = 'down'
       }
       return { subject: subj, average: avg, classAvg, trend, controles: ctrlBySubject.get(subj) || [] }
     }).sort((a, b) => a.subject.localeCompare(b.subject, 'fr'))
 
-    const generalAvg = round1(subjects.reduce((s, sub) => s + sub.average, 0) / subjects.length)
+    // Moyenne générale PONDÉRÉE par les coefficients ministériels, comme le
+    // fait l'administration (functions/schoolStats.js). La moyenne simple qui
+    // était calculée ici donnait un chiffre différent de celui de la direction
+    // pour le même élève. Tant que les coefficients ne sont pas chargés, le
+    // repli à 1 partout reproduit exactement l'ancien résultat.
+    const weighted = weightedAverage(
+      [...avgOn20BySubject.entries()].map(([subj, value]) => ({
+        value,
+        coef: coefOf ? coefOf(subj, niveau) : 1,
+      })),
+    )
+    const generalAvgOn20 = weighted ?? 0
+    const generalAvg = round1(toDisplay(generalAvgOn20))
 
+    // Le rang se compare à `classStats.studentAvgs`, que le serveur calcule
+    // SANS pondération : on le confronte donc à la moyenne simple de l'élève,
+    // pas à sa moyenne pondérée — sinon on classerait deux grandeurs
+    // différentes.
     let rank = '—'
     if (classStudentAvgs.length > 0) {
+      const simpleOn20 = [...avgOn20BySubject.values()]
+        .reduce((s, v) => s + v, 0) / avgOn20BySubject.size
+      const simpleAvg = round1(toDisplay(simpleOn20))
       const sorted = [...classStudentAvgs].sort((a, b) => b - a)
-      const pos = sorted.findIndex(v => v <= generalAvg) + 1
+      const pos = sorted.findIndex(v => v <= simpleAvg) + 1
       rank = `${pos || sorted.length} / ${sorted.length}`
     }
-
-    // Barème : primaire (…AEP) noté /10, le reste /20. Déduit de la classe.
-    const bareme: 10 | 20 = classStats?.bareme || (/aep/i.test(classe || '') ? 10 : 20)
 
     return {
       semestre: scope === 'academicYear' ? `Année ${period.academicYear}` : latestSemestre,
       hasClassComparison: scope === 'semester' && classStats != null,
       generalAvg,
       rank,
-      honor: computeHonor(generalAvg, bareme),
+      honor: computeHonor(generalAvgOn20, 20),
       subjects,
       bareme,
     }
-  }, [notes, classStats, latestSemestre, prevSemestre, classe, period.academicYear, scope])
+  }, [notes, classStats, coefOf, niveau, latestSemestre, prevSemestre, classe, period.academicYear, scope])
 
   const competenceReport: ChildCompetenceReportReal | null = useMemo(() => {
     const competenceNotes = notes.filter(n => n.competence)

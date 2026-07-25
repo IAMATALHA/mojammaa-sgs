@@ -15,11 +15,11 @@
  */
 
 import {
-  addDoc, arrayUnion, collection, deleteDoc, doc, onSnapshot, query,
+  addDoc, arrayUnion, collection, deleteDoc, doc, query,
   Timestamp, updateDoc, where, type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
-import { toDocs } from './firestore'
+import { subscribeChunked } from './chunkedQuery'
 import type { Attachment } from './StorageService'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
 
@@ -53,31 +53,32 @@ export async function createRessource(
   return ref.id
 }
 
-/** Souscrit aux ressources d'une ou plusieurs classes (max 10 — limite `in`). */
+/**
+ * Souscrit aux ressources d'une ou plusieurs classes.
+ * Le nombre de classes n'est pas borné (un prof peut en avoir plus de 10).
+ */
 export function subscribeRessourcesForClasses(
   classes: string[],
   onChange: (list: RessourceDoc[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  if (classes.length === 0) {
-    onChange([])
-    return () => {}
-  }
   // Année scolaire uniquement — un support de cours doit rester visible toute
   // l'année, pas seulement le mois de sa publication.
   const period = currentAcademicPeriod()
-  const q = query(
-    collection(db, COL),
-    where('classeId', 'in', classes.slice(0, 10)),
-    where('academicYear', '==', period.academicYear),
-  )
-  return onSnapshot(
-    q,
-    snap => onChange(
-      toDocs<RessourceDoc>(snap)
-        .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)),
+  return subscribeChunked<RessourceDoc>(
+    classes,
+    chunk => query(
+      collection(db, COL),
+      where('classeId', 'in', chunk),
+      where('academicYear', '==', period.academicYear),
     ),
-    err => { onError?.(err) },
+    rows => onChange(
+      // Tri après fusion des chunks : chaque listener ne voit que ses classes.
+      [...rows].sort(
+        (a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0),
+      ),
+    ),
+    onError,
   )
 }
 

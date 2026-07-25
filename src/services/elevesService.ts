@@ -10,7 +10,8 @@ import {
   collection, query, where, getDocs, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
-import { toDoc, toDocs } from './firestore'
+import { toDocs } from './firestore'
+import { getDocsChunked, subscribeChunked } from './chunkedQuery'
 
 export interface EleveDoc {
   id?:           string   // id du document Firestore (fallback de clé quand codeMassar manque)
@@ -42,8 +43,7 @@ export function isActiveEleve(
 
 /**
  * Liste les élèves filtrés par classes (optionnel).
- *
- * Firestore limite `in` à 10 valeurs — au-delà on chunke.
+ * Le nombre de classes n'est pas borné — cf. `chunkedQuery`.
  */
 export async function listEleves(filter?: { classes?: string[] }): Promise<EleveDoc[]> {
   if (!filter?.classes || filter.classes.length === 0) {
@@ -51,50 +51,41 @@ export async function listEleves(filter?: { classes?: string[] }): Promise<Eleve
     return toDocs<EleveDoc>(snap).filter(isActiveEleve)
   }
 
-  const chunks: string[][] = []
-  for (let i = 0; i < filter.classes.length; i += 10) {
-    chunks.push(filter.classes.slice(i, i + 10))
-  }
+  const rows = await getDocsChunked<EleveDoc>(
+    filter.classes,
+    chunk => query(collection(db, COL), where('classe', 'in', chunk)),
+  )
 
-  const results: EleveDoc[] = []
-  const seen   = new Set<string>()
-  for (const chunk of chunks) {
-    const q = query(collection(db, COL), where('classe', 'in', chunk))
-    const snap = await getDocs(q)
-    snap.docs.forEach(d => {
-      const data = toDoc<EleveDoc>(d)
-      if (!isActiveEleve(data)) return
-      const key = data.codeMassar || d.id
-      if (!seen.has(key)) {
-        seen.add(key)
-        results.push(data)
-      }
-    })
-  }
-  return results
+  // Dédup métier par codeMassar (un élève inscrit dans deux classes du filtre
+  // ne doit compter qu'une fois) — plus stricte que la dédup par id de doc.
+  const seen = new Set<string>()
+  return rows.filter(eleve => {
+    if (!isActiveEleve(eleve)) return false
+    const key = eleve.codeMassar || eleve.id
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 /**
  * Souscrit en temps réel aux élèves d'un set de classes.
- * Retourne la fonction d'unsubscribe.
+ *
+ * Le nombre de classes n'est PAS borné : la version précédente ne gardait que
+ * les 10 premières, si bien qu'un professeur enseignant sa matière dans plus de
+ * 10 classes (courant au collège) perdait silencieusement les élèves des
+ * classes suivantes — effectifs, suivi de devoirs et statistiques compris.
  */
 export function subscribeEleves(
   classes: string[],
   onChange: (eleves: EleveDoc[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  if (classes.length === 0) {
-    onChange([])
-    return () => {}
-  }
-  // Firestore `in` limit = 10 — on prend juste les 10 premières classes
-  // (un prof n'en a quasiment jamais plus).
-  const safeClasses = classes.slice(0, 10)
-  const q = query(collection(db, COL), where('classe', 'in', safeClasses))
-  return onSnapshot(
-    q,
-    snap => onChange(toDocs<EleveDoc>(snap).filter(isActiveEleve)),
-    err  => { onError?.(err) },
+  return subscribeChunked<EleveDoc>(
+    classes,
+    chunk => query(collection(db, COL), where('classe', 'in', chunk)),
+    rows => onChange(rows.filter(isActiveEleve)),
+    onError,
   )
 }
 

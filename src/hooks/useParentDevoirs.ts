@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, query, where, onSnapshot, type Unsubscribe } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import type { Attachment } from '../services/StorageService'
-import { currentAcademicPeriod } from '../utils/academicPeriod'
+import { currentAcademicPeriod, localISODate } from '../utils/academicPeriod'
 import type { EleveDoc } from '../services/elevesService'
 import { useAuth } from '../contexts/AuthContext'
 import {
@@ -54,7 +54,7 @@ export function useParentDevoirs(eleves: EleveDoc[]) {
     if (classes.length === 0) { setDevoirs([]); setLoading(false); return }
     setError(null)
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = localISODate()
     const unsubs: Unsubscribe[] = []
 
     // One bucket per query chunk, each rebuilt from scratch on every snapshot so

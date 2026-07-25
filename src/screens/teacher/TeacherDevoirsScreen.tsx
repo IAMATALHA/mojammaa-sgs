@@ -33,7 +33,7 @@ import { db } from '../../config/firebase';
 import { uploadAttachment, type Attachment } from '../../services/StorageService';
 import { broadcastToClasses } from '../../services/messagesService';
 import type { UserProfile } from '../../types';
-import { academicPeriodForDate } from '../../utils/academicPeriod'
+import { academicPeriodForDate, localISODate } from '../../utils/academicPeriod'
 
 interface Devoir {
   id:           string
@@ -197,7 +197,7 @@ function generateDateChips(count: number): { iso: string; label: string; sub: st
   for (let i = 1; i <= count; i++) {
     const d = new Date(now)
     d.setDate(d.getDate() + i)
-    const iso = d.toISOString().split('T')[0]
+    const iso = localISODate(d)
     chips.push({
       iso,
       label: `${dayNames[d.getDay()]} ${d.getDate()}`,

@@ -42,7 +42,9 @@ export default function ParentNotesScreen() {
     [parent.eleves, selectedChildId],
   )
 
-  const { loading, error, report, competenceReport } = useParentNotes(selectedChildId, selectedEleve?.classe, scope)
+  const { loading, error, report, competenceReport } = useParentNotes(
+    selectedChildId, selectedEleve?.classe, scope, selectedEleve?.niveau,
+  )
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.bg }]}>

@@ -39,6 +39,11 @@ const {
   rebuildGuardianAccess,
 } = require('./guardianAccess')
 const {
+  buildParentsDirectory,
+  approximateSize,
+  SIZE_WARNING_BYTES,
+} = require('./parentsDirectory')
+const {
   PrayerClassSessionError,
   startPrayerClassSession: startPrayerClassSessionTransaction,
 } = require('./prayerClassSessions')
@@ -402,6 +407,16 @@ exports.onTransportTripWritten = onDocumentWritten('transportTrips/{tripId}', as
 exports.onEleveGuardianAccessWritten = onDocumentWritten('eleves/{eleveId}', async (event) => {
   const before = event.data?.before?.exists ? event.data.before.data() : null
   const after = event.data?.after?.exists ? event.data.after.data() : null
+
+  // L'annuaire des parents affiche « Prénom Nom · Classe » pour chaque enfant :
+  // une inscription, un changement de classe, une archive ou un rattachement à
+  // un autre parent le rendent obsolète. Marqué dirty, jamais recalculé ici —
+  // un import de rentrée déclencherait sinon 600 scans complets.
+  const pickChild = (e) => (e ? JSON.stringify([e.parentUid, e.nom, e.prenom, e.classe, e.active]) : '')
+  if (pickChild(before) !== pickChild(after)) {
+    await markParentsDirectoryDirty()
+  }
+
   const uids = affectedGuardianUids(before, after)
   if (uids.length === 0) return
 
@@ -664,6 +679,77 @@ async function refreshDirectory() {
   await db.collection('directory').doc('staff').set({ teachers, admins, updatedAt: new Date() })
 }
 
+// ── Annuaire des parents (directoryAdmin/parents) ──────────────────────────
+//
+// Même intention que directory/staff, mais réservé aux admins : ce document
+// porte les e-mails des parents et les noms + classes de leurs enfants.
+// Il évite au sélecteur de destinataires de lire `users` ET `eleves` en entier
+// à chaque ouverture (~1 300 documents à 600 élèves).
+
+async function refreshParentsDirectory() {
+  const [usersSnap, elevesSnap] = await Promise.all([
+    db.collection('users').get(),
+    db.collection('eleves').get(),
+  ])
+  const payload = buildParentsDirectory(
+    usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    elevesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+  )
+
+  const size = approximateSize(payload)
+  if (size > SIZE_WARNING_BYTES) {
+    // Ne bloque pas l'écriture : on veut la trace AVANT d'atteindre le plafond
+    // d'1 Mio, moment où le sélecteur retomberait sur son chemin de repli lent.
+    logger.warn('directoryAdmin/parents approche la limite de taille Firestore', {
+      bytes: size, parents: payload.parents.length,
+    })
+  }
+
+  await db.collection('directoryAdmin').doc('parents').set({
+    ...payload,
+    updatedAt: new Date(),
+  })
+  return payload
+}
+
+// Coalescing (même motif que classStatsDirty) : un import de 600 élèves
+// déclenche 600 fois le trigger `eleves`. Sans ce drapeau, chacun relancerait
+// un scan complet de `users` + `eleves`. Ici il n'en reste qu'un par passage.
+async function markParentsDirectoryDirty() {
+  await db.collection('directoryDirty').doc('parents').set({ at: new Date() })
+}
+
+exports.flushParentsDirectoryDirty = onSchedule(
+  { schedule: 'every 2 minutes', timeZone: 'Africa/Casablanca' },
+  async () => {
+    const ref = db.collection('directoryDirty').doc('parents')
+    const flag = await ref.get()
+    if (!flag.exists) return
+    // Le drapeau est retiré AVANT le recalcul : une écriture survenant pendant
+    // le refresh le repose, et sera donc traitée au passage suivant. L'ordre
+    // inverse perdrait cette écriture.
+    await ref.delete()
+    const payload = await refreshParentsDirectory()
+    logger.info('directoryAdmin/parents refreshed', {
+      parents: payload.parents.length, classes: payload.classes.length,
+    })
+  },
+)
+
+// Amorçage / réparation à la demande (le document n'existe pas encore, ou une
+// reprise de données l'a désynchronisé). Admin uniquement.
+exports.recomputeParentsDirectory = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in required.')
+  const me = await db.collection('users').doc(uid).get()
+  if (!me.exists || me.get('role') !== 'admin') {
+    throw new HttpsError('permission-denied', 'Admin only.')
+  }
+  const payload = await refreshParentsDirectory()
+  logger.info('directoryAdmin/parents refreshed (on-demand)', { by: uid })
+  return { ok: true, parents: payload.parents.length, classes: payload.classes.length }
+})
+
 exports.onUserWritten = onDocumentWritten('users/{uid}', async (event) => {
   const before = event.data?.before?.exists ? event.data.before.data() : null
   const after = event.data?.after?.exists ? event.data.after.data() : null
@@ -685,9 +771,17 @@ exports.onUserWritten = onDocumentWritten('users/{uid}', async (event) => {
   }
 
   // users/{uid} est réécrit à CHAQUE login (expoPushToken) : ne recalculer
-  // que si un champ visible dans l'annuaire a réellement changé.
-  const pick = (u) => (u ? JSON.stringify([u.role, u.nom, u.prenom, u.matiere, u.classes, u.classe]) : '')
-  if (pick(before) === pick(after)) return
+  // que si un champ visible dans l'annuaire a réellement changé. L'e-mail
+  // n'apparaît que dans l'annuaire des parents, d'où les deux empreintes.
+  const pickStaff = (u) => (u ? JSON.stringify([u.role, u.nom, u.prenom, u.matiere, u.classes, u.classe]) : '')
+  const pickParent = (u) => (u ? JSON.stringify([u.role, u.nom, u.prenom, u.email]) : '')
+
+  if (pickParent(before) !== pickParent(after)
+    && (before?.role === 'parent' || after?.role === 'parent')) {
+    await markParentsDirectoryDirty()
+  }
+
+  if (pickStaff(before) === pickStaff(after)) return
   await refreshDirectory()
   logger.info('directory/staff refreshed')
 })

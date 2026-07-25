@@ -34,3 +34,40 @@ export async function getStaffDirectory(): Promise<StaffDirectory | null> {
     admins:   Array.isArray(data.admins)   ? data.admins as StaffAdmin[]     : [],
   }
 }
+
+export interface DirectoryParent {
+  uid:      string
+  nom:      string
+  prenom:   string
+  email:    string
+  children: string[]   // « Prénom Nom · Classe », déjà trié
+}
+
+export interface ParentsDirectory {
+  parents: DirectoryParent[]
+  classes: string[]
+}
+
+/**
+ * Annuaire des parents pré-agrégé (`directoryAdmin/parents`), maintenu par la
+ * CF `flushParentsDirectoryDirty`. UNE lecture au lieu des collections `users`
+ * et `eleves` entières.
+ *
+ * Réservé aux admins par les rules : renvoie `null` pour tout autre rôle,
+ * comme lorsque le document n'a pas encore été calculé. L'appelant retombe
+ * alors sur la lecture directe.
+ */
+export async function getParentsDirectory(): Promise<ParentsDirectory | null> {
+  try {
+    const snap = await getDoc(doc(db, 'directoryAdmin', 'parents'))
+    if (!snap.exists()) return null
+    const data = snap.data() as Record<string, unknown>
+    if (!Array.isArray(data.parents)) return null
+    return {
+      parents: data.parents as DirectoryParent[],
+      classes: Array.isArray(data.classes) ? data.classes as string[] : [],
+    }
+  } catch {
+    return null
+  }
+}

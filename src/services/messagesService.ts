@@ -32,6 +32,7 @@ import {
 import { db } from '../config/firebase'
 import { toDoc, toDocs } from './firestore'
 import { isActiveEleve, type EleveDoc } from './elevesService'
+import { getParentsDirectory, getStaffDirectory } from './directoryService'
 import type { UserProfile } from '../types'
 import type { Attachment } from './StorageService'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
@@ -424,12 +425,57 @@ export async function broadcastPersonalized(p: {
   return result
 }
 
-// Get all users for recipient picker
-export async function getRecipientsList(): Promise<{
-  parents: { uid: string; nom: string; prenom: string; email: string; children: string[] }[]
-  teachers: { uid: string; nom: string; prenom: string; email: string; classes: string[] }[]
-  classes: string[]
-}> {
+type ParentRow  = { uid: string; nom: string; prenom: string; email: string; children: string[] }
+type TeacherRow = { uid: string; nom: string; prenom: string; email: string; classes: string[] }
+
+export interface RecipientsList {
+  parents:  ParentRow[]
+  teachers: TeacherRow[]
+  classes:  string[]
+}
+
+/**
+ * Destinataires du sélecteur admin.
+ *
+ * Chemin NOMINAL : deux documents pré-agrégés, maintenus côté serveur —
+ * `directoryAdmin/parents` (CF flushParentsDirectoryDirty) et `directory/staff`
+ * (CF onUserWritten). Deux lectures, contre les collections `users` ET `eleves`
+ * entières auparavant : ~1 300 documents à 600 élèves, plusieurs secondes
+ * d'attente à chaque ouverture du sélecteur pour des données qui ne bougent
+ * qu'aux inscriptions.
+ *
+ * Chemin de REPLI : lecture directe, si l'agrégat n'a pas encore été calculé
+ * (premier déploiement) ou s'il est illisible. Même stratégie que
+ * `AdminDashboardScreen` avec `stats/summary`. Pour l'amorcer sans attendre le
+ * passage planifié, appeler la callable `recomputeParentsDirectory`.
+ */
+export async function getRecipientsList(): Promise<RecipientsList> {
+  const [directory, staff] = await Promise.all([
+    getParentsDirectory(),
+    getStaffDirectory(),
+  ])
+
+  if (directory && staff) {
+    return {
+      parents: directory.parents,
+      teachers: staff.teachers.map(t => ({
+        uid: t.uid,
+        nom: t.nom,
+        prenom: t.prenom,
+        // directory/staff n'expose pas l'e-mail : il est lisible par les
+        // professeurs et les tuteurs, l'y ajouter élargirait sa portée.
+        email: '',
+        classes: t.classes || [],
+      })),
+      classes: directory.classes,
+    }
+  }
+
+  return getRecipientsListDirect()
+}
+
+/** Chemin de repli : reconstruit la liste depuis `users` + `eleves`. */
+async function getRecipientsListDirect(): Promise<RecipientsList> {
   const [usersSnap, elevesSnap] = await Promise.all([
     getDocs(collection(db, 'users')),
     getDocs(collection(db, 'eleves')),
@@ -447,9 +493,10 @@ export async function getRecipientsList(): Promise<{
       childrenByParent.set(data.parentUid, arr)
     }
   })
+  // Trié comme côté serveur (functions/parentsDirectory.js) : les deux chemins
+  // doivent afficher la même liste, sinon le repli se voit à l'écran.
+  childrenByParent.forEach(list => list.sort((a, b) => a.localeCompare(b, 'fr')))
 
-  type ParentRow  = { uid: string; nom: string; prenom: string; email: string; children: string[] }
-  type TeacherRow = { uid: string; nom: string; prenom: string; email: string; classes: string[] }
   const parents: ParentRow[] = []
   const teachers: TeacherRow[] = []
 

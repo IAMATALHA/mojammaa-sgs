@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, query, where, onSnapshot, type Unsubscribe } from 'firebase/firestore'
+import { collection, query, where, type Unsubscribe } from 'firebase/firestore'
 import { useAuth } from '../contexts/AuthContext'
 import { subscribeChildrenOfParent, type EleveDoc } from '../services/elevesService'
 import {
@@ -7,10 +7,11 @@ import {
   type AbsenceDoc,
 } from '../services/absencesService'
 import { subscribeNotesForEleve, type NoteDoc } from '../services/notesService'
-import { toDoc } from '../services/firestore'
+import { subscribeChunked } from '../services/chunkedQuery'
 import { db } from '../config/firebase'
 import type { Child } from '../utils/dashboardTypes'
-import { currentAcademicPeriod } from '../utils/academicPeriod'
+import { currentAcademicPeriod, localISODate } from '../utils/academicPeriod'
+import { noteOn20 } from '../utils/gradeScale'
 import { palette } from '../theme/designTokens'
 import {
   homeworkSubmissionId,
@@ -41,19 +42,6 @@ function hashOf(s: string): number {
 
 function round1(v: number): number { return Math.round(v * 10) / 10 }
 
-function noteBareme(note: NoteDoc, classe?: string): 10 | 20 {
-  if (note.bareme === 10 || note.bareme === 20) return note.bareme
-  if (note.cycle === 'primaire') return 10
-  return /aep/i.test(note.classe || classe || '') ? 10 : 20
-}
-
-function noteOn20(note: NoteDoc, classe?: string): number | null {
-  if (typeof note.note !== 'number') return null
-  const bareme = noteBareme(note, classe)
-  if (note.note < 0 || note.note > bareme) return null
-  return note.note * (20 / bareme)
-}
-
 export function useParentData(): ParentData {
   const period = currentAcademicPeriod()
   const { profile } = useAuth()
@@ -79,6 +67,8 @@ export function useParentData(): ParentData {
   useEffect(() => {
     const ids = eleves.map(e => e.codeMassar)
     if (ids.length === 0) { setAbsences([]); return }
+    // Fenêtre au MOIS : la carte enfant n'affiche qu'un taux récent, et les
+    // présences écrites à chaque séance rendraient l'année entière hors de prix.
     const unsub = subscribeAbsencesForEleves(ids, period, setAbsences)
     return unsub
   }, [eleves.map(e => e.codeMassar).join('|'), period.academicYear, period.monthKey])
@@ -102,34 +92,28 @@ export function useParentData(): ParentData {
   useEffect(() => {
     const classes = [...new Set(eleves.map(e => e.classe).filter(Boolean))]
     if (classes.length === 0) { setDevoirsByClasse(new Map()); return }
-    const today = new Date().toISOString().split('T')[0]
-    const unsubs: Unsubscribe[] = []
+    const today = localISODate()
     const devoirIds = new Map<string, string[]>()
 
-    for (let i = 0; i < classes.length; i += 10) {
-      const chunk = classes.slice(i, i + 10)
-      unsubs.push(onSnapshot(
-        query(
-          collection(db, 'devoirs'),
-          where('classeId', 'in', chunk),
-          where('academicYear', '==', period.academicYear),
-        ),
-        snap => {
-          chunk.forEach(c => devoirIds.set(c, []))
-          snap.docs.forEach(d => {
-            const data = toDoc<{ dateLimite?: string; classeId: string }>(d)
-            const dl = data.dateLimite
-            if (typeof dl === 'string' && dl >= today) {
-              const cls = data.classeId
-              devoirIds.set(cls, [...(devoirIds.get(cls) || []), d.id])
-            }
-          })
-          setDevoirsByClasse(new Map(devoirIds))
-        },
-        () => {},
-      ))
-    }
-    return () => unsubs.forEach(u => u())
+    return subscribeChunked<{ dateLimite?: string; classeId: string }>(
+      classes,
+      chunk => query(
+        collection(db, 'devoirs'),
+        where('classeId', 'in', chunk),
+        where('academicYear', '==', period.academicYear),
+      ),
+      rows => {
+        classes.forEach(c => devoirIds.set(c, []))
+        rows.forEach(data => {
+          const dl = data.dateLimite
+          if (typeof dl === 'string' && dl >= today) {
+            devoirIds.set(data.classeId, [...(devoirIds.get(data.classeId) || []), data.id])
+          }
+        })
+        setDevoirsByClasse(new Map(devoirIds))
+      },
+      () => {},
+    )
   }, [eleves.map(e => e.classe).join('|'), period.academicYear])
 
   useEffect(() => {
@@ -146,7 +130,7 @@ export function useParentData(): ParentData {
     () => eleves.map(e => {
       const childNotes = notesByEleve.get(e.codeMassar) || []
       const notesOn20 = childNotes
-        .map(note => noteOn20(note, e.classe))
+        .map(note => noteOn20(note.note, note, e.classe))
         .filter((note): note is number => note != null)
       const avgGrade = notesOn20.length > 0
         ? round1(notesOn20.reduce((s, n) => s + n, 0) / notesOn20.length)

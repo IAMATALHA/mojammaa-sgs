@@ -150,16 +150,20 @@ export function useTeacherData(): TeacherData {
     return () => clearInterval(id)
   }, [])
 
-  // Presence rate: only recompute on mount or when classes change (not every tick)
+  // Taux de présence : recalculé quand les classes ou l'effectif changent, pas
+  // à chaque tick d'horloge. L'effectif vient de la souscription `eleves`
+  // ci-dessus — le service ne relit donc plus les élèves pour les compter.
   useEffect(() => {
-    if (classes.length === 0) {
+    if (classes.length === 0 || eleves.length === 0) {
       setPresence(100)
       return
     }
-    computeTeacherPresenceRate(classes)
-      .then(setPresence)
-      .catch(() => setPresence(100))
-  }, [classes.join('|')])
+    let cancelled = false
+    computeTeacherPresenceRate(classes, eleves.length)
+      .then(rate => { if (!cancelled) setPresence(rate) })
+      .catch(() => { if (!cancelled) setPresence(100) })
+    return () => { cancelled = true }
+  }, [classes.join('|'), eleves.length])
 
   // Count pending devoirs (dateLimite >= today)
   useEffect(() => {

@@ -22,6 +22,7 @@ import {
 import i18n from '../i18n'
 import { db } from '../config/firebase'
 import { docData, toDocs } from './firestore'
+import { subscribeChunked } from './chunkedQuery'
 import { sendMessage } from './messagesService'
 import type { EleveDoc } from './elevesService'
 import type { BehaviorKind } from '../utils/behaviorTaxonomy'
@@ -121,22 +122,18 @@ export async function recordComportement(input: RecordComportementInput): Promis
 
 /**
  * Souscrit aux comportements d'une liste d'élèves (les enfants d'un parent).
- * Même contrainte que subscribeAbsencesForEleves : `in` limité à 10.
+ * Le nombre d'élèves n'est pas borné — cf. `chunkedQuery`.
  */
 export function subscribeComportementsForEleves(
   eleveIds: string[],
   onChange: (list: ComportementDoc[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  if (eleveIds.length === 0) {
-    onChange([])
-    return () => {}
-  }
-  const q = query(collection(db, COL), where('eleveId', 'in', eleveIds.slice(0, 10)))
-  return onSnapshot(
-    q,
-    snap => onChange(toDocs<ComportementDoc>(snap)),
-    err => { onError?.(err) },
+  return subscribeChunked<ComportementDoc>(
+    eleveIds,
+    chunk => query(collection(db, COL), where('eleveId', 'in', chunk)),
+    onChange,
+    onError,
   )
 }
 

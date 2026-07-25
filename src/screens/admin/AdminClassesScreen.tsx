@@ -13,7 +13,7 @@ import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 import type { AdminDashboardNav } from '../../navigation/types'
-import { currentAcademicPeriod } from '../../utils/academicPeriod'
+import { currentAcademicPeriod, localISODate } from '../../utils/academicPeriod'
 
 type CollectionName = 'eleves' | 'notes' | 'absences' | 'devoirs'
 
@@ -99,7 +99,7 @@ function asNumber(value: unknown): number | null {
 }
 
 function todayISO(): string {
-  return new Date().toISOString().split('T')[0]
+  return localISODate()
 }
 
 function monthStartISO(): string {
@@ -112,7 +112,7 @@ function lastDays(count: number): { iso: string; label: string }[] {
     const d = new Date()
     d.setDate(d.getDate() - (count - 1 - index))
     return {
-      iso: d.toISOString().split('T')[0],
+      iso: localISODate(d),
       label: String(d.getDate()).padStart(2, '0'),
     }
   })

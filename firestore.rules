@@ -801,6 +801,23 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── directoryAdmin (annuaire des parents, pré-agrégé) ────
+    // Collection SÉPARÉE de directory/ et non un simple document dedans :
+    // Firestore autorise dès qu'UNE règle correspond, donc `directory/{docId}`
+    // ci-dessus rendrait ce contenu lisible par les professeurs et les tuteurs.
+    // Or il associe e-mails de parents et noms + classes de leurs enfants —
+    // périmètre strictement administratif. Écriture Admin SDK uniquement.
+    match /directoryAdmin/{docId} {
+      allow read:  if isAdmin();
+      allow write: if false;
+    }
+
+    // Drapeau de recalcul de l'annuaire : écrit et lu par les seules Cloud
+    // Functions (Admin SDK). Aucun client n'y touche.
+    match /directoryDirty/{docId} {
+      allow read, write: if false;
+    }
+
     // ── Smart Pickup : créneau opérationnel ─────────────────
     match /pickupSessions/{serviceDate} {
       allow read: if isSignedIn();

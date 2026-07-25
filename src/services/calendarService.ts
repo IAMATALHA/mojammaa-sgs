@@ -4,6 +4,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { docData, toDocs } from './firestore'
+import { localISODate } from '../utils/academicPeriod'
 
 export type JourType = 'normal' | 'vacances' | 'evenement' | 'examen'
 
@@ -23,7 +24,7 @@ export async function getJourScolaire(date: string): Promise<JourScolaire | null
 }
 
 export async function getTodayJour(): Promise<JourScolaire | null> {
-  const today = new Date().toISOString().split('T')[0]
+  const today = localISODate()
   return getJourScolaire(today)
 }
 
@@ -31,7 +32,7 @@ export function subscribeTodayJour(
   onChange: (jour: JourScolaire | null) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  const today = new Date().toISOString().split('T')[0]
+  const today = localISODate()
   return onSnapshot(
     doc(db, COL, today),
     snap => onChange(docData<JourScolaire>(snap)),

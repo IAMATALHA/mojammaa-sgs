@@ -17,6 +17,7 @@ import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { palette, chartColors } from '../../theme/designTokens'
 import { functions } from '../../config/firebase'
 import type { AdminDashboardNav } from '../../navigation/types'
+import { localISODate } from '../../utils/academicPeriod'
 import type {
   AppliedScope, StatsCycle, StatsFilterKey, StatsPeriod, StatsScope,
 } from '../../types/stats'
@@ -193,7 +194,7 @@ function asNumber(value: unknown): number | null {
 }
 
 function todayISO(): string {
-  return new Date().toISOString().split('T')[0]
+  return localISODate()
 }
 
 function monthStartISO(): string {
@@ -206,7 +207,7 @@ function lastDays(count: number): { iso: string; label: string }[] {
     const d = new Date()
     d.setDate(d.getDate() - (count - 1 - index))
     return {
-      iso: d.toISOString().split('T')[0],
+      iso: localISODate(d),
       label: String(d.getDate()).padStart(2, '0'),
     }
   })

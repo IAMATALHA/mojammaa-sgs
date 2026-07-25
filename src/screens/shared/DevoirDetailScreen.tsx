@@ -20,6 +20,7 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { dirStyle } from '../../utils/arabicText'
+import { localISODate } from '../../utils/academicPeriod'
 import type { DevoirDetailParams } from '../../navigation/types'
 import HomeworkParentSubmission from '../../components/homework/HomeworkParentSubmission'
 import HomeworkTeacherTracking from '../../components/homework/HomeworkTeacherTracking'
@@ -47,7 +48,7 @@ export default function DevoirDetailScreen() {
   const attachments = devoir.attachments || []
   const images = attachments.filter(a => a.mime?.startsWith('image/'))
   const files = attachments.filter(a => !a.mime?.startsWith('image/'))
-  const isPast = !!devoir.dateLimite && devoir.dateLimite < new Date().toISOString().slice(0, 10)
+  const isPast = !!devoir.dateLimite && devoir.dateLimite < localISODate()
 
   const open = (url: string) => { Linking.openURL(url).catch(() => { /* URL invalide */ }) }
 

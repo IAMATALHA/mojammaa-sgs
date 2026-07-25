@@ -285,6 +285,7 @@ const ar = {
     allPresent: 'جميع تلاميذ {{classe}} حاضرون في {{seance}}.',
     absentsRecorded: '{{count}} غائب مسجل في {{classe}} · {{seance}}.',
     parentsNotified: '{{count}} ولي أمر تم إخطاره.',
+    absentsWithoutParent: '{{count}} غائب بدون حساب ولي أمر مرتبط — لم يتم إخطاره.',
     absentTapCancel: '🚫 غائب — اضغط للإلغاء',
     presentLabel: '✓ حاضر',
     newMessage: 'رسالة جديدة',

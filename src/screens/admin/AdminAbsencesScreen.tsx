@@ -12,6 +12,7 @@ import { db } from '../../config/firebase'
 import { toDoc } from '../../services/firestore'
 import type { AbsenceDoc } from '../../services/absencesService'
 import type { QueryDocumentSnapshot } from 'firebase/firestore'
+import { localISODate } from '../../utils/academicPeriod'
 
 interface AbsenceRow {
   id: string
@@ -35,7 +36,7 @@ interface RecidivisteRow {
 }
 
 function todayISO(): string {
-  return new Date().toISOString().split('T')[0]
+  return localISODate()
 }
 
 function monthStart(): string {

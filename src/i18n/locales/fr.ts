@@ -285,6 +285,7 @@ const fr = {
     allPresent: 'Tous les élèves de {{classe}} sont présents pour {{seance}}.',
     absentsRecorded: '{{count}} absent(s) enregistré(s) pour {{classe}} · {{seance}}.',
     parentsNotified: '{{count}} parent(s) notifié(s).',
+    absentsWithoutParent: '{{count}} absent(s) sans compte parent lié — non notifié(s).',
     absentTapCancel: '🚫 ABSENT — tap pour annuler',
     presentLabel: '✓ Présent',
     newMessage: 'Nouveau message',

@@ -52,7 +52,9 @@ export default function ParentPerformanceScreen() {
     [parent.eleves, selectedChildId],
   )
 
-  const { loading, error, report, competenceReport } = useParentNotes(selectedChildId, selectedEleve?.classe, scope)
+  const { loading, error, report, competenceReport } = useParentNotes(
+    selectedChildId, selectedEleve?.classe, scope, selectedEleve?.niveau,
+  )
 
   const childComportements = useMemo(
     () => entries.filter(e => e.eleveId === selectedChildId),

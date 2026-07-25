@@ -76,7 +76,7 @@ export function useTeacherDayCompletion(
         const data = toDoc<{ createdAt?: { toDate?: () => Date }; classeId?: string }>(d)
         const created = data.createdAt?.toDate?.()
         if (!created || !data.classeId) return
-        if (created.toISOString().split('T')[0] === date) posted.add(data.classeId)
+        if (localISODate(created) === date) posted.add(data.classeId)
       })
       setHomeworkPosted(posted)
     } catch {

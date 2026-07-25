@@ -17,6 +17,7 @@ import { db } from '../../config/firebase'
 import { toDoc, toDocs } from '../../services/firestore'
 import type { AbsenceDoc } from '../../services/absencesService'
 import type { AdminStackParamList } from '../../navigation/types'
+import { localISODate } from '../../utils/academicPeriod'
 import {
   buildTodayRollCallSessions,
   rollCallSessionKey,
@@ -26,7 +27,7 @@ import {
 } from '../../utils/rollCalls'
 
 function todayISO(): string {
-  return new Date().toISOString().split('T')[0]
+  return localISODate()
 }
 
 function copyFor(lang: string) {

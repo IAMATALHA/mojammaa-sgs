@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { subscribeChildrenOfParent, type EleveDoc } from '../services/elevesService'
-import { subscribeAbsencesForEleves, type AbsenceDoc } from '../services/absencesService'
+import { subscribeAbsenceHistoryForEleves, type AbsenceDoc } from '../services/absencesService'
 import type { AbsenceEntry } from '../utils/dashboardTypes'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
 
@@ -59,7 +59,7 @@ export function useParentAbsences(): ParentAbsencesData {
       return
     }
     setLoading(true)
-    const unsub = subscribeAbsencesForEleves(
+    const unsub = subscribeAbsenceHistoryForEleves(
       ids,
       period,
       list => {
@@ -73,12 +73,16 @@ export function useParentAbsences(): ParentAbsencesData {
       },
     )
     return unsub
-  }, [eleves.map(e => e.codeMassar).join('|'), period.academicYear, period.monthKey])
+  }, [eleves.map(e => e.codeMassar).join('|'), period.academicYear])
 
+  // Tri décroissant explicite : la souscription couvre désormais toute l'année
+  // scolaire (et non plus le mois courant), et Firestore renvoie les docs dans
+  // l'ordre de l'index (eleveId, puis id) — illisible pour un parent.
   const entries = useMemo(
     () => absences
       .filter(a => a.statut === 'absent')
-      .map(toEntry),
+      .map(toEntry)
+      .sort((a, b) => b.date.localeCompare(a.date)),
     [absences],
   )
 

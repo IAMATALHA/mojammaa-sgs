@@ -29,6 +29,7 @@ import { sendMessage } from '../../services/messagesService'
 import { getSchedule } from '../../services/scheduleService'
 import { getAbsenceRequestsForClassDate, decideAbsenceRequest, type AbsenceRequestDoc } from '../../services/absenceRequestsService'
 import { toDoc } from '../../services/firestore'
+import { getDocsChunked } from '../../services/chunkedQuery'
 import { isActiveEleve, type EleveDoc } from '../../services/elevesService'
 import type { AbsenceDoc } from '../../services/absencesService'
 import { Ionicons } from '@expo/vector-icons'
@@ -71,28 +72,38 @@ interface TeacherInfo {
  * faire ici : un prof n'a pas le droit de lire users/{parent} (rules),
  * et un push client doublerait celui de la CF.
  *
- * Retourne le nombre de parents notifiés.
+ * Retourne le nombre de parents notifiés ET le nombre d'absents sans compte
+ * parent lié : le professeur doit pouvoir constater qu'une partie des familles
+ * n'a PAS été prévenue, au lieu de le déduire d'un compteur plus petit que prévu.
  */
+interface NotifyResult {
+  notified:      number
+  sansParent:    number
+}
+
 async function notifyParentsOfAbsents(
   absents: EleveLite[],
   classe:  string,
   date:    string,
   seance:  string,
   teacher: TeacherInfo,
-): Promise<number> {
-  if (absents.length === 0) return 0
+): Promise<NotifyResult> {
+  if (absents.length === 0) return { notified: 0, sansParent: 0 }
 
   // 1. Lit les eleves docs des absents pour trouver leur parentUid.
+  //    Lecture CHUNKÉE : tronquer la liste (ce que faisait `slice(0, 10)`)
+  //    privait silencieusement de notification les parents des absents au-delà
+  //    du 10e — un cas courant dès qu'une classe entière manque à l'appel.
   const absentIds = absents.map(e => e.id)
-  const elevesSnap = await getDocs(
-    query(collection(db, 'eleves'), where(documentId(), 'in', absentIds.slice(0, 10))),
+  const eleveDocs = await getDocsChunked<EleveDoc>(
+    absentIds,
+    chunk => query(collection(db, 'eleves'), where(documentId(), 'in', chunk)),
   )
   const eleveToParent = new Map<string, { parentUid: string; prenom: string; nom: string }>()
-  elevesSnap.forEach(d => {
-    const data = toDoc<EleveDoc>(d)
+  eleveDocs.forEach(data => {
     if (!isActiveEleve(data)) return
     if (data.parentUid) {
-      eleveToParent.set(d.id, {
+      eleveToParent.set(data.id, {
         parentUid: data.parentUid,
         prenom:    data.prenomLatin || data.prenom || '',
         nom:       data.nomLatin    || data.nom    || '',
@@ -100,13 +111,13 @@ async function notifyParentsOfAbsents(
     }
   })
 
-  if (eleveToParent.size === 0) return 0
+  const sansParent = absents.filter(e => !eleveToParent.has(e.id)).length
+  if (eleveToParent.size === 0) return { notified: 0, sansParent }
 
   const fromNom = `${teacher.prenom} ${teacher.nom}`.trim()
 
   // 2. Pour chaque absent : écrire un message (la CF fait le push)
-  const writes: Promise<any>[] = []
-  let notified = 0
+  const writes: Promise<unknown>[] = []
 
   for (const eleve of absents) {
     const link = eleveToParent.get(eleve.id)
@@ -128,11 +139,17 @@ async function notifyParentsOfAbsents(
       eleveId:  eleve.id,
       classe,
     }))
-    notified++
   }
 
-  await Promise.all(writes)
-  return notified
+  // `allSettled` et non `all` : un seul envoi en échec ne doit pas faire
+  // remonter une exception qui masquerait les envois RÉUSSIS et afficherait
+  // « 0 parent notifié » au professeur. On compte les succès réels.
+  const results = await Promise.allSettled(writes)
+  const notified = results.filter(r => r.status === 'fulfilled').length
+  const failed = results.length - notified
+  if (failed > 0) console.warn(`[absences] ${failed} message(s) parent non écrit(s)`)
+
+  return { notified, sansParent: sansParent + failed }
 }
 
 export default function TeacherAttendanceScreen() {
@@ -296,26 +313,38 @@ export default function TeacherAttendanceScreen() {
 
       // ── Notifier les parents des absents ──────────────────────────────
       let notifSent = 0
+      let notifSkipped = 0
       if (absent.size > 0 && profile) {
         try {
-          notifSent = await notifyParentsOfAbsents(
+          const res = await notifyParentsOfAbsents(
             eleves.filter(e => absent.has(e.id)),
             classe, date, seance,
             { uid: profile.uid, nom: profile.nom, prenom: profile.prenom },
           )
+          notifSent = res.notified
+          notifSkipped = res.sansParent
         } catch (e) {
           // Erreur de notif non-bloquante : l'appel est déjà sauvegardé
           console.warn('Notification failed:', e)
+          notifSkipped = absent.size
         }
       }
 
       const count = absent.size
+      // Le professeur doit voir les deux chiffres : combien de familles ont été
+      // prévenues, et combien ne l'ont pas été (absence de compte parent lié ou
+      // échec d'écriture). Un silence sur le second laissait croire à une
+      // notification complète.
+      const notifLines = [
+        notifSent > 0 ? t('teacher.parentsNotified', { count: notifSent }) : '',
+        notifSkipped > 0 ? t('teacher.absentsWithoutParent', { count: notifSkipped }) : '',
+      ].filter(Boolean)
       Alert.alert(
         t('teacher.attendanceSaved'),
         count === 0
           ? t('teacher.allPresent', { classe, seance })
           : t('teacher.absentsRecorded', { count, classe, seance }) +
-            (notifSent > 0 ? `\n\n${t('teacher.parentsNotified', { count: notifSent })}` : ''),
+            (notifLines.length > 0 ? `\n\n${notifLines.join('\n')}` : ''),
         [{ text: 'OK', onPress: () => navigation.goBack() }],
       )
     } catch (e: any) {

@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { toDoc } from './firestore'
+import { localISODate } from '../utils/academicPeriod'
 
 export interface EventDoc {
   id:        string
@@ -29,7 +30,7 @@ export interface EventDoc {
 const COL = 'evenements'
 
 function todayISO(): string {
-  return new Date().toISOString().split('T')[0]
+  return localISODate()
 }
 
 /**
