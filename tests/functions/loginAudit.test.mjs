@@ -56,24 +56,46 @@ const android = describeDevice({
 assert.equal(android.label, 'samsung SM-A546B — android 14')
 assert.equal(android.appVersion, '1.0.15')
 
-// iOS n'expose pas le modèle : on retombe sur l'idiome, sans inventer.
-const ios = describeDevice({ platform: 'ios', osVersion: '18.2', idiom: 'phone' })
-assert.equal(ios.label, 'phone — ios 18.2')
+// iOS : la marque est connue avec certitude (tout iOS est un Apple), mais
+// Apple n'expose pas le modèle → on retombe sur l'idiome, sans inventer.
+const ios = describeDevice({ platform: 'ios', osVersion: '18.2', brand: 'Apple', idiom: 'phone' })
+assert.equal(ios.label, 'Apple phone — ios 18.2')
+assert.equal(ios.brand, 'Apple')
 assert.equal(ios.model, null)
+
+// Sous-marque Android : `brand` est la marque commerciale, `manufacturer` le
+// constructeur. Les confondre ferait disparaître l'une des deux.
+const redmi = describeDevice({
+  platform: 'android', osVersion: '13', brand: 'Redmi', manufacturer: 'Xiaomi', model: '22120RN86G',
+})
+assert.equal(redmi.brand, 'Redmi')
+assert.equal(redmi.manufacturer, 'Xiaomi')
+assert.equal(redmi.label, 'Redmi 22120RN86G — android 13')
+
+// Le modèle prime sur l'idiome quand les deux sont là : pas de « phone » en trop.
+assert.equal(
+  describeDevice({ platform: 'ios', osVersion: '18.2', brand: 'Apple', model: 'iPhone 7 Plus', idiom: 'phone' }).label,
+  'Apple iPhone 7 Plus — ios 18.2',
+)
 
 // Plateforme non reconnue → 'unknown', jamais la valeur brute du client.
 assert.equal(describeDevice({ platform: 'windows-phone' }).platform, 'unknown')
 assert.equal(describeDevice({ platform: '../../etc/passwd' }).platform, 'unknown')
 
 // Types non-chaîne : ignorés plutôt qu'écrits tels quels dans le journal.
-const hostile = describeDevice({ platform: 'ios', model: { $ne: null }, brand: 42, osVersion: [] })
+const hostile = describeDevice({
+  platform: 'ios', model: { $ne: null }, brand: 42, manufacturer: true, osVersion: [],
+})
 assert.equal(hostile.model, null)
 assert.equal(hostile.brand, null)
+assert.equal(hostile.manufacturer, null)
 assert.equal(hostile.osVersion, null)
 assert.equal(hostile.label, 'ios')
 
 // Chaînes surdimensionnées : bornées, pas rejetées (on garde l'info utile).
 assert.equal(describeDevice({ platform: 'android', model: 'M'.repeat(500) }).model.length, 60)
+assert.equal(describeDevice({ platform: 'android', brand: 'B'.repeat(500) }).brand.length, 40)
+assert.equal(describeDevice({ platform: 'android', manufacturer: 'M'.repeat(500) }).manufacturer.length, 40)
 
 // Entrée vide / absente : ne jette pas.
 assert.equal(describeDevice(undefined).platform, 'unknown')

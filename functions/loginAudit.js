@@ -92,17 +92,29 @@ function describeDevice(raw) {
   const platform = PLATFORMS.has(input.platform) ? input.platform : 'unknown'
   const osVersion = boundedText(input.osVersion, 20)
   const brand = boundedText(input.brand, 40)
+  // Distinct de `brand` : sur beaucoup d'appareils Android la marque commerciale
+  // n'est pas le constructeur (brand `Redmi` / manufacturer `Xiaomi`,
+  // brand `Poco` / manufacturer `Xiaomi`). Garder les deux evite de trancher
+  // a tort laquelle est « la marque ».
+  const manufacturer = boundedText(input.manufacturer, 40)
   const model = boundedText(input.model, 60)
   const idiom = boundedText(input.idiom, 20)
   const appVersion = boundedText(input.appVersion, 20)
 
   const os = osVersion ? `${platform} ${osVersion}` : platform
-  const hardware = [brand, model].filter(Boolean).join(' ') || idiom || null
+
+  // Libelle lisible pre-calcule, pour que les lecteurs n'aient pas a rejouer
+  // l'asymetrie entre plateformes. A defaut de modele (cas iOS), l'idiome
+  // (`phone` / `pad`) evite un libelle reduit a la seule marque.
+  const parts = [brand, model].filter(Boolean)
+  if (!model && idiom) parts.push(idiom)
+  const hardware = parts.join(' ') || null
 
   return {
     platform,
     osVersion,
     brand,
+    manufacturer,
     model,
     idiom,
     appVersion,

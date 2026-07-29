@@ -60,13 +60,19 @@ async function main() {
       ? at.toLocaleString('fr-FR', { timeZone: 'Africa/Casablanca' })
       : '—'
     const who = d.actorEmail || d.actorUid
-    const device = (d.device && d.device.label) || '—'
-    const appVersion = d.device && d.device.appVersion ? ` · app ${d.device.appVersion}` : ''
+    const dev = d.device || {}
+    const device = dev.label || '—'
+    const appVersion = dev.appVersion ? ` · app ${dev.appVersion}` : ''
 
     console.log(`• [${String(d.actorRole || '—').padEnd(11)}] ${who}`)
     console.log(`    quand    : ${when}`)
     console.log(`    IP       : ${d.ip || '—'}`)
     console.log(`    appareil : ${device}${appVersion}`)
+    // Le constructeur n'est affiché que s'il diffère de la marque commerciale
+    // (Redmi/Xiaomi, Poco/Xiaomi) — sinon la ligne serait redondante.
+    if (dev.manufacturer && dev.manufacturer.toLowerCase() !== String(dev.brand || '').toLowerCase()) {
+      console.log(`    fabricant: ${dev.manufacturer}`)
+    }
   }
   console.log('')
 

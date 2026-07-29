@@ -12,7 +12,12 @@ import { functions } from '../config/firebase'
  * iOS ne les publie pas et on n'a que l'idiome (`phone` / `pad`).
  */
 
-type AndroidConstants = { Brand?: string; Model?: string; Release?: string }
+type AndroidConstants = {
+  Brand?: string
+  Manufacturer?: string
+  Model?: string
+  Release?: string
+}
 type IosConstants = { interfaceIdiom?: string; osVersion?: string }
 
 function describeDevice() {
@@ -23,7 +28,10 @@ function describeDevice() {
     return {
       platform: 'android',
       osVersion: c.Release,
+      // `Brand` est la marque commerciale (`Redmi`, `Poco`), `Manufacturer` le
+      // constructeur (`Xiaomi`) — souvent differents, on envoie les deux.
       brand: c.Brand,
+      manufacturer: c.Manufacturer,
       model: c.Model,
       appVersion,
     }
@@ -34,6 +42,11 @@ function describeDevice() {
     return {
       platform: 'ios',
       osVersion: c.osVersion,
+      // Pas une supposition : tout appareil sous iOS est fabrique par Apple.
+      // Apple n'expose pas le modele au JS — `Constants.platform.ios.model`
+      // le donnerait ("iPhone 7 Plus") mais il est deprecie et vaut `null`
+      // dans la plupart des builds de production, d'ou le repli sur l'idiome.
+      brand: 'Apple',
       idiom: c.interfaceIdiom,
       appVersion,
     }
