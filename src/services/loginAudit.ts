@@ -43,8 +43,14 @@ function describeDevice() {
 }
 
 /**
- * À appeler après un sign-in réussi. Ne rejette jamais : journaliser une
- * connexion ne doit pas pouvoir faire échouer la connexion elle-même.
+ * Appelé par AuthContext dès qu'une session est établie — aussi bien après une
+ * saisie d'identifiants qu'à la reprise d'une session existante au démarrage
+ * de l'app. C'est ce second cas qui compte en pratique : les sessions Firebase
+ * persistent, donc un journal branché sur le seul écran de login resterait
+ * quasi vide pendant des semaines.
+ *
+ * Ne rejette jamais : journaliser une session ne doit pas pouvoir faire
+ * échouer la session elle-même.
  */
 export async function recordLoginDevice(): Promise<void> {
   try {

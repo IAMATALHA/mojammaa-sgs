@@ -29,6 +29,7 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { auth, db } from '../config/firebase'
 import type { RoleLogic, RoleRaw, UserProfile } from '../types'
 import { registerForPushNotificationsAsync, clearPushToken, recordLogin, recordLoginLocation } from '../services/NotificationService'
+import { recordLoginDevice } from '../services/loginAudit'
 
 function rawToLogic(raw: RoleRaw | string | undefined): RoleLogic {
   if (raw === 'admin') return 'admin'
@@ -118,6 +119,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             registerForPushNotificationsAsync(fbUser.uid)
             recordLogin(fbUser.uid)
             recordLoginLocation()
+            // Journal des sessions (IP + appareil). Ici et pas dans
+            // LoginScreen : les sessions Firebase persistent, donc presque
+            // personne ne ressaisit ses identifiants — un journal branché sur
+            // le seul écran de login resterait quasi vide. Ce point-ci couvre
+            // AUSSI la reprise de session au démarrage de l'app. Le garde
+            // `pushRegisteredRef` le limite à une fois par session, et la
+            // fonction plafonne de toute façon à une entrée par minute.
+            recordLoginDevice()
           }
           if (first) { first = false; setIsLoading(false) }
         },
