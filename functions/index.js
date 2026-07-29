@@ -20,6 +20,7 @@ const { getAuth } = require('firebase-admin/auth')
 const logger = require('firebase-functions/logger')
 const { createHash } = require('node:crypto')
 const { claimEmailSlot, claimGlobalSlot } = require('./resetThrottle')
+const loginAudit = require('./loginAudit')
 const { computeClassStats, statsDocId } = require('./classStats')
 const { computeSchoolStats } = require('./schoolStats')
 const {
@@ -1290,6 +1291,55 @@ exports.aggregateSchoolStats = onSchedule(
     logger.info('stats/summary refreshed (scheduled)', { eleves: s.totalEleves, classes: s.totalClasses })
   },
 )
+
+// ── Journal des connexions ───────────────────────────────────────────────
+//
+// Appelée par le client juste après un sign-in réussi. L'IP vient de l'infra
+// (non déclarée par l'appelant), l'appareil du client. Détail du compromis et
+// des garanties : functions/loginAudit.js.
+//
+// Ne jette JAMAIS d'erreur métier : si le journal échoue, la session de
+// l'utilisateur ne doit pas en souffrir. Le client l'appelle déjà en
+// fire-and-forget, mais on ne compte pas là-dessus.
+exports.recordLoginDevice = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in required.')
+
+  try {
+    const now = Date.now()
+    const ip = loginAudit.clientIpFrom(request.rawRequest)
+    const ipChain = loginAudit.forwardedChain(request.rawRequest)
+    const device = loginAudit.describeDevice(request.data)
+
+    // Le rôle et l'email viennent de Firestore/Auth, JAMAIS du client : sinon
+    // n'importe quel compte pourrait se journaliser sous une autre identité.
+    const me = await db.collection('users').doc(uid).get()
+
+    await db
+      .collection(loginAudit.COLLECTION)
+      .doc(loginAudit.loginEntryId(uid, now))
+      .set(
+        loginAudit.buildLoginEntry({
+          uid,
+          email: (request.auth.token && request.auth.token.email) || me.get('email') || null,
+          role: me.exists ? me.get('role') : null,
+          ip,
+          ipChain,
+          device,
+          now,
+        }),
+        { merge: true },
+      )
+
+    // Cloud Logging ne reçoit ni l'IP ni l'email : ce sont des données
+    // personnelles, elles restent dans `auditLog` (lecture superadmin only).
+    logger.info('login recorded', { uid, platform: device.platform })
+    return { ok: true }
+  } catch (e) {
+    logger.error('login audit failed', { uid, message: e.message })
+    return { ok: false }
+  }
+})
 
 // Recalcul à la demande — réservé aux admins (pull-to-refresh + amorçage
 // exceptionnel si stats/summary n'existe pas encore).

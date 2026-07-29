@@ -12,6 +12,7 @@ import { httpsCallable } from 'firebase/functions'
 import { useTranslation } from 'react-i18next'
 import { Globe, User, Lock } from 'lucide-react-native'
 import { auth, functions } from '../../config/firebase'
+import { recordLoginDevice } from '../../services/loginAudit'
 import { useTheme } from '../../contexts/ThemeContext'
 import LanguagePicker from '../../components/LanguagePicker'
 
@@ -63,6 +64,9 @@ export default function LoginScreen() {
 
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password)
+      // Fire-and-forget : le journal ne doit ni retarder ni bloquer l'entrée
+      // dans l'app. `recordLoginDevice` avale déjà ses propres erreurs.
+      void recordLoginDevice()
     } catch (e: any) {
       const code = e?.code || ''
       if (code === 'auth/invalid-email') setError(t('login.errorInvalidEmail'))

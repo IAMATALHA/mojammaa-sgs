@@ -40,7 +40,8 @@
     "db:import:eleves:commit": "node scripts/importStudents.js --commit",
     "db:sync:eleves": "node scripts/importStudents.js --archive-missing",
     "db:sync:eleves:commit": "node scripts/importStudents.js --archive-missing --commit",
-    "db:import:schedule": "node scripts/importSchedule.js cNnmhtiJF7VLgW01RBErKTwu9Ym2"
+    "db:import:schedule": "node scripts/importSchedule.js cNnmhtiJF7VLgW01RBErKTwu9Ym2",
+    "test:login-audit": "node tests/functions/loginAudit.test.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/cairo": "^0.4.2",
