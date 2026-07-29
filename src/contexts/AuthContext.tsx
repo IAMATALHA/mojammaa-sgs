@@ -28,7 +28,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { auth, db } from '../config/firebase'
 import type { RoleLogic, RoleRaw, UserProfile } from '../types'
-import { registerForPushNotificationsAsync, clearPushToken, recordLogin, recordLoginLocation } from '../services/NotificationService'
+import { registerForPushNotificationsAsync, clearPushToken, recordLogin } from '../services/NotificationService'
 import { recordLoginDevice } from '../services/loginAudit'
 
 function rawToLogic(raw: RoleRaw | string | undefined): RoleLogic {
@@ -118,7 +118,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             pushRegisteredRef.current = true
             registerForPushNotificationsAsync(fbUser.uid)
             recordLogin(fbUser.uid)
-            recordLoginLocation()
             // Journal des sessions (IP + appareil). Ici et pas dans
             // LoginScreen : les sessions Firebase persistent, donc presque
             // personne ne ressaisit ses identifiants — un journal branché sur

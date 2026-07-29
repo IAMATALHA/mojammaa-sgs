@@ -28,11 +28,8 @@ export interface UserProfile {
   expoPushToken?: string
   lastLoginAt?: unknown            // Firestore Timestamp — dernière connexion
   lastLoginPlatform?: 'ios' | 'android' | 'web'
-  lastLoginLocation?: {            // écrit UNIQUEMENT par la Cloud Function recordLoginLocation (IP serveur, non falsifiable côté client)
-    city?: string
-    country?: string
-    countryCode?: string
-  }
+  // lastLoginLocation retiré le 2026-07-29 avec recordLoginLocation (voir
+  // functions/index.js) : jamais renseigné en base, cf. journal auditLog.
 }
 
 export interface Eleve {

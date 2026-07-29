@@ -2,8 +2,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { auth, db, functions } from '../config/firebase';
+import { auth, db } from '../config/firebase';
 import i18n, { type AppLanguage } from '../i18n';
 import { palette } from '../theme/designTokens';
 
@@ -45,19 +44,6 @@ export async function recordLogin(userId: string) {
     }, { merge: true });
   } catch (e) {
     console.warn('[auth] failed to record login', e);
-  }
-}
-
-/**
- * Résout ville/pays depuis l'IP réelle de connexion, côté serveur (Cloud
- * Function recordLoginLocation) — le client ne peut ni connaître ni
- * falsifier sa propre IP publique, donc ce n'est pas un simple setDoc.
- */
-export async function recordLoginLocation() {
-  try {
-    await httpsCallable(functions, 'recordLoginLocation')();
-  } catch (e) {
-    console.warn('[auth] failed to record login location', e);
   }
 }
 

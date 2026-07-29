@@ -2178,45 +2178,21 @@ exports.sendBrandedPasswordReset = onCall(
   },
 )
 
-// ── Localisation de connexion (ville/pays) ────────────────────────────────
-// Le client ne peut pas connaître/prouver sa propre IP publique, et
-// firestore.rules interdit d'écrire lastLoginLocation depuis le client (seul
-// l'Admin SDK ici le peut) — sinon un utilisateur pourrait se falsifier une
-// localisation. On lit l'IP réelle côté serveur (rawRequest.ip, résolue par
-// le proxy de confiance Cloud Functions) et on la résout via un service tiers
-// (ipapi.co) : best effort, ne doit jamais faire échouer la connexion.
-function isPrivateIp(ip) {
-  if (!ip) return true
-  const v = ip.replace('::ffff:', '')
-  return v === '127.0.0.1' || v === '::1'
-    || v.startsWith('10.') || v.startsWith('192.168.')
-    || /^172\.(1[6-9]|2\d|3[01])\./.test(v)
-}
-
-exports.recordLoginLocation = onCall(async (request) => {
-  const uid = request.auth && request.auth.uid
-  if (!uid) throw new HttpsError('unauthenticated', 'Sign in required.')
-
-  const ip = request.rawRequest && request.rawRequest.ip
-  if (isPrivateIp(ip)) return { ok: false }
-
-  try {
-    const res = await fetch(`https://ipapi.co/${ip}/json/`, { signal: AbortSignal.timeout(4000) })
-    if (!res.ok) throw new Error(`ipapi.co HTTP ${res.status}`)
-    const data = await res.json()
-    if (data.error) throw new Error(data.reason || 'ipapi.co error')
-
-    await db.collection('users').doc(uid).set({
-      lastLoginLocation: {
-        city: data.city || null,
-        country: data.country_name || null,
-        countryCode: data.country_code || null,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-    }, { merge: true })
-    return { ok: true }
-  } catch (error) {
-    logger.warn('recordLoginLocation failed', { uid, error: String(error) })
-    return { ok: false }
-  }
-})
+// ── Localisation de connexion — RETIRÉE le 2026-07-29 ─────────────────────
+// `recordLoginLocation` résolvait ville/pays via ipapi.co. Elle échouait à
+// CHAQUE appel : les logs des 30 jours précédents ne contenaient que
+// « ipapi.co HTTP 429 », et lastLoginLocation était absent des 18 documents
+// users. Elle envoyait donc les IP des familles à un tiers non contractualisé
+// sans rien obtenir en retour — le pire des deux mondes.
+//
+// Elle lisait `rawRequest.ip`, qui devant Cloud Run est l'IP du proxy Google
+// et non celle du client : c'est pourquoi `loginAudit.js` passe par
+// `x-forwarded-for`. Le besoin « qui se connecte, d'où, sur quoi » est couvert
+// par `recordLoginDevice`, qui garde l'IP sans la faire sortir du projet.
+//
+// Si la géolocalisation redevient un besoin : MaxMind GeoLite2 embarqué
+// (résolution hors ligne, aucune IP transmise à un tiers), pas une API externe.
+//
+// La garde `lastLoginLocation` de firestore.rules est VOLONTAIREMENT conservée :
+// retirer une clé de la liste des champs non modifiables par le client n'a
+// aucun bénéfice et rouvrirait l'écriture d'un champ arbitraire.
