@@ -25,8 +25,8 @@ const { FieldValue, Timestamp } = require('firebase-admin/firestore')
 const COLLECTION = 'auditLog'
 
 // L'IP est une donnée personnelle (loi 09-08 / CNDP) : on ne la garde pas
-// indéfiniment. Le champ `expiresAt` permet de brancher une TTL policy
-// Firestore sans migration (cf. README de la fonction).
+// indéfiniment. Une TTL policy Firestore de production cible
+// `auditLog.expiresAt`; chaque entrée porte donc sa propre échéance.
 const RETENTION_DAYS = 180
 
 // Un utilisateur ne se connecte pas deux fois dans la même minute. Ancrer l'ID

@@ -33,6 +33,12 @@
       "expo-localization",
       "expo-font",
       [
+        "expo-image-picker",
+        {
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-notifications",
         {
           "color": "#A61B1B",

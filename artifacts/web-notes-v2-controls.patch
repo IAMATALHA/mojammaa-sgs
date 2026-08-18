@@ -1,0 +1,202 @@
+diff --git a/src/pages/Notes.tsx b/src/pages/Notes.tsx
+index 3aed610..8cb35d8 100644
+--- a/src/pages/Notes.tsx
++++ b/src/pages/Notes.tsx
+@@ -1,4 +1,4 @@
+-import { useEffect, useState, useMemo, useCallback } from 'react'
++import { Fragment, useEffect, useState, useMemo, useCallback } from 'react'
+ import type { CSSProperties, DragEvent } from 'react'
+ import { collection, getDoc, getDocs, writeBatch, doc, Timestamp } from 'firebase/firestore'
+ import { useTranslation } from 'react-i18next'
+@@ -375,6 +375,26 @@ function NoteBadge({ val, max = 20 }: { val: NoteVal; max?: number }) {
+   return <span style={{ fontSize: '11px', fontWeight: 700, color: cfg.color, background: cfg.bg, padding: '2px 7px', borderRadius: '6px' }}>{cfg.labelKey ? t(cfg.labelKey) : val}</span>
+ }
+ 
++// ─── Évaluation structurée v2 (contrôles + activités intégrées) ─────────────
++// Les notes v2 portent le détail par contrôle ; le champ `note` reste le résumé
++// calculé que les lecteurs legacy affichent. On lit ici le détail pour montrer
++// C1/C2/C3 et le suivi de progression, sans recalculer (le serveur fait foi).
++interface EvalComponent {
++  slot: string
++  category: 'control' | 'integrated'
++  kind: string
++  ordinal: number
++  label: string
++  note: number
++  bareme: number
++}
++interface NoteCalculation {
++  status?: 'empty' | 'provisional' | 'complete'
++  completed?: number
++  expected?: number
++  completionRate?: number
++}
++
+ // ─── Firestore note record ────────────────────────────────────────────────────
+ interface NoteRecord {
+   id: string
+@@ -388,9 +408,112 @@ interface NoteRecord {
+   matiere: string
+   matiereLabel: string
+   note: NoteVal
++  schemaVersion?: number
++  bareme?: number
++  evaluations?: EvalComponent[]
++  calculation?: NoteCalculation
++  evaluationPolicyVersion?: string
+   importedAt: any
+ }
+ 
++/**
++ * Progression intra-note : compare les contrôles écrits consécutifs de MÊME
++ * type (C1→C2→C3, ou compréhension 1→2, production 1→2). On ne mélange jamais
++ * deux natures différentes (un final anglais n'est pas comparé à un court). Le
++ * classement suit le même seuil que le serveur : ±0,5 point.
++ */
++function noteProgression(evaluations: EvalComponent[] | undefined) {
++  if (!Array.isArray(evaluations)) return null
++  const controls = evaluations
++    .filter(e => e.category === 'control')
++    .sort((a, b) => a.ordinal - b.ordinal)
++  if (controls.length < 2) return null
++  const byKind = new Map<string, EvalComponent[]>()
++  controls.forEach(c => { const r = byKind.get(c.kind) || []; r.push(c); byKind.set(c.kind, r) })
++  const steps: { from: number; to: number; delta: number }[] = []
++  byKind.forEach(list => {
++    for (let i = 1; i < list.length; i++) {
++      steps.push({ from: list[i - 1].note, to: list[i].note, delta: Math.round((list[i].note - list[i - 1].note) * 10) / 10 })
++    }
++  })
++  if (steps.length === 0) return null
++  const last = steps[steps.length - 1].delta
++  const outcome: 'improved' | 'declined' | 'stable' = last >= 0.5 ? 'improved' : last <= -0.5 ? 'declined' : 'stable'
++  return { steps, last, outcome }
++}
++
++/** Détail déplié d'une note v2 : contrôles, activités intégrées et suivi. */
++function EvaluationDetail({ note }: { note: NoteRecord }) {
++  const { t } = useTranslation()
++  const evals = note.evaluations || []
++  const controls = evals.filter(e => e.category === 'control').sort((a, b) => a.ordinal - b.ordinal)
++  const integrated = evals.filter(e => e.category === 'integrated')
++  const prog = noteProgression(evals)
++  const rate = note.calculation?.completionRate ?? (note.calculation?.status === 'complete' ? 100 : null)
++  const provisional = note.calculation?.status === 'provisional'
++  const bareme = note.bareme || 20
++
++  const arrow = prog?.outcome === 'improved' ? '▲' : prog?.outcome === 'declined' ? '▼' : '＝'
++  const progColor = prog?.outcome === 'improved' ? C.primary : prog?.outcome === 'declined' ? 'var(--color-danger)' : 'var(--color-text-muted)'
++
++  return (
++    <div style={{ padding: '12px 18px', background: 'var(--color-bg-subtle)', borderTop: '1px solid var(--color-border)' }}>
++      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '18px', alignItems: 'flex-start' }}>
++        {/* Contrôles écrits */}
++        <div style={{ flex: '1 1 260px' }}>
++          <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-subtle)', marginBottom: '6px' }}>
++            {t('notes_controls_label', 'Contrôles écrits')}
++          </div>
++          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
++            {controls.map(c => (
++              <div key={c.slot} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '6px 10px', minWidth: '58px' }}>
++                <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-subtle)' }}>{c.label}</span>
++                <NoteBadge val={c.note} max={bareme} />
++              </div>
++            ))}
++          </div>
++        </div>
++
++        {/* Activités intégrées */}
++        {integrated.length > 0 && (
++          <div style={{ flex: '0 1 160px' }}>
++            <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-subtle)', marginBottom: '6px' }}>
++              {t('notes_integrated_label', 'Activités intégrées')}
++            </div>
++            {integrated.map(a => (
++              <div key={a.slot} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '2px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '6px 10px' }}>
++                <NoteBadge val={a.note} max={a.bareme} />
++              </div>
++            ))}
++          </div>
++        )}
++
++        {/* Suivi de progression */}
++        <div style={{ flex: '0 1 200px' }}>
++          <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-subtle)', marginBottom: '6px' }}>
++            {t('notes_progress_label', 'Suivi')}
++          </div>
++          {prog ? (
++            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
++              <span style={{ fontSize: '18px', color: progColor, fontWeight: 800 }}>{arrow}</span>
++              <span style={{ fontSize: '13px', fontWeight: 700, color: progColor }}>
++                {prog.last > 0 ? '+' : ''}{prog.last} {t('notes_points_short', 'pts')}
++              </span>
++            </div>
++          ) : (
++            <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{t('notes_progress_insufficient', 'Pas assez de contrôles')}</span>
++          )}
++          {rate != null && (
++            <div style={{ marginTop: '6px', fontSize: '11px', color: provisional ? C.warn : 'var(--color-text-muted)', fontWeight: 600 }}>
++              {provisional ? t('notes_provisional', 'Provisoire') + ' · ' : ''}{rate}%
++            </div>
++          )}
++        </div>
++      </div>
++    </div>
++  )
++}
++
+ // ─── Main Component ───────────────────────────────────────────────────────────
+ type Tab = 'import' | 'consulter' | 'bulletins'
+ 
+@@ -431,6 +554,8 @@ export default function Notes() {
+   const [filterCycle, setFilterCycle] = useState<Cycle | ''>('')
+   const [search, setSearch] = useState('')
+   const [sortKey, setSortKey] = useState<'nom' | 'note'>('nom')
++  // Ligne dépliée pour montrer le détail des contrôles v2.
++  const [expandedId, setExpandedId] = useState<string | null>(null)
+   const [sortDir] = useState<'asc' | 'desc'>('asc')
+ 
+   // ── Elèves for matching ──
+@@ -854,18 +979,37 @@ export default function Notes() {
+                     </tr>
+                   </thead>
+                   <tbody>
+-                    {filtered.slice(0, 200).map((n, i) => (
+-                      <tr key={n.id} style={{ borderBottom: '1px solid var(--color-bg-muted)', background: i % 2 === 0 ? 'var(--color-surface)' : 'var(--color-surface-raised)' }}>
+-                        <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--color-text)' }}>{n.elevePrenom} {n.eleveNom}</td>
++                    {filtered.slice(0, 200).map((n, i) => {
++                      const isV2 = Number(n.schemaVersion) === 2 && Array.isArray(n.evaluations) && n.evaluations.length > 0
++                      const expanded = expandedId === n.id
++                      const ctrlCount = isV2 ? (n.evaluations || []).filter(e => e.category === 'control').length : 0
++                      return (
++                      <Fragment key={n.id}>
++                      <tr
++                        onClick={isV2 ? () => setExpandedId(expanded ? null : n.id) : undefined}
++                        style={{ borderBottom: expanded ? 'none' : '1px solid var(--color-bg-muted)', background: i % 2 === 0 ? 'var(--color-surface)' : 'var(--color-surface-raised)', cursor: isV2 ? 'pointer' : 'default' }}>
++                        <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--color-text)' }}>
++                          {isV2 && <span style={{ display: 'inline-block', width: 14, color: C.primary, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>}
++                          {n.elevePrenom} {n.eleveNom}
++                        </td>
+                         <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-info-text)' }}>{n.codeMassar || '—'}</td>
+                         <td style={{ padding: '10px 14px' }}>
+                           <span style={{ fontSize: '12px', fontWeight: 700, background: 'color-mix(in srgb, var(--color-primary) 8%, transparent)', color: C.primary, padding: '2px 8px', borderRadius: '6px' }}>{n.classe || '—'}</span>
+                         </td>
+                         <td style={{ padding: '10px 14px', color: 'var(--color-text-muted)' }}>{n.semestre}</td>
+-                        <td style={{ padding: '10px 14px', color: 'var(--color-text-soft)' }}>{n.matiereLabel}</td>
++                        <td style={{ padding: '10px 14px', color: 'var(--color-text-soft)' }}>
++                          {n.matiereLabel}
++                          {isV2 && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: 'var(--color-text-subtle)', background: 'var(--color-bg-subtle)', padding: '1px 6px', borderRadius: 5 }}>{ctrlCount} {t('notes_controls_short', 'contrôles')}</span>}
++                        </td>
+                         <td style={{ padding: '10px 14px', textAlign: 'center' }}><NoteBadge val={n.note} max={n.cycle === 'primaire' ? 10 : 20} /></td>
+                       </tr>
+-                    ))}
++                      {expanded && (
++                        <tr>
++                          <td colSpan={6} style={{ padding: 0 }}><EvaluationDetail note={n} /></td>
++                        </tr>
++                      )}
++                      </Fragment>
++                    )})}
+                   </tbody>
+                 </table>
+                 {filtered.length > 200 && <p style={{ padding: '8px 14px', color: 'var(--color-text-subtle)', fontSize: '12px', margin: 0 }}>{t('notes_limited_results')}</p>}
