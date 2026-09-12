@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, query, where, onSnapshot, type Unsubscribe } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import type { Attachment } from '../services/StorageService'
-import { currentAcademicPeriod, localISODate } from '../utils/academicPeriod'
+import { localISODate } from '../utils/academicPeriod'
 import type { EleveDoc } from '../services/elevesService'
 import { useAuth } from '../contexts/AuthContext'
 import {
@@ -37,7 +37,6 @@ function asString(v: unknown): string {
 interface RawDevoir extends Omit<ParentDevoir, 'childId' | 'childName' | 'parentUid' | 'status' | 'submission'> {}
 
 export function useParentDevoirs(eleves: EleveDoc[]) {
-  const period = currentAcademicPeriod()
   const { profile } = useAuth()
   const [devoirs, setDevoirs] = useState<RawDevoir[]>([])
   const [submissions, setSubmissions] = useState<HomeworkSubmission[]>([])
@@ -75,12 +74,14 @@ export function useParentDevoirs(eleves: EleveDoc[]) {
       const bucketId = i / 10
       buckets.set(bucketId, new Map())
       unsubs.push(onSnapshot(
-        // Année scolaire uniquement — filtrer par mois de CRÉATION ferait
-        // disparaître un devoir avant sa date de rendu (créé le 28, dû le 5).
+        // Pas de filtre academicYear ici : ce champ vient de la date
+        // d'ÉCHÉANCE, pas d'aujourd'hui. Un devoir créé fin août pour la
+        // rentrée de septembre porte déjà l'année scolaire suivante, alors
+        // que currentAcademicPeriod() (basé sur la date du jour) est encore
+        // sur l'ancienne → invisible côté parent jusqu'au 1er septembre.
         query(
           collection(db, 'devoirs'),
           where('classeId', 'in', chunk),
-          where('academicYear', '==', period.academicYear),
         ),
         snap => {
           const next = new Map<string, RawDevoir>()
@@ -110,7 +111,7 @@ export function useParentDevoirs(eleves: EleveDoc[]) {
     }
 
     return () => unsubs.forEach(u => u())
-  }, [classes.join(','), period.academicYear])
+  }, [classes.join(',')])
 
   useEffect(() => {
     if (!profile?.uid) { setSubmissions([]); return }
@@ -133,7 +134,7 @@ export function useParentDevoirs(eleves: EleveDoc[]) {
           return {
             ...d,
             childId,
-            childName: [eleve.prenomLatin || eleve.prenom, eleve.nomLatin || eleve.nom].filter(Boolean).join(' '),
+            childName: [eleve.prenomLatin || eleve.prenomFr || eleve.prenom, eleve.nomLatin || eleve.nomFr || eleve.nom].filter(Boolean).join(' '),
             parentUid: profile?.uid || '',
             status: submission?.status || 'pending',
             submission,

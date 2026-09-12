@@ -1,5 +1,5 @@
 /**
- * AdminStudentFileScreen — dossier élève 360°, strictement admin.
+ * Dossier élève partagé : l'API limite les enseignants à leurs classes et matière.
  *
  * C'est l'écran qui transforme les statistiques en outil de décision : l'admin
  * y voit, pour UN élève, ce qui a déclenché son signalement et de quoi juger
@@ -25,9 +25,8 @@ import {
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { functions } from '../../config/firebase'
-import type { AdminStackParamList } from '../../navigation/types'
 import type {
-  AppliedScope, FollowUpMetrics, FollowUpPriority, FollowUpReason, ScopeStudent,
+  AppliedScope, StatsScope, FollowUpMetrics, FollowUpPriority, FollowUpReason, ScopeStudent,
 } from '../../types/stats'
 import { translatedFormula } from '../../utils/evaluationFormula'
 import { displayBareme, toDisplayScale } from '../../utils/gradeScale'
@@ -60,11 +59,12 @@ interface SubjectLine {
 
 interface StudentFile {
   student: ScopeStudent
+  gradeScope?: 'subject' | 'overall'
   /** Contrat progressif : les anciennes callables ne renvoient que student.average. */
   overallAverage?: number | null
   subjectAverage?: number | null
   bySubject: SubjectLine[]
-  attendance: { absentDays: number; observedDays: number; lateCount: number }
+  attendance: { absentDays: number; observedDays: number; lateCount: number; recentAbsences?: { date: string; seance: string }[] }
   followUp: { reasons: FollowUpReason[]; metrics: FollowUpMetrics; priority: FollowUpPriority } | null
   applied: AppliedScope
 }
@@ -72,7 +72,7 @@ interface StudentFile {
 export default function AdminStudentFileScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const route = useRoute<RouteProp<AdminStackParamList, 'AdminStudentFile'>>()
+  const route = useRoute<RouteProp<{ StudentFile: { eleveId: string; scope: StatsScope } }, 'StudentFile'>>()
   const { eleveId, scope } = route.params
 
   const [file, setFile] = useState<StudentFile | null>(null)
@@ -82,9 +82,9 @@ export default function AdminStudentFileScreen() {
 
   const load = useCallback(async (pullToRefresh = false) => {
     if (pullToRefresh) setRefreshing(true)
-    else setLoading(true)
+    else { setLoading(true); setFile(null) }
     try {
-      const response = await httpsCallable<{ eleveId: string; scope: AppliedScope }, StudentFile>(
+      const response = await httpsCallable<{ eleveId: string; scope: StatsScope }, StudentFile>(
         functions, 'getStatsStudentFile',
       )({ eleveId, scope })
       setFile(response.data)
@@ -100,7 +100,7 @@ export default function AdminStudentFileScreen() {
   useEffect(() => { void load() }, [load])
 
   const name = file ? `${file.student.prenom} ${file.student.nom}`.trim() : t('admin.statsStudentFile')
-  const appliedScope = file?.applied ?? scope
+  const appliedScope = { ...scope, notesPeriod: 'annee', ...file?.applied }
 
   // Le serveur renvoie TOUT normalisé sur 20 (moyennes, contrôles, activités
   // intégrées, deltas) : c'est ce qui permet de comparer des cycles entre eux.
@@ -145,9 +145,9 @@ export default function AdminStudentFileScreen() {
                   {overallAverage == null ? `— /${bareme}` : `${overallAverage}/${bareme}`}
                 </Text>
                 <Text style={[styles.identityAverageLabel, { color: theme.textMuted }]}>
-                  {t('admin.statsOverallAverage')}
+                  {file.gradeScope === 'subject' ? appliedScope.matiere || t('admin.statsSubjectAverageShort') : t('admin.statsOverallAverage')}
                 </Text>
-                {appliedScope.matiere && subjectAverage != null ? (
+                {file.gradeScope !== 'subject' && appliedScope.matiere && subjectAverage != null ? (
                   <>
                     <Text style={[styles.identitySubjectValue, { color: theme.text }]}>
                       {subjectAverage}/{bareme}
@@ -208,6 +208,11 @@ export default function AdminStudentFileScreen() {
                   theme={theme}
                 />
               </View>
+              {(file.attendance.recentAbsences ?? []).map((absence, index) => (
+                <Text key={`${absence.date}-${absence.seance}-${index}`} style={[styles.cardLead, { color: theme.danger }]}>
+                  {absence.date} · {absence.seance}
+                </Text>
+              ))}
             </View>
 
             <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>

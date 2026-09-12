@@ -1,3 +1,4 @@
+import AttendanceDraftsCard from '../../components/AttendanceDraftsCard'
 /**
  * TeacherDashboardScreen — premium SaaS dashboard for the teacher role.
  *
@@ -270,6 +271,7 @@ export default function TeacherDashboardScreen() {
           />
         }
       >
+        <AttendanceDraftsCard onOpen={draft => nav.navigate('TeacherAttendance', { lessonKey: draft.lessonKey, date: draft.date })} />
         <View
           style={[
             styles.heroCard,

@@ -17,7 +17,7 @@ export const ELEVE_PLACEHOLDER = '{élève}'
 export const eleveKey = (e: EleveDoc) => e.codeMassar || e.id || `${e.classe}-${eleveName(e)}`
 
 export const eleveName = (e: EleveDoc) =>
-  `${e.prenomLatin || e.prenom || ''} ${e.nomLatin || e.nom || ''}`.trim() || e.nomComplet || '—'
+  `${e.prenomLatin || e.prenomFr || e.prenom || ''} ${e.nomLatin || e.nomFr || e.nom || ''}`.trim() || e.nomComplet || '—'
 
 export const elevePrenom = (e: EleveDoc) =>
-  e.prenomLatin || e.prenom || eleveName(e).split(' ')[0]
+  e.prenomLatin || e.prenomFr || e.prenom || eleveName(e).split(' ')[0]

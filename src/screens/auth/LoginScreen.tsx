@@ -10,6 +10,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
 import { useTranslation } from 'react-i18next'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { AuthStackParamList } from '../../navigation/types'
 import { Globe, User, Lock } from 'lucide-react-native'
 import { auth, functions } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -18,6 +21,7 @@ import LanguagePicker from '../../components/LanguagePicker'
 const PRIVACY_URL = 'https://mojammaa-sgs.web.app/privacy'
 
 export default function LoginScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>()
   const theme = useTheme()
   const { t } = useTranslation()
   const insets = useSafeAreaInsets()
@@ -213,6 +217,9 @@ export default function LoginScreen() {
               <Text style={[styles.forgotText, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>
                 {t('login.forgotPassword')}
               </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('ParentActivation')} style={styles.forgot}>
+              <Text style={[styles.forgotText, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>Activer un compte parent</Text>
             </TouchableOpacity>
           </Animated.View>
 

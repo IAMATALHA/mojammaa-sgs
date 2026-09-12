@@ -63,8 +63,12 @@ export default function AdminScopeStudentsScreen() {
       loadingMoreRef.current = true
       setLoadingMore(true)
     } else if (mode === 'refresh') {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
       setRefreshing(true)
     } else {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
       setLoading(true)
     }
     const generation = mode === 'more'
@@ -107,10 +111,12 @@ export default function AdminScopeStudentsScreen() {
         setError(err?.message || t('common.error'))
       }
     } finally {
-      setLoading(false)
-      loadingMoreRef.current = false
-      setLoadingMore(false)
-      setRefreshing(false)
+      if (generation === listGenerationRef.current) {
+        setLoading(false)
+        loadingMoreRef.current = false
+        setLoadingMore(false)
+        setRefreshing(false)
+      }
     }
   }, [scope, segment, band, side, progression, t])
 

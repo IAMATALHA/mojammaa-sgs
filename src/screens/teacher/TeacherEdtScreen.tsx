@@ -17,18 +17,18 @@ import {
 import { useTeacherDayCompletion } from '../../hooks/useTeacherDayCompletion';
 import type { TeacherStackParamList } from '../../navigation/types';
 import {
-  resolveScheduleSessionCode, scheduleLessonKey,
+  isScheduleSlotAttendanceOpen, resolveScheduleSessionCode, scheduleLessonKey,
 } from '../../utils/scheduleSession';
 
 const DAY_ORDER: WeekDay[] = [
   'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
 ]
 
-function todayWeekDay(): WeekDay {
+function todayWeekDay(now = new Date()): WeekDay {
   const names: WeekDay[] = [
     'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
   ]
-  return names[new Date().getDay()]
+  return names[now.getDay()]
 }
 
 export default function TeacherEdtScreen() {
@@ -40,8 +40,9 @@ export default function TeacherEdtScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedDay, setSelectedDay] = useState<WeekDay | null>(null)
+  const [now, setNow] = useState(() => new Date())
 
-  const today = useMemo(() => todayWeekDay(), [])
+  const today = todayWeekDay(now)
 
   useEffect(() => {
     if (!profile?.uid) {
@@ -57,6 +58,11 @@ export default function TeacherEdtScreen() {
     )
     return unsub
   }, [profile?.uid])
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   const grouped = useMemo(() => {
     if (!schedule?.weeklySlots) return [] as { day: WeekDay; items: WeeklySlot[] }[]
@@ -96,6 +102,7 @@ export default function TeacherEdtScreen() {
 
   const renderCard = ({ item: s }: { item: WeeklySlot }) => {
     const isToday = s.day === today
+    const canTakeAttendance = isScheduleSlotAttendanceOpen(s, now)
     const seance = resolveScheduleSessionCode(s)
     const appelFait = isToday && !!seance && attendanceDone.has(`${s.classe}|${seance}`)
     const devoirPoste = isToday && homeworkPosted.has(s.classe)
@@ -103,10 +110,10 @@ export default function TeacherEdtScreen() {
       <TouchableOpacity
         activeOpacity={0.85}
         // Tap = aller faire l'appel de cette séance (préréglé classe+séance).
-        // Aujourd'hui uniquement : l'appel est toujours daté du jour.
-        disabled={!isToday}
+        // Aujourd'hui uniquement, dès le début du cours et aussi après sa fin.
+        disabled={!canTakeAttendance}
         onPress={() => navigation.navigate('TeacherAttendance', { lessonKey: scheduleLessonKey(s) })}
-        style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border, opacity: canTakeAttendance ? 1 : 0.58 }]}
       >
         <View style={styles.timeRail}>
           <Text style={[styles.startTime, { color: theme.text }]}>{s.startTime}</Text>

@@ -20,6 +20,7 @@ export interface UserProfile {
   nom:     string
   prenom:  string
   email:   string
+  telephone?: string
   role:    RoleRaw
   classe?:  string                // legacy : classe unique (1 prof = 1 classe)
   classes?: string[]              // nouveau : tableau de classes attribuées

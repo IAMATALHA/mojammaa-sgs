@@ -46,3 +46,15 @@ export function currentAcademicPeriod(): AcademicPeriod {
   return academicPeriodForDate(new Date())
 }
 
+/**
+ * Années à lire pour les vues de devoirs « actifs ».
+ *
+ * `devoirs.academicYear` vient de la date d'échéance. Pendant les derniers
+ * jours d'août, un devoir à rendre en septembre appartient donc déjà à
+ * l'année suivante, même si aujourd'hui appartient encore à l'année sortante.
+ */
+export function currentAndNextAcademicYears(date = new Date()): [string, string] {
+  const current = academicPeriodForDate(date).academicYear
+  const start = Number(current.slice(0, 4))
+  return [current, `${start + 1}-${start + 2}`]
+}

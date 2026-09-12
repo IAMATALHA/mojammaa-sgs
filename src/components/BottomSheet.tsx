@@ -24,9 +24,10 @@ interface Props {
   onClose:          () => void
   children:         React.ReactNode
   maxHeightRatio?:  number   // hauteur max relative à l'écran, défaut 0.9
+  dismissible?: boolean
 }
 
-export default function BottomSheet({ visible, onClose, children, maxHeightRatio = 0.9 }: Props) {
+export default function BottomSheet({ visible, onClose, children, maxHeightRatio = 0.9, dismissible = true }: Props) {
   const theme = useTheme()
   const { height } = useWindowDimensions()
   const insets = useSafeAreaInsets()
@@ -65,6 +66,7 @@ export default function BottomSheet({ visible, onClose, children, maxHeightRatio
   }, [])
 
   const handleClose = () => {
+    if (!dismissible) return
     backdrop.value   = withTiming(0, { duration: 200 })
     translateY.value = withTiming(height, { duration: 220 }, finished => {
       if (finished) runOnJS(onClose)()

@@ -1,3 +1,4 @@
+import ActionCenter from '../../components/dashboard/action-center'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, ScrollView, RefreshControl, StyleSheet, Pressable, Text, Image,
@@ -381,7 +382,7 @@ export default function ParentDashboardScreen() {
   )
   const behaviorByChild = useMemo(() => {
     const grouped = new Map<string, ComportementDoc[]>()
-    comportements.forEach(entry => {
+    comportements.filter(entry => !entry.cancelledAt).forEach(entry => {
       const current = grouped.get(entry.eleveId) ?? []
       current.push(entry)
       grouped.set(entry.eleveId, current)
@@ -468,6 +469,12 @@ export default function ParentDashboardScreen() {
           )}
         </View>
 
+        <View style={styles.section}><ActionCenter mode="parent" onAction={action => {
+          if (action.kind === 'appointments') nav.navigate('StudentAppointments')
+          else if (action.kind === 'homework') nav.navigate('StudentDevoirs')
+          else if (action.kind === 'absences') nav.navigate('StudentAbsences')
+          else if (action.kind === 'messages') nav.navigate('StudentMessages')
+        }} /></View>
         {/* ── Accès rapide ─────────────────────────────────── */}
         {/* Juste sous les enfants : c'est la section la plus utilisée. */}
         <AnimatedSection delay={100}>

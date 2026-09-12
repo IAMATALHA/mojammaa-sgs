@@ -27,7 +27,7 @@
 <body>
   <h1>Privacy Policy</h1>
   <p class="muted">Application: <strong>Mojammaa Connect</strong> (Android package and Apple bundle identifier <code>com.youssefatalha.mojammaasgs</code>)<br />
-  Last updated: 2026-08-12</p>
+  Last updated: 2026-08-30</p>
 
   <p>This Privacy Policy describes how the Mojammaa Connect mobile application (the
   &ldquo;App&rdquo;) collects, uses, and protects information when used by adult
@@ -45,25 +45,37 @@
   <h2>2. What information we collect</h2>
   <ul>
     <li><strong>Account and profile information</strong> — user identifier,
-        email address, first and last name, role and school assignments. Passwords
-        are managed by Firebase Authentication; we never receive or store the
-        plain-text password.</li>
+        email address, optional contact telephone number, first and last name,
+        role and school, route or vehicle assignments. Passwords are submitted
+        directly to Firebase Authentication; the App operator does not receive
+        or store them in plain text.</li>
     <li><strong>School records</strong> — for pupils enrolled at the school:
-        full name, class/level, grades (<em>notes</em>), attendance records,
-        homework (<em>devoirs</em>) and teacher feedback. This data is entered
-        by teachers and administrators, not by the pupils themselves.</li>
+        full name, official school identifier (including the MASSAR code), date
+        of birth, class/level, parent or guardian account link, grades
+        (<em>notes</em>), attendance records, homework (<em>devoirs</em>) and
+        teacher feedback. This data is entered by teachers and administrators,
+        not by the pupils themselves.</li>
+    <li><strong>School operations</strong> — schedules and school-calendar
+        entries; behaviour records; parent absence declarations and their reason
+        (which may contain health information); transport route, stop and vehicle
+        assignments; pickup requests and statuses; and collective class prayer
+        status. Prayer status is recorded for the class as a whole and does not
+        contain an individual pupil attendance list.</li>
     <li><strong>Messages and activity</strong> — school announcements, direct
         messages between authorised users, message attachments, read receipts,
-        homework submissions, transport/pickup requests and related timestamps.</li>
+        homework submissions and related timestamps.</li>
     <li><strong>Uploaded files</strong> — documents and images that an authorised
         parent, teacher or administrator chooses to upload (for example, homework
         evidence, course materials or class photos), stored in Firebase Cloud
         Storage. Camera, photo-library and file access occurs only after the user
         initiates the corresponding action.</li>
-    <li><strong>Push notification tokens</strong> — when notifications are
-        enabled, the App registers an Expo/FCM device token so the school can
-        send reminders (new grade posted, announcement, etc.). The token is
-        stored against the user&rsquo;s account in Firestore.</li>
+    <li><strong>Push notification identifiers</strong> — when notifications are
+        enabled, the App registers an Expo push token so the school can send
+        reminders (new grade posted, announcement, etc.). Expo routes delivery
+        through Firebase Cloud Messaging (FCM) on Android and Apple Push
+        Notification service (APNs) on iOS; those services process their
+        platform-specific installation or device identifiers. The Expo push token
+        is stored against the user&rsquo;s account in Firestore.</li>
     <li><strong>Security and login records</strong> — automatically when an
         authenticated session starts, we record the account identifier, email,
         role, login time, IP address and a limited forwarded-IP chain when supplied
@@ -76,15 +88,16 @@
   </ul>
   <p>We do <strong>not</strong> collect advertising identifiers, contacts,
   microphone recordings or browsing history. The App does not request Android
-  precise or approximate location permissions and does not derive or store a
-  city, country or GPS location from the security IP address described above.
-  The App contains no advertising SDKs and no third-party artificial-intelligence
-  integration.</p>
+  precise or approximate location permissions and does not access live device
+  location. It stores only school-provided transport route or stop labels as
+  described above, and does not derive or store a city, country or GPS location
+  from the security IP address. The App contains no advertising SDKs and no
+  third-party artificial-intelligence integration.</p>
 
   <h2>3. How we use the information</h2>
   <ul>
     <li>To authenticate adult users and enforce role-based access (admin,
-        teacher and parent/legal guardian).</li>
+        teacher, parent/legal guardian and authorised driver).</li>
     <li>To display class schedules, grades, attendance, homework and messages
         to the people authorised to see them under the school&rsquo;s Firestore
         security rules.</li>
@@ -131,6 +144,8 @@
         Firestore, Cloud Storage, Cloud Messaging and hosting.</li>
     <li>Expo (Expo Application Services, 650 Industries, Inc.) &mdash;
         push-notification routing and delivery of signed App updates.</li>
+    <li>Apple Push Notification service (Apple Inc.) &mdash; push-notification
+        delivery on iOS.</li>
     <li>Resend &mdash; the user&rsquo;s email address and password-reset email are
         processed only when that user requests a password reset.</li>
   </ul>
@@ -142,11 +157,12 @@
   <ul>
     <li>Security and login records are scheduled for automatic deletion after
         180 days.</li>
-    <li>School records and school messages are retained while the pupil is
-        enrolled and for any additional period required by applicable education
-        or record-keeping rules.</li>
-    <li>Account data is deleted when the account is removed, except for records
-        that the school must retain by law.</li>
+    <li>School records, operational records and school messages are retained
+        while the pupil is enrolled and for any additional period required by
+        applicable education or record-keeping rules.</li>
+    <li>The Firebase Authentication account and main user profile are deleted
+        when the account is removed. Related school and operational records
+        follow the retention rules above or any legal retention requirement.</li>
     <li>Uploaded files are retained until deleted by an authorised user or as
         part of the related school record.</li>
     <li>After deletion from the live database, Firestore records may remain in
@@ -158,9 +174,9 @@
   <h2>8. Security</h2>
   <p>Data in transit is encrypted with HTTPS/TLS. Data at rest is encrypted by
   Google Cloud. Access to data is enforced by Firestore and Cloud Storage
-  security rules, which restrict each user (admin / teacher / parent) to the
-  records they are authorised to see. Passwords are stored only as hashes by
-  Firebase Authentication.</p>
+  security rules, which restrict each user (admin / teacher / parent / driver)
+  to the records they are authorised to see. Passwords are stored only as
+  hashes by Firebase Authentication.</p>
 
   <h2>9. Your rights &amp; contact</h2>
   <p>Users (or, for minors, their parents or legal guardians) may request

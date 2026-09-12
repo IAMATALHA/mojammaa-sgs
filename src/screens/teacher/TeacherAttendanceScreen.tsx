@@ -1,9 +1,10 @@
 /**
- * Saisie des absences "en 1 clic" :
+ * Saisie de l'appel "en 1 clic" :
  *   - tout le monde est PRÉSENT par défaut (carte verte)
  *   - le prof ne tape que les ABSENTS (carte rouge)
- *   - bouton "Sauvegarder" écrit dans Firestore avec un docId déterministe
- *     par séance pour pouvoir reposer son doigt sans dupliquer
+ *   - l'horloge marque les RETARDS (carte orange)
+ *   - chaque choix sauvegarde un brouillon local ; « Sauvegarder » le valide
+ *   - la file persistante soumet au serveur une opération rejouable sans doublon
  *
  * Schéma absences (consistent avec mojammaa-admin) :
  *   absences/{eleveId_date_seanceKey} = {
@@ -11,27 +12,21 @@
  *     statut, professorId, createdAt
  *   }
  */
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, Alert, ActivityIndicator,
 } from 'react-native'
 import Animated, { FadeInDown, Layout } from 'react-native-reanimated'
 import * as Haptics from 'expo-haptics'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRoute, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { TeacherStackParamList, TeacherRoute } from '../../navigation/types'
 import PressableScale from '../../components/PressableScale'
-import {
-  collection, getDocs, query, where, doc, Timestamp,
-  documentId,
-} from 'firebase/firestore'
-import { sendMessage } from '../../services/messagesService'
-import { getSchedule } from '../../services/scheduleService'
-import { getAbsenceRequestsForClassDate, decideAbsenceRequest, type AbsenceRequestDoc } from '../../services/absenceRequestsService'
-import { toDoc } from '../../services/firestore'
-import { getDocsChunked } from '../../services/chunkedQuery'
-import { isActiveEleve, type EleveDoc } from '../../services/elevesService'
-import type { AbsenceDoc } from '../../services/absencesService'
+import { collection, doc } from 'firebase/firestore'
+import { getAbsenceRequestsForClassDate, type AbsenceRequestDoc } from '../../services/absenceRequestsService'
+import { attendanceDrafts, loadAttendance } from '../../services/attendance-drafts'
+import type { AttendanceDraft } from '../../services/attendance-drafts-core'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenLayout from '../../components/ScreenLayout'
 import BehaviorSheet from '../../components/BehaviorSheet'
@@ -39,15 +34,8 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
-import { academicPeriodForDate, localISODate } from '../../utils/academicPeriod'
-import { commitInChunks } from '../../utils/firestoreBatch'
+import { localISODate } from '../../utils/academicPeriod'
 import type { WeeklySlot } from '../../services/scheduleService'
-import {
-  findScheduleSlotByLessonKey,
-  isScheduleSlotToday,
-  resolveScheduleSessionCode,
-} from '../../utils/scheduleSession'
-
 interface EleveLite {
   id:     string
   nom:    string
@@ -59,102 +47,10 @@ interface ResolvedLesson {
   seance: string
 }
 
-interface TeacherInfo {
-  uid:    string
-  nom:    string
-  prenom: string
-}
-
-/**
- * Pour chaque élève absent ayant un parent enregistré, écrit un doc dans
- * `messages` (historique permanent côté parent). Le push est envoyé
- * SERVEUR par la Cloud Function `onMessageCreated` — surtout ne pas le
- * faire ici : un prof n'a pas le droit de lire users/{parent} (rules),
- * et un push client doublerait celui de la CF.
- *
- * Retourne le nombre de parents notifiés ET le nombre d'absents sans compte
- * parent lié : le professeur doit pouvoir constater qu'une partie des familles
- * n'a PAS été prévenue, au lieu de le déduire d'un compteur plus petit que prévu.
- */
-interface NotifyResult {
-  notified:      number
-  sansParent:    number
-}
-
-async function notifyParentsOfAbsents(
-  absents: EleveLite[],
-  classe:  string,
-  date:    string,
-  seance:  string,
-  teacher: TeacherInfo,
-): Promise<NotifyResult> {
-  if (absents.length === 0) return { notified: 0, sansParent: 0 }
-
-  // 1. Lit les eleves docs des absents pour trouver leur parentUid.
-  //    Lecture CHUNKÉE : tronquer la liste (ce que faisait `slice(0, 10)`)
-  //    privait silencieusement de notification les parents des absents au-delà
-  //    du 10e — un cas courant dès qu'une classe entière manque à l'appel.
-  const absentIds = absents.map(e => e.id)
-  const eleveDocs = await getDocsChunked<EleveDoc>(
-    absentIds,
-    chunk => query(collection(db, 'eleves'), where(documentId(), 'in', chunk)),
-  )
-  const eleveToParent = new Map<string, { parentUid: string; prenom: string; nom: string }>()
-  eleveDocs.forEach(data => {
-    if (!isActiveEleve(data)) return
-    if (data.parentUid) {
-      eleveToParent.set(data.id, {
-        parentUid: data.parentUid,
-        prenom:    data.prenomLatin || data.prenom || '',
-        nom:       data.nomLatin    || data.nom    || '',
-      })
-    }
-  })
-
-  const sansParent = absents.filter(e => !eleveToParent.has(e.id)).length
-  if (eleveToParent.size === 0) return { notified: 0, sansParent }
-
-  const fromNom = `${teacher.prenom} ${teacher.nom}`.trim()
-
-  // 2. Pour chaque absent : écrire un message (la CF fait le push)
-  const writes: Promise<unknown>[] = []
-
-  for (const eleve of absents) {
-    const link = eleveToParent.get(eleve.id)
-    if (!link) continue
-    const body = `${link.prenom} ${link.nom} a été marqué(e) absent(e) en ${classe} (${seance}, ${date}).`
-
-    // 3.a — message Firestore (historique permanent)
-    writes.push(sendMessage({
-      type:     'attendance',
-      subject:  'Absence signalée',
-      body,
-      fromId:   teacher.uid,
-      fromNom,
-      fromRole: 'professeur',
-      toType:   'user',
-      toIds:    [link.parentUid],
-      category: 'attendance',
-      priority: 'urgent',
-      eleveId:  eleve.id,
-      classe,
-    }))
-  }
-
-  // `allSettled` et non `all` : un seul envoi en échec ne doit pas faire
-  // remonter une exception qui masquerait les envois RÉUSSIS et afficherait
-  // « 0 parent notifié » au professeur. On compte les succès réels.
-  const results = await Promise.allSettled(writes)
-  const notified = results.filter(r => r.status === 'fulfilled').length
-  const failed = results.length - notified
-  if (failed > 0) console.warn(`[absences] ${failed} message(s) parent non écrit(s)`)
-
-  return { notified, sansParent: sansParent + failed }
-}
-
 export default function TeacherAttendanceScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
+  const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<TeacherStackParamList>>()
   const route = useRoute<TeacherRoute<'TeacherAttendance'>>()
   const lessonKey = route.params?.lessonKey ?? ''
@@ -165,6 +61,7 @@ export default function TeacherAttendanceScreen() {
   const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [eleves,  setEleves]  = useState<EleveLite[]>([])
   const [absent,  setAbsent]  = useState<Set<string>>(new Set())  // ids des absents
+  const [late,    setLate]    = useState<Set<string>>(new Set())  // ids des élèves en retard
   const [loading, setLoading] = useState(false)
   const [saving,  setSaving]  = useState(false)
   const [requests, setRequests] = useState<AbsenceRequestDoc[]>([])  // déclarations parents (classe+date)
@@ -173,185 +70,107 @@ export default function TeacherAttendanceScreen() {
 
   const classe = lesson?.slot.classe ?? ''
   const seance = lesson?.seance ?? ''
-  const date = localISODate()
+  const date = useMemo(() => route.params?.date || localISODate(), [route.key, route.params?.date])
+  const [draft, setDraft] = useState<AttendanceDraft | null>(null)
+  const draftRef = useRef<AttendanceDraft | null>(null)
+  const loadGeneration = useRef(0)
+  const [storing, setStoring] = useState(false)
 
-  // La route ne transporte qu'une clé de créneau. Classe et période sont
-  // toujours relues dans l'EDT du professeur connecté, jamais acceptées
-  // depuis des paramètres modifiables côté navigation.
-  useEffect(() => {
-    let cancelled = false
-    setScheduleLoading(true)
-    setScheduleError(null)
-    setLesson(null)
+  const applyDraft = useCallback((value: AttendanceDraft) => {
+    draftRef.current = value
+    setDraft(value)
+    setLesson({ slot: value.slot, seance: value.seance })
+    setEleves(value.rows)
+    setAbsent(new Set(value.rows.filter(row => row.status === 'absent').map(row => row.id)))
+    setLate(new Set(value.rows.filter(row => row.status === 'retard').map(row => row.id)))
+  }, [])
 
-    if (!profile?.uid || !lessonKey) {
-      setScheduleLoading(false)
-      setScheduleError(t('teacher.attendanceSlotUnavailable'))
-      return () => { cancelled = true }
-    }
-
-    getSchedule(profile.uid)
-      .then(schedule => {
-        if (cancelled) return
-        const slot = findScheduleSlotByLessonKey(schedule?.weeklySlots ?? [], lessonKey)
-        const resolvedSeance = slot ? resolveScheduleSessionCode(slot) : null
-        if (!slot || !isScheduleSlotToday(slot) || !resolvedSeance) {
-          setScheduleError(t('teacher.attendanceSlotUnavailable'))
-          return
-        }
-        setLesson({ slot, seance: resolvedSeance })
-      })
-      .catch(() => {
-        if (!cancelled) setScheduleError(t('teacher.attendanceSlotUnavailable'))
-      })
-      .finally(() => {
-        if (!cancelled) setScheduleLoading(false)
-      })
-
-    return () => { cancelled = true }
-  }, [lessonKey, profile?.uid, t])
-
-  const load = useCallback(async () => {
-    if (!lesson) return
-    setLoading(true); setError(null)
+  const load = useCallback(async (replaceDraft = false) => {
+    if (!profile?.uid || !lessonKey) { setScheduleLoading(false); return }
+    const generation = ++loadGeneration.current
+    setLoading(true); setError(null); setScheduleError(null)
     try {
-      const [elevesSnap, absentsSnap] = await Promise.all([
-        getDocs(query(collection(db, 'eleves'), where('classe', '==', classe))),
-        getDocs(query(
-          collection(db, 'absences'),
-          where('classe', '==', classe),
-          where('date',   '==', date),
-          where('seance', '==', seance),
-          where('statut', '==', 'absent'),
-        )),
-      ])
-      const list: EleveLite[] = elevesSnap.docs
-        .map(d => ({ id: d.id, data: toDoc<EleveDoc>(d) }))
-        .filter(({ data }) => isActiveEleve(data))
-        .map(({ id, data }) => ({
-          id,
-          nom: data.nom || '',
-          prenom: data.prenom || '',
-        }))
-        .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
-      setEleves(list)
-      const set = new Set<string>()
-      absentsSnap.forEach(d => set.add(toDoc<AbsenceDoc>(d).eleveId))
-      setAbsent(set)
-      // Déclarations d'absence des parents pour cette date (best-effort)
-      getAbsenceRequestsForClassDate(classe, date)
-        .then(setRequests)
-        .catch(() => setRequests([]))
+      const cached = await attendanceDrafts.get(profile.uid, date, lessonKey)
+      if (generation !== loadGeneration.current) return
+      if (cached && !replaceDraft) { applyDraft(cached); setScheduleLoading(false); setLoading(false) }
+      const beforeFetch = draftRef.current
+      const bundle = await loadAttendance(lessonKey, date)
+      if (generation !== loadGeneration.current) return
+      const current = draftRef.current
+      if (replaceDraft || (current === beforeFetch && (!current || current.state === 'synced'))) {
+        const next: AttendanceDraft = {
+          uid: profile.uid, lessonKey, date, slot: bundle.slot, seance: bundle.seance,
+          rows: bundle.students, state: 'synced', updatedAt: Date.now(),
+        }
+        await attendanceDrafts.put(next)
+        if (generation !== loadGeneration.current) return
+        if (draftRef.current === current) applyDraft(next)
+      }
+      void getAbsenceRequestsForClassDate(bundle.slot.classe, date)
+        .then(list => { if (generation === loadGeneration.current) setRequests(list) }).catch(() => {})
     } catch (e: any) {
-      setError(e?.message || 'Impossible de charger.')
+      if (generation !== loadGeneration.current) return
+      if (!draftRef.current) setScheduleError(t(
+        e?.message === 'attendance-scope-changed' ? 'offlineAttendance.scopeChanged'
+          : e?.message === 'attendance-not-started' ? 'offlineAttendance.notStarted'
+            : e?.message === 'attendance-expired' ? 'offlineAttendance.expired'
+              : ['functions/permission-denied', 'functions/failed-precondition', 'functions/invalid-argument'].includes(e?.code)
+                ? 'offlineAttendance.reloadFailed' : 'offlineAttendance.firstLoad'))
+      else if (replaceDraft) setError(t('offlineAttendance.reloadFailed'))
     } finally {
-      setLoading(false)
+      if (generation === loadGeneration.current) { setLoading(false); setScheduleLoading(false) }
     }
-  }, [classe, date, lesson, seance])
+  }, [profile?.uid, lessonKey, date, applyDraft, t])
 
   useEffect(() => {
-    if (!lesson) {
-      setEleves([])
-      setAbsent(new Set())
-      setRequests([])
-      return
-    }
-    load()
-  }, [lesson, load])
+    draftRef.current = null; setDraft(null); setLesson(null); setScheduleLoading(true)
+    void load()
+    return () => { loadGeneration.current++ }
+  }, [load])
 
-  const toggleAbsent = (id: string) => {
-    // Vibration impact moyen = signal clair "j'ai marqué un absent"
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
-    setAbsent(prev => {
-      const n = new Set(prev)
-      if (n.has(id)) n.delete(id)
-      else n.add(id)
-      return n
-    })
+  useEffect(() => attendanceDrafts.subscribe(() => {
+    if (!profile?.uid) return
+    void attendanceDrafts.get(profile.uid, date, lessonKey).then(next => {
+      const current = draftRef.current
+      if (next && current?.state === 'queued' && next.operationId === current.operationId) applyDraft(next)
+    }).catch(() => {})
+  }), [profile?.uid, date, lessonKey, applyDraft])
+
+  const toggleStatus = (id: string, status: 'absent' | 'retard') => {
+    const current = draftRef.current
+    if (!current || saving || current.state === 'queued' || current.state === 'review') return
+    void Haptics.selectionAsync().catch(() => {})
+    const next: AttendanceDraft = {
+      ...current, state: 'draft', operationId: undefined, updatedAt: Date.now(),
+      rows: current.rows.map(row => row.id === id ? { ...row, status: row.status === status ? 'present' : status } : row),
+    }
+    applyDraft(next); setStoring(true)
+    void attendanceDrafts.put(next).then(() => {
+      if (draftRef.current?.updatedAt === next.updatedAt) setStoring(false)
+    }).catch(() => { setStoring(false); setError(t('offlineAttendance.storageFailed')) })
   }
+  const toggleAbsent = (id: string) => toggleStatus(id, 'absent')
+  const toggleLate = (id: string) => toggleStatus(id, 'retard')
 
   const save = async () => {
-    if (!profile || !lesson || !classe || !seance) {
-      setError(t('teacher.attendanceSlotUnavailable'))
-      return
-    }
+    const current = draftRef.current
+    if (!current || !current.rows.length || saving || current.state === 'queued' || current.state === 'review') return
     setSaving(true); setError(null)
+    const queued: AttendanceDraft = { ...current, state: 'queued', operationId: doc(collection(db, '_ids')).id, updatedAt: Date.now() }
+    applyDraft(queued)
+    let persisted = false
     try {
-      const period = academicPeriodForDate(date)
-      // Pour chaque élève, on écrit son statut. Le docId est déterministe
-      // pour qu'un rappel sur l'appel mette à jour l'enregistrement au lieu
-      // de dupliquer. Commits par chunks : les règles font un get() par
-      // absence créée (cohérence élève/classe) et Firestore plafonne à 20
-      // accès règles par batch — une classe entière en un batch échouerait.
-      await commitInChunks(db, eleves, (batch, e) => {
-        const docId = `${e.id}_${date}_${seance}`
-        const ref = doc(db, 'absences', docId)
-        batch.set(ref, {
-          eleveId:     e.id,
-          eleveNom:    e.nom,
-          elevePrenom: e.prenom,
-          classe,
-          date,
-          seance,
-          statut:      absent.has(e.id) ? 'absent' : 'present',
-          professorId: profile.uid,
-          createdAt:   Timestamp.now(),
-          ...period,
-          // Absence déclarée par le parent → justifiée d'office avec son motif.
-          ...(absent.has(e.id) && declaredFor(e.id)
-            ? { justified: true, raison: declaredFor(e.id)!.reason }
-            : {}),
-        }, { merge: true })
-      })
-
-      // Les déclarations couvertes par cet appel passent à 'approved'.
-      await Promise.all(
-        requests
-          .filter(r => r.id && r.status === 'pending' && absent.has(r.eleveId))
-          .map(r => decideAbsenceRequest(r.id!, 'approved', profile.uid).catch(() => {})),
-      )
-
-      // ── Notifier les parents des absents ──────────────────────────────
-      let notifSent = 0
-      let notifSkipped = 0
-      if (absent.size > 0 && profile) {
-        try {
-          const res = await notifyParentsOfAbsents(
-            eleves.filter(e => absent.has(e.id)),
-            classe, date, seance,
-            { uid: profile.uid, nom: profile.nom, prenom: profile.prenom },
-          )
-          notifSent = res.notified
-          notifSkipped = res.sansParent
-        } catch (e) {
-          // Erreur de notif non-bloquante : l'appel est déjà sauvegardé
-          console.warn('Notification failed:', e)
-          notifSkipped = absent.size
-        }
-      }
-
-      const count = absent.size
-      // Le professeur doit voir les deux chiffres : combien de familles ont été
-      // prévenues, et combien ne l'ont pas été (absence de compte parent lié ou
-      // échec d'écriture). Un silence sur le second laissait croire à une
-      // notification complète.
-      const notifLines = [
-        notifSent > 0 ? t('teacher.parentsNotified', { count: notifSent }) : '',
-        notifSkipped > 0 ? t('teacher.absentsWithoutParent', { count: notifSkipped }) : '',
-      ].filter(Boolean)
-      Alert.alert(
-        t('teacher.attendanceSaved'),
-        count === 0
-          ? t('teacher.allPresent', { classe, seance })
-          : t('teacher.absentsRecorded', { count, classe, seance }) +
-            (notifLines.length > 0 ? `\n\n${notifLines.join('\n')}` : ''),
-        [{ text: 'OK', onPress: () => navigation.goBack() }],
-      )
-    } catch (e: any) {
-      setError(e?.message || 'Erreur lors de la sauvegarde.')
-    } finally {
-      setSaving(false)
-    }
+      await attendanceDrafts.put(queued)
+      persisted = true
+      await attendanceDrafts.flush(current.uid)
+      const result = await attendanceDrafts.get(current.uid, date, lessonKey)
+      if (result) applyDraft(result)
+      Alert.alert(t(result?.state === 'synced' ? 'teacher.attendanceSaved' : result?.state === 'review' ? 'offlineAttendance.reviewTitle' : 'offlineAttendance.queuedTitle'),
+        t(result?.state === 'synced' ? 'communication.alertsQueued' : result?.state === 'review' ? 'offlineAttendance.review' : 'offlineAttendance.queued'))
+    } catch {
+      if (!persisted) applyDraft(current)
+      setError(t('offlineAttendance.storageFailed'))
+    } finally { setSaving(false) }
   }
 
   const declaredFor = (eleveId: string): AbsenceRequestDoc | undefined =>
@@ -359,6 +178,11 @@ export default function TeacherAttendanceScreen() {
 
   const renderEleve = ({ item, index }: { item: EleveLite; index: number }) => {
     const isAbsent = absent.has(item.id)
+    const isLate = late.has(item.id)
+    const statusColor = isAbsent ? theme.danger : isLate ? theme.warning : theme.success
+    const statusLabel = isAbsent
+      ? t('teacher.absentTapCancel')
+      : isLate ? t('teacher.lateTapCancel') : t('teacher.presentLabel')
     return (
       <Animated.View
         entering={FadeInDown.delay(index * 30).springify().damping(18)}
@@ -370,22 +194,25 @@ export default function TeacherAttendanceScreen() {
           haptic={false}  // on a déjà un impact dans toggleAbsent
           accessibilityRole="button"
           accessibilityState={{ selected: isAbsent }}
-          accessibilityLabel={`${item.prenom} ${item.nom}`}
+          accessibilityLabel={`${item.prenom} ${item.nom}. ${statusLabel}`}
+          accessibilityHint={t('teacher.markAbsentHint')}
           style={[
             styles.card,
             {
-              backgroundColor: theme.white,
-              borderColor:     isAbsent ? theme.danger : theme.border,
+              backgroundColor: isAbsent
+                ? theme.dangerSurface
+                : isLate ? theme.warningSurface : theme.white,
+              borderColor: isAbsent ? theme.danger : isLate ? theme.warning : theme.border,
             },
           ]}
         >
-          <View style={[styles.statusStripe, { backgroundColor: isAbsent ? theme.danger : theme.success }]} />
+          <View style={[styles.statusStripe, { backgroundColor: statusColor }]} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.eleveName, { color: theme.text, fontFamily: theme.fonts.bold }]}>
               {item.prenom} {item.nom}
             </Text>
-            <Text style={[styles.eleveStatus, { color: isAbsent ? theme.danger : theme.success, fontFamily: theme.fonts.semibold }]}>
-              {isAbsent ? t('teacher.absentTapCancel') : t('teacher.presentLabel')}
+            <Text style={[styles.eleveStatus, { color: statusColor, fontFamily: theme.fonts.semibold }]}>
+              {statusLabel}
             </Text>
             {declaredFor(item.id) ? (
               <Text style={{ color: theme.warning, fontFamily: theme.fonts.semibold, fontSize: 10.5, marginTop: 2 }}>
@@ -393,6 +220,24 @@ export default function TeacherAttendanceScreen() {
               </Text>
             ) : null}
           </View>
+          {/* Retard : action directe et exclusive avec absent. */}
+          <PressableScale
+            onPress={() => toggleLate(item.id)}
+            scaleDown={0.88}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isLate }}
+            accessibilityLabel={isLate ? t('teacher.cancelLate') : t('teacher.markLate')}
+            style={[
+              styles.lateBtn,
+              {
+                borderColor: isLate ? theme.warning : theme.border,
+                backgroundColor: isLate ? theme.warning : theme.white,
+              },
+            ]}
+          >
+            <Ionicons name={isLate ? 'time' : 'time-outline'} size={21} color={isLate ? theme.white : theme.warning} />
+          </PressableScale>
           {/* Mérite / avertissement sans quitter l'appel (Pressable imbriqué :
               le tap sur le smiley ne doit PAS basculer l'absence). */}
           <PressableScale
@@ -409,6 +254,10 @@ export default function TeacherAttendanceScreen() {
       </Animated.View>
     )
   }
+
+  const absentCount = absent.size
+  const lateCount = late.size
+  const presentCount = Math.max(0, eleves.length - absentCount - lateCount)
 
   if (scheduleLoading) {
     return (
@@ -443,6 +292,30 @@ export default function TeacherAttendanceScreen() {
 
   return (
     <ScreenLayout title={t('teacher.attendanceTitle', { classe })}>
+      {draft && (
+        <View style={{ padding: 12, marginBottom: 12, borderRadius: 12, backgroundColor: theme.surface }}>
+          <Text style={{ color: draft.state === 'review' ? theme.danger : theme.textSoft, fontSize: 13 }}>
+            {date} · {t(storing ? 'offlineAttendance.storing' : `offlineAttendance.${draft.state}`)}
+          </Text>
+          {draft.state === 'review' && (
+            <PressableScale onPress={() => Alert.alert(t('offlineAttendance.reload'), t('offlineAttendance.reloadConfirm'), [
+              { text: t('common.cancel'), style: 'cancel' },
+              { text: t('common.confirm'), onPress: () => void load(true) },
+            ])} accessibilityRole="button" accessibilityLabel={t('offlineAttendance.reload')} style={{ paddingVertical: 12 }}>
+              <Text style={{ color: theme.primary, fontWeight: '700' }}>{t('offlineAttendance.reload')}</Text>
+            </PressableScale>
+          )}
+          {(draft.state === 'review' || draft.state === 'draft') && (
+            <PressableScale onPress={() => Alert.alert(t('offlineAttendance.discard'), t('offlineAttendance.discardConfirm'), [
+              { text: t('common.cancel'), style: 'cancel' },
+              { text: t('common.delete'), style: 'destructive', onPress: () => void attendanceDrafts.discard(draft)
+                .then(() => navigation.goBack()).catch(() => setError(t('offlineAttendance.storageFailed'))) },
+            ])} accessibilityRole="button" accessibilityLabel={t('offlineAttendance.discard')} style={{ paddingVertical: 12 }}>
+              <Text style={{ color: theme.danger }}>{t('offlineAttendance.discard')}</Text>
+            </PressableScale>
+          )}
+        </View>
+      )}
       {error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
           <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
@@ -456,7 +329,7 @@ export default function TeacherAttendanceScreen() {
         style={[styles.lockedSession, { borderColor: theme.primary + '35', backgroundColor: theme.primarySurface }]}
       >
         <View style={[styles.lockIcon, { backgroundColor: theme.primary + '16' }]}>
-          <Ionicons name="lock-closed" size={15} color={theme.primary} />
+          <Ionicons name="lock-open" size={15} color={theme.primary} />
         </View>
         <Text style={[styles.lockedSessionCode, { color: theme.primary, fontFamily: theme.fonts.black }]}>
           {seance}
@@ -467,11 +340,31 @@ export default function TeacherAttendanceScreen() {
       </View>
 
       <View style={[styles.summary, { backgroundColor: theme.white, borderColor: theme.border }]}>
-        <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800' }}>
-          {date} · {seance} · {t('teacher.studentsCount', { count: eleves.length })} · {t('teacher.absentCount', { count: absent.size })}
+        <Text style={[styles.summaryMeta, { color: theme.text, fontFamily: theme.fonts.bold }]}>
+          {date} · {seance} · {t('teacher.studentsCount', { count: eleves.length })}
         </Text>
-        <Text style={{ color: theme.textSoft, fontSize: 11, marginTop: 2 }}>
-          {t('teacher.tapAbsent')}
+        <View style={styles.statusSummaryRow}>
+          <View style={[styles.statusChip, { backgroundColor: theme.successSurface }]}>
+            <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
+            <Text style={[styles.statusChipText, { color: theme.success, fontFamily: theme.fonts.bold }]}>
+              {t('teacher.presentCount', { count: presentCount })}
+            </Text>
+          </View>
+          <View style={[styles.statusChip, { backgroundColor: theme.warningSurface }]}>
+            <Ionicons name="time-outline" size={13} color={theme.warning} />
+            <Text style={[styles.statusChipText, { color: theme.warning, fontFamily: theme.fonts.bold }]}>
+              {t('teacher.lateCount', { count: lateCount })}
+            </Text>
+          </View>
+          <View style={[styles.statusChip, { backgroundColor: theme.dangerSurface }]}>
+            <View style={[styles.statusDot, { backgroundColor: theme.danger }]} />
+            <Text style={[styles.statusChipText, { color: theme.danger, fontFamily: theme.fonts.bold }]}>
+              {t('teacher.absentCount', { count: absentCount })}
+            </Text>
+          </View>
+        </View>
+        <Text style={[styles.summaryHint, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>
+          {t('teacher.tapAttendance')}
         </Text>
       </View>
 
@@ -501,15 +394,24 @@ export default function TeacherAttendanceScreen() {
           data={eleves}
           keyExtractor={item => item.id}
           renderItem={renderEleve}
-          contentContainerStyle={{ paddingBottom: 90 }}
+          contentContainerStyle={{ paddingBottom: 116 + insets.bottom }}
         />
       )}
 
-      {/* Bouton sauvegarder sticky */}
-      <View style={[styles.footer, { backgroundColor: theme.bg, borderTopColor: theme.border }]}>
+      {/* Barre d'action au-dessus de la zone système Android/iOS. */}
+      <View style={[
+        styles.footer,
+        {
+          backgroundColor: theme.white,
+          borderTopColor: theme.border,
+          paddingBottom: Math.max(insets.bottom, 12),
+        },
+      ]}>
         <PressableScale
           onPress={save}
-          disabled={saving}
+          disabled={saving || draft?.state === 'queued' || draft?.state === 'review'}
+          accessibilityRole="button"
+          accessibilityLabel={t('teacher.saveAttendance')}
           style={[styles.saveBtn, {
             backgroundColor: theme.primary,
             opacity:         saving ? 0.7 : 1,
@@ -519,8 +421,19 @@ export default function TeacherAttendanceScreen() {
             ? <ActivityIndicator color="#fff" />
             : (
               <>
-                <Ionicons name="save" size={18} color="#fff" />
-                <Text style={[styles.saveBtnText, { fontFamily: theme.fonts.black }]}>{t('teacher.saveAttendance')}</Text>
+                <View style={styles.saveIconWrap}>
+                  <Ionicons name="save-outline" size={20} color="#fff" />
+                </View>
+                <View style={styles.saveCopy}>
+                  <Text style={[styles.saveBtnText, { fontFamily: theme.fonts.black }]}>{t('teacher.saveAttendance')}</Text>
+                  <Text style={[styles.saveBtnMeta, { fontFamily: theme.fonts.semibold }]}>
+                    {t('teacher.saveAttendanceSummary', {
+                      present: presentCount,
+                      late: lateCount,
+                      absent: absentCount,
+                    })}
+                  </Text>
+                </View>
               </>
             )}
         </PressableScale>
@@ -549,16 +462,26 @@ const styles = StyleSheet.create({
   blockedText:  { fontSize: 13, lineHeight: 19, textAlign: 'center' },
   scheduleBtn:  { minHeight: 44, paddingHorizontal: 18, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   scheduleBtnText:{ color: '#fff', fontSize: 13 },
-  summary:      { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, marginBottom: 12 },
-  card:         { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8, borderRadius: 8, borderWidth: 1, overflow: 'hidden' },
+  summary:      { paddingHorizontal: 12, paddingVertical: 11, borderRadius: 12, borderWidth: 1, marginBottom: 12, gap: 8, borderCurve: 'continuous' },
+  summaryMeta:  { fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  statusSummaryRow:{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  statusChip:   { minHeight: 26, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, borderRadius: 999 },
+  statusDot:    { width: 7, height: 7, borderRadius: 999 },
+  statusChipText:{ fontSize: 10.5, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  summaryHint:  { fontSize: 10.5, lineHeight: 15 },
+  card:         { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8, borderRadius: 12, borderWidth: 1, overflow: 'hidden', borderCurve: 'continuous' },
   statusStripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   eleveName:    { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   eleveStatus:  { fontSize: 12, fontWeight: '600' },
-  behaviorBtn:  { width: 38, height: 38, borderRadius: 19, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginStart: 10 },
+  lateBtn:      { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginStart: 8 },
+  behaviorBtn:  { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginStart: 7 },
   loading:      { paddingVertical: 40, alignItems: 'center' },
   empty:        { paddingVertical: 60, alignItems: 'center' },
   errorBox:     { padding: 12, borderRadius: 10, marginBottom: 12 },
-  footer:       { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 14, borderTopWidth: 1 },
-  saveBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48, paddingHorizontal: 16, borderRadius: 10 },
-  saveBtnText:  { color: '#fff', fontSize: 16, fontWeight: '800' },
+  footer:       { position: 'absolute', left: -20, right: -20, bottom: 0, paddingTop: 10, paddingHorizontal: 20, borderTopWidth: StyleSheet.hairlineWidth, boxShadow: '0 -8px 24px rgba(67, 24, 18, 0.10)' },
+  saveBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 11, minHeight: 58, paddingHorizontal: 16, borderRadius: 15, borderCurve: 'continuous', boxShadow: '0 5px 14px rgba(166, 27, 27, 0.24)' },
+  saveIconWrap: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.16)' },
+  saveCopy:     { flex: 1, gap: 1 },
+  saveBtnText:  { color: '#fff', fontSize: 15, lineHeight: 19, fontWeight: '800' },
+  saveBtnMeta:  { color: 'rgba(255,255,255,0.82)', fontSize: 10.5, lineHeight: 14 },
 })

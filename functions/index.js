@@ -19,6 +19,13 @@ const { getFirestore, FieldPath, FieldValue } = require('firebase-admin/firestor
 const { getAuth } = require('firebase-admin/auth')
 const logger = require('firebase-functions/logger')
 const { createHash } = require('node:crypto')
+const { reconcileSchoolAlert } = require('./schoolAlerts')
+const { createMessageDelivery } = require('./messageDelivery')
+const { registerPushDevice, getPushTargets } = require('./pushDevices')
+const attendanceSubmission = require('./attendanceSubmission')
+const appointments = require('./appointments')
+const { getDashboardActions } = require('./dashboardActions')
+const { cancelComportement } = require('./behaviorCancellation')
 const { claimEmailSlot, claimGlobalSlot } = require('./resetThrottle')
 const loginAudit = require('./loginAudit')
 const { computeClassStats, statsDocId } = require('./classStats')
@@ -30,6 +37,9 @@ const {
 } = require('./collegeEvaluation')
 const { gradeProgress, gradeProgressStudents } = require('./gradeProgress')
 const drill = require('./statsDrilldown')
+const coefficientSettings = require('./coefficientSettings')
+const { updateStudentLatinNames } = require('./studentLatinNames')
+const { requireStudentFileAccess, restrictStudentFileGrades } = require('./studentFileAccess')
 const { buildSlotDocs } = require('./emploiDuTempsSync')
 const {
   TransportTransitionError,
@@ -57,6 +67,10 @@ const db = getFirestore()
 // existing deployment and avoid cross-region hops.
 setGlobalOptions({ maxInstances: 10, region: 'europe-west1' })
 
+exports.getCoefficientSettings = onCall(request => coefficientSettings.getCoefficientSettings(db, request))
+exports.saveLevelCoefficients = onCall(request => coefficientSettings.saveLevelCoefficients(db, request))
+exports.updateStudentLatinNames = onCall({ timeoutSeconds: 120 }, request => updateStudentLatinNames(db, request))
+
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
 const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts'
 const EXPO_PUSH_TOKEN_RE = /^(Expo|Exponent)PushToken\[[^\]]+\]$/
@@ -74,6 +88,9 @@ async function resolveRecipientUids(data) {
   // New format
   if (data.toType === 'user' && Array.isArray(data.toIds)) {
     data.toIds.forEach((u) => u && uids.add(u))
+  } else if (data.toType === 'administration') {
+    const admins = await db.collection('users').where('role', '==', 'admin').get()
+    admins.forEach(d => uids.add(d.id))
   } else if (data.toType === 'all') {
     const snap = await db.collection('users').get()
     snap.forEach((d) => uids.add(d.id))
@@ -112,45 +129,20 @@ async function resolveRecipientUids(data) {
   return [...uids]
 }
 
-/** Read Expo push tokens for a list of UIDs (Admin SDK → bypasses rules). */
-async function tokensForUids(uids) {
-  const tokens = new Set()
-  let invalid = 0
-  // getAll is efficient and avoids the `in`-query 10-item limit.
-  for (let i = 0; i < uids.length; i += 100) {
-    const refs = uids.slice(i, i + 100).map((u) => db.collection('users').doc(u))
-    const docs = await db.getAll(...refs)
-    docs.forEach((d) => {
-      const tok = d.exists ? d.get('expoPushToken') : null
-      if (!tok) return
-      if (isValidExpoPushToken(tok)) tokens.add(tok)
-      else invalid++
-    })
-  }
-  return { tokens: [...tokens], invalid }
+/** Shared device registry for both school messages and Smart Pickup. */
+async function pushTargetsForUids(uids) {
+  return { targets: await getPushTargets(db, uids), invalid: 0 }
 }
 
-/** Token + langue préférée, sans exposer ces valeurs dans les logs. */
-async function pushTargetsForUids(uids) {
-  const byToken = new Map()
-  let invalid = 0
-  for (let i = 0; i < uids.length; i += 100) {
-    const refs = uids.slice(i, i + 100).map((uid) => db.collection('users').doc(uid))
-    const docs = await db.getAll(...refs)
-    docs.forEach((docSnap) => {
-      const token = docSnap.exists ? docSnap.get('expoPushToken') : null
-      if (!token) return
-      if (!isValidExpoPushToken(token)) {
-        invalid++
-        return
-      }
-      const requested = docSnap.get('notificationLanguage')
-      const language = ['fr', 'en', 'ar'].includes(requested) ? requested : 'fr'
-      byToken.set(token, { token, language })
-    })
+exports.registerPushDevice = onCall(async request => {
+  try { return await registerPushDevice(db, request.auth?.uid, request.data) }
+  catch (error) {
+    if (['unauthenticated', 'permission-denied', 'invalid-argument'].includes(error.code)) {
+      throw new HttpsError(error.code, error.message)
+    }
+    throw error
   }
-  return { targets: [...byToken.values()], invalid }
-}
+})
 
 function summarizeExpoTicketError(ticket) {
   return {
@@ -484,71 +476,86 @@ function summarizeExpoReceipts(ticketIds, receipts) {
 
 // Name MUST stay `onMessageCreated` and region `europe-west1` to REPLACE the
 // pre-existing deployed function — not create a duplicate that double-sends.
-exports.onMessageCreated = onDocumentCreated('messages/{messageId}', async (event) => {
-  const snap = event.data
-  if (!snap) return
-  const data = snap.data() || {}
+const messageDelivery = createMessageDelivery(db, { resolveRecipients: resolveRecipientUids })
+exports.onMessageCreated = onDocumentCreated(
+  { document: 'messages/{messageId}', retry: true, timeoutSeconds: 120 },
+  async event => {
+    if (!event.data) return
+    await stampPeriodFields(event.data, event.data.get('createdAt'))
+    await messageDelivery.enqueue(event.data.ref)
+    await messageDelivery.process(event.data.ref)
+  },
+)
 
-  // Filet de sécurité période (voir stampPeriodFields) — un message sans
-  // academicYear serait invisible dans toutes les boîtes de réception.
-  await stampPeriodFields(snap, data.createdAt)
+exports.retryMessageDeliveries = onSchedule(
+  { schedule: 'every 1 minutes', timeZone: 'Africa/Casablanca', timeoutSeconds: 180 },
+  () => messageDelivery.flush(),
+)
 
-  const uids = await resolveRecipientUids(data)
-  if (uids.length === 0) {
-    await snap.ref.set({ push: { sent: 0, recipients: 0, at: new Date() } }, { merge: true })
-    return
+exports.retryMessageDelivery = onCall(async request => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in required.')
+  const id = request.data?.messageId
+  if (typeof id !== 'string' || !id || id.length > 200 || id.includes('/')) {
+    throw new HttpsError('invalid-argument', 'Invalid message ID.')
   }
-
-  const { tokens, invalid: invalidTokens } = await tokensForUids(uids)
-  const title = (data.priority === 'urgent' ? '🚨 ' : '') + (data.subject || data.subjectAr || 'Nouveau message')
-  const targetWorkspace = data.toType === 'parents' || data.toId === 'parents'
-    ? 'parent'
-    : undefined
-  const messages = tokens.map((to) => ({
-    to,
-    sound: 'default',
-    title,
-    body: data.body || data.bodyAr || "Ouvrez l'application pour le detail.",
-    // priority high : réveille l'appareil même en Doze (sinon FCM « normal »
-    // peut retenir la notif jusqu'à la prochaine ouverture de l'app).
-    // channelId : canal Android créé par l'app (importance MAX).
-    priority: 'high',
-    channelId: 'default',
-    data: {
-      messageId: event.params.messageId,
-      type: data.category || 'announcement',
-      ...(targetWorkspace ? { workspace: targetWorkspace } : {}),
-    },
-  }))
-
-  const pushResult = await sendExpoPush(messages)
-  const receiptReadyAt = pushResult.ticketIds.length > 0
-    ? new Date(Date.now() + RECEIPT_CHECK_DELAY_MS)
-    : null
-  logger.info('push processed', {
-    messageId: event.params.messageId,
-    recipients: uids.length,
-    tokens: tokens.length,
-    invalidTokens,
-    sent: pushResult.sent,
-    errors: pushResult.errors,
-    ticketIds: pushResult.ticketIds.length,
-  })
-
-  // Record outcome for observability (does not re-trigger onCreate).
-  await snap.ref.set({
-    push: {
-      sent: pushResult.sent,
-      errors: pushResult.errors,
-      recipients: uids.length,
-      tokens: tokens.length,
-      invalidTokens,
-      ticketIds: pushResult.ticketIds,
-      receiptReadyAt,
-      at: new Date(),
-    },
-  }, { merge: true })
+  try {
+    return { queued: await messageDelivery.retry(db.collection('messages').doc(id), request.auth.uid) }
+  } catch (error) {
+    if (error.code === 'permission-denied') throw new HttpsError('permission-denied', 'Admin only.')
+    throw error
+  }
 })
+
+exports.onAttendanceAlertWritten = onDocumentWritten(
+  { document: 'absences/{absenceId}', retry: true },
+  event => {
+    if (!event.data?.after?.exists) return null
+    const before = event.data.before.exists ? event.data.before.data() : null
+    // Also prevents legacy absences being re-announced by metadata-only edits.
+    if (before?.statut === event.data.after.get('statut')) return null
+    return reconcileSchoolAlert(db, {
+      kind: 'attendance', sourceRef: event.data.after.ref,
+      before, period: academicPeriodForValue,
+    })
+  },
+)
+exports.onBehaviorAlertCreated = onDocumentCreated(
+  { document: 'comportements/{recordId}', retry: true },
+  event => event.data ? reconcileSchoolAlert(db, {
+    kind: 'behavior', sourceRef: event.data.ref, period: academicPeriodForValue,
+  }) : null,
+)
+
+for (const [name, handler] of Object.entries({ ...appointments, cancelComportement, getDashboardActions })) {
+  if (!['appointmentCommand', 'listAppointments', 'cancelComportement', 'getDashboardActions'].includes(name)) continue
+  exports[name] = onCall({ timeoutSeconds: 60 }, async request => {
+    try { return await handler(db, request.auth?.uid, request.data) }
+    catch (error) {
+      if (['unauthenticated', 'permission-denied', 'invalid-argument', 'failed-precondition', 'already-exists', 'not-found'].includes(error.code)) {
+        throw new HttpsError(error.code, error.message)
+      }
+      throw error
+    }
+  })
+}
+exports.onBehaviorAlertWritten = onDocumentWritten(
+  { document: 'comportements/{recordId}', retry: true },
+  event => event.data?.after.exists ? reconcileSchoolAlert(db, {
+    kind: 'behavior', sourceRef: event.data.after.ref, period: academicPeriodForValue,
+  }) : null,
+)
+
+for (const method of ['loadAttendance', 'submitAttendance']) {
+  exports[method] = onCall({ timeoutSeconds: 60 }, async request => {
+    try { return await attendanceSubmission[method](db, request.auth?.uid, request.data) }
+    catch (error) {
+      if (['unauthenticated', 'permission-denied', 'invalid-argument', 'failed-precondition', 'already-exists'].includes(error.code)) {
+        throw new HttpsError(error.code, error.message)
+      }
+      throw error
+    }
+  })
+}
 
 // Expo tickets only mean "accepted by Expo". Receipts reveal provider errors
 // such as InvalidCredentials, MismatchSenderId, or DeviceNotRegistered.
@@ -993,6 +1000,12 @@ function currentAcademicPeriod() {
   return academicPeriodForValue(new Date())
 }
 
+function currentAndNextAcademicYears() {
+  const current = currentAcademicPeriod().academicYear
+  const start = Number(current.slice(0, 4))
+  return [current, `${start + 1}-${start + 2}`]
+}
+
 // Complète academicYear/semestre/monthKey manquants sur un doc écrit par un
 // client pas encore à jour (OTA en attente ou runtime < 1.0.14). Sans ce
 // filet, le doc est invisible pour toutes les requêtes filtrées par période
@@ -1016,14 +1029,16 @@ async function stampPeriodFields(snap, dateValue) {
 /** Recalcule les statistiques de la période active et les écrit (Admin SDK). */
 async function refreshSchoolStats() {
   const period = currentAcademicPeriod()
+  const homeworkYears = currentAndNextAcademicYears()
   const [eleves, users, notes, absences, devoirs, coefDoc] = await Promise.all([
     db.collection('eleves').get(),
     db.collection('users').get(),
     db.collection('notes').where('academicYear', '==', period.academicYear).where('semestre', '==', period.semestre).get(),
     db.collection('absences').where('academicYear', '==', period.academicYear).where('monthKey', '==', period.monthKey).get(),
-    // Devoirs : année entière, pas le mois de création — activeHomework se
-    // calcule sur dateLimite (un devoir créé fin juin dû début juillet doit compter).
-    db.collection('devoirs').where('academicYear', '==', period.academicYear).get(),
+    // academicYear vient de l'ÉCHÉANCE. Fin août, les devoirs de rentrée sont
+    // déjà dans l'année suivante alors qu'aujourd'hui est encore dans l'année
+    // sortante : les deux années sont nécessaires pour activeHomework.
+    db.collection('devoirs').where('academicYear', 'in', homeworkYears).get(),
     db.collection('settings').doc('coefficients').get(),
   ])
   const toRows = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }))
@@ -1738,23 +1753,25 @@ exports.getStatsGradeDetails = onCall(async (request) => {
 
 /**
  * Dossier élève 360° — l'endpoint le plus sensible du lot : un élève, toutes
- * ses métriques. Strictement admin, projection minimale, aucun log nominatif.
+ * ses métriques. Admin ou enseignant de sa classe (sa matière uniquement).
  */
 exports.getStatsStudentFile = onCall(async (request) => {
-  const uid = await drill.requireAdmin(db, request)
-
   const raw = request.data && typeof request.data === 'object' ? request.data : {}
   const eleveId = statsFilterText(raw.eleveId, 64)
-  if (!eleveId) throw new HttpsError('invalid-argument', 'Student id required.')
+  if (!eleveId || eleveId.includes('/')) throw new HttpsError('invalid-argument', 'Student id required.')
+  const access = await requireStudentFileAccess(db, request, eleveId)
+  const { uid } = access
+  const teacher = access.role === 'professeur'
   const scopeInput = raw.scope && typeof raw.scope === 'object' ? raw.scope : {}
 
   const scope = await resolveScope({
     period: statsFilterText(scopeInput.period, 10),
-    cycle: statsFilterText(scopeInput.cycle, 20),
-    niveau: statsFilterText(scopeInput.niveau),
-    classe: statsFilterText(scopeInput.classe),
-    matiere: statsFilterText(scopeInput.matiere),
+    cycle: teacher ? '' : statsFilterText(scopeInput.cycle, 20),
+    niveau: teacher ? '' : statsFilterText(scopeInput.niveau),
+    classe: teacher ? access.classe : statsFilterText(scopeInput.classe),
+    matiere: teacher ? access.matiere : statsFilterText(scopeInput.matiere),
   })
+  scope.cacheBase = restrictStudentFileGrades(scope.cacheBase, access)
 
   const inScope = scope.scopeEleves.some((row) => row.id === eleveId)
   const doc = inScope ? scope.elevesSnap.docs.find((row) => row.id === eleveId) : null
@@ -1883,10 +1900,15 @@ exports.getStatsStudentFile = onCall(async (request) => {
         ? { subjectAverage: scopeAverage.average }
         : {}),
     },
+    gradeScope: teacher ? 'subject' : 'overall',
+    gradeSubject: teacher ? access.matiere : '',
     bySubject,
     attendance: {
       absentDays: absentDates.size,
       observedDays: observedDates.size,
+      recentAbsences: absencesOfStudent.filter(row => row.statut === 'absent')
+        .map(row => ({ date: statsFilterText(row.date), seance: statsFilterText(row.seance) }))
+        .sort((a, b) => b.date.localeCompare(a.date) || a.seance.localeCompare(b.seance)).slice(0, 6),
       lateCount: absencesOfStudent.filter((row) => {
         const statut = String(row.statut)
         return statut === 'retard' || statut === 'late'

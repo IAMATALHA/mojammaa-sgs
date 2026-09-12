@@ -17,6 +17,7 @@ interface UserRow {
   nom: string
   prenom: string
   email: string
+  telephone?: string
   role: RoleRaw
   classe?: string
   classes?: string[]
@@ -56,6 +57,7 @@ export default function AdminUsersScreen() {
           nom: data.nom || '',
           prenom: data.prenom || '',
           email: data.email || '',
+          telephone: data.telephone || '',
           role: data.role || 'parent',
           classe: data.classe,
           classes: data.classes,
@@ -94,6 +96,7 @@ export default function AdminUsersScreen() {
             {item.prenom} {item.nom}
           </Text>
           <Text style={{ color: theme.textSoft, fontSize: 12, marginTop: 1 }}>{item.email}</Text>
+          {item.telephone ? <Text style={{ color: theme.textSoft, fontSize: 12, marginTop: 3 }}>{item.telephone}</Text> : null}
           <View style={styles.tagsRow}>
             <View style={[styles.tag, { backgroundColor: rc.bg }]}>
               <Text style={{ color: rc.fg, fontSize: 9, fontWeight: '800', letterSpacing: 0.3 }}>

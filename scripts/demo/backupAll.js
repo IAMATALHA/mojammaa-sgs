@@ -28,14 +28,17 @@ function tsFolder() {
 
 async function main() {
   const outDir = path.join(__dirname, '..', '..', 'backups', `firestore-${tsFolder()}`)
-  fs.mkdirSync(outDir, { recursive: true })
+  fs.mkdirSync(outDir, { recursive: true, mode: 0o700 })
+  fs.chmodSync(outDir, 0o700)
 
   const collections = await db.listCollections()
   let grandTotal = 0
   for (const col of collections) {
     const snap = await col.get()
     const docs = snap.docs.map(d => ({ __id: d.id, ...d.data() }))
-    fs.writeFileSync(path.join(outDir, `${col.id}.json`), JSON.stringify(docs, null, 2))
+    const collectionFile = path.join(outDir, `${col.id}.json`)
+    fs.writeFileSync(collectionFile, JSON.stringify(docs, null, 2), { mode: 0o600 })
+    fs.chmodSync(collectionFile, 0o600)
     grandTotal += docs.length
     console.log(`   ✓ ${col.id.padEnd(18)} ${docs.length} doc(s)`)
   }
@@ -52,7 +55,9 @@ async function main() {
     }))
     pageToken = res.pageToken
   } while (pageToken)
-  fs.writeFileSync(path.join(outDir, '_auth_users.json'), JSON.stringify(users, null, 2))
+  const authFile = path.join(outDir, '_auth_users.json')
+  fs.writeFileSync(authFile, JSON.stringify(users, null, 2), { mode: 0o600 })
+  fs.chmodSync(authFile, 0o600)
   console.log(`   ✓ ${'_auth_users'.padEnd(18)} ${users.length} compte(s)`)
 
   console.log(`\n✅ Sauvegarde : ${outDir}`)

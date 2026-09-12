@@ -22,13 +22,15 @@
 import React, {
   createContext, useContext, useEffect, useRef, useState, useCallback, useMemo,
 } from 'react'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { startAttendanceSync } from '../services/attendance-drafts'
 import type { ReactNode } from 'react'
 import type { User } from 'firebase/auth'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { auth, db } from '../config/firebase'
 import type { RoleLogic, RoleRaw, UserProfile } from '../types'
-import { registerForPushNotificationsAsync, clearPushToken, recordLogin } from '../services/NotificationService'
+import { registerForPushNotificationsAsync, clearPushToken, recordLogin, startNotificationSync } from '../services/NotificationService'
 import { recordLoginDevice } from '../services/loginAudit'
 
 function rawToLogic(raw: RoleRaw | string | undefined): RoleLogic {
@@ -94,11 +96,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileError(false)
       pushRegisteredRef.current = false
       let first = true
+      let cachedTeacher = false
+      const cacheKey = `@mojammaa/offline-teacher/${fbUser.uid}`
+      void AsyncStorage.getItem(cacheKey).then(raw => {
+        if (!raw || !first || auth.currentUser?.uid !== fbUser.uid) return
+        const cached = JSON.parse(raw)
+        if (cached.profile?.uid === fbUser.uid && cached.profile.role === 'professeur'
+          && Date.now() - cached.verifiedAt < 7 * 86400_000) {
+          cachedTeacher = true
+          setProfile(cached.profile); setUser(fbUser); setIsLoading(false)
+        }
+      }).catch(() => {})
 
       profileUnsubRef.current = onSnapshot(
         doc(db, 'users', fbUser.uid),
         snap => {
           if (!snap.exists()) {
+            if (snap.metadata.fromCache) return
+            void AsyncStorage.removeItem(cacheKey).catch(() => {})
             // Pas (ou PLUS) de doc users/{uid} : compte non provisionné, ou
             // désactivé/supprimé en cours de session (offboarding). On déconnecte
             // et on renvoie au login, au lieu d'afficher à tort l'espace parent.
@@ -111,12 +126,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           // Doc présent : profil exposé / mis à jour en temps réel. Une
           // rétrogradation de rôle prend ainsi effet immédiatement.
-          setProfile({ uid: fbUser.uid, ...snap.data() } as UserProfile)
+          const verifiedProfile = { uid: fbUser.uid, ...snap.data() } as UserProfile
+          setProfile(verifiedProfile)
+          if (!snap.metadata.fromCache) {
+            if (verifiedProfile.role === 'professeur') {
+              const { uid, nom, prenom, role, classes, classe, matiere, cycle } = verifiedProfile
+              void AsyncStorage.setItem(cacheKey, JSON.stringify({ profile: { uid, nom, prenom, role, classes, classe, matiere, cycle, email: '' }, verifiedAt: Date.now() })).catch(() => {})
+            } else void AsyncStorage.removeItem(cacheKey).catch(() => {})
+          }
           setProfileError(false)
           setUser(fbUser)
           if (!pushRegisteredRef.current) {
             pushRegisteredRef.current = true
-            registerForPushNotificationsAsync(fbUser.uid)
+            void registerForPushNotificationsAsync(fbUser.uid).catch(() => {})
             recordLogin(fbUser.uid)
             // Journal des sessions (IP + appareil). Ici et pas dans
             // LoginScreen : les sessions Firebase persistent, donc presque
@@ -129,12 +151,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           if (first) { first = false; setIsLoading(false) }
         },
-        () => {
+        (error) => {
           // Erreur de lecture (offline/permission) : on NE déconnecte PAS — la
           // session est conservée. On signale l'erreur pour que l'UI ne suppose
           // pas « parent » par défaut. Firestore termine le listener ici.
           profileUnsubRef.current = null
-          setProfileError(true)
+          setProfileError(!(cachedTeacher && error.code === 'unavailable'))
           setUser(fbUser)
           if (first) { first = false; setIsLoading(false) }
         },
@@ -147,11 +169,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!profile?.uid) return
+    const stopPush = startNotificationSync(profile.uid)
+    const stopAttendance = profile.role === 'professeur' ? startAttendanceSync(profile.uid) : () => {}
+    return () => { stopPush(); stopAttendance() }
+  }, [profile?.uid, profile?.role])
+
   const logout = useCallback(async () => {
     // Clear the push token first so the next user on this device does not
     // receive notifications meant for the previous account.
     if (user?.uid) {
-      try { await clearPushToken(user.uid) } catch {}
+      await clearPushToken(user.uid)
     }
     await signOut(auth)
   }, [user])

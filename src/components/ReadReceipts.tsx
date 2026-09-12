@@ -40,6 +40,7 @@ export default function ReadReceipts({ message, theme, sender }: Props) {
   const total = targeted ? message.toIds.length : null
 
   const resendUnread = () => {
+    if (message.push?.status === 'superseded') return
     Alert.alert(
       t('receipts.resend'),
       t('receipts.resendConfirm', { count: unreadIds.length }),
@@ -52,7 +53,7 @@ export default function ReadReceipts({ message, theme, sender }: Props) {
             try {
               const fromNom = `${sender.prenom || ''} ${sender.nom || ''}`.trim() || message.fromNom
               await sendMessage({
-                type:     message.type || 'announcement',
+                type:     message.type === 'attendance' || message.type === 'behavior' ? 'direct' : message.type || 'announcement',
                 subject:  `${t('receipts.reminderPrefix')}${message.subject}`,
                 body:     message.body,
                 fromId:   sender.uid,
@@ -110,7 +111,7 @@ export default function ReadReceipts({ message, theme, sender }: Props) {
               {t('receipts.allRead')}
             </Text>
           )}
-          {!allRead && (resent ? (
+          {!allRead && message.push?.status !== 'superseded' && (resent ? (
             <Text style={{ color: theme.success, fontSize: 12, fontWeight: '700', marginTop: 10 }}>
               {t('receipts.resent')}
             </Text>

@@ -1,3 +1,4 @@
+import { TeacherAppointmentsScreen } from '../screens/shared/appointments-screen'
 /**
  * Teacher navigation : NativeStack wrapping warm floating tabs.
  */
@@ -27,6 +28,7 @@ import TeacherComportementScreen from '../screens/teacher/TeacherComportementScr
 import TeacherPrayerScreen from '../screens/teacher/TeacherPrayerScreen'
 import TeacherRessourcesScreen from '../screens/teacher/TeacherRessourcesScreen'
 import TeacherStatsScreen from '../screens/teacher/TeacherStatsScreen'
+import AdminStudentFileScreen from '../screens/admin/AdminStudentFileScreen'
 import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen'
 import DevoirDetailScreen from '../screens/shared/DevoirDetailScreen'
 import type { TeacherTabsParamList, TeacherStackParamList } from './types'
@@ -111,12 +113,14 @@ export default function TeacherStack() {
       <Stack.Screen name="TeacherAttendance" component={TeacherAttendanceScreen} />
       <Stack.Screen name="TeacherClasseFolder" component={TeacherClasseFolderScreen} />
       <Stack.Screen name="TeacherClasseEleves" component={TeacherClasseElevesScreen} />
+      <Stack.Screen name="TeacherStudentFile" component={AdminStudentFileScreen} />
       <Stack.Screen name="TeacherNotes" component={TeacherNotesScreen} />
       <Stack.Screen name="TeacherComportement" component={TeacherComportementScreen} />
       <Stack.Screen name="TeacherPrayer" component={TeacherPrayerScreen} />
       <Stack.Screen name="TeacherRessources" component={TeacherRessourcesScreen} />
       <Stack.Screen name="TeacherDevoirsDetail" component={TeacherDevoirsScreen} />
       <Stack.Screen name="TeacherDevoirView" component={DevoirDetailScreen} />
+      <Stack.Screen name="TeacherAppointments" component={TeacherAppointmentsScreen} />
       <Stack.Screen name="TeacherStats" component={TeacherStatsScreen} />
     </Stack.Navigator>
   )

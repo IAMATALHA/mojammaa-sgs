@@ -25,6 +25,7 @@ import type { EleveDoc } from '../../services/elevesService'
 import type { TeacherStackParamList } from '../../navigation/types'
 import AnimatedCounter from '../../components/AnimatedCounter'
 import { currentAcademicPeriod } from '../../utils/academicPeriod'
+import { performanceNumber as asNumber, performanceScore, rankPerformance, recordedAttendance } from '../../utils/teacher-performance'
 import {
   findCurrentScheduleSlot,
   resolveScheduleSessionCode,
@@ -46,17 +47,18 @@ interface NoteRow {
 interface ClassStats {
   name: string
   studentCount: number
-  absencesMonth: number
+  absencesMonth: number | null
   gradedStudents: number
   coverage: number
   bareme: 10 | 20
   avg20: number | null
   avgDisplay: number | null
   delta: number | null
-  healthScore: number
-  gradeScore: number
-  absenceScore: number
-  trendScore: number
+  healthScore: number | null
+  gradeScore: number | null
+  absenceScore: number | null
+  trendScore: number | null
+  weights: ReturnType<typeof performanceScore>['weights']
   gradedIds: string[]
   action: 'notes' | 'support' | 'attendance' | 'good'
 }
@@ -68,15 +70,6 @@ const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max,
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function asNumber(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    const n = Number(value.replace(',', '.'))
-    return Number.isFinite(n) ? n : null
-  }
-  return null
 }
 
 function baremeFromClasse(classe: string): 10 | 20 {
@@ -139,8 +132,8 @@ function triggerHaptic(kind: 'light' | 'medium') {
 }
 
 function studentName(e: EleveDoc): string {
-  const first = e.prenomLatin || e.prenom || ''
-  const last = e.nomLatin || e.nom || ''
+  const first = e.prenomLatin || e.prenomFr || e.prenom || ''
+  const last = e.nomLatin || e.nomFr || e.nom || ''
   return `${first} ${last}`.trim() || e.codeMassar || '—'
 }
 
@@ -208,33 +201,46 @@ export default function TeacherStatsScreen() {
           where('academicYear', '==', period.academicYear),
           where('monthKey', '==', period.monthKey),
         )
-        const notesQuery = subject
+        const notesQuery = (semestre: string) => subject
           ? query(
             collection(db, 'notes'),
             where('classe', '==', classe),
             where('academicYear', '==', period.academicYear),
-            where('semestre', '==', period.semestre),
+            where('semestre', '==', semestre),
             where('matiere', '==', subject),
           )
           : null
 
-        const [absSnap, notesSnap] = await Promise.all([
+        const currentNotesQuery = notesQuery(period.semestre)
+        const previousNotesQuery = period.semestre === 'S2' ? notesQuery('S1') : null
+        const [absSnap, notesSnap, previousNotesSnap] = await Promise.all([
           getDocs(absQuery),
-          notesQuery ? getDocs(notesQuery) : Promise.resolve(null),
+          currentNotesQuery ? getDocs(currentNotesQuery) : Promise.resolve(null),
+          previousNotesQuery ? getDocs(previousNotesQuery) : Promise.resolve(null),
         ])
 
+        const students = teacher.byClasse[classe] ?? []
+        const studentIds = new Map<string, string>()
+        students.forEach(student => {
+          const id = student.id || student.codeMassar
+          if (student.id) studentIds.set(student.id, id)
+          if (student.codeMassar) studentIds.set(student.codeMassar, id)
+        })
+        const attendanceRows = absSnap.docs.map(docSnap => toDoc<AbsenceDoc>(docSnap))
+          .filter(row => studentIds.has(row.eleveId) && typeof row.date === 'string')
+          .map(row => ({ ...row, eleveId: studentIds.get(row.eleveId)! }))
+        const attendance = recordedAttendance(attendanceRows)
         const absences = new Set<string>()
-        absSnap.docs.forEach((docSnap) => {
-          const row = toDoc<AbsenceDoc>(docSnap)
-          if (typeof row.date !== 'string') return
-          if (row.statut === 'absent') absences.add(row.eleveId || docSnap.id)
+        attendanceRows.forEach(row => {
+          if (row.seance && row.statut === 'absent') absences.add(row.eleveId)
         })
 
         const validNotes: { eleveId: string; semestre: string; value20: number }[] = []
-        notesSnap?.docs.forEach((docSnap) => {
+        const noteDocs = [...(notesSnap?.docs ?? []), ...(previousNotesSnap?.docs ?? [])]
+        noteDocs.forEach((docSnap) => {
           const row = toDoc<NoteRow>(docSnap)
           const value20 = validNote20(row, bareme)
-          const eleveId = asString(row.eleveId) || asString(row.codeMassar) || docSnap.id
+          const eleveId = studentIds.get(asString(row.eleveId)) || studentIds.get(asString(row.codeMassar))
           if (value20 == null || !eleveId) return
           validNotes.push({
             eleveId,
@@ -243,7 +249,7 @@ export default function TeacherStatsScreen() {
           })
         })
 
-        const currentNotes = validNotes
+        const currentNotes = validNotes.filter(note => note.semestre === period.semestre)
         const gradedIds = [...new Set(currentNotes.map(note => note.eleveId))]
         const gradedStudents = gradedIds.length
         const studentCount = teacher.byClasse[classe]?.length ?? 0
@@ -253,15 +259,7 @@ export default function TeacherStatsScreen() {
         const avgS1 = average(validNotes.filter(note => note.semestre === 'S1').map(note => note.value20))
         const avgS2 = average(validNotes.filter(note => note.semestre === 'S2').map(note => note.value20))
         const delta = avgS1 != null && avgS2 != null ? round1(avgS2 - avgS1) : null
-        const absenceScore = studentCount > 0 ? clamp(100 - ((absences.size / studentCount) * 120)) : 100
-        const gradeScore = avg20 != null ? clamp((avg20 / 20) * 100) : 52
-        const trendScore = delta == null ? 58 : clamp(58 + (delta * 8))
-        const healthScore = Math.round(clamp(
-          (gradeScore * 0.42) +
-          (coverage * 0.26) +
-          (absenceScore * 0.22) +
-          (trendScore * 0.10),
-        ))
+        const scores = performanceScore(avg20, coverage, attendance.presence, delta)
 
         const action: ClassStats['action'] =
           coverage < 70 ? 'notes' :
@@ -272,23 +270,20 @@ export default function TeacherStatsScreen() {
         return {
           name: classe,
           studentCount,
-          absencesMonth: absences.size,
+          absencesMonth: attendance.count > 0 ? absences.size : null,
           gradedStudents,
           coverage,
           bareme,
           avg20: avg20 == null ? null : round1(avg20),
           avgDisplay,
           delta,
-          healthScore,
-          gradeScore: Math.round(gradeScore),
-          absenceScore: Math.round(absenceScore),
-          trendScore: Math.round(trendScore),
+          ...scores,
           gradedIds,
           action,
         }
       }))
 
-      results.sort((a, b) => b.healthScore - a.healthScore || a.name.localeCompare(b.name, 'fr'))
+      results.sort((a, b) => (b.healthScore ?? -1) - (a.healthScore ?? -1) || a.name.localeCompare(b.name, 'fr'))
       setClassStats(results)
     } catch (e: any) {
       setError(e?.message || t('common.error'))
@@ -301,7 +296,8 @@ export default function TeacherStatsScreen() {
 
   const summary = useMemo(() => {
     const totalStudents = classStats.reduce((sum, item) => sum + item.studentCount, 0)
-    const totalAbsences = classStats.reduce((sum, item) => sum + item.absencesMonth, 0)
+    const hasAttendance = classStats.some(item => item.absencesMonth != null)
+    const totalAbsences = hasAttendance ? classStats.reduce((sum, item) => sum + (item.absencesMonth ?? 0), 0) : null
     const totalExpected = classStats.reduce((sum, item) => sum + item.studentCount, 0)
     const totalGraded = classStats.reduce((sum, item) => sum + item.gradedStudents, 0)
     const weightedAvgRows = classStats.filter(item => item.avg20 != null && item.gradedStudents > 0)
@@ -315,6 +311,7 @@ export default function TeacherStatsScreen() {
     // cartes de classe, elles, gardent chacune le sien (`avgDisplay`).
     const baremes = new Set(weightedAvgRows.map(item => item.bareme))
     const bareme: 10 | 20 = baremes.size === 1 ? [...baremes][0] : 20
+    const ranked = rankPerformance(classStats)
     return {
       totalStudents,
       totalAbsences,
@@ -322,8 +319,8 @@ export default function TeacherStatsScreen() {
       avg20: avg20 == null ? null : round1(avg20),
       bareme,
       avgDisplay: avg20 == null ? null : round1(avg20 * (bareme / 20)),
-      strongest: classStats[0],
-      focus: classStats.length > 0 ? classStats[classStats.length - 1] : undefined,
+      strongest: ranked[0],
+      focus: ranked.length > 0 ? ranked[ranked.length - 1] : undefined,
     }
   }, [classStats])
 
@@ -400,7 +397,7 @@ export default function TeacherStatsScreen() {
 
               <View style={[styles.heroMetrics, isAr && styles.rowReverse]}>
                 <HeroPill value={<><AnimatedCounter value={summary.coverage} />%</>} label={t('teacher.perfCoverage')} isAr={isAr} theme={theme} />
-                <HeroPill value={<AnimatedCounter value={summary.totalAbsences} />} label={t('teacher.perfAbsencesMonth')} isAr={isAr} theme={theme} />
+                <HeroPill value={summary.totalAbsences == null ? '—' : <AnimatedCounter value={summary.totalAbsences} />} label={t('teacher.perfAbsencesMonth')} isAr={isAr} theme={theme} />
                 <HeroPill
                   value={summary.focus?.name || '—'}
                   label={t('teacher.perfFocusClass')}
@@ -411,7 +408,7 @@ export default function TeacherStatsScreen() {
               </View>
             </LinearGradient>
 
-            <View style={styles.insightGrid}>
+            {summary.strongest ? <View style={styles.insightGrid}>
               <InsightCard
                 icon={<Award size={17} color={theme.success} strokeWidth={2.2} />}
                 label={t('teacher.perfStrongClass')}
@@ -434,7 +431,7 @@ export default function TeacherStatsScreen() {
                 isAr={isAr}
                 onPress={summary.focus ? () => openFolder(summary.focus!.name) : undefined}
               />
-            </View>
+            </View> : null}
 
             <View style={[styles.sectionTitleRow, isAr && styles.rowReverse]}>
               <Text style={[styles.sectionTitle, { color: theme.text, fontFamily: isAr ? theme.fonts.arabicBold : theme.fonts.bold }]}>
@@ -575,7 +572,7 @@ function ClassPerformanceCard({
           style={[styles.scoreBadge, { backgroundColor: tone.bg }]}
         >
           <Text style={[styles.scoreText, { color: tone.color, fontFamily: theme.fonts.black }]}>
-            {item.healthScore}%
+            {item.healthScore == null ? '—' : `${item.healthScore}%`}
           </Text>
           <ChevronRight size={12} color={tone.color} strokeWidth={2.4} style={expandedMode === 'score' ? styles.chevronOpen : undefined} />
         </MotionPressable>
@@ -617,7 +614,7 @@ function ClassPerformanceCard({
         />
         <MetricTile
           icon={<CalendarX size={14} color={theme.warning} strokeWidth={2.1} />}
-          value={String(item.absencesMonth)}
+          value={formatNumber(item.absencesMonth)}
           label={t('teacher.perfAbsencesMonth')}
           color={theme.warning}
           bg={theme.warningSurface}
@@ -639,9 +636,9 @@ function ClassPerformanceCard({
         />
       </View>
 
-      <View style={[styles.progressWrap, { backgroundColor: theme.surfaceAlt }]}>
+      {item.healthScore != null ? <View style={[styles.progressWrap, { backgroundColor: theme.surfaceAlt }]}>
         <View style={[styles.progressFill, { width: `${item.healthScore}%`, backgroundColor: tone.color }]} />
-      </View>
+      </View> : null}
 
       <AnimatePresence>
         {expandedMode === 'score' ? (
@@ -684,10 +681,10 @@ function ScoreBreakdownPanel({ item, theme, isAr, t, onOpenNotes }: {
   onOpenNotes: () => void
 }) {
   const rows = [
-    { id: 'notes', icon: <BookOpenCheck size={15} color={theme.primary} />, label: t('teacher.perfScoreNotes'), value: item.gradeScore, weight: 42, color: theme.primary },
-    { id: 'coverage', icon: <GraduationCap size={15} color={theme.info} />, label: t('teacher.perfCoverage'), value: item.coverage, weight: 26, color: theme.info },
-    { id: 'presence', icon: <CheckCircle2 size={15} color={theme.success} />, label: t('teacher.perfScorePresence'), value: item.absenceScore, weight: 22, color: theme.success },
-    { id: 'trend', icon: <TrendingUp size={15} color={theme.warning} />, label: t('teacher.perfS2Trend'), value: item.trendScore, weight: 10, color: theme.warning },
+    { id: 'notes', icon: <BookOpenCheck size={15} color={theme.primary} />, label: t('teacher.perfScoreNotes'), value: item.gradeScore, weight: item.weights.notes, color: theme.primary },
+    { id: 'coverage', icon: <GraduationCap size={15} color={theme.info} />, label: t('teacher.perfCoverage'), value: item.coverage, weight: item.weights.coverage, color: theme.info },
+    { id: 'presence', icon: <CheckCircle2 size={15} color={theme.success} />, label: t('teacher.perfScorePresence'), value: item.absenceScore, weight: item.weights.presence, color: theme.success },
+    { id: 'trend', icon: <TrendingUp size={15} color={theme.warning} />, label: t('teacher.perfS2Trend'), value: item.trendScore, weight: item.weights.trend, color: theme.warning },
   ]
 
   return (
@@ -708,12 +705,16 @@ function ScoreBreakdownPanel({ item, theme, isAr, t, onOpenNotes }: {
           </Text>
         </View>
         <Text style={[styles.detailScore, { color: actionTone(item.action, theme).color, fontFamily: theme.fonts.black }]}>
-          {item.healthScore}%
+          {item.healthScore == null ? '—' : `${item.healthScore}%`}
         </Text>
       </View>
 
+      <Text style={[styles.detailMeta, { color: theme.textSoft, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium }]}>
+        {t(item.healthScore == null ? 'teacher.perfScoreUnavailable' : 'teacher.perfScoreAvailableOnly')}
+      </Text>
+
       {rows.map(row => (
-        <ScoreBreakdownRow key={row.id} {...row} theme={theme} isAr={isAr} t={t} />
+        <ScoreBreakdownRow key={row.id} {...row} weight={item.healthScore == null ? 0 : row.weight} theme={theme} isAr={isAr} t={t} />
       ))}
 
       <MotionPressable
@@ -734,7 +735,7 @@ function ScoreBreakdownPanel({ item, theme, isAr, t, onOpenNotes }: {
 function ScoreBreakdownRow({ icon, label, value, weight, color, theme, isAr, t }: {
   icon: React.ReactNode
   label: string
-  value: number
+  value: number | null
   weight: number
   color: string
   theme: Theme
@@ -750,14 +751,14 @@ function ScoreBreakdownRow({ icon, label, value, weight, color, theme, isAr, t }
             {label}
           </Text>
         </View>
-        <Text style={[styles.scoreValue, { color, fontFamily: theme.fonts.black }]}>{value}%</Text>
+        <Text style={[styles.scoreValue, { color, fontFamily: theme.fonts.black }]}>{value == null ? '—' : `${formatNumber(value)}%`}</Text>
       </View>
-      <View style={[styles.scoreTrack, { backgroundColor: theme.surfaceAlt }]}>
+      {value != null ? <View style={[styles.scoreTrack, { backgroundColor: theme.surfaceAlt }]}>
         <View style={[styles.scoreFill, { width: `${clamp(value)}%`, backgroundColor: color }]} />
-      </View>
-      <Text style={[styles.scoreWeight, { color: theme.textSoft, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium }]}>
-        {t('teacher.perfScoreWeightSuffix', { pct: weight })}
-      </Text>
+      </View> : null}
+      {value == null || weight > 0 ? <Text style={[styles.scoreWeight, { color: theme.textSoft, fontFamily: isAr ? theme.fonts.arabicSemi : theme.fonts.medium }]}>
+        {value == null ? t('common.noData') : t('teacher.perfScoreWeightSuffix', { pct: formatNumber(weight, 1) })}
+      </Text> : null}
     </View>
   )
 }

@@ -16,6 +16,13 @@ Source de vérité pour la structure de la base.
 | Liaisons | Toujours par UID (jamais par nom) |
 | Soft delete | Champ `deletedAt?: Timestamp` plutôt que vraie suppression sur les docs sensibles |
 
+Les jeux temporaires de présentation utilisent de préférence des classes préfixées
+`TEST-`. Une simulation d'école peut employer un libellé scolaire normal uniquement
+après un contrôle d'absence de collision sur les élèves et les professeurs. Ses élèves
+gardent des identifiants préfixés `DEMO-` et ses documents les marqueurs `demo: true`,
+`isTestData: true`, `demoRunId` ou `provisioningTag`. Le nettoyage doit filtrer sur
+`demoRunId` et sur les identifiants attendus ; il ne doit jamais supprimer une classe réelle.
+
 ---
 
 ## Collections

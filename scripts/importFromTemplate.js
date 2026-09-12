@@ -1,3 +1,4 @@
+const { preserveLatinNames } = require('../functions/studentLatinNames')
 /**
  * Importe Enseignants + Élèves + Parents depuis le modèle Excel
  * (mojammaa_import_template.xlsx — 5 feuilles).
@@ -237,16 +238,18 @@ async function commit({ eleves, parents, teachers, schedules }) {
   // ── 1. Élèves ──────────────────────────────────────────────────────
   if (eleves.length) {
     console.log(`\n🚀 Écriture de ${eleves.length} élève(s)...`)
-    const batch = db.batch()
-    eleves.forEach(e => {
-      batch.set(db.collection('eleves').doc(e.codeMassar), {
-        codeMassar: e.codeMassar, nom: e.nom, prenom: e.prenom,
-        nomLatin: e.nomLatin, prenomLatin: e.prenomLatin, nomComplet: e.nomComplet,
-        classe: e.classe, classes: [e.classe], niveau: e.niveau,
-        dateNaissance: e.dateNaissance, updatedAt: TS(),
-      }, { merge: true })
+    await db.runTransaction(async tx => {
+      const refs = eleves.map(e => db.collection('eleves').doc(e.codeMassar))
+      const current = await tx.getAll(...refs)
+      eleves.forEach((e, index) => {
+        tx.set(refs[index], {
+          codeMassar: e.codeMassar, nom: e.nom, prenom: e.prenom,
+          ...preserveLatinNames(current[index].data(), e), nomComplet: e.nomComplet,
+          classe: e.classe, classes: [e.classe], niveau: e.niveau,
+          dateNaissance: e.dateNaissance, updatedAt: TS(),
+        }, { merge: true })
+      })
     })
-    await batch.commit()
     console.log(`   ✓ ${eleves.length} élève(s) écrit(s)`)
   }
 

@@ -97,8 +97,8 @@ async function hydratePickupRequests(records: PickupRequest[]): Promise<PickupRe
     const student = students.get(record.eleveId)
     return {
       ...record,
-      elevePrenom: student?.prenomLatin || student?.prenom || '',
-      eleveNom: student?.nomLatin || student?.nom || '',
+      elevePrenom: student?.prenomLatin || student?.prenomFr || student?.prenom || '',
+      eleveNom: student?.nomLatin || student?.nomFr || student?.nom || '',
       classe: student?.classe || '',
     }
   })

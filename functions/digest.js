@@ -44,7 +44,7 @@ async function buildWeeklyDigests(db) {
     const list = childrenByParent.get(e.parentUid) || []
     list.push({
       id: d.id,
-      prenom: e.prenomLatin || e.prenom || '',
+      prenom: e.prenomLatin || e.prenomFr || e.prenom || '',
       prenomAr: e.prenom || e.prenomLatin || '',
       classe: e.classe || '',
     })

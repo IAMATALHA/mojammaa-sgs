@@ -29,6 +29,7 @@ const {
   resolveBareme, noteOn20, weightedAverage, displayBareme, toDisplayScale,
 } = load('../../src/utils/gradeScale.ts')
 const { makeCoefOf } = load('../../src/services/coefficientsService.ts', id => {
+  if (id === '../../functions/lib/collegeEvaluationPolicy.json') return { default: JSON.parse(fs.readFileSync(new URL('../../functions/lib/collegeEvaluationPolicy.json', import.meta.url), 'utf8')) }
   if (id === 'firebase/firestore') return { doc: () => {}, getDoc: async () => {} }
   if (id === '../config/firebase') return { db: {} }
   if (id === './firestore') return { docData: () => null }

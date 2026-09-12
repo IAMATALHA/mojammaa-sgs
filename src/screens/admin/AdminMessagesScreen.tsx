@@ -1,3 +1,4 @@
+import type { AdminDashboardNav } from '../../navigation/types'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, Pressable, Modal, ScrollView,
@@ -19,7 +20,7 @@ import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   subscribeMessages, subscribeSentMessages, subscribeTeacherMessages, markAsRead, deleteMessage,
-  broadcast, broadcastToParents, broadcastPersonalized, getRecipientsList,
+  sendMessage, subscribeDeliveryIssues, broadcast, broadcastToParents, broadcastPersonalized, getRecipientsList,
   type MessageDoc, type MessageToType,
 } from '../../services/messagesService'
 import { listEleves, type EleveDoc } from '../../services/elevesService'
@@ -35,8 +36,9 @@ import { ELEVE_PLACEHOLDER, eleveKey, eleveName, elevePrenom } from '../../utils
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import { dirStyle, localizedSubject, localizedBody } from '../../utils/arabicText'
 import ReadReceipts from '../../components/ReadReceipts'
+import MessageDeliveryStatus from '../../components/message-delivery-status'
 
-type Tab = 'inbox' | 'sent' | 'supervision'
+type Tab = 'inbox' | 'sent' | 'supervision' | 'issues'
 // Audiences entières (all/parents/teachers) → un seul doc broadcast.
 // 'class'  → picker élève + perso {élève} (parité prof, sur n'importe quelle classe).
 // 'people' → multi-sélection de personnes nommées (profs et/ou parents).
@@ -49,9 +51,15 @@ export default function AdminMessagesScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language as 'fr' | 'ar' | 'en'
   const { profile } = useAuth()
-  const navigation = useNavigation<BottomTabNavigationProp<AdminTabsParamList, 'AdminMessages'>>()
+  const navigation = useNavigation<AdminDashboardNav>()
   const route = useRoute<AdminTabRoute<'AdminMessages'>>()
   const [tab, setTab] = useState<Tab>('inbox')
+  useEffect(() => {
+    if (route.params?.initialTab) {
+      setTab(route.params.initialTab)
+      navigation.setParams({ initialTab: undefined })
+    }
+  }, [route.params?.initialTab, navigation])
   const [inboxMsgs, setInboxMsgs] = useState<MessageDoc[]>([])
   const [sentMsgs, setSentMsgs] = useState<MessageDoc[]>([])
   const [supervisionMsgs, setSupervisionMsgs] = useState<MessageDoc[]>([])
@@ -59,6 +67,10 @@ export default function AdminMessagesScreen() {
   const [loadError, setLoadError] = useState(false)
   const [detail, setDetail] = useState<MessageDoc | null>(null)
   const [showCompose, setShowCompose] = useState(false)
+  const [deliveryIssues, setDeliveryIssues] = useState<MessageDoc[]>([])
+  const [issuesError, setIssuesError] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const [replying, setReplying] = useState(false)
 
   useEffect(() => {
     if (!profile?.uid) return
@@ -75,7 +87,8 @@ export default function AdminMessagesScreen() {
     // Supervision : tous les messages envoyés par un prof, peu importe le
     // destinataire — l'admin ne doit pas rater un souci côté prof↔parent.
     const u3 = subscribeTeacherMessages(list => setSupervisionMsgs(list))
-    return () => { u1(); u2(); u3() }
+    const u4 = subscribeDeliveryIssues(list => { setDeliveryIssues(list); setIssuesError(false) }, () => setIssuesError(true))
+    return () => { u1(); u2(); u3(); u4() }
   }, [profile?.uid])
 
 
@@ -94,13 +107,15 @@ export default function AdminMessagesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.messageId, inboxMsgs])
 
-  const displayed = tab === 'inbox' ? inboxMsgs : tab === 'sent' ? sentMsgs : supervisionMsgs
+  const displayed = tab === 'inbox' ? inboxMsgs : tab === 'sent' ? sentMsgs : tab === 'issues' ? deliveryIssues : supervisionMsgs
+  const liveDetail = displayed.find(m => m.id === detail?.id) || detail
   const unreadCount = useMemo(
     () => inboxMsgs.filter(m => !(m.readBy || []).includes(profile?.uid || '')).length,
     [inboxMsgs, profile?.uid],
   )
 
   const openMessage = async (msg: MessageDoc) => {
+    setReplyText('')
     setDetail(msg)
     if (tab === 'inbox' && profile?.uid && msg.id) {
       try { await markAsRead(msg.id, profile.uid) } catch {}
@@ -126,6 +141,22 @@ export default function AdminMessagesScreen() {
         }
       },
     })
+  }
+
+  const sendReply = async () => {
+    if (!profile || !detail || detail.fromRole !== 'parent' || !replyText.trim() || replying) return
+    setReplying(true)
+    try {
+      await sendMessage({
+        type: 'direct', subject: `RE: ${detail.subject}`, body: replyText.trim(),
+        fromId: profile.uid, fromNom: `${profile.prenom} ${profile.nom}`.trim(), fromRole: 'admin',
+        toType: 'user', toIds: [detail.fromId], toLabel: detail.fromNom || '',
+        eleveId: detail.eleveId, category: 'admin', priority: 'normal',
+      })
+      setReplyText(''); setDetail(null)
+      Alert.alert(t('teacher.messageSent'))
+    } catch { Alert.alert(t('common.error'), t('communication.sendFailed')) }
+    finally { setReplying(false) }
   }
 
   const renderItem = ({ item }: { item: MessageDoc }) => {
@@ -163,6 +194,7 @@ export default function AdminMessagesScreen() {
             <Text numberOfLines={1} style={[{ color: theme.textSoft, fontSize: 12, marginTop: 2 }, dirStyle(localizedBody(item, lang))]}>{localizedBody(item, lang)}</Text>
           </View>
         </View>
+        {tab !== 'inbox' && <MessageDeliveryStatus message={item} />}
         {showReceipt && item.toType === 'user' && Array.isArray(item.toIds) && item.toIds.length > 0 ? (
           <Text style={{
             color: item.toIds.every(uid => (item.readBy || []).includes(uid)) ? theme.success : theme.textSoft,
@@ -215,9 +247,17 @@ export default function AdminMessagesScreen() {
             <Text numberOfLines={1} style={{ color: tab === 'supervision' ? theme.primary : theme.textSoft, fontWeight: '700', fontSize: 13, marginStart: 6 }}>{t('admin.supervision')}</Text>
           </View>
         </Pressable>
+        <Pressable onPress={() => setTab('issues')} accessibilityRole="tab"
+          accessibilityState={{ selected: tab === 'issues' }} accessibilityLabel={t('communication.issues')}
+          style={[styles.tab, tab === 'issues' && { backgroundColor: theme.card }]}>
+          <Text numberOfLines={1} style={{ color: deliveryIssues.length ? theme.danger : theme.textSoft, fontWeight: '700', fontSize: 12 }}>
+            {t('communication.issues')}{deliveryIssues.length ? ` (${deliveryIssues.length})` : ''}
+          </Text>
+        </Pressable>
       </View>
 
-      {loadError && displayed.length === 0 && <MessagesErrorBanner />}
+      {tab === 'issues' && <Text style={{ color: theme.textSoft, fontSize: 12, marginVertical: 8 }}>{t('communication.issuesHint')}</Text>}
+      {(tab === 'issues' ? issuesError : loadError && displayed.length === 0) && <MessagesErrorBanner />}
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
@@ -257,30 +297,49 @@ export default function AdminMessagesScreen() {
                 )}
                 <Text style={[{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }, dirStyle(localizedSubject(detail, lang))]}>{localizedSubject(detail, lang)}</Text>
                 <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
+                {detail.type === 'appointment' && (
+                  <Pressable accessibilityRole="button" onPress={() => { setDetail(null); navigation.navigate('AdminAppointments') }} style={{ minHeight: 48, justifyContent: 'center', marginTop: 12 }}>
+                    <Text style={{ color: theme.primary, fontWeight: '700' }}>{t('appointments.title')}</Text>
+                  </Pressable>
+                )}
                 {(detail.attachments || []).filter(a => a.mime?.startsWith('image/')).map(a => (
                   <Image key={a.url} source={{ uri: a.url }}
                     accessibilityLabel={t('common.attachment')}
                     style={{ width: '100%', height: 280, borderRadius: 14, marginTop: 12, backgroundColor: theme.surface }}
                     resizeMode="contain" />
                 ))}
+                {liveDetail && tab !== 'inbox' && <MessageDeliveryStatus message={liveDetail} allowRetry />}
                 {tab === 'sent' && profile?.uid ? (
                   <ReadReceipts
                     message={sentMsgs.find(m => m.id === detail.id) || detail}
                     theme={theme}
                     sender={{ uid: profile.uid, nom: profile.nom, prenom: profile.prenom, role: profile.role }}
                   />
-                ) : tab === 'supervision' ? (
+                ) : tab === 'supervision' || tab === 'issues' ? (
                   <View style={[styles.urgentTag, { backgroundColor: theme.surfaceAlt, marginTop: 14 }]}>
                     <Text style={{ color: theme.textSoft, fontSize: 12, fontWeight: '600' }}>
                       {detail.toType === 'user' && Array.isArray(detail.toIds) && detail.toIds.length > 0
                         ? t('receipts.readOf', {
-                            read: detail.toIds.filter(uid => (detail.readBy || []).includes(uid)).length,
+                            read: (liveDetail?.toIds || []).filter(uid => (liveDetail?.readBy || []).includes(uid)).length,
                             total: detail.toIds.length,
                           })
                         : t('receipts.readCount', { count: (detail.readBy || []).length })}
                     </Text>
                   </View>
                 ) : null}
+                {tab === 'inbox' && detail.fromRole === 'parent' && (
+                  <View style={{ marginTop: 16, gap: 10 }}>
+                    <TextInput value={replyText} onChangeText={setReplyText} multiline maxLength={1000}
+                      accessibilityLabel={t('teacher.writeMessage')} placeholder={t('teacher.writeMessage')}
+                      placeholderTextColor={theme.textSoft}
+                      style={{ color: theme.text, borderColor: theme.border, borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 80 }} />
+                    <TouchableOpacity onPress={sendReply} disabled={replying || !replyText.trim()}
+                      accessibilityRole="button" accessibilityLabel={t('compose.send')}
+                      style={{ padding: 12, borderRadius: 12, backgroundColor: theme.primary, opacity: replying || !replyText.trim() ? 0.5 : 1 }}>
+                      {replying ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', textAlign: 'center' }}>{t('compose.send')}</Text>}
+                    </TouchableOpacity>
+                  </View>
+                )}
               </ScrollView>
             </Pressable>
           </Pressable>
@@ -467,11 +526,6 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
 
   const pickPoster = async () => {
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (!perm.granted) {
-        Alert.alert(t('teacher.permissionDenied'), t('teacher.cameraAccessDenied'))
-        return
-      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.85,

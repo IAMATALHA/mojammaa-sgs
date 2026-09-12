@@ -16,13 +16,11 @@
  * Ordre de résolution (miroir de `makeCoefOf`) :
  *     parNiveau[niveau][matiere]  >  matieres[matiere]  >  1
  *
- * LIMITE CONNUE : le serveur canonise en plus les libellés via les alias de
- * `collegeEvaluationPolicy.json` (« Maths » → « Mathématiques »), que l'app
- * n'embarque pas. Sans effet en pratique — `setupCoefficients.js` vérifie
- * chaque clé contre les libellés réellement présents en base — mais un
- * coefficient saisi sous un alias retomberait ici à 1.
+ * Les alias de matières reprennent la politique partagée du serveur.
+ * Les bulletins ouverts souscrivent aux modifications de l'administration.
  */
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot } from 'firebase/firestore'
+import policy from '../../functions/lib/collegeEvaluationPolicy.json'
 import { db } from '../config/firebase'
 import { docData } from './firestore'
 
@@ -52,8 +50,15 @@ function normalizeSubject(value: string): string {
 
 /** Construit la fonction de résolution à partir du document brut. */
 export function makeCoefOf(coefficients: CoefficientsDoc | null): CoefOf {
+  const canonicalKey = (label: string) => {
+    const key = normalizeSubject(label)
+    for (const subject of Object.values(policy.subjects)) {
+      if ([subject.canonical, ...subject.aliases].some(alias => normalizeSubject(alias) === key)) return normalizeSubject(subject.canonical)
+    }
+    return key
+  }
   const normalizedMap = (values: Record<string, number>) => new Map(
-    Object.entries(values || {}).map(([key, value]) => [normalizeSubject(key), value]),
+    Object.entries(values || {}).map(([key, value]) => [canonicalKey(key), value]),
   )
   const global = normalizedMap(coefficients?.matieres || {})
   const byLevel = new Map(
@@ -64,12 +69,22 @@ export function makeCoefOf(coefficients: CoefficientsDoc | null): CoefOf {
   )
 
   return (matiere, niveau) => {
-    const key = normalizeSubject(matiere)
-    const forLevel = niveau ? byLevel.get(niveau)?.get(key) : undefined
+    const key = canonicalKey(matiere)
+    const alias = niveau?.replace(/^([123])APIC$/, '$1AC')
+    const forLevel = niveau ? (byLevel.get(niveau)?.get(key) ?? byLevel.get(alias || '')?.get(key)) : undefined
     if (forLevel !== undefined && forLevel > 0) return forLevel
     const g = global.get(key)
     return g !== undefined && g > 0 ? g : 1
   }
+}
+
+/** An admin edit is reflected in open parent reports without restarting the app. */
+export function subscribeCoefficients(onChange: (data: CoefficientsDoc | null) => void, onError?: (error: Error) => void) {
+  return onSnapshot(doc(db, 'settings', 'coefficients'), snap => {
+    const data = docData<CoefficientsDoc>(snap)
+    cached = Promise.resolve(data)
+    onChange(data)
+  }, onError)
 }
 
 // Le document change au rythme des arrêtés ministériels (une fois par an au

@@ -1,3 +1,4 @@
+import { makeCoefOf as sharedMakeCoefOf } from '../../services/coefficientsService'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator, Pressable,
@@ -13,7 +14,7 @@ import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 import type { AdminDashboardNav } from '../../navigation/types'
-import { currentAcademicPeriod, localISODate } from '../../utils/academicPeriod'
+import { currentAcademicPeriod, currentAndNextAcademicYears, localISODate } from '../../utils/academicPeriod'
 import { displayBareme, toDisplayScale } from '../../utils/gradeScale'
 
 type CollectionName = 'eleves' | 'notes' | 'absences' | 'devoirs'
@@ -163,12 +164,7 @@ function noteOn20(row: NoteRow): number | null {
  * > matieres[matiere] (global) > 1.
  */
 function makeCoefOf(coefficients: CoefConfig) {
-  return (matiere: string, niveau?: string): number => {
-    const n = niveau ? coefficients.parNiveau[niveau]?.[matiere] : undefined
-    if (n !== undefined && n > 0) return n
-    const g = coefficients.matieres[matiere]
-    return g > 0 ? g : 1
-  }
+  return sharedMakeCoefOf(coefficients)
 }
 
 /** Moyenne pondérée Σ(note×coef)/Σ(coef) — replie sur la moyenne simple si aucun coef. */
@@ -295,6 +291,8 @@ export default function AdminClassesScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const period = currentAcademicPeriod()
+  const homeworkYears = currentAndNextAcademicYears()
+  const homeworkYearsKey = homeworkYears.join('|')
 
   useEffect(() => {
     const cache: SnapshotCache = {
@@ -373,7 +371,7 @@ export default function AdminClassesScreen() {
       }, handleError),
       onSnapshot(query(
         collection(db, 'devoirs'),
-        where('academicYear', '==', period.academicYear),
+        where('academicYear', 'in', homeworkYears),
       ), snap => {
         cache.devoirs = snap.docs.map(docSnap => {
           const row = docSnap.data() as Record<string, unknown>
@@ -399,7 +397,7 @@ export default function AdminClassesScreen() {
     ]
 
     return () => unsubs.forEach(unsub => unsub())
-  }, [period.academicYear, period.monthKey, period.semestre, t])
+  }, [homeworkYearsKey, period.academicYear, period.monthKey, period.semestre, t])
 
   const totalEleves = useMemo(() => classes.reduce((sum, item) => sum + item.eleveCount, 0), [classes])
   const averageSize = classes.length > 0 ? Math.round(totalEleves / classes.length) : 0

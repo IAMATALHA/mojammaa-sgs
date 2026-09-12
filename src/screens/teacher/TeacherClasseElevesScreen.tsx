@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl,
+  View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Pressable,
 } from 'react-native'
-import { useRoute } from '@react-navigation/native'
-import type { TeacherRoute } from '../../navigation/types'
+import { useRoute, useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { TeacherRoute, TeacherStackParamList } from '../../navigation/types'
+import { ChevronRight } from 'lucide-react-native'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTranslation } from 'react-i18next'
@@ -23,6 +25,7 @@ export default function TeacherClasseElevesScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
   const route = useRoute<TeacherRoute<'TeacherClasseEleves'>>()
+  const navigation = useNavigation<NativeStackNavigationProp<TeacherStackParamList>>()
   const { classe } = route.params ?? { classe: '' }
   const [eleves,  setEleves]  = useState<Eleve[]>([])
   const [loading, setLoading] = useState(true)
@@ -69,7 +72,9 @@ export default function TeacherClasseElevesScreen() {
             </Text>
           }
           renderItem={({ item, index }) => (
-            <View style={[styles.row, { borderBottomColor: theme.border }]}>
+            <Pressable style={[styles.row, { borderBottomColor: theme.border }]}
+              accessibilityRole="button" accessibilityLabel={`${t('admin.statsOpenStudentFile')} · ${item.prenom} ${item.nom}`}
+              onPress={() => navigation.navigate('TeacherStudentFile', { eleveId: item.id, scope: { period: 'annee', cycle: '', niveau: '', classe, matiere: '' } })}>
               <Text style={[styles.idx, { color: theme.textSoft }]}>{index + 1}.</Text>
               <View style={{ flex: 1, marginStart: 10 }}>
                 <Text style={[styles.name, { color: theme.text }]}>{item.prenom} {item.nom}</Text>
@@ -77,7 +82,8 @@ export default function TeacherClasseElevesScreen() {
                   <Text style={[styles.massar, { color: theme.textSoft }]}>{item.codeMassar}</Text>
                 ) : null}
               </View>
-            </View>
+              <ChevronRight size={18} color={theme.textSoft} />
+            </Pressable>
           )}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.primary} />}
         />

@@ -10,7 +10,7 @@
  * L'écran parle de devoirs, pas d'élèves : il compte les rendus sans jamais
  * dire qui a rendu. Aucun nominatif ne transite.
  */
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl,
 } from 'react-native'
@@ -57,26 +57,56 @@ export default function AdminScopeHomeworkScreen() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const loadingMoreRef = useRef(false)
+  const requestIdRef = useRef(0)
 
   const load = useCallback(async (mode: 'initial' | 'more' | 'refresh', nextCursor?: string | null) => {
-    if (mode === 'more') setLoadingMore(true)
-    else if (mode === 'refresh') setRefreshing(true)
-    else setLoading(true)
+    if (mode === 'more') {
+      // FlatList peut déclencher onEndReached plusieurs fois avant le rendu
+      // suivant. Le ref ferme cette fenêtre de façon synchrone.
+      if (loadingMoreRef.current || !nextCursor) return
+      loadingMoreRef.current = true
+      setLoadingMore(true)
+    } else {
+      // Un refresh/chargement neuf invalide toute page encore en vol.
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+      if (mode === 'refresh') setRefreshing(true)
+      else setLoading(true)
+    }
+    const requestId = ++requestIdRef.current
     try {
       const response = await httpsCallable<
         { scope: AppliedScope; cursor?: string | null; limit: number }, HomeworkResult
       >(functions, 'getStatsHomework')({ scope, cursor: nextCursor ?? null, limit: PAGE_SIZE })
+      if (requestId !== requestIdRef.current) return
       const payload = response.data
-      setRows(prev => (mode === 'more' ? [...prev, ...payload.homework] : payload.homework))
+      setRows(prev => {
+        if (mode !== 'more') return payload.homework
+        const ids = new Set(prev.map(row => row.id))
+        return [
+          ...prev,
+          ...payload.homework.filter(row => {
+            if (ids.has(row.id)) return false
+            ids.add(row.id)
+            return true
+          }),
+        ]
+      })
       setTotal(payload.total)
       setCursor(payload.nextCursor)
       setError(null)
     } catch (err: any) {
-      setError(err?.message || t('common.error'))
+      if (requestId === requestIdRef.current) {
+        setError(err?.message || t('common.error'))
+      }
     } finally {
-      setLoading(false)
-      setLoadingMore(false)
-      setRefreshing(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+        loadingMoreRef.current = false
+        setLoadingMore(false)
+        setRefreshing(false)
+      }
     }
   }, [scope, t])
 
@@ -118,7 +148,7 @@ export default function AdminScopeHomeworkScreen() {
           }
           ListEmptyComponent={<EmptyState theme={theme} t={t} />}
           onEndReachedThreshold={0.4}
-          onEndReached={() => { if (cursor && !loadingMore) void load('more', cursor) }}
+          onEndReached={() => { if (cursor) void load('more', cursor) }}
           ListFooterComponent={loadingMore ? (
             <View style={styles.footer}><ActivityIndicator color={theme.primary} /></View>
           ) : null}

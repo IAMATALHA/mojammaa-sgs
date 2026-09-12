@@ -18,6 +18,7 @@ import type { AppliedScope, StudentProgressionQuery, StudentSegment } from '../t
 // ── Auth ───────────────────────────────────────────────────────────────────
 export type AuthStackParamList = {
   Login: undefined
+  ParentActivation: undefined
 }
 
 // ── Partagé ────────────────────────────────────────────────────────────────
@@ -51,15 +52,17 @@ export type TeacherTabsParamList = {
 
 export type TeacherStackParamList = {
   TeacherTabs:          NavigatorScreenParams<TeacherTabsParamList> | undefined
-  TeacherAttendance:    { lessonKey: string }
+  TeacherAttendance:    { lessonKey: string; date?: string }
   TeacherClasseFolder:  { classe: string; openAttendance?: boolean }
   TeacherClasseEleves:  { classe: string }
+  TeacherStudentFile:   { eleveId: string; scope: import('../types/stats').StatsScope }
   TeacherNotes:         { classe?: string }
   TeacherComportement:  { classe: string }
   TeacherPrayer:        { classe: string }
   TeacherRessources:    { classe: string }
   TeacherDevoirsDetail: { classe?: string }
   TeacherDevoirView:    DevoirDetailParams
+  TeacherAppointments: undefined
   TeacherStats:         undefined
 }
 
@@ -72,6 +75,7 @@ export type TeacherDashboardNav = CompositeNavigationProp<
 // ── Student / Parent ───────────────────────────────────────────────────────
 export type StudentHomeStackParamList = {
   StudentHome:         undefined
+  StudentAppointments: undefined
   StudentPickup:       undefined
   StudentComportement: undefined
   StudentRessources:   undefined
@@ -105,7 +109,7 @@ export type AdminTabsParamList = {
   AdminDashboard:    undefined
   AdminStatsTab:     undefined
   AdminCalendarTab:  undefined
-  AdminMessages:     { messageId?: string } | undefined
+  AdminMessages:     { messageId?: string; initialTab?: 'inbox' | 'issues' } | undefined
   AdminSettings:     undefined
 }
 
@@ -134,6 +138,8 @@ export type AdminStackParamList = {
   AdminScopeHomework:   { scope: AppliedScope }
   AdminPickup:    undefined
   AdminPrayer:    undefined
+  AdminAppointments: undefined
+  AdminChecklist: undefined
 }
 
 /** Tableau de bord admin : onglet (AdminDashboard) ciblant onglets + pile. */

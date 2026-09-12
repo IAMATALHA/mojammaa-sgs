@@ -1,3 +1,4 @@
+import { ParentAppointmentsScreen } from '../screens/shared/appointments-screen'
 /**
  * Parent / student navigation.
  *
@@ -63,6 +64,7 @@ function HomeStack() {
     >
       <HomeStackNav.Screen name="StudentHome" component={ParentDashboardScreen} />
       <HomeStackNav.Screen name="StudentPickup" component={ParentPickupScreen} />
+      <HomeStackNav.Screen name="StudentAppointments" component={ParentAppointmentsScreen} />
       <HomeStackNav.Screen name="StudentComportement" component={ParentComportementScreen} />
       <HomeStackNav.Screen name="StudentRessources" component={ParentRessourcesScreen} />
       <HomeStackNav.Screen name="StudentPerformance" component={ParentPerformanceScreen} />

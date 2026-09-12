@@ -260,12 +260,12 @@ console.log('\n── 1. Messages : enveloppe immuable ──')
 await allow('parent crée un message direct (flux compose parent)',
   addDoc(collection(asUser('parent1'), 'messages'), {
     type: 'direct', subject: 'S', body: 'B', fromId: 'parent1', fromRole: 'parent',
-    eleveId: 'e1', toType: 'user', toIds: ['prof1'], readBy: [], status: 'sent',
+    eleveId: 'e1', toType: 'user', toIds: ['admin1'], readBy: [], status: 'sent',
   }))
 await deny('persona parent sans preuve eleveId live',
   addDoc(collection(asUser('parent1'), 'messages'), {
     type: 'direct', subject: 'S', body: 'B', fromId: 'parent1', fromRole: 'parent',
-    toType: 'user', toIds: ['prof1'], readBy: [], status: 'sent',
+    toType: 'user', toIds: ['admin1'], readBy: [], status: 'sent',
   }))
 await deny('expéditeur bascule toType user → all (escalade en diffusion école)',
   updateDoc(doc(asUser('parent1'), 'messages/m1'), { toType: 'all' }))
@@ -583,7 +583,7 @@ console.log('\n── 8. Schéma legacy toId : mélange interdit, legacy préser
 await deny('parent glisse toId:"all" dans un message user (escalade mixed-schema)',
   addDoc(collection(asUser('parent1'), 'messages'), {
     type: 'direct', subject: 'S', body: 'B', fromId: 'parent1', fromRole: 'parent',
-    eleveId: 'e1', toType: 'user', toIds: ['prof1'], toId: 'all', readBy: [], status: 'sent',
+    eleveId: 'e1', toType: 'user', toIds: ['admin1'], toId: 'all', readBy: [], status: 'sent',
   }))
 await deny('prof mélange nouveau schéma + toId legacy',
   addDoc(collection(asUser('prof1'), 'messages'), {
@@ -605,17 +605,17 @@ console.log('\n── 9. fromNom : un parent signe de son vrai nom ──')
 await deny('parent signe « Administration » (usurpation d\'affichage)',
   addDoc(collection(asUser('parent1'), 'messages'), {
     type: 'direct', subject: 'S', body: 'B', fromId: 'parent1', fromRole: 'parent',
-    eleveId: 'e1', fromNom: 'Administration', toType: 'user', toIds: ['prof1'], readBy: [], status: 'sent',
+    eleveId: 'e1', fromNom: 'Administration', toType: 'user', toIds: ['admin1'], readBy: [], status: 'sent',
   }))
 await allow('parent signe de son vrai nom (prénom nom, flux compose)',
   addDoc(collection(asUser('parent1'), 'messages'), {
     type: 'direct', subject: 'S', body: 'B', fromId: 'parent1', fromRole: 'parent',
-    eleveId: 'e1', fromNom: 'Pa Rent', toType: 'user', toIds: ['prof1'], readBy: [], status: 'sent',
+    eleveId: 'e1', fromNom: 'Pa Rent', toType: 'user', toIds: ['admin1'], readBy: [], status: 'sent',
   }))
 await allow('parent signe nom prénom (ordre inverse toléré)',
   addDoc(collection(asUser('parent1'), 'messages'), {
     type: 'direct', subject: 'S', body: 'B', fromId: 'parent1', fromRole: 'parent',
-    eleveId: 'e1', fromNom: 'Rent Pa', toType: 'user', toIds: ['prof1'], readBy: [], status: 'sent',
+    eleveId: 'e1', fromNom: 'Rent Pa', toType: 'user', toIds: ['admin1'], readBy: [], status: 'sent',
   }))
 
 console.log('\n── 10. Non-régression lectures ──')
@@ -1452,6 +1452,82 @@ await deny('un non-superadmin ne lit pas le journal d’audit',
   getDoc(doc(asUser('admin1'), 'auditLog/entry1')))
 await allow('le superadmin lit le journal d’audit',
   getDoc(doc(asUser('super1'), 'auditLog/entry1')))
+
+// Premier lot : routage administration, alertes serveur et suivi infalsifiable.
+const parentMessage = {
+  type: 'direct', subject: 'Demande', body: 'Question', fromId: 'parent1',
+  fromRole: 'parent', fromNom: 'Pa Rent', eleveId: 'e1',
+  toType: 'administration', toIds: [], readBy: [], status: 'sent',
+}
+await allow('parent écrit dans la boîte commune administration',
+  setDoc(doc(asUser('parent1'), 'messages/adminInbox'), parentMessage))
+await allow('admin lit la boîte commune via la requête réelle',
+  getDocs(query(collection(asUser('admin1'), 'messages'), where('toType', 'in', ['all', 'parents', 'teachers', 'administration']))))
+await deny('prof ne lit pas les demandes à l’administration',
+  getDoc(doc(asUser('prof1'), 'messages/adminInbox')))
+await allow('parent relit sa propre demande', getDoc(doc(asUser('parent1'), 'messages/adminInbox')))
+await deny('parent ne contacte pas directement un professeur',
+  addDoc(collection(asUser('parent1'), 'messages'), { ...parentMessage, toType: 'user', toIds: ['prof1'] }))
+await deny('parent ne contourne pas le routage en omettant fromRole',
+  addDoc(collection(asUser('parent1'), 'messages'), { ...Object.fromEntries(Object.entries(parentMessage).filter(([key]) => key !== 'fromRole')), toType: 'user', toIds: ['prof1'] }))
+await deny('parent ne mélange pas administrateur et professeur',
+  addDoc(collection(asUser('parent1'), 'messages'), { ...parentMessage, toType: 'user', toIds: ['admin1', 'prof1'] }))
+await deny('parent ne rend pas sa demande lisible à une classe',
+  addDoc(collection(asUser('parent1'), 'messages'), { ...parentMessage, classe: '1A' }))
+await deny('prof utilisant son espace parent ne contacte pas un collègue',
+  addDoc(collection(asUser('profParent'), 'messages'), {
+    ...parentMessage, fromId: 'profParent', fromNom: 'Prof Parent', eleveId: 'e7', toType: 'user', toIds: ['prof1'],
+  }))
+await allow('prof peut toujours informer un parent',
+  setDoc(doc(asUser('prof1'), 'messages/teacherNotice'), {
+    type: 'direct', subject: 'Information', body: 'B', fromId: 'prof1', fromRole: 'professeur',
+    toType: 'user', toIds: ['parent1'], readBy: [],
+  }))
+await allow('admin répond au parent',
+  setDoc(doc(asUser('admin1'), 'messages/adminReply'), {
+    type: 'direct', subject: 'Réponse', body: 'B', fromId: 'admin1', fromRole: 'admin',
+    toType: 'user', toIds: ['parent1'], readBy: [],
+  }))
+await allow('parent répond à un administrateur',
+  addDoc(collection(asUser('parent1'), 'messages'), { ...parentMessage, toType: 'user', toIds: ['admin1'] }))
+for (const type of ['attendance', 'behavior']) {
+  await deny(`client prof ne double plus l’alerte automatique ${type}`,
+    addDoc(collection(asUser('prof1'), 'messages'), {
+      type, subject: 'S', body: 'B', fromId: 'prof1', fromRole: 'professeur', toType: 'user', toIds: ['parent1'],
+    }))
+}
+await deny('client ne falsifie pas le suivi au create',
+  addDoc(collection(asUser('parent1'), 'messages'), { ...parentMessage, push: { status: 'transmitted' } }))
+await deny('même un admin ne falsifie pas le suivi après envoi',
+  updateDoc(doc(asUser('admin1'), 'messages/adminReply'), { push: { status: 'transmitted' } }))
+await allow('admin accuse lecture de la boîte commune',
+  updateDoc(doc(asUser('admin1'), 'messages/adminInbox'), { readBy: arrayUnion('admin1') }))
+await allow('prof lit son identifiant neuf pour une création unique de mérite',
+  getDoc(doc(asUser('prof1'), 'comportements/newOperationId')))
+for (const collectionName of ['messageDeliveryJobs', 'schoolAlertState', 'pushDevices', 'pushTokenOwners', 'attendanceOperations']) {
+  await deny(`parent ne lit pas ${collectionName}`, getDoc(doc(asUser('parent1'), collectionName, 'private')))
+  await deny(`admin client ne modifie pas ${collectionName}`, setDoc(doc(asUser('admin1'), collectionName, 'private'), { forged: true }))
+}
+
+// Dernier lot : rendez-vous privés et annulations de mérite auditées.
+for (const col of ['appointments', 'appointmentOperations', 'appointmentBookings', 'appointmentFamilies']) {
+  for (const uid of ['parent1', 'prof1', 'admin1']) {
+    await deny(`${uid} ne lit pas directement ${col}`, getDoc(doc(asUser(uid), col, 'private')))
+    await deny(`${uid} ne forge pas ${col}`, setDoc(doc(asUser(uid), col, 'private'), { parentUid: uid, status: 'confirmed' }))
+  }
+}
+await deny('prof ne supprime pas un mérite sans trace', deleteDoc(doc(asUser('prof2'), 'comportements/c7')))
+await deny('admin ne supprime pas un mérite sans trace', deleteDoc(doc(asUser('admin1'), 'comportements/c7')))
+await deny('admin ne contourne pas l’annulation auditée', updateDoc(doc(asUser('admin1'), 'comportements/c7'), { cancelledBy: 'forged', cancelledAt: new Date() }))
+await deny('prof ne forge pas une annulation au create', addDoc(collection(asUser('prof1'), 'comportements'), {
+  eleveId: 'e1', classe: '1A', kind: 'merite', teacherId: 'prof1', cancelledAt: new Date(),
+}))
+await deny('client admin ne forge pas un avis de rendez-vous', addDoc(collection(asUser('admin1'), 'messages'), {
+  type: 'appointment', subject: 'Fake', body: 'Fake', fromId: 'admin1', fromRole: 'admin', toType: 'user', toIds: ['parent1'],
+}))
+await deny('client ne détourne pas le routage rendez-vous via un message direct', addDoc(collection(asUser('parent1'), 'messages'), {
+  ...parentMessage, appointmentAudience: 'parent', appointmentId: 'forged',
+}))
 
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)

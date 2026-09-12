@@ -1,30 +1,14 @@
-/**
- * comportementsService — collection `comportements` (mérites / avertissements).
- *
- * Format des docs (créé par BehaviorSheet côté prof) :
- *   {
- *     eleveId, eleveNom, elevePrenom, classe, date, seance?,
- *     kind: 'merite' | 'avertissement',
- *     reason: clé de BEHAVIOR_REASONS (jamais un libellé),
- *     comment?, teacherId, teacherNom, createdAt
- *   }
- *
- * À l'enregistrement, un doc `messages` est écrit pour le parent (historique
- * permanent + push envoyé SERVEUR par la CF onMessageCreated — même schéma
- * que notifyParentsOfAbsents dans TeacherAttendanceScreen : pas de push
- * client, un prof n'a pas le droit de lire users/{parent}).
- */
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '../config/firebase'
+/** Comportements : écriture unique ; alertes produites par le serveur. */
 
 import {
-  addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, query,
+  collection, doc, onSnapshot, query, runTransaction,
   Timestamp, where, type Unsubscribe,
 } from 'firebase/firestore'
-import i18n from '../i18n'
 import { db } from '../config/firebase'
-import { docData, toDocs } from './firestore'
+import { toDocs } from './firestore'
 import { subscribeChunked } from './chunkedQuery'
-import { sendMessage } from './messagesService'
-import type { EleveDoc } from './elevesService'
 import type { BehaviorKind } from '../utils/behaviorTaxonomy'
 
 export interface ComportementDoc {
@@ -40,17 +24,16 @@ export interface ComportementDoc {
   comment?:     string
   teacherId:    string
   teacherNom:   string
+  cancelledAt?: Timestamp
+  cancelledBy?: string
+  cancelReason?: string
   createdAt?:   Timestamp
 }
 
 const COL = 'comportements'
 
-/** Libellé bilingue d'une raison, indépendant de la langue du téléphone du prof. */
-function reasonLabel(reason: string, lng: 'fr' | 'ar'): string {
-  return i18n.t(`behavior.reasons.${reason}`, { lng })
-}
-
 export interface RecordComportementInput {
+  id: string
   eleve:    { id: string; nom: string; prenom: string }
   classe:   string
   date:     string
@@ -61,63 +44,28 @@ export interface RecordComportementInput {
   teacher:  { uid: string; nom: string; prenom: string }
 }
 
-/**
- * Écrit le doc comportement puis, si l'élève a un parent lié, le message
- * bilingue qui déclenche le push. Retourne true si un parent a été notifié.
- */
-export async function recordComportement(input: RecordComportementInput): Promise<boolean> {
+export async function recordComportement(input: RecordComportementInput): Promise<void> {
   const { eleve, classe, date, seance, kind, reason, comment, teacher } = input
   const teacherNom = `${teacher.prenom} ${teacher.nom}`.trim()
 
-  await addDoc(collection(db, COL), {
-    eleveId:     eleve.id,
-    eleveNom:    eleve.nom,
-    elevePrenom: eleve.prenom,
-    classe,
-    date,
-    ...(seance ? { seance } : {}),
-    kind,
-    reason,
-    ...(comment?.trim() ? { comment: comment.trim() } : {}),
-    teacherId:   teacher.uid,
-    teacherNom,
-    createdAt:   Timestamp.now(),
+  const ref = doc(db, COL, input.id)
+  await runTransaction(db, async transaction => {
+    if ((await transaction.get(ref)).exists()) return
+    transaction.set(ref, {
+      eleveId:     eleve.id,
+      eleveNom:    eleve.nom,
+      elevePrenom: eleve.prenom,
+      classe,
+      date,
+      ...(seance ? { seance } : {}),
+      kind,
+      reason,
+      ...(comment?.trim() ? { comment: comment.trim() } : {}),
+      teacherId:   teacher.uid,
+      teacherNom,
+      createdAt:   Timestamp.now(),
+    })
   })
-
-  // ── Notification parent (best-effort : le doc est déjà sauvegardé) ──
-  const eleveSnap = await getDoc(doc(db, 'eleves', eleve.id))
-  const parentUid = docData<EleveDoc>(eleveSnap)?.parentUid
-  if (!parentUid) return false
-
-  const childName = `${eleve.prenom} ${eleve.nom}`.trim()
-  const merite = kind === 'merite'
-  const subject   = merite ? '⭐ Mérite signalé' : '⚠️ Avertissement'
-  const subjectAr = merite ? '⭐ إشادة بالسلوك' : '⚠️ إنذار سلوكي'
-  const commentSuffix   = comment?.trim() ? ` — ${comment.trim()}` : ''
-  const body = merite
-    ? `${childName} a été félicité(e) en ${classe} : ${reasonLabel(reason, 'fr')}${commentSuffix} (${teacherNom}, ${date}).`
-    : `${childName} a reçu un avertissement en ${classe} : ${reasonLabel(reason, 'fr')}${commentSuffix} (${teacherNom}, ${date}).`
-  const bodyAr = merite
-    ? `تمت الإشادة بسلوك ${childName} في القسم ${classe}: ${reasonLabel(reason, 'ar')}${commentSuffix}`
-    : `تلقى/تلقت ${childName} إنذارًا في القسم ${classe}: ${reasonLabel(reason, 'ar')}${commentSuffix}`
-
-  await sendMessage({
-    type:      'behavior',
-    subject,
-    subjectAr,
-    body,
-    bodyAr,
-    fromId:    teacher.uid,
-    fromNom:   teacherNom,
-    fromRole:  'professeur',
-    toType:    'user',
-    toIds:     [parentUid],
-    category:  'behavior',
-    priority:  merite ? 'normal' : 'urgent',
-    eleveId:   eleve.id,
-    classe,
-  })
-  return true
 }
 
 /**
@@ -151,6 +99,6 @@ export function subscribeComportementsForClasse(
   )
 }
 
-export async function deleteComportement(id: string): Promise<void> {
-  await deleteDoc(doc(db, COL, id))
+export async function cancelComportement(id: string, reason: string): Promise<void> {
+  await httpsCallable(functions, 'cancelComportement', { timeout: 12_000 })({ id, reason })
 }

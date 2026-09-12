@@ -66,8 +66,8 @@ function projectStudent(doc, average) {
   const data = doc.data() || {}
   return {
     id: doc.id,
-    nom: String(data.nomLatin || data.nom || ''),
-    prenom: String(data.prenomLatin || data.prenom || ''),
+    nom: String(data.nomLatin || data.nomFr || data.nom || ''),
+    prenom: String(data.prenomLatin || data.prenomFr || data.prenom || ''),
     classe: String(data.classe || ''),
     niveau: String(data.niveau || ''),
     average: average == null ? null : average,

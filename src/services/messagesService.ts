@@ -26,7 +26,7 @@
 
 import {
   collection, query, where, addDoc, onSnapshot, updateDoc, doc,
-  serverTimestamp, getDocs, arrayUnion,
+  serverTimestamp, getDocs, arrayUnion, limit,
   type Unsubscribe, type Query, type DocumentData, type Timestamp,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
@@ -36,16 +36,27 @@ import { getParentsDirectory, getStaffDirectory } from './directoryService'
 import type { UserProfile } from '../types'
 import type { Attachment } from './StorageService'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '../config/firebase'
 
-export type MessageType = 'announcement' | 'direct' | 'attendance' | 'behavior'
-export type MessageToType = 'all' | 'parents' | 'teachers' | 'class' | 'user'
+export async function retryMessageDelivery(messageId: string): Promise<boolean> {
+  const result = await httpsCallable<{ messageId: string }, { queued: boolean }>(functions, 'retryMessageDelivery')({ messageId })
+  return result.data.queued
+}
+
+export type MessageType = 'announcement' | 'direct' | 'attendance' | 'behavior' | 'appointment'
+export type MessageToType = 'all' | 'parents' | 'teachers' | 'class' | 'user' | 'administration'
 export type MessageCategory = 'attendance' | 'homework' | 'grade' | 'event' | 'announcement' | 'admin' | 'behavior'
 
 export interface MessageDoc {
+  appointmentId?: string
+  appointmentAudience?: 'parent' | 'teacher' | 'admin'
   id?:        string
   type:       MessageType
   subject:    string
   body:       string
+  subjectEn?: string
+  bodyEn?: string
   subjectAr?: string   // version arabe (affichée si l'app est en arabe)
   bodyAr?:    string
   fromId:     string
@@ -66,6 +77,29 @@ export interface MessageDoc {
   academicYear?: string
   semestre?:     string
   monthKey?:     string
+  push?: {
+    engine?: number
+    status?: 'pending' | 'retrying' | 'accepted' | 'transmitted' | 'no_recipient' | 'no_device' | 'failed' | 'partial_failure' | 'blocked' | 'superseded'
+    sent?: number
+    recipients?: number
+    transmitted?: number
+    errors?: number
+    noDevice?: number
+    errorCodes?: string[]
+  }
+}
+
+/** File d'incidents réservée à l'administration, sans tokens ni réponses Expo. */
+export function subscribeDeliveryIssues(
+  onChange: (messages: MessageDoc[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  return onSnapshot(query(collection(db, 'messages'),
+    where('push.status', 'in', ['no_recipient', 'no_device', 'failed', 'partial_failure', 'blocked', 'retrying']),
+    limit(100),
+  ), snap => onChange(toDocs<MessageDoc>(snap).sort(
+    (a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0),
+  )), err => onError?.(err))
 }
 
 const COL = 'messages'
@@ -155,7 +189,7 @@ export function subscribeMessages(
   const toTypes = ['all']
   if (role === 'professeur') toTypes.push('teachers')
   else if (role === 'parent') toTypes.push('parents')
-  else if (role === 'admin') toTypes.push('teachers', 'parents')
+  else if (role === 'admin') toTypes.push('teachers', 'parents', 'administration')
   unsubs.push(listen(
     query(
       collection(db, COL),

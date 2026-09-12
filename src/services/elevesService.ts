@@ -18,6 +18,8 @@ export interface EleveDoc {
   codeMassar:    string
   nom:           string   // arabe
   prenom:        string   // arabe
+  nomFr?:        string   // legacy web spelling
+  prenomFr?:     string
   nomLatin?:     string   // translit
   prenomLatin?:  string   // translit
   nomComplet?:   string   // arabe complet (legacy MASSAR)

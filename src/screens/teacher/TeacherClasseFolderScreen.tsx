@@ -21,11 +21,11 @@ import { useCurrentTeacherScheduleSlot } from '../../hooks/useCurrentTeacherSche
 import { useTeacherPrayerActivity } from '../../hooks/useTeacherPrayerActivity'
 import { db } from '../../config/firebase'
 import type { TeacherStackParamList, TeacherRoute } from '../../navigation/types'
-import { currentAcademicPeriod } from '../../utils/academicPeriod'
+import { currentAndNextAcademicYears } from '../../utils/academicPeriod'
 import { localServiceDate } from '../../services/pickup-service'
 import { getSchedule } from '../../services/scheduleService'
 import {
-  findCurrentScheduleSlot,
+  findLatestAttendanceOpenSlot,
   resolveScheduleSessionCode,
   scheduleLessonKey,
 } from '../../utils/scheduleSession'
@@ -57,7 +57,8 @@ export default function TeacherClasseFolderScreen() {
   const [eleveCount,   setEleveCount]   = useState<number | null>(null)
   const [devoirsCount, setDevoirsCount] = useState<number | null>(null)
   const [loading,      setLoading]      = useState(true)
-  const period = currentAcademicPeriod()
+  const homeworkYears = currentAndNextAcademicYears()
+  const homeworkYearsKey = homeworkYears.join('|')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -69,7 +70,7 @@ export default function TeacherClasseFolderScreen() {
         getDocs(query(
           collection(db, 'devoirs'),
           where('classeId', '==', classe),
-          where('academicYear', '==', period.academicYear),
+          where('academicYear', 'in', homeworkYears),
         )),
       ])
       setEleveCount(elevesSnap.docs.filter(d => d.data().active !== false).length)
@@ -79,7 +80,7 @@ export default function TeacherClasseFolderScreen() {
     } finally {
       setLoading(false)
     }
-  }, [classe, period.academicYear])
+  }, [classe, homeworkYearsKey])
 
   useEffect(() => { load() }, [load])
 
@@ -91,17 +92,18 @@ export default function TeacherClasseFolderScreen() {
 
     try {
       const schedule = await getSchedule(profile.uid)
-      const currentSlot = findCurrentScheduleSlot(schedule?.weeklySlots ?? [])
+      const attendanceSlot = findLatestAttendanceOpenSlot(
+        (schedule?.weeklySlots ?? []).filter(slot => slot.classe === classe),
+      )
       if (
-        !currentSlot
-        || currentSlot.classe !== classe
-        || !resolveScheduleSessionCode(currentSlot)
+        !attendanceSlot
+        || !resolveScheduleSessionCode(attendanceSlot)
       ) {
         navigation.navigate('TeacherTabs', { screen: 'TeacherEdt' })
         return
       }
       navigation.navigate('TeacherAttendance', {
-        lessonKey: scheduleLessonKey(currentSlot),
+        lessonKey: scheduleLessonKey(attendanceSlot),
       })
     } catch {
       navigation.navigate('TeacherTabs', { screen: 'TeacherEdt' })

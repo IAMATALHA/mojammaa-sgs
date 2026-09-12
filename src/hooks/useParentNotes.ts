@@ -6,7 +6,7 @@ import {
   type ClassStatsDoc,
   type CompetenceValue,
 } from '../services/notesService'
-import { getCoefficients, makeCoefOf, type CoefOf } from '../services/coefficientsService'
+import { subscribeCoefficients, makeCoefOf, type CoefOf } from '../services/coefficientsService'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
 import { noteOn20, resolveBareme, weightedAverage } from '../utils/gradeScale'
 
@@ -92,11 +92,7 @@ export function useParentNotes(
   // Coefficients ministériels — mêmes valeurs que l'administration.
   // `setState(fn)` interpréterait une fonction comme un updater : on l'emballe.
   useEffect(() => {
-    let cancelled = false
-    getCoefficients().then(doc => {
-      if (!cancelled) setCoefOf(() => makeCoefOf(doc))
-    })
-    return () => { cancelled = true }
+    return subscribeCoefficients(doc => setCoefOf(() => makeCoefOf(doc)), err => setError(err.message))
   }, [])
 
   useEffect(() => {

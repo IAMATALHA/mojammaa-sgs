@@ -13,7 +13,7 @@
  * Requête : notes where matiereLabel == X (repli matiere == X pour les vieux
  * docs sans label) — admin : lecture totale autorisée par les rules.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Pressable,
 } from 'react-native'
@@ -146,8 +146,10 @@ export default function AdminMatiereDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const requestIdRef = useRef(0)
 
   const load = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     setError(null)
     try {
       const baseScope: AppliedScope = scope || {
@@ -169,17 +171,22 @@ export default function AdminMatiereDetailScreen() {
         matiere: matiere || undefined,
         classe: classeParam || undefined,
       })
+      if (requestId !== requestIdRef.current) return
       setDetails(response.data)
     } catch (e: any) {
-      setError(e?.message || t('common.error'))
+      if (requestId === requestIdRef.current) {
+        setError(e?.message || t('common.error'))
+      }
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
   }, [classeParam, matiere, scope, t])
 
-  useEffect(() => { load() }, [load])
-  const onRefresh = () => { setRefreshing(true); load() }
+  useEffect(() => { void load() }, [load])
+  const onRefresh = () => { setRefreshing(true); void load() }
 
   const stats = useMemo(() => {
     const summary = details?.summary

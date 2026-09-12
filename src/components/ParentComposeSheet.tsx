@@ -1,29 +1,17 @@
-/**
- * ParentComposeSheet — compose parent : « Contacter un prof / l'école ».
- *
- * Destinataires possibles (depuis directory/staff, maintenu par CF) :
- *   - Administration de l'école → message aux uids admin
- *   - Professeurs des classes de SES enfants (fallback : tous les profs
- *     si aucune correspondance de classe)
- *
- * Envoi : type 'direct', toType 'user' — autorisé aux parents par les
- * rules (anti-usurpation fromId == uid). Push géré par la CF.
- */
-import React, { useEffect, useMemo, useState } from 'react'
+/** Parent → boîte commune de l’administration. Les professeurs restent informateurs. */
+import React, { useEffect, useState } from 'react'
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity, Pressable,
-  ActivityIndicator, Alert, ScrollView,
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  ActivityIndicator, Alert,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { Building2, GraduationCap, Send } from 'lucide-react-native'
+import { Building2, Send } from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext'
 import BottomSheet from './BottomSheet'
-import { getStaffDirectory, type StaffDirectory, type StaffTeacher } from '../services/directoryService'
 import { subscribeChildrenOfParent, type EleveDoc } from '../services/elevesService'
 import { sendMessage } from '../services/messagesService'
 import { dirStyle } from '../utils/arabicText'
 
-type Recipient = { kind: 'school' } | { kind: 'teacher'; teacher: StaffTeacher }
 
 interface Props {
   visible: boolean
@@ -34,22 +22,10 @@ interface Props {
 export default function ParentComposeSheet({ visible, onClose, profile }: Props) {
   const theme = useTheme()
   const { t } = useTranslation()
-  const [staff, setStaff] = useState<StaffDirectory | null>(null)
-  const [loadingStaff, setLoadingStaff] = useState(false)
   const [children, setChildren] = useState<EleveDoc[]>([])
-  const [recipient, setRecipient] = useState<Recipient | null>(null)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
-
-  useEffect(() => {
-    if (!visible) return
-    setLoadingStaff(true)
-    getStaffDirectory()
-      .then(setStaff)
-      .catch(() => setStaff(null))
-      .finally(() => setLoadingStaff(false))
-  }, [visible])
 
   useEffect(() => {
     setChildren([])
@@ -58,36 +34,11 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
     return unsub
   }, [visible, profile?.uid])
 
-  const childClasses = useMemo(
-    () => [...new Set(children.map(child => child.classe).filter(Boolean))],
-    [children],
-  )
-
-  const teachers = useMemo(() => {
-    if (!staff) return []
-    const mine = staff.teachers.filter(te => te.classes.some(c => childClasses.includes(c)))
-    return mine.length > 0 ? mine : staff.teachers
-  }, [staff, childClasses])
-
-  const guardianEleveId = useMemo(() => {
-    const matched = recipient?.kind === 'teacher'
-      ? children.find(child => recipient.teacher.classes.includes(child.classe))
-      : children[0]
-    const child = matched || children[0]
-    return child?.codeMassar || child?.id || ''
-  }, [children, recipient])
-
-  const reset = () => { setRecipient(null); setSubject(''); setBody('') }
+  const guardianEleveId = children[0]?.codeMassar || children[0]?.id || ''
+  const reset = () => { setSubject(''); setBody('') }
 
   const send = async () => {
-    if (!profile || !recipient || !guardianEleveId || !subject.trim() || !body.trim()) return
-    const toIds = recipient.kind === 'school'
-      ? (staff?.admins || []).map(a => a.uid)
-      : [recipient.teacher.uid]
-    if (toIds.length === 0) return
-    const toLabel = recipient.kind === 'school'
-      ? t('parentCompose.school')
-      : `${recipient.teacher.prenom} ${recipient.teacher.nom}`.trim()
+    if (!profile || !guardianEleveId || !subject.trim() || !body.trim()) return
     setSending(true)
     try {
       await sendMessage({
@@ -98,9 +49,9 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
         fromNom:  `${profile.prenom || ''} ${profile.nom || ''}`.trim(),
         fromRole: 'parent',
         eleveId: guardianEleveId,
-        toType:   'user',
-        toIds,
-        toLabel,
+        toType:   'administration',
+        toIds:    [],
+        toLabel:  t('parentCompose.school'),
         priority: 'normal',
         category: 'admin',
       })
@@ -114,7 +65,7 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
     }
   }
 
-  const canSend = !!recipient && !!guardianEleveId && !!subject.trim() && !!body.trim() && !sending
+  const canSend = !!guardianEleveId && !!subject.trim() && !!body.trim() && !sending
 
   return (
     <BottomSheet visible={visible} onClose={() => { reset(); onClose() }}>
@@ -125,59 +76,11 @@ export default function ParentComposeSheet({ visible, onClose, profile }: Props)
           {t('parentCompose.title')}
         </Text>
 
-        {/* ── Destinataire ── */}
-        <Text style={[styles.label, { color: theme.textSoft }]}>{t('parentCompose.recipient')}</Text>
-        {loadingStaff ? (
-          <ActivityIndicator color={theme.primary} style={{ marginVertical: 14 }} />
-        ) : !staff ? (
-          <Text style={{ color: theme.textSoft, fontSize: 13, marginTop: 8 }}>
-            {t('parentCompose.empty')}
-          </Text>
-        ) : (
-          <ScrollView style={{ maxHeight: 190 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
-            <Pressable
-              onPress={() => setRecipient({ kind: 'school' })}
-              accessibilityRole="button"
-              accessibilityState={{ selected: recipient?.kind === 'school' }}
-              accessibilityLabel={t('parentCompose.school')}
-              style={[styles.recipientRow, {
-                borderColor: recipient?.kind === 'school' ? theme.primary : theme.border,
-                backgroundColor: recipient?.kind === 'school' ? theme.primarySurface : theme.surface,
-              }]}>
-              <Building2 size={17} color={theme.primary} strokeWidth={2} />
-              <Text style={{ color: theme.text, fontWeight: '700', fontSize: 13, marginStart: 8 }}>
-                {t('parentCompose.school')}
-              </Text>
-            </Pressable>
-            {teachers.length > 0 && (
-              <Text style={[styles.label, { color: theme.textSoft }]}>{t('parentCompose.teachers')}</Text>
-            )}
-            {teachers.map(te => {
-              const active = recipient?.kind === 'teacher' && recipient.teacher.uid === te.uid
-              return (
-                <Pressable key={te.uid}
-                  onPress={() => setRecipient({ kind: 'teacher', teacher: te })}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  accessibilityLabel={`${te.prenom} ${te.nom}`.trim()}
-                  style={[styles.recipientRow, {
-                    borderColor: active ? theme.primary : theme.border,
-                    backgroundColor: active ? theme.primarySurface : theme.surface,
-                  }]}>
-                  <GraduationCap size={17} color={theme.accent} strokeWidth={2} />
-                  <View style={{ marginStart: 8, flex: 1 }}>
-                    <Text numberOfLines={1} style={{ color: theme.text, fontWeight: '700', fontSize: 13 }}>
-                      {`${te.prenom} ${te.nom}`.trim()}
-                    </Text>
-                    {!!te.matiere && (
-                      <Text numberOfLines={1} style={{ color: theme.textSoft, fontSize: 11 }}>{te.matiere}</Text>
-                    )}
-                  </View>
-                </Pressable>
-              )
-            })}
-          </ScrollView>
-        )}
+        <View style={[styles.recipientRow, { borderColor: theme.border, backgroundColor: theme.primarySurface, marginTop: 14 }]}>
+          <Building2 size={17} color={theme.primary} />
+          <Text style={{ color: theme.text, fontWeight: '700', marginStart: 8 }}>{t('parentCompose.school')}</Text>
+        </View>
+        <Text style={{ color: theme.textSoft, marginBottom: 8 }}>{t('parentCompose.administrationOnly')}</Text>
 
         {/* ── Objet + message ── */}
         <TextInput

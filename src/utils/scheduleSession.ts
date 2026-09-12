@@ -17,6 +17,8 @@ export interface ScheduleSessionSlot {
 }
 
 const GLOBAL_SESSION_BY_START: Readonly<Record<string, string>> = {
+  '08:15': 'S1',
+  '09:15': 'S2',
   '08:30': 'S1',
   '09:30': 'S2',
   '09:40': 'S2', // rythme du vendredi
@@ -73,6 +75,35 @@ export function isScheduleSlotToday(
   now = new Date(),
 ): boolean {
   return slot.day === dayName(now)
+}
+
+/**
+ * L'appel s'ouvre au début de la séance et reste disponible jusqu'à la fin
+ * de la journée. Un professeur peut donc compléter/corriger un appel après
+ * le cours, mais ne peut jamais anticiper une séance à venir.
+ */
+export function isScheduleSlotAttendanceOpen(
+  slot: Pick<ScheduleSessionSlot, 'day' | 'startTime'>,
+  now = new Date(),
+): boolean {
+  if (!isScheduleSlotToday(slot, now)) return false
+  const start = parseHM(slot.startTime)
+  if (Number.isNaN(start)) return false
+  return now.getHours() * 60 + now.getMinutes() >= start
+}
+
+/** Dernière séance déjà commencée aujourd'hui, sans choix arbitraire. */
+export function findLatestAttendanceOpenSlot<T extends ScheduleSessionSlot>(
+  slots: readonly T[],
+  now = new Date(),
+): T | null {
+  const candidates = slots
+    .map(slot => ({ slot, start: parseHM(slot.startTime) }))
+    .filter(row => !Number.isNaN(row.start) && isScheduleSlotAttendanceOpen(row.slot, now))
+  if (candidates.length === 0) return null
+  const latestStart = Math.max(...candidates.map(row => row.start))
+  const latest = candidates.filter(row => row.start === latestStart)
+  return latest.length === 1 ? latest[0].slot : null
 }
 
 function endMinute(slot: ScheduleSessionSlot, start: number): number {

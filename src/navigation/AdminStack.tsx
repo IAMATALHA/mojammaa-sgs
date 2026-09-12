@@ -1,3 +1,4 @@
+import { AdminAppointmentsScreen } from '../screens/shared/appointments-screen'
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
@@ -29,6 +30,7 @@ import AdminAttendanceStatsScreen from '../screens/admin/AdminAttendanceStatsScr
 import AdminScopeHomeworkScreen from '../screens/admin/AdminScopeHomeworkScreen'
 import AdminPickupScreen from '../screens/admin/admin-pickup-screen'
 import AdminPrayerScreen from '../screens/admin/AdminPrayerScreen'
+import AdminBackToSchoolChecklistScreen from '../screens/admin/AdminBackToSchoolChecklistScreen'
 import type { AdminTabsParamList, AdminStackParamList } from './types'
 
 const Tab = createBottomTabNavigator<AdminTabsParamList>()
@@ -102,6 +104,8 @@ export default function AdminStack() {
       <Stack.Screen name="AdminScopeHomework" component={AdminScopeHomeworkScreen} />
       <Stack.Screen name="AdminPickup" component={AdminPickupScreen} />
       <Stack.Screen name="AdminPrayer" component={AdminPrayerScreen} />
+      <Stack.Screen name="AdminAppointments" component={AdminAppointmentsScreen} />
+      <Stack.Screen name="AdminChecklist" component={AdminBackToSchoolChecklistScreen} />
     </Stack.Navigator>
   )
 }

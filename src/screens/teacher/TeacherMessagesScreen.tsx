@@ -1,3 +1,4 @@
+import type { TeacherDashboardNav } from '../../navigation/types'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, Pressable, Modal, ScrollView,
@@ -30,6 +31,7 @@ import { ELEVE_PLACEHOLDER, eleveKey, eleveName, elevePrenom } from '../../utils
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import { dirStyle, localizedSubject, localizedBody } from '../../utils/arabicText'
 import ReadReceipts from '../../components/ReadReceipts'
+import MessageDeliveryStatus from '../../components/message-delivery-status'
 
 type Tab = 'inbox' | 'sent'
 
@@ -38,7 +40,7 @@ export default function TeacherMessagesScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language as 'fr' | 'ar' | 'en'
   const { profile } = useAuth()
-  const navigation = useNavigation<BottomTabNavigationProp<TeacherTabsParamList, 'TeacherMessages'>>()
+  const navigation = useNavigation<TeacherDashboardNav>()
   const route = useRoute<TeacherTabRoute<'TeacherMessages'>>()
   const [tab, setTab] = useState<Tab>('inbox')
   const [inboxMsgs, setInboxMsgs] = useState<MessageDoc[]>([])
@@ -227,12 +229,18 @@ export default function TeacherMessagesScreen() {
                 )}
                 <Text style={[{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }, dirStyle(localizedSubject(detail, lang))]}>{localizedSubject(detail, lang)}</Text>
                 <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
+                {detail.type === 'appointment' && (
+                  <Pressable accessibilityRole="button" onPress={() => { setDetail(null); navigation.navigate('TeacherAppointments') }} style={{ minHeight: 48, justifyContent: 'center', marginTop: 12 }}>
+                    <Text style={{ color: theme.primary, fontWeight: '700' }}>{t('appointments.title')}</Text>
+                  </Pressable>
+                )}
                 {(detail.attachments || []).filter(a => a.mime?.startsWith('image/')).map(a => (
                   <Image key={a.url} source={{ uri: a.url }}
                     accessibilityLabel={t('common.attachment')}
                     style={{ width: '100%', height: 280, borderRadius: 14, marginTop: 12, backgroundColor: theme.surface }}
                     resizeMode="contain" />
                 ))}
+                {tab === 'sent' && <MessageDeliveryStatus message={sentMsgs.find(m => m.id === detail.id) || detail} />}
                 {tab === 'sent' && profile?.uid ? (
                   <ReadReceipts
                     message={sentMsgs.find(m => m.id === detail.id) || detail}
@@ -339,7 +347,7 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
     .replace(/[ً-ْٰ]/g, '')
     .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
   const eleveHaystack = (e: EleveDoc) =>
-    normName([e.prenomLatin, e.nomLatin, e.prenom, e.nom, e.nomComplet].filter(Boolean).join(' '))
+    normName([e.prenomLatin, e.nomLatin, e.prenomFr, e.nomFr, e.prenom, e.nom, e.nomComplet].filter(Boolean).join(' '))
   const filteredByClasse = useMemo(() => {
     const nq = normName(eleveSearch.trim())
     if (!nq) return null

@@ -1,3 +1,4 @@
+import { makeCoefOf as sharedMakeCoefOf } from '../../services/coefficientsService'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, RefreshControl, Modal,
@@ -260,12 +261,7 @@ function normalizeNoteOn20(row: NoteRow): NoteRow | null {
  * functions/schoolStats.js : parNiveau[niveau][matiere] > matieres[matiere] > 1.
  */
 function makeCoefOf(coefficients: CoefConfig) {
-  return (matiere: string, niveau?: string): number => {
-    const n = niveau ? coefficients.parNiveau[niveau]?.[matiere] : undefined
-    if (n !== undefined && n > 0) return n
-    const g = coefficients.matieres[matiere]
-    return g > 0 ? g : 1
-  }
+  return sharedMakeCoefOf(coefficients)
 }
 
 /** Moyenne pondérée Σ(note×coef)/Σ(coef) — replie sur la moyenne simple si aucun coef. */

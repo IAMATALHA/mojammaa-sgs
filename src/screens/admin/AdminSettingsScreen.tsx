@@ -1,3 +1,4 @@
+import NotificationSettingsGroup from '../../components/NotificationSettingsGroup'
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking,
@@ -35,7 +36,7 @@ export default function AdminSettingsScreen() {
   const handleLogout = () => {
     Alert.alert(t('common.logoutTitle'), t('common.logoutConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.logout'), style: 'destructive', onPress: () => logout() },
+      { text: t('common.logout'), style: 'destructive', onPress: () => logout().catch(() => Alert.alert(t('common.error'), t('notificationSettings.logoutFailed'))) },
     ])
   }
 
@@ -58,6 +59,7 @@ export default function AdminSettingsScreen() {
         </View>
 
         <WorkspaceSettingsGroup />
+        <NotificationSettingsGroup />
 
         {/* Langue + outils admin */}
         <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>
@@ -75,6 +77,11 @@ export default function AdminSettingsScreen() {
               <Text style={[styles.rowSub, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>www.mojammaa.com</Text>
             </View>
             <ChevronRight size={16} color={theme.textMuted} strokeWidth={2} />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.row, styles.rowLast]} onPress={() => Linking.openURL(`${ADMIN_WEB_URL}/coefficients`).catch(() => Alert.alert(t('common.error')))}>
+            <RowIcon bg={theme.primarySurface}><ExternalLink size={16} color={theme.primary} /></RowIcon>
+            <Text style={[styles.rowTitle, { flex: 1, color: theme.text, fontFamily: theme.fonts.semibold }]}>{t('admin.manageCoefficients')}</Text>
+            <ChevronRight size={16} color={theme.textMuted} />
           </TouchableOpacity>
         </View>
 

@@ -1,3 +1,4 @@
+import ActionCenter from '../../components/dashboard/action-center'
 /**
  * AdminDashboardScreen — poste de pilotage (refonte audit 3 juil. 2026).
  *
@@ -25,6 +26,7 @@ import {
   ChevronRight, ClipboardCheck, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown,
   CarFront,
   MoonStar,
+  ListChecks,
 } from 'lucide-react-native'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
@@ -47,7 +49,7 @@ import {
 type AdminQuickRoute =
   | 'AdminAbsences' | 'AdminUsers' | 'AdminDevoirs'
   | 'AdminCalendarTab' | 'AdminRollCalls' | 'AdminPickup' | 'AdminEdt'
-  | 'AdminPrayer'
+  | 'AdminPrayer' | 'AdminChecklist'
 
 type OperationItem = {
   key: string
@@ -356,6 +358,15 @@ export default function AdminDashboardScreen() {
       title: t('actions.schedule'),
       route: 'AdminEdt',
     },
+    {
+      key: 'back-to-school-checklist',
+      icon: <ListChecks size={17} color={theme.primary} strokeWidth={2.1} />,
+      iconBg: theme.primarySurface,
+      title: t('checklist.dashboardTitle'),
+      status: t('checklist.dashboardHint'),
+      statusColor: theme.textMuted,
+      route: 'AdminChecklist',
+    },
   ]
 
   return (
@@ -374,6 +385,10 @@ export default function AdminDashboardScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
+        <ActionCenter mode="admin" onAction={action => {
+          if (action.kind === 'appointments') nav.navigate('AdminAppointments')
+          else nav.navigate('AdminMessages', { initialTab: action.kind === 'delivery' ? 'issues' : 'inbox' })
+        }} />
         <View
           accessible={!heroActionable && Boolean(heroAccessibilityLabel)}
           accessibilityRole={!heroActionable ? 'summary' : undefined}

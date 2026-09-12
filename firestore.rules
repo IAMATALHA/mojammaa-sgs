@@ -128,6 +128,17 @@ service cloud.firestore {
         && request.resource.data.keys().hasAny(['eleveId'])
         && isGuardianOf(request.resource.data.eleveId);
     }
+    // Les familles écrivent à la boîte commune de l'administration, ou
+    // répondent à UN administrateur dont le rôle est vérifié en direct.
+    function parentMessageToAdministration() {
+      let data = request.resource.data;
+      return data.get('type', '') == 'direct'
+        && !data.keys().hasAny(['classe', 'toId'])
+        && data.toIds is list
+        && ((data.toType == 'administration' && data.toIds.size() == 0)
+          || (data.toType == 'user' && data.toIds.size() == 1
+            && get(/databases/$(database)/documents/users/$(data.toIds[0])).data.role == 'admin'));
+    }
     // Classe RÉELLE de l'élève ciblé (anti-injection 2026-07-11) : un prof ne
     // peut créer une note/absence/comportement QUE si l'élève appartient bien
     // à la classe déclarée dans le doc. Sans ce get(), un prof pouvait écrire
@@ -402,20 +413,23 @@ service cloud.firestore {
 
     // ── comportements (mérites / avertissements) ─────────────
     // Même périmètre que les absences : nominatif → le parent ne lit QUE
-    // ses enfants, le prof QUE ses classes. Le prof peut retirer SA propre
-    // entrée (erreur de saisie) ; le message parent déjà envoyé reste.
+    // ses enfants, le prof QUE ses classes. Les annulations motivées passent
+    // par le serveur et conservent l'entrée ainsi qu'une rectification parent.
     match /comportements/{recordId} {
+      // Lecture d'un identifiant neuf pour la transaction de création unique.
+      allow get: if isTeacher()
+        && !exists(/databases/$(database)/documents/comportements/$(recordId));
       allow read: if isAdmin()
                   || teacherTeaches(resource.data.classe)
                   || isGuardianOf(resource.data.eleveId);
-      allow create: if isAdmin()
-        || (teacherTeaches(request.resource.data.classe)
-            && request.resource.data.teacherId == myUid()
-            // 2026-07-11 : cohérence élève/classe (même injection que notes).
-            && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe));
-      allow update: if isAdmin();
-      allow delete: if isAdmin()
-        || (isTeacher() && resource.data.teacherId == myUid());
+      allow create: if !request.resource.data.keys().hasAny(['cancelledAt', 'cancelledBy', 'cancelReason'])
+        && request.resource.data.kind in ['merite', 'avertissement']
+        && (isAdmin()
+          || (teacherTeaches(request.resource.data.classe)
+              && request.resource.data.teacherId == myUid()
+              && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe)));
+      // Corrections auditées via cancelComportement uniquement.
+      allow update, delete: if false;
     }
 
     // ── classStats (agrégats ANONYMES par année/classe/semestre) ──
@@ -673,7 +687,12 @@ service cloud.firestore {
       // borne réelle par destinataire viendra du refactor deliveries (CF).
       allow create: if isSignedIn()
         && request.resource.data.fromId == myUid()
+        // Les alertes et leur suivi sont écrits exclusivement par le serveur.
+        && !request.resource.data.keys().hasAny(['push', 'automation', 'appointmentId', 'appointmentAudience'])
+        && !(request.resource.data.get('type', '') in ['attendance', 'behavior', 'appointment'])
+        && (!(isParent() || createsAsGuardian()) || parentMessageToAdministration())
         && (request.resource.data.toType == 'user'
+            || (request.resource.data.toType == 'administration' && createsAsGuardian())
             || (isAdmin() && !createsAsGuardian()))
         && ((isTeacher() || isAdmin()) && !createsAsGuardian()
             || (request.resource.data.toIds is list
@@ -726,7 +745,7 @@ service cloud.firestore {
         && (
           (isAdmin() && untouched(['fromId', 'fromNom', 'fromRole',
                                    'toType', 'toIds', 'toId', 'classe',
-                                   'eleveId', 'createdAt']))
+                                   'eleveId', 'createdAt', 'push', 'automation', 'type', 'appointmentId', 'appointmentAudience']))
           || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy'])
         )
         && selfAppendOnly('readBy')

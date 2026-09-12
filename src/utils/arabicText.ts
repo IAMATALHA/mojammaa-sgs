@@ -30,14 +30,18 @@ export function dirStyle(s?: string | null): TextStyle | undefined {
 interface BilingualMessage {
   subject?:   string
   body?:      string
+  subjectEn?: string
+  bodyEn?: string
   subjectAr?: string
   bodyAr?:    string
 }
 
 export function localizedSubject(msg: BilingualMessage, lang: string): string {
+  if (lang === 'en' && msg.subjectEn) return msg.subjectEn
   return (lang === 'ar' && msg.subjectAr) ? msg.subjectAr : (msg.subject || '')
 }
 
 export function localizedBody(msg: BilingualMessage, lang: string): string {
+  if (lang === 'en' && msg.bodyEn) return msg.bodyEn
   return (lang === 'ar' && msg.bodyAr) ? msg.bodyAr : (msg.body || '')
 }

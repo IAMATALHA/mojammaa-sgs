@@ -1,3 +1,4 @@
+import NotificationSettingsGroup from './NotificationSettingsGroup'
 /**
  * BasicSettingsScreen — écran Réglages partagé (prof + parent).
  * Liste groupée sobre : profil avec avatar, langue, version, déconnexion.
@@ -32,7 +33,7 @@ export default function BasicSettingsScreen({ roleLabel }: { roleLabel: string }
   const handleLogout = () => {
     Alert.alert(t('common.logoutTitle'), t('common.logoutConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.logout'), style: 'destructive', onPress: () => logout().catch(() => {}) },
+      { text: t('common.logout'), style: 'destructive', onPress: () => logout().catch(() => Alert.alert(t('common.error'), t('notificationSettings.logoutFailed'))) },
     ])
   }
 
@@ -55,6 +56,7 @@ export default function BasicSettingsScreen({ roleLabel }: { roleLabel: string }
         </View>
 
         <WorkspaceSettingsGroup />
+        <NotificationSettingsGroup />
 
         {/* Langue */}
         <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>

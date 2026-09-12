@@ -1,8 +1,7 @@
 /**
  * useTeacherDayCompletion — pour les séances du JOUR du prof, calcule :
- *   - appel fait ?   → il existe des docs `absences` (classe, date, seance)
- *                      (l'appel écrit un doc par élève, présents inclus —
- *                      l'existence suffit)
+ *   - appel fait ?   → chaque élève actif de la classe possède un statut
+ *                      valide dans `absences` pour cette date et séance.
  *   - devoir posté ? → un doc `devoirs` du prof pour cette classe créé
  *                      aujourd'hui
  *
@@ -17,7 +16,7 @@ import { db } from '../config/firebase'
 import { toDoc } from '../services/firestore'
 import type { WeeklySlot } from '../services/scheduleService'
 import type { AbsenceDoc } from '../services/absencesService'
-import { currentAcademicPeriod, localISODate } from '../utils/academicPeriod'
+import { currentAndNextAcademicYears, localISODate } from '../utils/academicPeriod'
 
 export interface DayCompletion {
   /** clés `${classe}|${seance}` dont l'appel est enregistré aujourd'hui */
@@ -34,7 +33,8 @@ export function useTeacherDayCompletion(
   todaySlots: WeeklySlot[],
   teacherUid: string | undefined,
 ): DayCompletion {
-  const period = currentAcademicPeriod()
+  const homeworkYears = currentAndNextAcademicYears()
+  const homeworkYearsKey = homeworkYears.join('|')
   const [attendanceDone, setAttendanceDone] = useState<Set<string>>(new Set())
   const [homeworkPosted, setHomeworkPosted] = useState<Set<string>>(new Set())
 
@@ -52,14 +52,24 @@ export function useTeacherDayCompletion(
       // Appels du jour (chunks de 10 pour la limite `in`)
       const attendance = new Set<string>()
       for (let i = 0; i < classes.length; i += 10) {
-        const snap = await getDocs(query(
+        const chunk = classes.slice(i, i + 10)
+        const [snap, roster] = await Promise.all([getDocs(query(
           collection(db, 'absences'),
-          where('classe', 'in', classes.slice(i, i + 10)),
+          where('classe', 'in', chunk),
           where('date', '==', date),
-        ))
+        )), getDocs(query(collection(db, 'eleves'), where('classe', 'in', chunk)))])
+        const marked = new Map<string, Set<string>>()
         snap.forEach(d => {
           const data = toDoc<AbsenceDoc>(d)
-          if (data.classe && data.seance) attendance.add(`${data.classe}|${data.seance}`)
+          if (!data.classe || !data.seance || !['present', 'absent', 'retard'].includes(data.statut)) return
+          const key = `${data.classe}|${data.seance}`
+          const ids = marked.get(key) || new Set<string>()
+          ids.add(data.eleveId); marked.set(key, ids)
+        })
+        marked.forEach((ids, key) => {
+          const classe = key.split('|')[0]
+          const expected = roster.docs.filter(d => d.get('active') !== false && d.get('classe') === classe)
+          if (expected.length && expected.every(d => ids.has(d.id))) attendance.add(key)
         })
       }
       setAttendanceDone(attendance)
@@ -68,8 +78,7 @@ export function useTeacherDayCompletion(
       const devoirsSnap = await getDocs(query(
         collection(db, 'devoirs'),
         where('teacherId', '==', teacherUid),
-        where('academicYear', '==', period.academicYear),
-        where('monthKey', '==', period.monthKey),
+        where('academicYear', 'in', homeworkYears),
       ))
       const posted = new Set<string>()
       devoirsSnap.forEach(d => {
@@ -82,7 +91,7 @@ export function useTeacherDayCompletion(
     } catch {
       // Best-effort : des chips absentes ne doivent pas casser l'EDT.
     }
-  }, [teacherUid, classesKey, period.academicYear, period.monthKey])
+  }, [teacherUid, classesKey, homeworkYearsKey])
 
   // Au focus : le prof revient de l'appel / de la création d'un devoir.
   useFocusEffect(useCallback(() => { load() }, [load]))

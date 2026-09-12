@@ -3,7 +3,7 @@
  * mérite ou avertissement + motif (taxonomie fixe) + commentaire libre.
  * Écrit dans `comportements` et notifie le parent (push via CF).
  */
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, Pressable,
   ActivityIndicator, Alert,
@@ -12,6 +12,8 @@ import { useTranslation } from 'react-i18next'
 import { Star, AlertTriangle, Send } from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext'
 import BottomSheet from './BottomSheet'
+import { collection, doc } from 'firebase/firestore'
+import { db } from '../config/firebase'
 import { recordComportement } from '../services/comportementsService'
 import { BEHAVIOR_REASONS, type BehaviorKind } from '../utils/behaviorTaxonomy'
 import { dirStyle } from '../utils/arabicText'
@@ -33,10 +35,11 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
   const [reason, setReason] = useState<string | null>(null)
   const [comment, setComment] = useState('')
   const [sending, setSending] = useState(false)
+  const actionId = useRef<string | null>(null)
 
   const kindColor = kind === 'merite' ? theme.success : theme.danger
 
-  const reset = () => { setKind('merite'); setReason(null); setComment('') }
+  const reset = () => { actionId.current = null; setKind('merite'); setReason(null); setComment('') }
   const close = () => { reset(); onClose() }
 
   const pickKind = (k: BehaviorKind) => {
@@ -53,14 +56,16 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
     }
     setSending(true)
     try {
-      const notified = await recordComportement({
+      actionId.current ??= doc(collection(db, 'comportements')).id
+      await recordComportement({
+        id: actionId.current,
         eleve, classe, date, seance, kind, reason,
         comment: comment.trim() || undefined,
         teacher,
       })
       Alert.alert(
         t('behavior.saved'),
-        notified ? t('behavior.parentNotified') : t('behavior.noParentLinked'),
+        t('communication.alertsQueued'),
       )
       close()
     } catch (e: any) {
@@ -73,7 +78,7 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
   const canSubmit = !!eleve && !!teacher && !!reason && !sending
 
   return (
-    <BottomSheet visible={visible} onClose={close}>
+    <BottomSheet dismissible={!sending} visible={visible} onClose={close}>
       <View>
         <Text style={{ color: theme.text, fontWeight: '800', fontSize: 17 }}>
           {t('behavior.sheetTitle')}

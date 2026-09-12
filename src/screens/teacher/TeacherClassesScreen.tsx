@@ -12,7 +12,8 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../config/firebase'
-import { subscribeSchedule, type ScheduleDoc, type WeeklySlot } from '../../services/scheduleService'
+import { subscribeSchedule, type ScheduleDoc } from '../../services/scheduleService'
+import { teacherClassSubjects } from '../../utils/teacher-class-subjects'
 import type { TeacherStackParamList } from '../../navigation/types'
 import type { UserProfile } from '../../types'
 
@@ -52,24 +53,12 @@ export default function TeacherClassesScreen() {
     return unsub
   }, [profile?.uid])
 
-  // Build class rows from schedule + profile.classes + eleves count
+  // Le profil définit le périmètre ; un ancien EDT ne peut pas l'élargir.
   const load = useCallback(async () => {
     if (!profile?.uid) return
     setLoading(true); setError(null)
     try {
-      const subjectsByClasse = new Map<string, Set<string>>()
-
-      if (scheduleDoc?.weeklySlots) {
-        scheduleDoc.weeklySlots.forEach((s: WeeklySlot) => {
-          const set = subjectsByClasse.get(s.classe) || new Set<string>()
-          if (s.subject) set.add(s.subject)
-          subjectsByClasse.set(s.classe, set)
-        })
-      }
-
-      profileClasses.forEach(c => {
-        if (!subjectsByClasse.has(c)) subjectsByClasse.set(c, new Set<string>())
-      })
+      const subjectsByClasse = teacherClassSubjects(profileClasses, scheduleDoc?.weeklySlots)
 
       const classeNames = [...subjectsByClasse.keys()]
 

@@ -4,7 +4,7 @@
  * Format des docs (créé par TeacherAttendanceScreen) :
  *   {
  *     eleveId, eleveNom, elevePrenom, classe, date, seance,
- *     statut: 'present' | 'absent', academicYear, semestre, monthKey,
+ *     statut: 'present' | 'absent' | 'retard', academicYear, semestre, monthKey,
  *     professorId, createdAt
  *   }
  */
@@ -155,8 +155,9 @@ export function subscribeAbsenceHistoryForEleves(
  * Taux de présence d'un élève sur les `daysWindow` derniers jours.
  *
  * Le dénominateur vient des DONNÉES, pas d'une constante : l'appel écrit un doc
- * par élève et par séance, `statut` valant 'present' ou 'absent'. On compte donc
- * les jours réellement appelés, et parmi eux ceux où l'élève a été porté absent.
+ * par élève et par séance, `statut` valant 'present', 'absent' ou 'retard'.
+ * Un retard compte comme une présence : seuls les jours portés absents réduisent
+ * le taux.
  *
  * C'est ce qui rend le calcul indépendant de la fenêtre de données qu'on lui
  * passe. L'ancienne version divisait par un forfait de 22 jours d'école alors

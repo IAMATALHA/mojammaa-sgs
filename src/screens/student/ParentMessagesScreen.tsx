@@ -142,7 +142,7 @@ export default function ParentMessagesScreen() {
   }
 
   const handleReply = async () => {
-    if (!profile || !detail || !guardianEleveId || !replyText.trim()) return
+    if (!profile || !detail || detail.fromRole !== 'admin' || detail.type !== 'direct' || !guardianEleveId || !replyText.trim()) return
     setReplying(true)
     try {
       const fromNom = `${profile.prenom} ${profile.nom}`.trim()
@@ -153,7 +153,7 @@ export default function ParentMessagesScreen() {
         fromId: profile.uid,
         fromNom,
         fromRole: 'parent',
-        eleveId: guardianEleveId,
+        eleveId: detail.eleveId || guardianEleveId,
         toType: 'user',
         toIds: [detail.fromId],
         toLabel: detail.fromNom || '',
@@ -240,7 +240,7 @@ export default function ParentMessagesScreen() {
         <FlatList data={filtered} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 80 }} />
       )}
 
-      {/* ── Compose : contacter un prof / l'école ── */}
+      {/* ── Compose : contacter l’administration ── */}
       <TouchableOpacity onPress={() => setShowCompose(true)} accessibilityRole="button" accessibilityLabel={t('teacher.newMessage')} style={[styles.fab, { backgroundColor: theme.accent }]} activeOpacity={0.85}>
         <PenSquare size={22} color="#fff" strokeWidth={2} />
       </TouchableOpacity>
@@ -271,7 +271,12 @@ export default function ParentMessagesScreen() {
               )}
               <Text style={[{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }, dirStyle(localizedSubject(detail, lang))]}>{localizedSubject(detail, lang)}</Text>
               <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
-              {(detail.attachments || []).filter(a => a.mime?.startsWith('image/')).map(a => (
+              {detail.type === 'appointment' && (
+                  <Pressable accessibilityRole="button" onPress={() => { setDetail(null); navigation.navigate('HomeTab', { screen: 'StudentAppointments' }) }} style={{ minHeight: 48, justifyContent: 'center', marginTop: 12 }}>
+                    <Text style={{ color: theme.primary, fontWeight: '700' }}>{t('appointments.title')}</Text>
+                  </Pressable>
+                )}
+                {(detail.attachments || []).filter(a => a.mime?.startsWith('image/')).map(a => (
                 <Image key={a.url} source={{ uri: a.url }}
                   accessibilityLabel={t('common.attachment')}
                   style={{ width: '100%', height: 280, borderRadius: 14, marginTop: 12, backgroundColor: theme.surface }}
@@ -280,7 +285,7 @@ export default function ParentMessagesScreen() {
             </ScrollView>
 
             {/* Reply bar */}
-            {detail.fromId && detail.type !== 'announcement' && (
+            {detail.fromId && detail.fromRole === 'admin' && detail.type === 'direct' && (
               <View style={[styles.replyBar, { borderTopColor: theme.border }]}>
                 <TextInput value={replyText} onChangeText={setReplyText}
                   accessibilityLabel={t('teacher.writeMessage')}

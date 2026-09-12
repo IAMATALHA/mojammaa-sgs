@@ -1,3 +1,6 @@
+import MeritProgressCard from '../../components/merit-progress-card'
+import { behaviorPeriod } from '../../utils/merit-progress'
+import { localISODate } from '../../utils/academicPeriod'
 /**
  * ParentComportementScreen — timeline des mérites / avertissements.
  *
@@ -8,7 +11,7 @@
 
 import React, { useMemo, useState } from 'react'
 import {
-  View, Text, ScrollView, Pressable, StyleSheet,
+  View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -32,19 +35,18 @@ export default function ParentComportementScreen() {
   const { t } = useTranslation()
   const nav = useNavigation<NativeStackNavigationProp<StudentHomeStackParamList>>()
   const parent = useParentData()
-  const { entries, error } = useParentComportements()
+  const { entries, error, loading } = useParentComportements()
+  const [period, setPeriod] = useState<'month' | 'year' | 'all'>('year')
+  const [kind, setKind] = useState<'all' | 'merite' | 'avertissement'>('all')
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
 
-  const filtered = useMemo(
-    () => selectedChildId === 'all'
-      ? entries
-      : entries.filter(e => e.eleveId === selectedChildId),
-    [selectedChildId, entries],
-  )
+  const filtered = useMemo(() => behaviorPeriod(entries, period, localISODate())
+    .filter(entry => (selectedChildId === 'all' || entry.eleveId === selectedChildId) && (kind === 'all' || entry.kind === kind)),
+  [entries, selectedChildId, period, kind])
 
   const stats = useMemo(() => ({
-    merites:        filtered.filter(e => e.kind === 'merite').length,
-    avertissements: filtered.filter(e => e.kind === 'avertissement').length,
+    merites:        filtered.filter(e => !e.cancelledAt && e.kind === 'merite').length,
+    avertissements: filtered.filter(e => !e.cancelledAt && e.kind === 'avertissement').length,
   }), [filtered])
 
   const childName = (id: string): string => {
@@ -94,6 +96,18 @@ export default function ParentComportementScreen() {
           </View>
         ) : null}
 
+        {loading && <ActivityIndicator color={theme.primary} />}
+        <View style={styles.section}>
+          {parent.children.filter(child => selectedChildId === 'all' || child.id === selectedChildId).map(child => (
+            <MeritProgressCard key={child.id} name={`${child.firstName} ${child.lastName}`} entries={entries.filter(entry => entry.eleveId === child.id)} />
+          ))}
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {(['month', 'year', 'all'] as const).map(value => <Chip key={value} label={t(`meritProgress.period.${value}`)} active={period === value} onPress={() => setPeriod(value)} theme={theme} />)}
+        </ScrollView>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {(['all', 'merite', 'avertissement'] as const).map(value => <Chip key={value} label={t(value === 'all' ? 'parent.allFilter' : `behavior.${value}`)} active={kind === value} onPress={() => setKind(value)} theme={theme} />)}
+        </ScrollView>
         {/* Stat strip */}
         <View style={styles.kpiRow}>
           <KpiChip value={stats.merites} label={t('behavior.merites')} color={theme.success} theme={theme} />
@@ -234,6 +248,7 @@ function ComportementRow({
         >
           {date}{childName ? ` · ${childName}` : ''} · {item.teacherNom}
         </Text>
+        {item.cancelledAt && <Text style={{ color: theme.textMuted, marginTop: 4 }}>{t('meritProgress.cancelled')} · {item.cancelReason}</Text>}
         {item.comment ? (
           <Text style={[{
             color: theme.textSoft,
@@ -252,7 +267,7 @@ function ComportementRow({
           fontSize: 10,
           letterSpacing: 0.4,
         }}>
-          {t(`behavior.${item.kind}`).toUpperCase()}
+          {t(item.cancelledAt ? 'meritProgress.cancelled' : `behavior.${item.kind}`).toUpperCase()}
         </Text>
       </View>
     </View>

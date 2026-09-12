@@ -1,3 +1,4 @@
+const { preserveLatinNames } = require('../functions/studentLatinNames')
 /**
  * Import students from MASSAR Excel exports into Firestore.
  *
@@ -200,7 +201,8 @@ function transliterate(arabic) {
 // 2. Parse un fichier MASSAR
 // ──────────────────────────────────────────────────────────────────────────
 
-const MASSAR_RE = /^A\d{6,}$/
+// Le préfixe varie selon l'élève : ne pas limiter les exports à la lettre A.
+const MASSAR_RE = /^[A-Z]\d{6,}$/
 
 function classFromFilename(file) {
   // export_notesCC_1APIC-3_0019.xlsx → "1APIC-3"
@@ -223,31 +225,53 @@ function parseDate(s) {
   return `${m[3]}-${m[2]}-${m[1]}`
 }
 
-function parseFile(file) {
+function parseFile(file, sheetName = null) {
   const wb    = XLSX.readFile(file)
-  const sheet = wb.Sheets[wb.SheetNames[0]]
+  const selectedSheet = sheetName || wb.SheetNames[0]
+  const sheet = wb.Sheets[selectedSheet]
   const rows  = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+  return parseRows(rows, file, selectedSheet)
+}
 
-  const classe = classFromFilename(file)
+function parseRows(rows, file, selectedSheet) {
+  const listEleveFormat = /^ListEleve_/i.test(path.basename(file))
+  const classe = listEleveFormat ? selectedSheet : classFromFilename(file)
   const niveau = levelFromClass(classe)
   const students = []
 
   rows.forEach((row, idx) => {
     if (!Array.isArray(row) || row.length < 4) return
     // Cherche une cellule qui ressemble à un code MASSAR
-    const massarIdx = row.findIndex(c => MASSAR_RE.test(String(c).trim()))
+    const numberedStudent = listEleveFormat && Number.isInteger(row[0]) && row[0] > 0
+    if (numberedStudent && !MASSAR_RE.test(String(row[1]).trim())) {
+      throw new Error(`Code MASSAR invalide : ${selectedSheet}, ligne ${idx + 1}. Import annulé.`)
+    }
+    const massarIdx = numberedStudent ? 1 : row.findIndex(c => MASSAR_RE.test(String(c).trim()))
     if (massarIdx < 0) return
 
     const codeMassar = String(row[massarIdx]).trim()
-    // Le nom arabe est dans la cellule suivante (col +1)
-    const arabicName = String(row[massarIdx + 1] || '').trim()
-    const dob        = String(row[massarIdx + 2] || '').trim()
-    if (!arabicName) return
-
-    // Split: 1er mot = nom de famille, le reste = prénom
-    const parts  = arabicName.split(/\s+/).filter(Boolean)
-    const nomAr  = parts[0] || ''
-    const prenomAr = parts.slice(1).join(' ')
+    let nomAr
+    let prenomAr
+    let nomComplet
+    let dob
+    if (listEleveFormat) {
+      nomAr = String(row[massarIdx + 1] || '').trim()
+      prenomAr = String(row[massarIdx + 2] || '').trim()
+      dob = String(row[massarIdx + 4] || '').trim()
+      nomComplet = `${nomAr} ${prenomAr}`.trim()
+      if (!nomAr || !prenomAr) {
+        throw new Error(`Identité incomplète : ${selectedSheet}, ligne ${idx + 1}. Import annulé.`)
+      }
+    } else {
+      // Format MASSAR historique : nom complet dans la cellule suivante.
+      const arabicName = String(row[massarIdx + 1] || '').trim()
+      dob = String(row[massarIdx + 2] || '').trim()
+      if (!arabicName) return
+      const parts  = arabicName.split(/\s+/).filter(Boolean)
+      nomAr  = parts[0] || ''
+      prenomAr = parts.slice(1).join(' ')
+      nomComplet = arabicName
+    }
 
     students.push({
       codeMassar,
@@ -255,11 +279,12 @@ function parseFile(file) {
       prenom:      prenomAr,
       nomLatin:    transliterate(nomAr),
       prenomLatin: transliterate(prenomAr),
-      nomComplet:  arabicName,
+      nomComplet,
       classe,
       niveau,
       dateNaissance: parseDate(dob),
       sourceFile:  path.basename(file),
+      sourceSheet: selectedSheet,
     })
   })
 
@@ -283,7 +308,10 @@ async function main() {
   const requestedAcademicYear = argumentValue('--academic-year')
   const archiveConfirmation = argumentValue('--confirm-archive')
   const DATA = path.join(__dirname, '..', 'data')
-  const files = glob.sync(path.join(DATA, 'export_notesCC_*.xlsx'))
+  const listEleveFiles = glob.sync(path.join(DATA, 'ListEleve_*.xlsx'))
+  const files = listEleveFiles.length > 0
+    ? listEleveFiles
+    : glob.sync(path.join(DATA, 'export_notesCC_*.xlsx'))
 
   if (WIPE) {
     throw new Error(
@@ -311,9 +339,14 @@ async function main() {
   // Parse tous les fichiers
   const allStudents = []
   for (const f of files) {
-    const list = parseFile(f)
-    console.log(`   → ${list.length} élève(s) dans ${classFromFilename(f)}`)
-    allStudents.push(...list)
+    const workbook = XLSX.readFile(f)
+    const isListEleve = /^ListEleve_/i.test(path.basename(f))
+    const sheets = isListEleve ? workbook.SheetNames : [workbook.SheetNames[0]]
+    for (const sheetName of sheets) {
+      const list = parseFile(f, sheetName)
+      console.log(`   → ${list.length} élève(s) dans ${sheetName}`)
+      allStudents.push(...list)
+    }
   }
 
   // Dédup par codeMassar (un élève peut apparaître dans plusieurs Excels
@@ -398,31 +431,32 @@ async function main() {
   // Batch écrit par paquets de 400 (limite Firestore: 500)
   const batchSize = 400
   for (let i = 0; i < plan.toUpsert.length; i += batchSize) {
-    const batch = db.batch()
     const slice = plan.toUpsert.slice(i, i + batchSize)
-    slice.forEach(s => {
-      // Si une ancienne base utilise un ID non canonique, écrire dans le doc
-      // existant conserve parentUid et évite de créer un doublon.
-      const ref = db.collection('eleves').doc(existingIdByMassar.get(s.codeMassar) || s.codeMassar)
-      batch.set(ref, {
-        codeMassar:    s.codeMassar,
-        nom:           s.nom,
-        prenom:        s.prenom,
-        nomLatin:      s.nomLatin,
-        prenomLatin:   s.prenomLatin,
-        nomComplet:    s.nomComplet,
-        classe:        s.classe,
-        classes:       s.classes ?? [s.classe],
-        niveau:        s.niveau,
-        dateNaissance: s.dateNaissance,
-        active:        true,
-        academicYear:  plan.academicYear,
-        archivedAt:    admin.firestore.FieldValue.delete(),
-        archivedBeforeAcademicYear: admin.firestore.FieldValue.delete(),
-        updatedAt:     admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true })
+    await db.runTransaction(async tx => {
+      const refs = slice.map(s => db.collection('eleves').doc(existingIdByMassar.get(s.codeMassar) || s.codeMassar))
+      const current = await tx.getAll(...refs)
+      slice.forEach((s, index) => {
+        // Si une ancienne base utilise un ID non canonique, écrire dans le doc
+        // existant conserve parentUid et évite de créer un doublon.
+        const ref = db.collection('eleves').doc(existingIdByMassar.get(s.codeMassar) || s.codeMassar)
+        tx.set(ref, {
+          codeMassar:    s.codeMassar,
+          nom:           s.nom,
+          prenom:        s.prenom,
+          ...preserveLatinNames(current[index].data(), s),
+          nomComplet:    s.nomComplet,
+          classe:        s.classe,
+          classes:       s.classes ?? [s.classe],
+          niveau:        s.niveau,
+          dateNaissance: s.dateNaissance,
+          active:        true,
+          academicYear:  plan.academicYear,
+          archivedAt:    admin.firestore.FieldValue.delete(),
+          archivedBeforeAcademicYear: admin.firestore.FieldValue.delete(),
+          updatedAt:     admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true })
+      })
     })
-    await batch.commit()
     written += slice.length
     console.log(`   Actifs écrits : ${written}/${plan.toUpsert.length}`)
   }
@@ -450,7 +484,11 @@ async function main() {
   )
 }
 
-main().catch(err => {
-  console.error('❌ Synchronisation annulée :', err.message || err)
-  process.exit(1)
-})
+module.exports = { parseFile, parseRows }
+
+if (require.main === module) {
+  main().catch(err => {
+    console.error('❌ Synchronisation annulée :', err.message || err)
+    process.exit(1)
+  })
+}

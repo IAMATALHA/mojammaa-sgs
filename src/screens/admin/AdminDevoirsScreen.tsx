@@ -14,7 +14,7 @@ import { db } from '../../config/firebase'
 import { toDoc } from '../../services/firestore'
 import type { Attachment } from '../../services/StorageService'
 import type { AdminStackParamList } from '../../navigation/types'
-import { currentAcademicPeriod, localISODate } from '../../utils/academicPeriod'
+import { currentAndNextAcademicYears, localISODate } from '../../utils/academicPeriod'
 
 interface DevoirRow {
   id: string
@@ -45,14 +45,15 @@ export default function AdminDevoirsScreen() {
   const [loading, setLoading] = useState(true)
 
   const today = localISODate()
-  const period = currentAcademicPeriod()
+  const homeworkYears = currentAndNextAcademicYears()
+  const homeworkYearsKey = homeworkYears.join('|')
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const snap = await getDocs(query(
         collection(db, 'devoirs'),
-        where('academicYear', '==', period.academicYear),
+        where('academicYear', 'in', homeworkYears),
       ))
       const list: DevoirRow[] = snap.docs.map(d => {
         const data = toDoc<{
@@ -76,7 +77,7 @@ export default function AdminDevoirsScreen() {
       setDevoirs(list)
     } catch {}
     finally { setLoading(false) }
-  }, [period.academicYear])
+  }, [homeworkYearsKey])
 
   useEffect(() => { load() }, [load])
 

@@ -33,7 +33,7 @@ import { db } from '../../config/firebase';
 import { uploadAttachment, type Attachment } from '../../services/StorageService';
 import { broadcastToClasses } from '../../services/messagesService';
 import type { UserProfile } from '../../types';
-import { academicPeriodForDate, localISODate } from '../../utils/academicPeriod'
+import { academicPeriodForDate, currentAndNextAcademicYears, localISODate } from '../../utils/academicPeriod'
 
 interface Devoir {
   id:           string
@@ -70,7 +70,8 @@ export default function TeacherDevoirsScreen() {
   const [error,   setError]   = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [prefill, setPrefill] = useState<Devoir | null>(null)
-  const period = academicPeriodForDate(new Date())
+  const homeworkYears = currentAndNextAcademicYears()
+  const homeworkYearsKey = homeworkYears.join('|')
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -79,7 +80,7 @@ export default function TeacherDevoirsScreen() {
       const snap = await getDocs(query(
         collection(db, 'devoirs'),
         where('teacherId', '==', profile.uid),
-        where('academicYear', '==', period.academicYear),
+        where('academicYear', 'in', homeworkYears),
       ))
       let list = toDocs<Devoir>(snap)
       if (routeClasse) list = list.filter(x => x.classeId === routeClasse)
@@ -90,7 +91,7 @@ export default function TeacherDevoirsScreen() {
     } finally {
       setLoading(false)
     }
-  }, [profile, period.academicYear, routeClasse])
+  }, [profile, homeworkYearsKey, routeClasse])
 
   useEffect(() => { load() }, [load])
 
@@ -259,12 +260,12 @@ function CreateDevoirModal({
   const pickPhoto = async (fromCamera: boolean) => {
     if (!profile) return
     try {
-      const perm = fromCamera
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (perm.status !== 'granted') {
-        Alert.alert(t('teacher.permissionDenied'), t('teacher.cameraAccessDenied'))
-        return
+      if (fromCamera) {
+        const permission = await ImagePicker.requestCameraPermissionsAsync()
+        if (permission.status !== 'granted') {
+          Alert.alert(t('teacher.permissionDenied'), t('teacher.cameraAccessDenied'))
+          return
+        }
       }
       const result = fromCamera
         ? await ImagePicker.launchCameraAsync({  mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 })
@@ -344,10 +345,19 @@ function CreateDevoirModal({
           category: 'homework',
           teacher:  { uid: profile.uid, nom: profile.nom, prenom: profile.prenom },
         })
-      } catch {}
+      } catch (notificationError: any) {
+        console.warn('[TeacherDevoirs] homework notification failed', {
+          code: notificationError?.code || null,
+          message: notificationError?.message || String(notificationError),
+        })
+      }
 
       onCreated()
     } catch (e: any) {
+      console.error('[TeacherDevoirs] homework creation failed', {
+        code: e?.code || null,
+        message: e?.message || String(e),
+      })
       setErr(e?.message || t('teacher.createFailed'))
       Alert.alert(t('common.error'), e?.message || t('teacher.createFailed'))
     } finally {

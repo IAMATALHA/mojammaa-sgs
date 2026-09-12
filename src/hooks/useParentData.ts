@@ -95,10 +95,12 @@ export function useParentData(): ParentData {
 
     return subscribeChunked<{ dateLimite?: string; classeId: string }>(
       classes,
+      // academicYear vient de l'échéance, pas d'aujourd'hui. Cette requête a
+      // déjà un `in` sur les classes ; Firestore n'autorise pas un second `in`
+      // pour inclure aussi l'année de rentrée pendant la bascule d'août.
       chunk => query(
         collection(db, 'devoirs'),
         where('classeId', 'in', chunk),
-        where('academicYear', '==', period.academicYear),
       ),
       rows => {
         classes.forEach(c => devoirIds.set(c, []))
@@ -112,7 +114,7 @@ export function useParentData(): ParentData {
       },
       () => {},
     )
-  }, [eleves.map(e => e.classe).join('|'), period.academicYear])
+  }, [eleves.map(e => e.classe).join('|')])
 
   useEffect(() => {
     if (!profile?.uid) { setSubmissionStatus(new Map()); return }
@@ -145,8 +147,8 @@ export function useParentData(): ParentData {
       return {
         bareme,
         id: e.codeMassar,
-        firstName: e.prenomLatin || e.prenom || '',
-        lastName: e.nomLatin || e.nom || '',
+        firstName: e.prenomLatin || e.prenomFr || e.prenom || '',
+        lastName: e.nomLatin || e.nomFr || e.nom || '',
         classe: e.classe || '',
         level: e.niveau || 'Collège',
         avatarColor: AVATAR_COLORS[hashOf(e.codeMassar) % AVATAR_COLORS.length],
