@@ -177,6 +177,7 @@ export function useTeacherData(): TeacherData {
       where('academicYear', 'in', homeworkYears),
     )).then(snap => {
       const count = snap.docs.filter(d => {
+        if (d.get('cancelledAt')) return false
         const dl = toDoc<{ dateLimite?: string }>(d).dateLimite
         return typeof dl === 'string' && dl >= today
       }).length

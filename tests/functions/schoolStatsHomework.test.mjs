@@ -19,6 +19,8 @@ const result = computeSchoolStats({
   ],
   devoirs: [
     { id: 'd1', classeId: '1A', dateLimite: '2000-01-01' },
+    { id: 'cancelled', classeId: '1A', dateLimite: '2099-01-01', cancelledAt: new Date() },
+    { id: 'cancelledPast', classeId: '1A', dateLimite: '2000-01-01', cancelledAt: new Date() },
   ],
   homeworkSubmissions: [
     { id: 'd1_e1', homeworkId: 'd1', eleveId: 'e1', status: 'submitted_late' },

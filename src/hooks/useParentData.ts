@@ -94,7 +94,7 @@ export function useParentData(): ParentData {
     const today = localISODate()
     const devoirIds = new Map<string, string[]>()
 
-    return subscribeChunked<{ dateLimite?: string; classeId: string }>(
+    return subscribeChunked<{ dateLimite?: string; classeId: string; cancelledAt?: unknown }>(
       classes,
       // academicYear vient de l'échéance, pas d'aujourd'hui. Cette requête a
       // déjà un `in` sur les classes ; Firestore n'autorise pas un second `in`
@@ -106,6 +106,7 @@ export function useParentData(): ParentData {
       rows => {
         classes.forEach(c => devoirIds.set(c, []))
         rows.forEach(data => {
+          if (data.cancelledAt) return
           const dl = data.dateLimite
           if (typeof dl === 'string' && dl >= today) {
             devoirIds.set(data.classeId, [...(devoirIds.get(data.classeId) || []), data.id])

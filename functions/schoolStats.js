@@ -472,7 +472,7 @@ function computeSchoolStats(cache, options = {}) {
     id: d.id, eleveId: asString(d.eleveId), classe: asString(d.classe),
     date: asString(d.date), statut: asString(d.statut),
   }))
-  const devoirs = (cache.devoirs || []).map((d) => ({
+  const devoirs = (cache.devoirs || []).filter(d => !d.cancelledAt).map((d) => ({
     id: d.id, classeId: asString(d.classeId) || asString(d.classe), dateLimite: asString(d.dateLimite),
   }))
   // `resolveScope` fournit déjà les devoirs dont l'échéance tombe dans la

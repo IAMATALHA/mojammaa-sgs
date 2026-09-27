@@ -74,6 +74,7 @@ async function buildWeeklyDigests(db) {
   const upcomingByClasse = new Map()
   devoirsSnap.forEach((d) => {
     const dev = d.data()
+    if (dev.cancelledAt) return
     const due = dev.dateLimite
     if (typeof due !== 'string' || due <= isoToday || due > isoNextWeek) return
     upcomingByClasse.set(dev.classeId, (upcomingByClasse.get(dev.classeId) || 0) + 1)

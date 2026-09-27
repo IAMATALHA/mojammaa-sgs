@@ -1,4 +1,16 @@
 const fr = {
+  homeworkManagement: {
+    edit: "Modifier le devoir",
+    remove: "Supprimer le devoir",
+    save: "Enregistrer",
+    cancelled: "Devoir annulé — rendus conservés",
+    confirmRemove: "Supprimer ce devoir ? Si un suivi ou un rendu existe, le devoir sera annulé et les rendus seront conservés. Les familles seront prévenues.",
+    notify: "Prévenir les familles",
+    notifyHint: "Décochez pour une simple correction de texte. Une modification de date, de type ou de pièce jointe est toujours signalée.",
+    failed: "Action impossible. Actualisez le devoir et réessayez.",
+    unavailable: "Ce devoir a été supprimé ou n’est plus accessible.",
+    updated: "Modifié le {{date}}",
+  },
   common: {
     cancel: 'Annuler',
     confirm: 'Confirmer',

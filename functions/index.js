@@ -26,6 +26,7 @@ const attendanceSubmission = require('./attendanceSubmission')
 const appointments = require('./appointments')
 const { getDashboardActions } = require('./dashboardActions')
 const { cancelComportement } = require('./behaviorCancellation')
+const { manageHomework } = require('./homeworkManagement')
 const { claimEmailSlot, claimGlobalSlot } = require('./resetThrottle')
 const loginAudit = require('./loginAudit')
 const { computeClassStats, statsDocId } = require('./classStats')
@@ -526,8 +527,8 @@ exports.onBehaviorAlertCreated = onDocumentCreated(
   }) : null,
 )
 
-for (const [name, handler] of Object.entries({ ...appointments, cancelComportement, getDashboardActions })) {
-  if (!['appointmentCommand', 'listAppointments', 'cancelComportement', 'getDashboardActions'].includes(name)) continue
+for (const [name, handler] of Object.entries({ ...appointments, cancelComportement, getDashboardActions, manageHomework })) {
+  if (!['appointmentCommand', 'listAppointments', 'cancelComportement', 'getDashboardActions', 'manageHomework'].includes(name)) continue
   exports[name] = onCall({ timeoutSeconds: 60 }, async request => {
     try { return await handler(db, request.auth?.uid, request.data) }
     catch (error) {
@@ -1047,7 +1048,7 @@ async function refreshSchoolStats() {
     users: toRows(users),
     notes: toRows(notes),
     absences: toRows(absences),
-    devoirs: toRows(devoirs),
+    devoirs: toRows(devoirs).filter(row => !row.cancelledAt),
     coefficients: coefDoc.exists ? coefDoc.data() : null,
   })
   await db.collection('stats').doc('summary').set({ ...summary, ...period, updatedAt: new Date() })
@@ -1242,6 +1243,7 @@ async function resolveScope(filters) {
   const selectedAbsences = toRows(absencesSnap).filter((row) =>
     statsRowInScope(row, scopeIds, scopeClasses, knownStudentIds))
   const selectedDevoirs = toRows(devoirsSnap).filter((row) => {
+    if (row.cancelledAt) return false
     const due = statsFilterText(row.dateLimite)
     const rowClass = statsFilterText(row.classeId) || statsFilterText(row.classe)
     // La métrique et son drill-down décrivent les devoirs DONT L'ÉCHÉANCE

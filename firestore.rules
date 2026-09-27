@@ -71,6 +71,7 @@ service cloud.firestore {
         && data.teacherId is string
         && validHomeworkSubmissionStatus(data.status)
         && exists(/databases/$(database)/documents/devoirs/$(data.homeworkId))
+        && get(/databases/$(database)/documents/devoirs/$(data.homeworkId)).data.get('cancelledAt', null) == null
         && exists(/databases/$(database)/documents/eleves/$(data.eleveId))
         && data.classeId ==
           get(/databases/$(database)/documents/devoirs/$(data.homeworkId)).data.classeId
@@ -507,8 +508,12 @@ service cloud.firestore {
         || (isTeacher() && (resource.data.teacherId == myUid()
                             || teacherTeaches(resource.data.classeId)))
         || guardianHasClass(resource.data.classeId);
-      allow create, update: if isAdmin() || teacherTeaches(request.resource.data.classeId);
-      allow delete: if isAdmin() || (isTeacher() && resource.data.teacherId == myUid());
+      allow create: if isAdmin() || (teacherTeaches(request.resource.data.classeId)
+        && request.resource.data.teacherId == myUid()
+        && request.resource.data.get('cancelledAt', null) == null);
+      // Mutations pass through manageHomework: ownership, preserved submissions,
+      // concurrency and notifications are checked atomically on the server.
+      allow update, delete: if false;
     }
 
     // ── homeworkSubmissions (statut nominatif du rendu) ─────────

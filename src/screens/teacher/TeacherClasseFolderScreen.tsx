@@ -74,7 +74,7 @@ export default function TeacherClasseFolderScreen() {
         )),
       ])
       setEleveCount(elevesSnap.docs.filter(d => d.data().active !== false).length)
-      setDevoirsCount(devoirsSnap.size)
+      setDevoirsCount(devoirsSnap.docs.filter(d => !d.get('cancelledAt')).length)
     } catch {
       // Une rule qui rate ne doit pas casser l'écran.
     } finally {

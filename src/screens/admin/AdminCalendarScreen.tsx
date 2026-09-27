@@ -167,7 +167,7 @@ export default function AdminCalendarScreen() {
       collection(db, 'devoirs'),
       where('academicYear', '==', period.academicYear),
     ), snap => {
-      setTasks(snap.docs.map(d => {
+      setTasks(snap.docs.filter(d => !d.get('cancelledAt')).map(d => {
         const data = toDoc<{
           titre?: string; classeId?: string; teacherNom?: string; description?: string
           dateLimite?: string; type?: string; attachments?: Attachment[]

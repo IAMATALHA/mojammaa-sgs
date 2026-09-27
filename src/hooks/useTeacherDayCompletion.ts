@@ -82,6 +82,7 @@ export function useTeacherDayCompletion(
       ))
       const posted = new Set<string>()
       devoirsSnap.forEach(d => {
+        if (d.get('cancelledAt')) return
         const data = toDoc<{ createdAt?: { toDate?: () => Date }; classeId?: string }>(d)
         const created = data.createdAt?.toDate?.()
         if (!created || !data.classeId) return

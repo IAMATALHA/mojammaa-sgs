@@ -8,13 +8,13 @@
  * Convention `attachments` sur le doc devoir :
  *   attachments: [{ url, name, mime, size }]
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Modal,
   TextInput, ScrollView, Alert, ActivityIndicator, RefreshControl,
   KeyboardAvoidingView, Platform, Image, StatusBar,
 } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { TeacherRoute, TeacherStackParamList } from '../../navigation/types';
 import { toDocs } from '../../services/firestore';
@@ -34,8 +34,9 @@ import { uploadAttachment, type Attachment } from '../../services/StorageService
 import { broadcastToClasses } from '../../services/messagesService';
 import type { UserProfile } from '../../types';
 import { academicPeriodForDate, currentAndNextAcademicYears, localISODate } from '../../utils/academicPeriod'
+import { homeworkCommandId, manageHomework } from '../../services/homework-management'
 
-interface Devoir {
+export interface Devoir {
   id:           string
   titre:        string
   description?: string
@@ -46,6 +47,8 @@ interface Devoir {
   dateLimite:   string
   attachments?: Attachment[]
   createdAt?:   Timestamp
+  updatedAt?: Timestamp
+  cancelledAt?: Timestamp
 }
 
 const TYPES = ['Maison', 'Contrôle', 'Révision', 'Projet']
@@ -70,6 +73,9 @@ export default function TeacherDevoirsScreen() {
   const [error,   setError]   = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [prefill, setPrefill] = useState<Devoir | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const removeCommands = useRef(new Map<string, string>())
   const homeworkYears = currentAndNextAcademicYears()
   const homeworkYearsKey = homeworkYears.join('|')
 
@@ -93,10 +99,25 @@ export default function TeacherDevoirsScreen() {
     }
   }, [profile, homeworkYearsKey, routeClasse])
 
-  useEffect(() => { load() }, [load])
+  useFocusEffect(useCallback(() => { void load() }, [load]))
 
-  const openCreate    = () => { setPrefill(null); setModalOpen(true) }
-  const openWithReuse = (d: Devoir) => { setPrefill(d); setModalOpen(true) }
+  const openCreate    = () => { setEditing(false); setPrefill(null); setModalOpen(true) }
+  const openWithReuse = (d: Devoir) => { setEditing(false); setPrefill(d); setModalOpen(true) }
+  const remove = (d: Devoir) => Alert.alert(t('homeworkManagement.remove'), t('homeworkManagement.confirmRemove'), [
+    { text: t('common.cancel'), style: 'cancel' },
+    { text: t('homeworkManagement.remove'), style: 'destructive', onPress: async () => {
+      if (removing) return
+      setRemoving(true)
+      try {
+        const commandId = removeCommands.current.get(d.id) || homeworkCommandId()
+        removeCommands.current.set(d.id, commandId)
+        await manageHomework({ id: d.id, commandId, version: d.updatedAt?.toMillis() || 0, action: 'remove' })
+        removeCommands.current.delete(d.id)
+        await load()
+      } catch { Alert.alert(t('common.error'), t('homeworkManagement.failed')) }
+      finally { setRemoving(false) }
+    } },
+  ])
 
   // Tap sur la carte → page entière (description complète + pièces jointes
   // consultables). Le chip « Réutiliser » garde la priorité (bouton imbriqué).
@@ -134,6 +155,14 @@ export default function TeacherDevoirsScreen() {
         <Text style={[styles.classText, { color: theme.text }]}>{item.classeId}</Text>
         <Text style={[styles.dueDate, { color: theme.textSoft }]}>{t('teacher.dueDate', { date: formatDate(item.dateLimite) })}</Text>
       </View>
+      {item.cancelledAt ? <Text style={{ color: theme.danger }}>{t('homeworkManagement.cancelled')}</Text> : <View style={styles.chipRow}>
+        <TouchableOpacity disabled={removing} style={styles.reuseChip} onPress={() => { setEditing(true); setPrefill(item); setModalOpen(true) }}>
+          <Text style={{ color: theme.primary }}>{t('homeworkManagement.edit')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity disabled={removing} style={styles.reuseChip} onPress={() => remove(item)}>
+          <Text style={{ color: theme.danger }}>{t('homeworkManagement.remove')}</Text>
+        </TouchableOpacity>
+      </View>}
       <TouchableOpacity onPress={() => openWithReuse(item)} style={[styles.reuseChip, { backgroundColor: theme.primarySurface }]}>
         <Ionicons name="copy-outline" size={12} color={theme.primary} />
         <Text style={{ color: theme.primary, fontSize: 11, fontWeight: '700', marginStart: 4 }}>
@@ -182,6 +211,7 @@ export default function TeacherDevoirsScreen() {
         visible={modalOpen}
         defaultClasse={routeClasse || profile?.classe}
         prefill={prefill}
+        editing={editing}
         onClose={() => setModalOpen(false)}
         onCreated={() => { setModalOpen(false); load() }}
       />
@@ -216,12 +246,13 @@ function getAvailableClasses(profile: UserProfile | null | undefined): string[] 
 }
 
 // ─── Create devoir modal ─────────────────────────────────────────────────────
-function CreateDevoirModal({
-  visible, defaultClasse, prefill, onClose, onCreated,
+export function CreateDevoirModal({
+  visible, defaultClasse, prefill, editing = false, onClose, onCreated,
 }: {
   visible:       boolean
   defaultClasse?: string
   prefill?:      Devoir | null
+  editing?: boolean
   onClose:       () => void
   onCreated:     () => void
 }) {
@@ -237,28 +268,36 @@ function CreateDevoirModal({
   const [uploading,   setUploading]   = useState(false);
   const [saving,      setSaving]      = useState(false);
   const [err,         setErr]         = useState('');
+  const [notify, setNotify] = useState(true)
+  const commandId = useRef<string | null>(null)
+  const commandPayload = useRef('')
+  const savingRef = useRef(false)
+  const dismiss = () => { if (!savingRef.current && !uploading) onClose() }
 
   const dateChips = useMemo(() => generateDateChips(30), [])
   const availableClasses = useMemo(() => getAvailableClasses(profile), [profile])
 
   useEffect(() => {
     if (!visible) return
+    commandId.current = null
+    commandPayload.current = ''
+    setNotify(true)
     if (prefill) {
       setTitre(prefill.titre)
       setDescription(prefill.description || '')
       setType(prefill.type || TYPES[0])
       setClasseId(prefill.classeId || defaultClasse || '')
-      setDateLimite('')
+      setDateLimite(editing ? prefill.dateLimite : '')
       setAttachments(prefill.attachments ? [...prefill.attachments] : [])
     } else {
       setTitre(''); setDescription(''); setType(TYPES[0])
       setClasseId(defaultClasse || ''); setDateLimite(''); setAttachments([])
     }
     setErr('')
-  }, [visible, prefill, defaultClasse])
+  }, [visible, prefill, defaultClasse, editing])
 
   const pickPhoto = async (fromCamera: boolean) => {
-    if (!profile) return
+    if (!profile || savingRef.current) return
     try {
       if (fromCamera) {
         const permission = await ImagePicker.requestCameraPermissionsAsync()
@@ -288,7 +327,7 @@ function CreateDevoirModal({
   }
 
   const pickPdf = async () => {
-    if (!profile) return
+    if (!profile || savingRef.current) return
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*'],
@@ -316,12 +355,25 @@ function CreateDevoirModal({
   }
 
   const submit = async () => {
-    if (!profile) return
+    if (!profile || savingRef.current || uploading) return
     if (!titre.trim())    { setErr(t('teacher.titleRequired')); return }
     if (!classeId.trim()) { setErr(t('teacher.classRequired')); return }
     if (!dateLimite)      { setErr(t('teacher.invalidDate')); return }
     setSaving(true); setErr('');
+    savingRef.current = true
     try {
+      if (editing && prefill) {
+        const payload = JSON.stringify({ titre, description, type, dateLimite, attachments, notify })
+        if (commandPayload.current !== payload) commandId.current = null
+        commandPayload.current = payload
+        commandId.current ??= homeworkCommandId()
+        await manageHomework({ id: prefill.id, commandId: commandId.current,
+          version: prefill.updatedAt?.toMillis() || 0, action: 'edit', notify,
+          changes: { titre: titre.trim(), description: description.trim(), type, dateLimite, attachments },
+        })
+        onCreated()
+        return
+      }
       await addDoc(collection(db, 'devoirs'), {
         titre:       titre.trim(),
         description: description.trim(),
@@ -358,32 +410,34 @@ function CreateDevoirModal({
         code: e?.code || null,
         message: e?.message || String(e),
       })
-      setErr(e?.message || t('teacher.createFailed'))
-      Alert.alert(t('common.error'), e?.message || t('teacher.createFailed'))
+      const message = editing ? t('homeworkManagement.failed') : (e?.message || t('teacher.createFailed'))
+      setErr(message)
+      Alert.alert(t('common.error'), message)
     } finally {
       setSaving(false)
+      savingRef.current = false
     }
   }
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={dismiss}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: theme.bg }}>
         <View style={[styles.modalHeader, { borderBottomColor: theme.border, paddingTop: (Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0) + 16 }]}>
-          <TouchableOpacity onPress={onClose}>
+          <TouchableOpacity onPress={dismiss} disabled={saving || uploading}>
             <Text style={{ color: theme.text, fontSize: 16 }}>{t('common.cancel')}</Text>
           </TouchableOpacity>
           <Text style={[styles.modalTitle, { color: theme.text }]}>
-            {prefill ? t('teacher.reuseHomework') : t('teacher.newHomework')}
+            {editing ? t('homeworkManagement.edit') : prefill ? t('teacher.reuseHomework') : t('teacher.newHomework')}
           </Text>
           <TouchableOpacity onPress={submit} disabled={saving || uploading}>
             {saving
               ? <ActivityIndicator color={theme.primary} />
-              : <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '700' }}>{t('teacher.create')}</Text>}
+              : <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '700' }}>{t(editing ? 'homeworkManagement.save' : 'teacher.create')}</Text>}
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
-          {prefill ? (
+        <ScrollView pointerEvents={saving ? 'none' : 'auto'} contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
+          {prefill && !editing ? (
             <View style={[styles.prefillBanner, { backgroundColor: theme.primarySurface }]}>
               <Ionicons name="copy-outline" size={14} color={theme.primary} />
               <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '600', marginStart: 6, flex: 1 }}>
@@ -391,6 +445,12 @@ function CreateDevoirModal({
               </Text>
             </View>
           ) : null}
+
+          {editing && <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: notify }}
+            disabled={saving} onPress={() => setNotify(value => !value)} style={{ paddingVertical: 12 }}>
+            <Text style={{ color: theme.text }}>{notify ? '☑' : '☐'} {t('homeworkManagement.notify')}</Text>
+            <Text style={{ color: theme.textSoft, fontSize: 12 }}>{t('homeworkManagement.notifyHint')}</Text>
+          </TouchableOpacity>}
 
           {err ? (
             <View style={[styles.errorBox, { backgroundColor: theme.danger + '12' }]}>
@@ -400,6 +460,7 @@ function CreateDevoirModal({
 
           <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.titleLabel')}</Text>
           <TextInput
+            editable={!saving}
             value={titre} onChangeText={setTitre}
             accessibilityLabel={t('teacher.titleLabel')}
             placeholder={t('teacher.devoirTitlePlaceholder')}
@@ -410,6 +471,7 @@ function CreateDevoirModal({
 
           <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>{t('teacher.descriptionLabel')}</Text>
           <TextInput
+            editable={!saving}
             value={description} onChangeText={setDescription}
             accessibilityLabel={t('teacher.descriptionLabel')}
             placeholder={t('teacher.devoirDescPlaceholder')}
@@ -440,10 +502,11 @@ function CreateDevoirModal({
           {/* Class selector — scrollable chips */}
           <Text style={[styles.label, { color: theme.textSoft, marginTop: 12 }]}>{t('teacher.targetClass')}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
-            {availableClasses.map(c => {
+            {(editing && prefill ? [prefill.classeId] : availableClasses).map(c => {
               const active = classeId === c
               return (
                 <TouchableOpacity key={c}
+                  disabled={editing}
                   onPress={() => setClasseId(c)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
@@ -461,6 +524,7 @@ function CreateDevoirModal({
 
           {/* Date picker — scrollable day chips, today+ only */}
           <Text style={[styles.label, { color: theme.textSoft, marginTop: 14 }]}>{t('teacher.deadlineLabel')}</Text>
+          {!!dateLimite && <Text style={{ color: theme.text }}>{formatDate(dateLimite)}</Text>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
             {dateChips.map(dc => {
               const active = dateLimite === dc.iso

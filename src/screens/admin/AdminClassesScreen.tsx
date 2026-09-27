@@ -373,7 +373,7 @@ export default function AdminClassesScreen() {
         collection(db, 'devoirs'),
         where('academicYear', 'in', homeworkYears),
       ), snap => {
-        cache.devoirs = snap.docs.map(docSnap => {
+        cache.devoirs = snap.docs.filter(d => !d.get('cancelledAt')).map(docSnap => {
           const row = docSnap.data() as Record<string, unknown>
           return {
             id: docSnap.id,

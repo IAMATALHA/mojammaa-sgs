@@ -1529,6 +1529,21 @@ await deny('client ne détourne pas le routage rendez-vous via un message direct
   ...parentMessage, appointmentAudience: 'parent', appointmentId: 'forged',
 }))
 
+// Homework mutations must use the authenticated server transaction.
+await allow('prof creates own homework', setDoc(doc(asUser('prof1'), 'devoirs/newOwn'), { classeId: '1A', teacherId: 'prof1', titre: 'Test' }))
+await deny('prof cannot impersonate colleague on create', setDoc(doc(asUser('prof1'), 'devoirs/forged'), { classeId: '1A', teacherId: 'profSameClass', titre: 'Test' }))
+await deny('same-class colleague cannot directly edit homework', updateDoc(doc(asUser('profSameClass'), 'devoirs/d1a'), { titre: 'Changed' }))
+await deny('owner cannot bypass server edit checks', updateDoc(doc(asUser('prof1'), 'devoirs/d1a'), { titre: 'Changed' }))
+await deny('owner cannot bypass submission preservation', deleteDoc(doc(asUser('prof1'), 'devoirs/d1a')))
+await testEnv.withSecurityRulesDisabled(async ctx => {
+  await updateDoc(doc(ctx.firestore(), 'devoirs/d1a'), { cancelledAt: new Date() })
+})
+await deny('parent cannot submit work after cancellation', setDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e6'), {
+  homeworkId: 'd1a', eleveId: 'e6', classeId: '1A', parentUid: 'parent1', teacherId: 'prof1',
+  status: 'submitted', attachments: [{ url: 'https://example.com/test.pdf', name: 'Test', mime: 'application/pdf' }],
+  parentComment: '', submittedAt: serverTimestamp(), submittedByUid: 'parent1', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+}))
+
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)
 if (failed.length) {

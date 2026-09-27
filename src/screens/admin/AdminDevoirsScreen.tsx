@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl,
   TouchableOpacity,
 } from 'react-native'
 import { collection, getDocs, query, Timestamp, where } from 'firebase/firestore'
 import { useTranslation } from 'react-i18next'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { BookOpen, Clock, Users, Paperclip } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
@@ -27,6 +27,7 @@ interface DevoirRow {
   type: string
   attachments: Attachment[]
   createdAt?: Timestamp
+  cancelledAt?: Timestamp
 }
 
 function formatDate(iso: string): string {
@@ -59,6 +60,7 @@ export default function AdminDevoirsScreen() {
         const data = toDoc<{
           titre?: string; description?: string; classeId?: string; teacherId?: string; teacherNom?: string
           dateLimite?: string; type?: string; attachments?: Attachment[]; createdAt?: Timestamp
+  cancelledAt?: Timestamp
         }>(d)
         return {
           id: d.id,
@@ -71,6 +73,7 @@ export default function AdminDevoirsScreen() {
           type: data.type || '',
           attachments: Array.isArray(data.attachments) ? data.attachments : [],
           createdAt: data.createdAt,
+          cancelledAt: data.cancelledAt,
         }
       })
       list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
@@ -79,10 +82,10 @@ export default function AdminDevoirsScreen() {
     finally { setLoading(false) }
   }, [homeworkYearsKey])
 
-  useEffect(() => { load() }, [load])
+  useFocusEffect(useCallback(() => { void load() }, [load]))
 
-  const active = devoirs.filter(d => d.dateLimite >= today)
-  const past = devoirs.filter(d => d.dateLimite < today)
+  const active = devoirs.filter(d => !d.cancelledAt && d.dateLimite >= today)
+  const past = devoirs.filter(d => d.cancelledAt || d.dateLimite < today)
 
   // Tap → page entière (description complète + pièces jointes consultables).
   const openView = (d: DevoirRow) => {
@@ -96,7 +99,7 @@ export default function AdminDevoirsScreen() {
   }
 
   const renderItem = ({ item }: { item: DevoirRow }) => {
-    const isActive = item.dateLimite >= today
+    const isActive = !item.cancelledAt && item.dateLimite >= today
     return (
       <TouchableOpacity activeOpacity={0.75} onPress={() => openView(item)}
         style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -116,7 +119,7 @@ export default function AdminDevoirsScreen() {
         <View style={styles.metaRow}>
           <Clock size={12} color={isActive ? theme.accent : theme.textMuted} strokeWidth={2} />
           <Text style={{ color: isActive ? theme.accent : theme.textMuted, fontSize: 12, fontWeight: '600', marginStart: 4 }}>
-            {formatDate(item.dateLimite)}
+            {item.cancelledAt ? t('homeworkManagement.cancelled') : formatDate(item.dateLimite)}
           </Text>
         </View>
       </TouchableOpacity>

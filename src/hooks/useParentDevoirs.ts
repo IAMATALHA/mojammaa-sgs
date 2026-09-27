@@ -88,6 +88,7 @@ export function useParentDevoirs(eleves: EleveDoc[]) {
           const next = new Map<string, RawDevoir>()
           snap.docs.forEach(d => {
             const data = d.data() as Record<string, unknown>
+            if (data.cancelledAt) return
             const dateLimite = asString(data.dateLimite)
             next.set(d.id, {
               id: d.id,

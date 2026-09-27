@@ -7,9 +7,9 @@
  * images affichées en grand (tap → plein écran navigateur), autres fichiers
  * en lignes ouvrables (Linking).
  */
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
-  View, Text, ScrollView, Pressable, Image, StyleSheet, Linking,
+  View, Text, ScrollView, Pressable, Image, StyleSheet, Linking, Alert, ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
@@ -24,6 +24,10 @@ import { localISODate } from '../../utils/academicPeriod'
 import type { DevoirDetailParams } from '../../navigation/types'
 import HomeworkParentSubmission from '../../components/homework/HomeworkParentSubmission'
 import HomeworkTeacherTracking from '../../components/homework/HomeworkTeacherTracking'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { db } from '../../config/firebase'
+import { CreateDevoirModal, type Devoir } from '../teacher/TeacherDevoirsScreen'
+import { homeworkCommandId, manageHomework } from '../../services/homework-management'
 
 function fmtDate(iso?: string): string {
   if (!iso) return '—'
@@ -40,10 +44,38 @@ function fmtSize(bytes?: number): string {
 export default function DevoirDetailScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
-  const { role } = useAuth()
+  const { role, profile } = useAuth()
   const navigation = useNavigation()
   const route = useRoute<RouteProp<{ params: DevoirDetailParams }, 'params'>>()
-  const devoir = route.params.devoir
+  const [live, setLive] = useState<Devoir | null>(null)
+  const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editDraft, setEditDraft] = useState<Devoir | null>(null)
+  const [removing, setRemoving] = useState(false)
+  const commandId = useRef<string | null>(null)
+  useEffect(() => {
+    setLoaded(false); setLoadError(false); setLive(null)
+    return onSnapshot(doc(db, 'devoirs', route.params.devoir.id), snapshot => {
+      setLive(snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } as Devoir : null)
+      setLoaded(true); setLoadError(false)
+    }, () => { setLoaded(true); setLoadError(true) })
+  }, [route.params.devoir.id])
+  const devoir = { ...route.params.devoir, ...live }
+  const canManage = !!live && !live.cancelledAt && (role === 'admin' || (role === 'teacher' && live.teacherId === profile?.uid))
+  const remove = () => Alert.alert(t('homeworkManagement.remove'), t('homeworkManagement.confirmRemove'), [
+    { text: t('common.cancel'), style: 'cancel' },
+    { text: t('homeworkManagement.remove'), style: 'destructive', onPress: async () => {
+      if (!live || removing) return
+      setRemoving(true)
+      try {
+        commandId.current ??= homeworkCommandId()
+        await manageHomework({ id: live.id, commandId: commandId.current, version: live.updatedAt?.toMillis() || 0, action: 'remove' })
+        commandId.current = null
+      } catch { Alert.alert(t('common.error'), t('homeworkManagement.failed')) }
+      finally { setRemoving(false) }
+    } },
+  ])
 
   const attachments = devoir.attachments || []
   const images = attachments.filter(a => a.mime?.startsWith('image/'))
@@ -76,6 +108,15 @@ export default function DevoirDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {!loaded ? <ActivityIndicator color={theme.primary} /> : loadError || !live ? (
+          <Text style={{ color: theme.danger }}>{t('homeworkManagement.unavailable')}</Text>
+        ) : <>
+        {live.cancelledAt && <Text style={{ color: theme.danger }}>{t('homeworkManagement.cancelled')}</Text>}
+        {live.updatedAt && <Text style={{ color: theme.textSoft }}>{t('homeworkManagement.updated', { date: live.updatedAt.toDate().toLocaleString() })}</Text>}
+        {canManage && <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginVertical: 12 }}>
+          <Pressable disabled={removing} onPress={() => { setEditDraft(live); setEditing(true) }} accessibilityRole="button"><Text style={{ color: theme.primary }}>{t('homeworkManagement.edit')}</Text></Pressable>
+          <Pressable disabled={removing} onPress={remove} accessibilityRole="button"><Text style={{ color: theme.danger }}>{t('homeworkManagement.remove')}</Text></Pressable>
+        </View>}
         <Text style={[{ color: theme.text, fontWeight: '800', fontSize: 22, letterSpacing: -0.4 }, dirStyle(devoir.titre)]}>
           {devoir.titre}
         </Text>
@@ -146,16 +187,18 @@ export default function DevoirDetailScreen() {
           </View>
         )}
 
-        {role === 'student' && devoir.eleveId ? (
+        {role === 'student' && devoir.eleveId && !live.cancelledAt ? (
           <HomeworkParentSubmission homework={devoir} />
         ) : null}
         {role === 'teacher' ? (
-          <HomeworkTeacherTracking homework={devoir} />
+          <HomeworkTeacherTracking homework={devoir} readOnly={!!live.cancelledAt || live.teacherId !== profile?.uid} />
         ) : null}
         {role === 'admin' ? (
           <HomeworkTeacherTracking homework={devoir} readOnly />
         ) : null}
+        </>}
       </ScrollView>
+      <CreateDevoirModal visible={editing} editing prefill={editDraft} onClose={() => setEditing(false)} onCreated={() => setEditing(false)} />
     </SafeAreaView>
   )
 }

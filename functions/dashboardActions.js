@@ -25,7 +25,7 @@ async function getDashboardActions(db, uid, input, now = new Date()) {
     const classes = [...new Set(children.map(doc => doc.get('classe')).filter(Boolean))]
     await Promise.all(chunks(classes).map(async group => {
       const homework = await db.collection('devoirs').where('classeId', 'in', group).where('dateLimite', '>=', yearStart).where('dateLimite', '<=', today).get()
-      const pairs = homework.docs.flatMap(work => children.filter(child => child.get('classe') === work.get('classeId')).map(child => ({ work, child })))
+      const pairs = homework.docs.filter(work => !work.get('cancelledAt')).flatMap(work => children.filter(child => child.get('classe') === work.get('classeId')).map(child => ({ work, child })))
       for (const batch of chunks(pairs, 100)) {
         const submissions = await db.getAll(...batch.map(({ work, child }) => db.doc(`homeworkSubmissions/${work.id}_${child.id}`)))
         missingHomework += submissions.filter(doc => !doc.exists || ['pending', 'not_submitted', 'not_done'].includes(doc.get('status'))).length

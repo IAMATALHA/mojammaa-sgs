@@ -1,4 +1,16 @@
 const en = {
+  homeworkManagement: {
+    edit: "Edit homework",
+    remove: "Delete homework",
+    save: "Save",
+    cancelled: "Homework cancelled — submissions preserved",
+    confirmRemove: "Delete this homework? If tracking or submissions exist, it will be cancelled and submissions preserved. Families will be notified.",
+    notify: "Notify families",
+    notifyHint: "Uncheck for a simple text correction. Changes to the due date, type or attachments always notify families.",
+    failed: "Unable to save. Refresh the homework and try again.",
+    unavailable: "This homework was deleted or is no longer accessible.",
+    updated: "Updated on {{date}}",
+  },
   common: {
     cancel: 'Cancel',
     confirm: 'Confirm',
