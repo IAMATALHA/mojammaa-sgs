@@ -8,6 +8,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test": "node scripts/runTests.mjs",
+    "test:emulator": "firebase emulators:exec --only firestore,storage --project demo-mojammaa-storage \"node scripts/runTests.mjs --emulator\"",
     "doctor": "npx expo-doctor",
     "email:announcement": "node scripts/sendAnnouncementEmail.js",
     "verify:rules": "node scripts/verifyRulesLive.js",
