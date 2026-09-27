@@ -14,7 +14,8 @@ Point de départ : 1.0.16, versionCode 47, build `afbb3736-6fcf-4d49-8920-ba28c6
 
 - [x] Correctifs du 27/09 (après-midi) : notifications devoir modifié/annulé adressées aux parents (bug prod : 5 messages `no_recipient` depuis le 24/09) et création via `manageHomework` (`5434784`, `2505ce3`) ; pièces jointes validées par les règles à la création client (`eb88361`) ; libellés EN/AR, scripts, composant mort (`0aee4d5`) ; `npm audit fix` app et fonctions (`0e26969`, `1ab48bd`).
 
-- [x] Revue Codex du 27/09 (soir) : la validation des pièces jointes dans les règles dépassait la limite Firestore de 1 000 expressions dès 10 pièces jointes → une seule expression régulière par pièce jointe ; 20 acceptées (limite), 21 et une URL externe en 20e position refusées ; marge mesurée au-delà de 60. Audit npm de l'app : 23 failles sur toutes les dépendances, 16 hors dev (0 critique, 3 élevées : `brace-expansion`, `image-size`, `postcss`), toutes dans l'outillage de build (Metro, CLI d'`expo-updates`, `@expo/metro-config`) et non embarquées ; `npm audit fix` n'a plus rien à appliquer (simulation) : il faudrait des `overrides` ou des versions majeures (Expo 57, firebase-admin 14), non appliqués.
+- [x] Revue Codex du 27/09 (soir) : la validation des pièces jointes dans les règles dépassait la limite Firestore de 1 000 expressions dès 10 pièces jointes → une seule expression régulière par pièce jointe ; 20 acceptées (limite), 21 et une URL externe en 20e position refusées ; marge mesurée au-delà de 60. Audit npm de l'app : 23 failles sur toutes les dépendances, 16 hors dev (0 critique, 3 élevées : `brace-expansion`, `image-size`, `postcss`), toutes dans l'outillage de build (Metro, CLI d'`expo-updates`, `@expo/metro-config`) et non embarquées ; `npm audit fix` n'a plus rien à appliquer (simulation). `brace-expansion` (5.0.6, via `minimatch` ← `@expo/fingerprint`/`glob`) se corrigerait par un `overrides` DANS sa plage (5.0.12) ; `image-size` (Metro `^1.0.2`) et `postcss` (`~8.4.32`) exigent des versions hors plage (mise à jour d'Expo). Aucun `overrides` appliqué.
+- [x] Revue Codex (2) : les règles acceptaient `mime: 42` ou un `name` objet → l'écran plante (`mime.startsWith`, texte). Double correction : (a) règles du pont (anciennes installations) : `name` et `mime` doivent être des textes, plafond ramené à 10 pièces jointes (budget mesuré : 19 max avec ces contrôles ; 10 acceptées testées) ; (b) app : `safeAttachments` écarte toute pièce jointe malformée à la lecture (devoirs, détail, calendrier admin, devoirs parent, formulaire prof, rendus parents). La fonction `manageHomework` garde 20 pièces jointes, tout vérifié. Risque résiduel : les pièces jointes des MESSAGES et des RESSOURCES suivent le même motif de lecture, non traité ici.
 
 ## 0 bis. Ordre de déploiement — OBLIGATOIRE
 
@@ -64,6 +65,7 @@ APK signé sans nouveau build : Play Console → Explorateur d'app bundles → v
 - [ ] Connexion admin, professeur et parent ; activation parent avec un code de test ; interface en arabe (RTL).
 - [ ] Parent : choix de l'enfant, résultats, devoirs et absences ; une alerte consultée disparaît et reste masquée après réouverture.
 - [ ] Professeur : créer (le parent reçoit « 📚 Nouveau devoir » dans sa langue), modifier (avec et sans « Prévenir les familles »), supprimer un devoir sans rendu, puis un devoir avec rendu (doit devenir « annulé ») ; à chaque fois, push ET message dans la boîte du parent.
+- [ ] Pièces jointes : un devoir avec plusieurs photos et un PDF s'ouvre chez le parent, le prof et l'admin (détail et calendrier).
 - [ ] Navigation complète (onglets, retours, liens des notifications) : `@react-navigation/core` passé de 7.17 à 7.22 via `npm audit fix`.
 - [ ] Comportement : motif, observation suggérée et « Autre motif » avec précision ; notification parent.
 - [ ] Appel d'une séance, messagerie, statistiques admin.
@@ -103,5 +105,6 @@ Tant que des téléphones restent en 1.0.16, chaque correctif JavaScript est pub
 - [x] Horloge GMT des fonctions serveur (`2521fa3`) et durcissement de `manageHomework` : version à la milliseconde, pièces jointes limitées au bucket (`2fdf4f3`). Audit Lilith du 27/09 : une traversée `../` trouvée dans la première version et corrigée. Tests verts.
 - [ ] Déployer fonctions + règles : voir l'étape 0 bis.
 - [x] Création de devoir atomique via `manageHomework` (code, 27/09) ; les règles valident aussi les pièces jointes des anciennes installations.
+- [ ] Même nettoyage `safeAttachments` pour les pièces jointes des messages et des ressources (motif `mime?.startsWith` identique).
 - [ ] Plus tard, quand plus aucune installation ne crée par `addDoc` (vérifier qu'aucun nouveau devoir n'est sans `createdVia`) : interdire la création client dans les règles.
 - Écran « mise à jour obligatoire » : d'abord par OTA sur 1.0.16, activé seulement quand la 1.0.17 est disponible pour tous. Nécessite une modification des règles Firestore, donc un audit Lilith.
