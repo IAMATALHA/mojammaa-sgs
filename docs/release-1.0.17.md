@@ -23,7 +23,7 @@ L'app crée désormais les devoirs via `manageHomework` (action `create`). Publi
 
 1. [x] Déployé le 27/09 (13:20 UTC) depuis `462a76a` (arbre propre) : règles Firestore (ruleset `a7e063b3`) + les 43 fonctions de la codebase `default`, nommées une à une (`--only functions:default:<nom>,…`). **Pas de `--only functions` global** : 16 fonctions appartiennent à la codebase `admin` (repo mojammaa-admin), dont `getCoefficientSettings` et `saveLevelCoefficients`, AUSSI exportées par ce repo ; un déploiement global tenterait de se les réapproprier. 43/43 réussies, empreintes `admin` inchangées.
 2. [x] `verify:rules` : en phase (`a7e063b3`). `functions:list` : 59 ACTIVE (43 default, 16 admin). Logs après déploiement : aucune erreur ni avertissement (tâches planifiées exécutées avec le nouveau code).
-3. [x] Nouvelle OTA 1.0.16 publiée après le déploiement (étape 2). Restent : tag `v1.0.16-final` → `9c988c2`, puis le build 1.0.17.
+3. [x] Nouvelle OTA 1.0.16 publiée après le déploiement (étape 2). Tag `v1.0.16-final` → `9c988c2` fait. Reste : le build 1.0.17.
 
 ## 1. Vérifications juste avant le build
 
@@ -44,7 +44,7 @@ Après le passage à 1.0.17, `eas update` publie pour le runtime 1.0.17 : les in
 - [x] Publié le 27/09 depuis `a1a3fd3` (arbre propre) ; Expo Updates sert bien ces deux identifiants pour `production` / `1.0.16`.
 - [x] Republié le 27/09 depuis `679f40d` après les correctifs client : Android groupe `34775bb0-71e3-4319-b3a1-3c4a6f4d1c03` (mise à jour `01a0e2b3-6950-761a-b800-b8cc8d8f0bbc`), iOS groupe `9ba36427-3c68-4086-af98-d1db0eacfc30` (mise à jour `01a0e2b4-3e25-73bf-8114-69b009a0df2e`) ; identifiants servis pour `production` / `1.0.16` au 27/09. Ce n'est plus la dernière : l'app crée désormais les devoirs via `manageHomework`, donc une nouvelle OTA suit le déploiement.
 - [x] Après l'étape 0 bis : OTA 1.0.16 publiée le 27/09 depuis `9c988c2` (arbre propre, création de devoirs via `manageHomework`, pièces jointes sécurisées). Android groupe `e70e7bde-9252-44e4-9b92-883b375ec84c` (mise à jour `01a0e30b-af7d-75f3-886b-fa825e9e8128`), iOS groupe `c396048a-65f2-4dfc-a979-06c91ae00af9` (mise à jour `01a0e30c-941c-76f6-a17e-68b0bd31a19b`) ; identifiants servis vérifiés pour `production` / `1.0.16`.
-- [ ] Tag `v1.0.16-final` (encore sur `a1a3fd3`) : le poser sur `9c988c2`, commit de cette OTA (push forcé du tag, à faire à la main).
+- [x] Tag `v1.0.16-final` déplacé sur `9c988c2` (commit de cette OTA), poussé le 27/09.
 
 ## 3. Passage en 1.0.17
 
