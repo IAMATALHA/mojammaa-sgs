@@ -21,8 +21,8 @@ Point de départ : 1.0.16, versionCode 47, build `afbb3736-6fcf-4d49-8920-ba28c6
 
 L'app crée désormais les devoirs via `manageHomework` (action `create`). Publier l'app avant la fonction casserait la création de devoirs.
 
-1. [ ] `firebase deploy --only functions,firestore:rules` depuis un arbre propre (accord explicite).
-2. [ ] `npm run verify:rules` en phase ; `firebase functions:list` ; logs de `manageHomework` sans erreur.
+1. [x] Déployé le 27/09 (13:20 UTC) depuis `462a76a` (arbre propre) : règles Firestore (ruleset `a7e063b3`) + les 43 fonctions de la codebase `default`, nommées une à une (`--only functions:default:<nom>,…`). **Pas de `--only functions` global** : 16 fonctions appartiennent à la codebase `admin` (repo mojammaa-admin), dont `getCoefficientSettings` et `saveLevelCoefficients`, AUSSI exportées par ce repo ; un déploiement global tenterait de se les réapproprier. 43/43 réussies, empreintes `admin` inchangées.
+2. [x] `verify:rules` : en phase (`a7e063b3`). `functions:list` : 59 ACTIVE (43 default, 16 admin). Logs après déploiement : aucune erreur ni avertissement (tâches planifiées exécutées avec le nouveau code).
 3. [ ] Seulement ensuite : nouvelle OTA 1.0.16 (étape 2) et déplacement du tag `v1.0.16-final`, puis le build 1.0.17.
 
 ## 1. Vérifications juste avant le build
