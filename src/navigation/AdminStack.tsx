@@ -16,7 +16,6 @@ import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen'
 import AdminMessagesScreen from '../screens/admin/AdminMessagesScreen'
 import AdminSettingsScreen from '../screens/admin/AdminSettingsScreen'
 import AdminStatsScreen from '../screens/admin/AdminStatsScreen'
-import AdminEdtScreen from '../screens/admin/AdminEdtScreen'
 import AdminCalendarScreen from '../screens/admin/AdminCalendarScreen'
 import AdminAbsencesScreen from '../screens/admin/AdminAbsencesScreen'
 import AdminRollCallsScreen from '../screens/admin/AdminRollCallsScreen'
@@ -28,9 +27,6 @@ import AdminScopeStudentsScreen from '../screens/admin/AdminScopeStudentsScreen'
 import AdminStudentFileScreen from '../screens/admin/AdminStudentFileScreen'
 import AdminAttendanceStatsScreen from '../screens/admin/AdminAttendanceStatsScreen'
 import AdminScopeHomeworkScreen from '../screens/admin/AdminScopeHomeworkScreen'
-import AdminPickupScreen from '../screens/admin/admin-pickup-screen'
-import AdminPrayerScreen from '../screens/admin/AdminPrayerScreen'
-import AdminBackToSchoolChecklistScreen from '../screens/admin/AdminBackToSchoolChecklistScreen'
 import type { AdminTabsParamList, AdminStackParamList } from './types'
 
 const Tab = createBottomTabNavigator<AdminTabsParamList>()
@@ -90,7 +86,6 @@ export default function AdminStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AdminTabs" component={AdminTabs} />
-      <Stack.Screen name="AdminEdt" component={AdminEdtScreen} />
       <Stack.Screen name="AdminCalendar" component={AdminCalendarScreen} />
       <Stack.Screen name="AdminAbsences" component={AdminAbsencesScreen} />
       <Stack.Screen name="AdminRollCalls" component={AdminRollCallsScreen} />
@@ -102,10 +97,7 @@ export default function AdminStack() {
       <Stack.Screen name="AdminStudentFile" component={AdminStudentFileScreen} />
       <Stack.Screen name="AdminAttendanceStats" component={AdminAttendanceStatsScreen} />
       <Stack.Screen name="AdminScopeHomework" component={AdminScopeHomeworkScreen} />
-      <Stack.Screen name="AdminPickup" component={AdminPickupScreen} />
-      <Stack.Screen name="AdminPrayer" component={AdminPrayerScreen} />
       <Stack.Screen name="AdminAppointments" component={AdminAppointmentsScreen} />
-      <Stack.Screen name="AdminChecklist" component={AdminBackToSchoolChecklistScreen} />
     </Stack.Navigator>
   )
 }

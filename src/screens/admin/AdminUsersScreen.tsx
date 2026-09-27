@@ -6,6 +6,8 @@ import {
 import { collection, getDocs } from 'firebase/firestore'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTranslation } from 'react-i18next'
+import { useRoute, type RouteProp } from '@react-navigation/native'
+import type { AdminStackParamList } from '../../navigation/types'
 import { useTheme } from '../../contexts/ThemeContext'
 import { db } from '../../config/firebase'
 import { toDoc } from '../../services/firestore'
@@ -34,6 +36,7 @@ const PLATFORM_LABEL: Record<string, string> = {
 export default function AdminUsersScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
+  const route = useRoute<RouteProp<AdminStackParamList, 'AdminUsers'>>()
   const roleColors: Record<string, { bg: string; fg: string }> = {
     admin:      { bg: theme.primary, fg: theme.white },
     professeur: { bg: theme.accent, fg: theme.white },
@@ -44,7 +47,8 @@ export default function AdminUsersScreen() {
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'admin' | 'professeur' | 'parent'>('all')
+  const [filter, setFilter] = useState<'all' | 'admin' | 'professeur' | 'parent'>(route.params?.role ?? 'all')
+  useEffect(() => { setFilter(route.params?.role ?? 'all') }, [route.params?.role])
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)

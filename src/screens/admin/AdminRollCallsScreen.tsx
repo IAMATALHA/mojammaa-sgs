@@ -4,7 +4,7 @@ import {
   Pressable,
 } from 'react-native'
 import { collection, getDocs, query, where } from 'firebase/firestore'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTranslation } from 'react-i18next'
 import {
@@ -94,6 +94,8 @@ export default function AdminRollCallsScreen() {
   const isAr = i18n.language === 'ar'
   const copy = copyFor(i18n.language)
   const nav = useNavigation<NativeStackNavigationProp<AdminStackParamList>>()
+  const route = useRoute<RouteProp<AdminStackParamList, 'AdminRollCalls'>>()
+  const selectedClass = route.params?.classe
   const [sessions, setSessions] = useState<RollCallSession[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -124,14 +126,15 @@ export default function AdminRollCallsScreen() {
 
   useEffect(() => { load() }, [load])
 
-  const summary = useMemo(() => summarizeRollCallSessions(sessions), [sessions])
+  const visibleSessions = useMemo(() => selectedClass ? sessions.filter(session => session.classe === selectedClass) : sessions, [sessions, selectedClass])
+  const summary = useMemo(() => summarizeRollCallSessions(visibleSessions), [visibleSessions])
   const currentSessions = useMemo(
-    () => sessions.filter(session => session.timing === 'current'),
-    [sessions],
+    () => visibleSessions.filter(session => session.timing === 'current'),
+    [visibleSessions],
   )
 
   return (
-    <ScreenLayout title={copy.title}>
+    <ScreenLayout title={selectedClass ? `${copy.title} · ${selectedClass}` : copy.title}>
       {error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}>
           <Text numberOfLines={3} style={[styles.errorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>
@@ -189,7 +192,7 @@ export default function AdminRollCallsScreen() {
       >
         {loading ? (
           <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
-        ) : sessions.length === 0 ? (
+        ) : visibleSessions.length === 0 ? (
           <EmptyState text={copy.noSessions} theme={theme} />
         ) : (
           <>
@@ -215,8 +218,8 @@ export default function AdminRollCallsScreen() {
             />
             <SessionSection
               title={copy.all}
-              count={sessions.length}
-              sessions={sessions}
+              count={visibleSessions.length}
+              sessions={visibleSessions}
               copy={copy}
               theme={theme}
               isAr={isAr}

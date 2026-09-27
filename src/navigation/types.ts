@@ -118,11 +118,11 @@ export type AdminStackParamList = {
   AdminEdt:       undefined
   AdminCalendar:  undefined
   AdminAbsences:  undefined
-  AdminRollCalls: undefined
+  AdminRollCalls: { classe?: string } | undefined
   AdminDevoirs:   undefined
   AdminDevoirView: DevoirDetailParams
   AdminMatiereDetail: { matiere?: string; classe?: string; scope?: AppliedScope } | undefined
-  AdminUsers:     undefined
+  AdminUsers:     { role?: 'all' | 'admin' | 'professeur' | 'parent' } | undefined
   // Drill-downs des statistiques. Chacun reçoit le périmètre RENVOYÉ par le
   // serveur, jamais celui demandé par le client : c'est ce qui garantit que le
   // total de l'écran est exactement le chiffre de la tuile qui l'a ouvert.
