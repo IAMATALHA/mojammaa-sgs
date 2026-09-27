@@ -113,7 +113,6 @@ export type AdminTabsParamList = {
 
 export type AdminStackParamList = {
   AdminTabs:      NavigatorScreenParams<AdminTabsParamList> | undefined
-  AdminEdt:       undefined
   AdminCalendar:  undefined
   AdminAbsences:  undefined
   AdminRollCalls: { classe?: string } | undefined
@@ -134,10 +133,7 @@ export type AdminStackParamList = {
   AdminAttendanceStats: { scope: AppliedScope }
   AdminStudentFile:     { eleveId: string; scope: AppliedScope }
   AdminScopeHomework:   { scope: AppliedScope }
-  AdminPickup:    undefined
-  AdminPrayer:    undefined
   AdminAppointments: undefined
-  AdminChecklist: undefined
 }
 
 /** Tableau de bord admin : onglet (AdminDashboard) ciblant onglets + pile. */

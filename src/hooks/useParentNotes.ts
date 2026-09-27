@@ -229,11 +229,14 @@ export function useParentNotes(
       rank = `${pos || sorted.length} / ${sorted.length}`
     }
 
+    // Moyenne de classe seulement si chaque matière a son agrégat : sinon NaN.
+    const classAvgs = classStats ? subjects.map(subject => classStats.subjectAvgs[subject.subject]) : []
+    const hasClassComparison = scope === 'semester' && classStats != null && classAvgs.every(Number.isFinite)
     return {
       semestre: scope === 'academicYear' ? `Année ${period.academicYear}` : latestSemestre,
-      hasClassComparison: scope === 'semester' && classStats != null && subjects.every(subject => Number.isFinite(classStats.subjectAvgs[subject.subject])),
-      classGeneralAvg: classStats ? weightedAverage(subjects.map(subject => ({
-        value: classStats.subjectAvgs[subject.subject], coef: coefOf(subject.subject, niveau),
+      hasClassComparison,
+      classGeneralAvg: hasClassComparison ? weightedAverage(subjects.map((subject, i) => ({
+        value: classAvgs[i], coef: coefOf(subject.subject, niveau),
       }))) ?? undefined : undefined,
       generalAvg,
       rank,
