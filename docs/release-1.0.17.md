@@ -14,6 +14,8 @@ Point de départ : 1.0.16, versionCode 47, build `afbb3736-6fcf-4d49-8920-ba28c6
 
 - [x] Correctifs du 27/09 (après-midi) : notifications devoir modifié/annulé adressées aux parents (bug prod : 5 messages `no_recipient` depuis le 24/09) et création via `manageHomework` (`5434784`, `2505ce3`) ; pièces jointes validées par les règles à la création client (`eb88361`) ; libellés EN/AR, scripts, composant mort (`0aee4d5`) ; `npm audit fix` app et fonctions (`0e26969`, `1ab48bd`).
 
+- [x] Revue Codex du 27/09 (soir) : la validation des pièces jointes dans les règles dépassait la limite Firestore de 1 000 expressions dès 10 pièces jointes → une seule expression régulière par pièce jointe ; 20 acceptées (limite), 21 et une URL externe en 20e position refusées ; marge mesurée au-delà de 60. Audit npm de l'app : 23 failles sur toutes les dépendances, 16 hors dev (0 critique, 3 élevées : `brace-expansion`, `image-size`, `postcss`), toutes dans l'outillage de build (Metro, CLI d'`expo-updates`, `@expo/metro-config`) et non embarquées ; `npm audit fix` n'a plus rien à appliquer (simulation) : il faudrait des `overrides` ou des versions majeures (Expo 57, firebase-admin 14), non appliqués.
+
 ## 0 bis. Ordre de déploiement — OBLIGATOIRE
 
 L'app crée désormais les devoirs via `manageHomework` (action `create`). Publier l'app avant la fonction casserait la création de devoirs.
@@ -33,14 +35,15 @@ L'app crée désormais les devoirs via `manageHomework` (action `create`). Publi
 
 ## 2. Dernière OTA sur le runtime 1.0.16 — avant de changer de version
 
-Après le passage à 1.0.17, les installations 1.0.16 ne reçoivent plus rien. La dernière OTA (`b0ae77ef`, 26/09) ne porte pas de commit git : on republie depuis le commit exact pour que 1.0.16 et 1.0.17 exécutent le même code.
+Après le passage à 1.0.17, `eas update` publie pour le runtime 1.0.17 : les installations 1.0.16 ne reçoivent plus que les OTA publiées explicitement sur le runtime 1.0.16 (voir l'étape 7). La dernière OTA (`b0ae77ef`, 26/09) ne porte pas de commit git : on republie depuis le commit exact pour que 1.0.16 et 1.0.17 exécutent le même code.
 
 - [x] `app.json` encore en `1.0.16`.
 - [x] `CI=1 eas update --branch production --environment production --platform android --message "1.0.16 finale — a1a3fd3 (consolidation avant 1.0.17)"` → groupe `e7106d5e-90ed-459f-9535-ec58009b9bd6`, mise à jour `01a0e2a8-8dec-727c-933f-e453406b46d8`.
 - [x] Même commande en `--platform ios` → groupe `93b0da1a-516e-4025-ba25-f1afa84fe172`, mise à jour `01a0e2a9-919c-74e8-bf9b-afa8073d50dc`.
 - [x] Publié le 27/09 depuis `a1a3fd3` (arbre propre) ; Expo Updates sert bien ces deux identifiants pour `production` / `1.0.16`.
-- [x] Republié le 27/09 depuis `679f40d` après les correctifs client : Android groupe `34775bb0-71e3-4319-b3a1-3c4a6f4d1c03` (mise à jour `01a0e2b3-6950-761a-b800-b8cc8d8f0bbc`), iOS groupe `9ba36427-3c68-4086-af98-d1db0eacfc30` (mise à jour `01a0e2b4-3e25-73bf-8114-69b009a0df2e`) ; ce sont les identifiants servis pour `production` / `1.0.16`. **C'est la vraie dernière OTA 1.0.16.**
-- [ ] Tag `v1.0.16-final` : il pointe encore sur `a1a3fd3`, le déplacer sur `679f40d` (push forcé du tag, à faire à la main).
+- [x] Republié le 27/09 depuis `679f40d` après les correctifs client : Android groupe `34775bb0-71e3-4319-b3a1-3c4a6f4d1c03` (mise à jour `01a0e2b3-6950-761a-b800-b8cc8d8f0bbc`), iOS groupe `9ba36427-3c68-4086-af98-d1db0eacfc30` (mise à jour `01a0e2b4-3e25-73bf-8114-69b009a0df2e`) ; identifiants servis pour `production` / `1.0.16` au 27/09. Ce n'est plus la dernière : l'app crée désormais les devoirs via `manageHomework`, donc une nouvelle OTA suit le déploiement.
+- [ ] Après l'étape 0 bis uniquement : nouvelle OTA 1.0.16 (Android + iOS) depuis un arbre propre, puis vérifier les identifiants servis.
+- [ ] Tag `v1.0.16-final` (encore sur `a1a3fd3`) : le poser sur le commit de CETTE nouvelle OTA (push forcé du tag, à faire à la main).
 
 ## 3. Passage en 1.0.17
 
