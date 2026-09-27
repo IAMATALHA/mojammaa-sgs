@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, type Unsubscribe } from 'firebase
 import { db } from '../config/firebase'
 import type { Attachment } from '../services/StorageService'
 import { localISODate } from '../utils/academicPeriod'
+import { eleveName } from '../utils/eleveLabels'
 import type { EleveDoc } from '../services/elevesService'
 import { useAuth } from '../contexts/AuthContext'
 import {
@@ -134,7 +135,7 @@ export function useParentDevoirs(eleves: EleveDoc[]) {
           return {
             ...d,
             childId,
-            childName: [eleve.prenomLatin || eleve.prenomFr || eleve.prenom, eleve.nomLatin || eleve.nomFr || eleve.nom].filter(Boolean).join(' '),
+            childName: eleveName(eleve),
             parentUid: profile?.uid || '',
             status: submission?.status || 'pending',
             submission,

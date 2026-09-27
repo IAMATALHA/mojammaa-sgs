@@ -13,6 +13,7 @@ import type { Child } from '../utils/dashboardTypes'
 import { currentAcademicPeriod, localISODate } from '../utils/academicPeriod'
 import { displayBareme, noteOn20, toDisplayScale } from '../utils/gradeScale'
 import { palette } from '../theme/designTokens'
+import { eleveNameParts } from '../utils/eleveLabels'
 import {
   homeworkSubmissionId,
   subscribeParentHomeworkSubmissions,
@@ -147,8 +148,7 @@ export function useParentData(): ParentData {
       return {
         bareme,
         id: e.codeMassar,
-        firstName: e.prenomLatin || e.prenomFr || e.prenom || '',
-        lastName: e.nomLatin || e.nomFr || e.nom || '',
+        ...eleveNameParts(e),
         classe: e.classe || '',
         level: e.niveau || 'Collège',
         avatarColor: AVATAR_COLORS[hashOf(e.codeMassar) % AVATAR_COLORS.length],

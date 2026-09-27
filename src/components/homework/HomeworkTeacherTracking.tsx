@@ -53,7 +53,7 @@ function studentId(eleve: EleveDoc): string {
 }
 
 function studentName(eleve: EleveDoc): string {
-  return [eleve.prenomLatin || eleve.prenomFr || eleve.prenom, eleve.nomLatin || eleve.nomFr || eleve.nom].filter(Boolean).join(' ')
+  return [eleve.prenom, eleve.nom].filter(Boolean).join(' ') || eleve.nomComplet || '—'
 }
 
 function statusTone(status: HomeworkSubmissionStatus | undefined, theme: Theme): string {
@@ -225,7 +225,7 @@ export default function HomeworkTeacherTracking({ homework, readOnly = false }: 
                 <View style={styles.studentTop}>
                   <View style={[styles.avatar, { backgroundColor: theme.surfaceAlt }]}>
                     <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 12 }}>
-                      {(eleve.prenomLatin || eleve.prenomFr || eleve.prenom || '?').slice(0, 1).toUpperCase()}
+                      {(eleve.prenom || eleve.nom || eleve.nomComplet || '?').slice(0, 1)}
                     </Text>
                   </View>
                   <View style={{ flex: 1 }}>

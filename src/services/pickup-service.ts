@@ -28,6 +28,7 @@ import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from '../config/firebase'
 import { isActiveEleve, type EleveDoc } from './elevesService'
 import { docData, toDocs } from './firestore'
+import { eleveNameParts } from '../utils/eleveLabels'
 import type {
   AnnouncePickupArrivalInput,
   AssignTransportPassengerInput,
@@ -95,10 +96,11 @@ async function hydratePickupRequests(records: PickupRequest[]): Promise<PickupRe
   const students = await studentMap(records.map(record => record.eleveId))
   return records.map(record => {
     const student = students.get(record.eleveId)
+    const { firstName, lastName } = eleveNameParts(student)
     return {
       ...record,
-      elevePrenom: student?.prenomLatin || student?.prenomFr || student?.prenom || '',
-      eleveNom: student?.nomLatin || student?.nomFr || student?.nom || '',
+      elevePrenom: firstName,
+      eleveNom: lastName,
       classe: student?.classe || '',
     }
   })

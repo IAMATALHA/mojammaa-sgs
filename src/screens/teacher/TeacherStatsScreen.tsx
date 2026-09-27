@@ -132,9 +132,9 @@ function triggerHaptic(kind: 'light' | 'medium') {
 }
 
 function studentName(e: EleveDoc): string {
-  const first = e.prenomLatin || e.prenomFr || e.prenom || ''
-  const last = e.nomLatin || e.nomFr || e.nom || ''
-  return `${first} ${last}`.trim() || e.codeMassar || '—'
+  const first = e.prenom || ''
+  const last = e.nom || ''
+  return `${first} ${last}`.trim() || e.nomComplet || e.codeMassar || '—'
 }
 
 function MotionPressable({ children, style, onPress, haptic, accessibilityLabel }: {
