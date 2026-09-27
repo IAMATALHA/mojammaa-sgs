@@ -1537,11 +1537,11 @@ const hwFile = path => ({ url: `https://firebasestorage.googleapis.com/v0/b/moja
 const hwCreate = (id, attachments, uid = 'prof1') => setDoc(doc(asUser(uid), `devoirs/${id}`), { classeId: '1A', teacherId: uid, titre: 'Test', attachments })
 await allow('prof creates homework with an app attachment', hwCreate('hwAttOk', [hwFile('devoirs%2Fprof1%2F1_cours..v2.pdf')]))
 await allow('prof creates homework without attachments', hwCreate('hwAttNone', []))
-// Limite exacte : la validation doit tenir dans les 1 000 expressions de Firestore.
-await allow('prof creates homework with 20 app attachments (limit)', hwCreate('hwAtt20', Array.from({ length: 20 }, (_, i) => hwFile(`devoirs%2Fprof1%2F${i}_page.jpg`))))
-await deny('prof cannot create homework with 21 attachments', hwCreate('hwAtt21', Array.from({ length: 21 }, (_, i) => hwFile(`devoirs%2Fprof1%2F${i}_page.jpg`))))
-await deny('prof cannot hide an external URL at the last position (index 19)', hwCreate('hwAttLast', [
-  ...Array.from({ length: 19 }, (_, i) => hwFile(`devoirs%2Fprof1%2F${i}_page.jpg`)), { ...hwFile('devoirs%2Fx'), url: 'https://evil.example/x.pdf' }]))
+// Limite exacte du pont (anciennes installations) : doit tenir dans les 1 000 expressions de Firestore.
+await allow('prof creates homework with 10 app attachments (bridge limit)', hwCreate('hwAtt10', Array.from({ length: 10 }, (_, i) => hwFile(`devoirs%2Fprof1%2F${i}_page.jpg`))))
+await deny('prof cannot create homework with 11 attachments', hwCreate('hwAtt11', Array.from({ length: 11 }, (_, i) => hwFile(`devoirs%2Fprof1%2F${i}_page.jpg`))))
+await deny('prof cannot hide an external URL at the last position (index 9)', hwCreate('hwAttLast', [
+  ...Array.from({ length: 9 }, (_, i) => hwFile(`devoirs%2Fprof1%2F${i}_page.jpg`)), { ...hwFile('devoirs%2Fx'), url: 'https://evil.example/x.pdf' }]))
 for (const [label, attachment] of [
   ['external URL', { ...hwFile('devoirs%2Fx'), url: 'https://evil.example/consigne.pdf' }],
   ['raw dot-segment escape', hwFile('devoirs%2F../../../../../b/attacker/o/phish.html')],
@@ -1550,9 +1550,25 @@ for (const [label, attachment] of [
   ['other bucket', { ...hwFile('devoirs%2Fx'), url: hwFile('devoirs%2Fx').url.replace('mojammaa-sgs.firebasestorage.app', 'other.appspot.com') }],
   ['userinfo host', { ...hwFile('devoirs%2Fx'), url: 'https://firebasestorage.googleapis.com@evil.example/v0/b/mojammaa-sgs.firebasestorage.app/o/devoirs%2Fx' }],
 ]) await deny(`prof cannot create homework with ${label}`, hwCreate(`hwAtt-${label.replace(/\W+/g, '-')}`, [attachment]))
-// Segments ENCODÉS (%2F..%2F, %2E%2E) : jamais normalisés par un navigateur, ils restent des
-// noms d'objet littéraux dans le bucket. Refusés par manageHomework, tolérés par la règle.
-await allow('encoded segments stay inside the bucket (literal object name)', hwCreate('hwAttEncoded', [hwFile('devoirs%2F..%2Fnotes-imports%2Fx')]))
+// Métadonnées : l'app appelle mime.startsWith et affiche name/mime en texte ; un mauvais
+// type fait planter l'écran des familles (TypeError), quelle que soit la taille du document.
+for (const [label, bad] of [
+  ['numeric mime', { mime: 42 }], ['missing mime', { mime: undefined }], ['object name', { name: { x: 1 } }],
+  ['missing name', { name: undefined }], ['list name', { name: ['a'] }],
+]) {
+  const attachment = Object.fromEntries(Object.entries({ ...hwFile('devoirs%2Fprof1%2F1_a.pdf'), ...bad }).filter(([, v]) => v !== undefined))
+  await deny(`prof cannot create homework with ${label}`, hwCreate(`hwMeta-${label.replace(/\W+/g, '-')}`, [attachment]))
+}
+await deny('a malformed attachment at the last position (index 9) is refused', hwCreate('hwMetaLast', [
+  ...Array.from({ length: 9 }, (_, i) => hwFile(`devoirs%2Fprof1%2F${i}_page.jpg`)), { ...hwFile('devoirs%2Fx'), mime: 42 }]))
+{ const { size, ...noSize } = hwFile('devoirs%2Fprof1%2F1_a.pdf')
+  await allow('size stays optional', hwCreate('hwMetaNoSize', [noSize])) }
+// size n'est qu'affichée : la règle ne la contrôle pas (budget), l'app ignore une taille invalide.
+await allow('a non-numeric size is tolerated by the rule (display only, sanitized by the app)', hwCreate('hwMetaSize', [{ ...hwFile('devoirs%2Fprof1%2F1_a.pdf'), size: '4 Mo' }]))
+// Segments ENCODÉS (%2F..%2F, %2E%2E) : aucun navigateur ni client HTTP ne peut les normaliser
+// (pas de « / » ni « \ » bruts) et le bucket est fixé dans l'URL. Refusés par manageHomework,
+// tolérés par la règle ; risque résiduel : traitement interne du service Storage (non vérifiable).
+await allow('encoded segments are tolerated by the rule (bucket fixed, no normalization)', hwCreate('hwAttEncoded', [hwFile('devoirs%2F..%2Fnotes-imports%2Fx')]))
 await deny('admin client cannot create homework with an external attachment', hwCreate('hwAttAdmin', [{ ...hwFile('devoirs%2Fx'), url: 'https://evil.example/x' }], 'admin1'))
 await deny('same-class colleague cannot directly edit homework', updateDoc(doc(asUser('profSameClass'), 'devoirs/d1a'), { titre: 'Changed' }))
 await deny('owner cannot bypass server edit checks', updateDoc(doc(asUser('prof1'), 'devoirs/d1a'), { titre: 'Changed' }))
