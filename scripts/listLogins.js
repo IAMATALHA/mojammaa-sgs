@@ -15,6 +15,9 @@
  */
 const path = require('path')
 const fs = require('fs')
+const { GMT_EFFECTIVE_AT } = require('../functions/lib/moroccoTime')
+// Maroc en GMT depuis le 20/09/2026 ; l'ICU de Node applique encore GMT+1 à Africa/Casablanca.
+const moroccoZone = d => (d.getTime() >= GMT_EFFECTIVE_AT ? 'UTC' : 'Africa/Casablanca')
 
 async function main() {
   const days = process.argv[2] ? Number(process.argv[2]) : null
@@ -78,7 +81,7 @@ async function main() {
     if (diff < 3600000) ago = `il y a ${Math.round(diff / 60000)} min`
     else if (diff < day) ago = `il y a ${Math.round(diff / 3600000)} h`
     else ago = `il y a ${Math.round(diff / day)} j`
-    return `${d.toLocaleString('fr-FR', { timeZone: 'Africa/Casablanca' })} (${ago})`
+    return `${d.toLocaleString('fr-FR', { timeZone: moroccoZone(d) })} (${ago})`
   }
 
   console.log(`\n${rows.length} compte(s)${days != null ? ` actifs ces ${days} derniers jours` : ''} — triés par activité récente\n`)

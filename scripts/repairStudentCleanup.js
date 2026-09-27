@@ -5,6 +5,7 @@ const path = require('node:path')
 const assert = require('node:assert/strict')
 const admin = require('firebase-admin')
 const { computeSchoolStats } = require('../functions/schoolStats')
+const { moroccoParts } = require('../functions/lib/moroccoTime')
 const ROOT = path.resolve(__dirname, '..')
 const SOURCE = path.join(ROOT, 'backups/firestore-20260910-185928')
 const RESTORE = ['ressources', 'pushDevices', 'pushTokenOwners']
@@ -28,11 +29,9 @@ function mentions(value, ids) {
   return !!value && typeof value === 'object' && Object.values(value).some(v => mentions(v, ids))
 }
 function periodFor(date) {
-  const p = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit',
-  }).formatToParts(date)
-  const year = Number(p.find(v => v.type === 'year').value)
-  const month = Number(p.find(v => v.type === 'month').value)
+  const p = moroccoParts(date)
+  const year = Number(p.year)
+  const month = Number(p.month)
   const start = month >= 9 ? year : year - 1
   return { academicYear: `${start}-${start + 1}`, semestre: month >= 9 || month <= 1 ? 'S1' : 'S2',
     monthKey: `${year}-${String(month).padStart(2, '0')}` }
