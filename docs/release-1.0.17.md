@@ -99,6 +99,13 @@ Tant que des téléphones restent en 1.0.16, chaque correctif JavaScript est pub
 - [ ] runtime 1.0.17 : `eas update` normal depuis la branche ;
 - [ ] runtime 1.0.16 : depuis un worktree sur `v1.0.16-final` (version 1.0.16), avec le correctif ajouté par cherry-pick, puis `eas update` Android et iOS.
 
+### Correctif du 27/09 (soir) — cloison entre profs
+
+- [x] Règles Firestore déployées (ruleset `e1ba974c`, `fe64d1c`) : un prof ne lit que SES devoirs, et seulement les annonces de l'administration parmi les messages tagués `classe`. Source live vérifiée identique au fichier avant/après.
+- [x] Conséquence client : l'en-tête du dossier de classe prof affiche « 0 élèves · 0 devoirs » (requête `classeId` désormais refusée). Correctif `73588a1` (SES devoirs, `allSettled`).
+- [ ] OTA runtime 1.0.17 depuis `73588a1` (Android + iOS).
+- [ ] OTA runtime 1.0.16 depuis le worktree `~/mojammaa-sgs-ota-1016`, branche `hotfix/1.0.16-dossier-classe` (`c9fa1f4` = `v1.0.16-final` + cherry-pick), Android + iOS ; puis déplacer le tag `v1.0.16-final` sur `c9fa1f4`.
+
 ## 8. Clôture
 
 - [x] Tag `v1.0.17` sur `7c47027` (commit buildé), poussé.
