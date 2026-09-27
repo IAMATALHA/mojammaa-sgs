@@ -65,22 +65,29 @@ export default function TeacherClasseFolderScreen() {
     try {
       // Pas de comptage de notes ici : un prof ne lit que les notes de SA
       // matière (règle Firestore), une requête classe tous-sujets serait refusée.
-      const [elevesSnap, devoirsSnap] = await Promise.all([
+      // Devoirs : les SIENS seulement (règle devoirs = teacherId), classe
+      // filtrée côté client. allSettled : un refus ne masque pas l'effectif.
+      const [elevesRes, devoirsRes] = await Promise.allSettled([
         getDocs(query(collection(db, 'eleves'),  where('classe',   '==', classe))),
-        getDocs(query(
+        profile?.uid ? getDocs(query(
           collection(db, 'devoirs'),
-          where('classeId', '==', classe),
+          where('teacherId', '==', profile.uid),
           where('academicYear', 'in', homeworkYears),
-        )),
+        )) : Promise.reject(new Error('no-profile')),
       ])
-      setEleveCount(elevesSnap.docs.filter(d => d.data().active !== false).length)
-      setDevoirsCount(devoirsSnap.docs.filter(d => !d.get('cancelledAt')).length)
+      if (elevesRes.status === 'fulfilled') {
+        setEleveCount(elevesRes.value.docs.filter(d => d.data().active !== false).length)
+      }
+      if (devoirsRes.status === 'fulfilled') {
+        setDevoirsCount(devoirsRes.value.docs
+          .filter(d => d.get('classeId') === classe && !d.get('cancelledAt')).length)
+      }
     } catch {
       // Une rule qui rate ne doit pas casser l'écran.
     } finally {
       setLoading(false)
     }
-  }, [classe, homeworkYearsKey])
+  }, [classe, homeworkYearsKey, profile?.uid])
 
   useEffect(() => { load() }, [load])
 
