@@ -28,6 +28,7 @@ expo-env.d.ts
 /backups/
 .firebase/
 /outputs/
+/output/
 # The mobile grade rules import this shared policy from functions/lib.
 /functions/**
 !/functions/lib
