@@ -22,6 +22,7 @@ import { toDoc } from '../../services/firestore'
 import * as Haptics from 'expo-haptics'
 import { academicPeriodForDate } from '../../utils/academicPeriod'
 import { palette } from '../../theme/designTokens'
+import { safeAttachments } from '../../utils/attachments'
 
 const JOUR_TYPES: { value: JourType; labelKey: string; color: string }[] = [
   { value: 'vacances', labelKey: 'calendar.vacances', color: palette.success },
@@ -180,7 +181,7 @@ export default function AdminCalendarScreen() {
           description: data.description || '',
           dateLimite: data.dateLimite || '',
           type: data.type || 'devoir',
-          attachments: Array.isArray(data.attachments) ? data.attachments : [],
+          attachments: safeAttachments(data.attachments),
         }
       }).filter(t => t.dateLimite >= visibleStart && t.dateLimite <= visibleEnd))
     }, () => {})

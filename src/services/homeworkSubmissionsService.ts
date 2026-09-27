@@ -14,6 +14,7 @@ import type { Attachment } from './StorageService'
 import { toDoc, toDocs } from './firestore'
 import { commitInChunks } from '../utils/firestoreBatch'
 import type { EleveDoc } from './elevesService'
+import { safeAttachments } from '../utils/attachments'
 
 export type HomeworkSubmissionStatus =
   | 'pending'
@@ -57,7 +58,7 @@ export function homeworkSubmissionId(homeworkId: string, eleveId: string): strin
 function normalizeSubmission(data: HomeworkSubmission): HomeworkSubmission {
   return {
     ...data,
-    attachments: Array.isArray(data.attachments) ? data.attachments : [],
+    attachments: safeAttachments(data.attachments),
     status: data.status || 'pending',
   }
 }

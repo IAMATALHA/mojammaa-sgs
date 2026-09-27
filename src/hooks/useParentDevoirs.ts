@@ -4,6 +4,7 @@ import { db } from '../config/firebase'
 import type { Attachment } from '../services/StorageService'
 import { localISODate } from '../utils/academicPeriod'
 import { eleveName } from '../utils/eleveLabels'
+import { safeAttachments } from '../utils/attachments'
 import type { EleveDoc } from '../services/elevesService'
 import { useAuth } from '../contexts/AuthContext'
 import {
@@ -100,7 +101,7 @@ export function useParentDevoirs(eleves: EleveDoc[]) {
               teacherNom: asString(data.teacherNom),
               dateLimite,
               isPast: dateLimite < today,
-              attachments: Array.isArray(data.attachments) ? (data.attachments as Attachment[]) : [],
+              attachments: safeAttachments(data.attachments),
             })
           })
           buckets.set(bucketId, next)

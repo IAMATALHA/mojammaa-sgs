@@ -15,6 +15,7 @@ import { toDoc } from '../../services/firestore'
 import type { Attachment } from '../../services/StorageService'
 import type { AdminStackParamList } from '../../navigation/types'
 import { currentAndNextAcademicYears, localISODate } from '../../utils/academicPeriod'
+import { safeAttachments } from '../../utils/attachments'
 
 interface DevoirRow {
   id: string
@@ -71,7 +72,7 @@ export default function AdminDevoirsScreen() {
           teacherNom: data.teacherNom || '',
           dateLimite: data.dateLimite || '',
           type: data.type || '',
-          attachments: Array.isArray(data.attachments) ? data.attachments : [],
+          attachments: safeAttachments(data.attachments),
           createdAt: data.createdAt,
           cancelledAt: data.cancelledAt,
         }

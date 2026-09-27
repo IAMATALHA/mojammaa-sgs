@@ -28,6 +28,7 @@ import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import { CreateDevoirModal, type Devoir } from '../teacher/TeacherDevoirsScreen'
 import { homeworkCommandId, isHomeworkConflict, manageHomework } from '../../services/homework-management'
+import { safeAttachments } from '../../utils/attachments'
 
 function fmtDate(iso?: string): string {
   if (!iso) return '—'
@@ -80,7 +81,7 @@ export default function DevoirDetailScreen() {
     } },
   ])
 
-  const attachments = devoir.attachments || []
+  const attachments = safeAttachments(devoir.attachments)
   const images = attachments.filter(a => a.mime?.startsWith('image/'))
   const files = attachments.filter(a => !a.mime?.startsWith('image/'))
   const isPast = !!devoir.dateLimite && devoir.dateLimite < localISODate()

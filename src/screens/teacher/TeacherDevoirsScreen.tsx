@@ -33,6 +33,7 @@ import { db } from '../../config/firebase';
 import { uploadAttachment, type Attachment } from '../../services/StorageService';
 import type { UserProfile } from '../../types';
 import { currentAndNextAcademicYears, localISODate } from '../../utils/academicPeriod'
+import { safeAttachments } from '../../utils/attachments'
 import { homeworkCommandId, isHomeworkConflict, manageHomework } from '../../services/homework-management'
 
 export interface Devoir {
@@ -292,7 +293,7 @@ export function CreateDevoirModal({
       setType(prefill.type || TYPES[0])
       setClasseId(prefill.classeId || defaultClasse || '')
       setDateLimite(editing ? prefill.dateLimite : '')
-      setAttachments(prefill.attachments ? [...prefill.attachments] : [])
+      setAttachments(safeAttachments(prefill.attachments))
     } else {
       setTitre(''); setDescription(''); setType(TYPES[0])
       setClasseId(defaultClasse || ''); setDateLimite(''); setAttachments([])
