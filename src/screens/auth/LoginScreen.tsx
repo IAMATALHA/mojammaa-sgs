@@ -219,7 +219,7 @@ export default function LoginScreen() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('ParentActivation')} style={styles.forgot}>
-              <Text style={[styles.forgotText, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>Activer un compte parent</Text>
+              <Text style={[styles.forgotText, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>{t('parentActivation.title')}</Text>
             </TouchableOpacity>
           </Animated.View>
 

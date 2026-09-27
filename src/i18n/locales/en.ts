@@ -90,6 +90,22 @@ const en = {
     privacy: 'Privacy policy',
   },
 
+  parentActivation: {
+    title: 'Activate a parent account',
+    subtitle: 'Enter the code provided by the school, then your own account details.',
+    code: 'Activation code',
+    firstName: 'First name',
+    lastName: 'Last name',
+    email: 'Your email',
+    phone: 'Phone (optional)',
+    password: 'Password (at least 8 characters)',
+    submit: 'Activate my account',
+    haveAccount: 'I already have an account',
+    required: 'Fill in all required fields. The password must be at least 8 characters long.',
+    linkError: 'This account already exists, but the code could not be linked.',
+    error: 'Activation failed. Check the code.',
+  },
+
   tabs: {
     home: 'Home',
     homework: 'Homework',

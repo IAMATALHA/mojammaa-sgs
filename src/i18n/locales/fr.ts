@@ -90,6 +90,22 @@ const fr = {
     privacy: 'Politique de confidentialité',
   },
 
+  parentActivation: {
+    title: 'Activer un compte parent',
+    subtitle: 'Saisissez le code remis par l’école, puis vos propres identifiants.',
+    code: 'Code d’activation',
+    firstName: 'Prénom',
+    lastName: 'Nom',
+    email: 'Votre e-mail',
+    phone: 'Téléphone (facultatif)',
+    password: 'Mot de passe (8 caractères minimum)',
+    submit: 'Activer mon compte',
+    haveAccount: 'J’ai déjà un compte',
+    required: 'Remplissez tous les champs. Le mot de passe doit contenir au moins 8 caractères.',
+    linkError: 'Ce compte existe déjà, mais le code n’a pas pu être ajouté.',
+    error: 'Activation impossible. Vérifiez le code.',
+  },
+
   tabs: {
     home: 'Accueil',
     homework: 'Devoirs',
