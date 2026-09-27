@@ -12,6 +12,16 @@ Point de départ : 1.0.16, versionCode 47, build `afbb3736-6fcf-4d49-8920-ba28c6
 - [x] Branche poussée le 27/09 (`0ac7d57..a1a3fd3`).
 - [x] Correctifs client avant build (27/09, poussés) : `9b795a4` conflit de version des devoirs explicite + rechargement ; `679f40d` routes admin reportées retirées des types, moyenne de classe sans NaN.
 
+- [x] Correctifs du 27/09 (après-midi) : notifications devoir modifié/annulé adressées aux parents (bug prod : 5 messages `no_recipient` depuis le 24/09) et création via `manageHomework` (`5434784`, `2505ce3`) ; pièces jointes validées par les règles à la création client (`eb88361`) ; libellés EN/AR, scripts, composant mort (`0aee4d5`) ; `npm audit fix` app et fonctions (`0e26969`, `1ab48bd`).
+
+## 0 bis. Ordre de déploiement — OBLIGATOIRE
+
+L'app crée désormais les devoirs via `manageHomework` (action `create`). Publier l'app avant la fonction casserait la création de devoirs.
+
+1. [ ] `firebase deploy --only functions,firestore:rules` depuis un arbre propre (accord explicite).
+2. [ ] `npm run verify:rules` en phase ; `firebase functions:list` ; logs de `manageHomework` sans erreur.
+3. [ ] Seulement ensuite : nouvelle OTA 1.0.16 (étape 2) et déplacement du tag `v1.0.16-final`, puis le build 1.0.17.
+
 ## 1. Vérifications juste avant le build
 
 - [ ] `git status` propre, sur le commit qui sera buildé.
@@ -50,7 +60,8 @@ APK signé sans nouveau build : Play Console → Explorateur d'app bundles → v
 - [ ] Premier lancement : nouvelle interface visible immédiatement, sans attendre d'OTA.
 - [ ] Connexion admin, professeur et parent ; activation parent avec un code de test ; interface en arabe (RTL).
 - [ ] Parent : choix de l'enfant, résultats, devoirs et absences ; une alerte consultée disparaît et reste masquée après réouverture.
-- [ ] Professeur : créer, modifier (avec et sans « Prévenir les familles »), supprimer un devoir sans rendu, puis un devoir avec rendu (doit devenir « annulé ») ; le parent reçoit la notification.
+- [ ] Professeur : créer (le parent reçoit « 📚 Nouveau devoir » dans sa langue), modifier (avec et sans « Prévenir les familles »), supprimer un devoir sans rendu, puis un devoir avec rendu (doit devenir « annulé ») ; à chaque fois, push ET message dans la boîte du parent.
+- [ ] Navigation complète (onglets, retours, liens des notifications) : `@react-navigation/core` passé de 7.17 à 7.22 via `npm audit fix`.
 - [ ] Comportement : motif, observation suggérée et « Autre motif » avec précision ; notification parent.
 - [ ] Appel d'une séance, messagerie, statistiques admin.
 
@@ -87,6 +98,7 @@ Tant que des téléphones restent en 1.0.16, chaque correctif JavaScript est pub
 ## Hors build — à planifier
 
 - [x] Horloge GMT des fonctions serveur (`2521fa3`) et durcissement de `manageHomework` : version à la milliseconde, pièces jointes limitées au bucket (`2fdf4f3`). Audit Lilith du 27/09 : une traversée `../` trouvée dans la première version et corrigée. Tests verts.
-- [ ] Déployer ces fonctions : indépendant du build, sur accord explicite.
-- [ ] Création de devoir atomique via `manageHomework` (création côté client aujourd'hui : les règles ne valident pas les pièces jointes à la création).
+- [ ] Déployer fonctions + règles : voir l'étape 0 bis.
+- [x] Création de devoir atomique via `manageHomework` (code, 27/09) ; les règles valident aussi les pièces jointes des anciennes installations.
+- [ ] Plus tard, quand plus aucune installation ne crée par `addDoc` (vérifier qu'aucun nouveau devoir n'est sans `createdVia`) : interdire la création client dans les règles.
 - Écran « mise à jour obligatoire » : d'abord par OTA sur 1.0.16, activé seulement quand la 1.0.17 est disponible pour tous. Nécessite une modification des règles Firestore, donc un audit Lilith.
