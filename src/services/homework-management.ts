@@ -14,10 +14,13 @@ export interface HomeworkChanges {
   dateLimite: string
   attachments: Attachment[]
 }
-export async function manageHomework(input: {
-  id: string; commandId: string; version: number; action: 'edit' | 'remove'
-  changes?: HomeworkChanges; notify?: boolean
-}) {
-  const result = await httpsCallable<typeof input, { status: 'updated' | 'deleted' | 'cancelled' }>(functions, 'manageHomework')(input)
+export type HomeworkCommand =
+  | { action: 'create'; id: string; commandId: string; classeId: string; changes: HomeworkChanges }
+  | { action: 'edit'; id: string; commandId: string; version: number; changes: HomeworkChanges; notify?: boolean }
+  | { action: 'remove'; id: string; commandId: string; version: number }
+export async function manageHomework(input: HomeworkCommand) {
+  const result = await httpsCallable<HomeworkCommand, {
+    status: 'created' | 'updated' | 'deleted' | 'cancelled'; id?: string
+  }>(functions, 'manageHomework')(input)
   return result.data
 }

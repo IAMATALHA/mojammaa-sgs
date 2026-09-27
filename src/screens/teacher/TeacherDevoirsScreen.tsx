@@ -19,7 +19,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { TeacherRoute, TeacherStackParamList } from '../../navigation/types';
 import { toDocs } from '../../services/firestore';
 import {
-  collection, getDocs, query, where, addDoc, serverTimestamp,
+  collection, getDocs, query, where,
   Timestamp,
 } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
@@ -31,9 +31,8 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 import { uploadAttachment, type Attachment } from '../../services/StorageService';
-import { broadcastToClasses } from '../../services/messagesService';
 import type { UserProfile } from '../../types';
-import { academicPeriodForDate, currentAndNextAcademicYears, localISODate } from '../../utils/academicPeriod'
+import { currentAndNextAcademicYears, localISODate } from '../../utils/academicPeriod'
 import { homeworkCommandId, isHomeworkConflict, manageHomework } from '../../services/homework-management'
 
 export interface Devoir {
@@ -367,48 +366,21 @@ export function CreateDevoirModal({
     setSaving(true); setErr('');
     savingRef.current = true
     try {
+      // Création comme modification : une commande serveur idempotente qui écrit le
+      // devoir et prévient les familles dans le même commit. Un nouvel essai avec le
+      // même contenu réutilise la même commande, donc ne crée jamais de doublon.
+      const payload = JSON.stringify({ classeId: classeId.trim(), titre, description, type, dateLimite, attachments, notify })
+      if (commandPayload.current !== payload) commandId.current = null
+      commandPayload.current = payload
+      commandId.current ??= homeworkCommandId()
+      const changes = { titre: titre.trim(), description: description.trim(), type, dateLimite, attachments }
       if (editing && prefill) {
-        const payload = JSON.stringify({ titre, description, type, dateLimite, attachments, notify })
-        if (commandPayload.current !== payload) commandId.current = null
-        commandPayload.current = payload
-        commandId.current ??= homeworkCommandId()
         await manageHomework({ id: prefill.id, commandId: commandId.current,
-          version: prefill.updatedAt?.toMillis() || 0, action: 'edit', notify,
-          changes: { titre: titre.trim(), description: description.trim(), type, dateLimite, attachments },
-        })
-        onCreated()
-        return
+          version: prefill.updatedAt?.toMillis() || 0, action: 'edit', notify, changes })
+      } else {
+        await manageHomework({ id: commandId.current, commandId: commandId.current,
+          action: 'create', classeId: classeId.trim(), changes })
       }
-      await addDoc(collection(db, 'devoirs'), {
-        titre:       titre.trim(),
-        description: description.trim(),
-        type,
-        classeId:    classeId.trim(),
-        teacherId:   profile.uid,
-        teacherNom:  `${profile.prenom} ${profile.nom}`,
-        dateLimite,
-        attachments,
-        ...academicPeriodForDate(dateLimite),
-        createdAt:   serverTimestamp(),
-      })
-
-      // Notifier les parents de la classe : push + message dans l'inbox.
-      // Best-effort : on n'échoue pas la création du devoir si l'envoi rate.
-      try {
-        await broadcastToClasses({
-          classes:  [classeId.trim()],
-          subject:  t('teacher.newHomeworkNotifTitle', { subject: profile.matiere || '' }).trim(),
-          body:     t('teacher.newHomeworkNotifBody', { title: titre.trim(), date: dateLimite }),
-          category: 'homework',
-          teacher:  { uid: profile.uid, nom: profile.nom, prenom: profile.prenom },
-        })
-      } catch (notificationError: any) {
-        console.warn('[TeacherDevoirs] homework notification failed', {
-          code: notificationError?.code || null,
-          message: notificationError?.message || String(notificationError),
-        })
-      }
-
       onCreated()
     } catch (e: any) {
       if (editing && isHomeworkConflict(e)) {
@@ -422,7 +394,7 @@ export function CreateDevoirModal({
         code: e?.code || null,
         message: e?.message || String(e),
       })
-      const message = editing ? t('homeworkManagement.failed') : (e?.message || t('teacher.createFailed'))
+      const message = t(editing ? 'homeworkManagement.failed' : 'teacher.createFailed')
       setErr(message)
       Alert.alert(t('common.error'), message)
     } finally {
