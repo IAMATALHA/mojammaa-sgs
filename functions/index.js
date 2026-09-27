@@ -1065,10 +1065,16 @@ function statsFilterText(value, maxLength = 100) {
 function cycleFromStudent(data) {
   const explicit = statsFilterText(data.cycle).toLowerCase()
   if (STATS_CYCLES.has(explicit)) return explicit
-  const niveau = statsFilterText(data.niveau).toUpperCase()
-  if (niveau.includes('APIC')) return 'college'
-  if (niveau.includes('AEP')) return 'primaire'
+  const niveau = canonicalStatsLevel(data.niveau || data.classe)
+  if (/^[1-3](APIC|AC)/.test(niveau)) return 'college'
+  if (/^(CP|CE1|CE2|CM1|CM2|CE6|[1-6]AEP)(?=$|[\s\d-])/.test(niveau)) return 'primaire'
   return 'prescolaire'
+}
+
+function canonicalStatsLevel(value) {
+  const text = statsFilterText(value).toUpperCase().replace(/\s+/g, ' ')
+  const match = /^([1-6])AEP$/.exec(text)
+  return match ? ['CP', 'CE1', 'CE2', 'CM1', 'CM2', 'CE6'][Number(match[1]) - 1] : text.replace(/^([1-3])AC$/, '$1APIC')
 }
 
 function casablancaToday() {
@@ -1099,9 +1105,12 @@ function shiftISODate(value, days) {
 // d'une moyenne annuelle. Desormais ces deux periodes retombent sur le semestre
 // EN COURS, et `notesPeriod` dit explicitement ce que la moyenne couvre.
 // `annee` reste volontairement sans semestre : les deux semestres y sont agreges.
-function statsDateRange(periodName) {
+function statsDateRange(periodName, requestedYear) {
   const today = casablancaToday()
-  const academic = academicPeriodForValue(today)
+  const current = academicPeriodForValue(today)
+  const year = requestedYear || current.academicYear
+  if (!/^20\d{2}-20\d{2}$/.test(year) || Number(year.slice(5)) !== Number(year.slice(0, 4)) + 1 || year > current.academicYear) throw new HttpsError('invalid-argument', 'Invalid academic year.')
+  const academic = { ...current, academicYear: year }
   const startYear = Number(academic.academicYear.slice(0, 4))
   const currentSemestre = academic.semestre === 'S1' || academic.semestre === 'S2' ? academic.semestre : 'S1'
   if (periodName === 'semaine') {
@@ -1116,7 +1125,7 @@ function statsDateRange(periodName) {
   if (periodName === 'S2') {
     return { ...academic, from: `${startYear + 1}-02-01`, to: `${startYear + 1}-07-10`, semestre: 'S2', notesPeriod: 'S2' }
   }
-  return { ...academic, from: `${startYear}-09-01`, to: today, semestre: null, notesPeriod: 'annee' }
+  return { ...academic, from: `${startYear}-09-01`, to: year === current.academicYear ? today : `${startYear + 1}-08-31`, semestre: null, notesPeriod: 'annee' }
 }
 
 function statsRowInScope(row, scopeIds, scopeClasses, knownStudentIds) {
@@ -1150,20 +1159,23 @@ async function submissionsForDevoirs(devoirIds) {
  * (periode, cycle, niveau, classe, matiere) en jeux de documents.
  */
 async function resolveScope(filters) {
-  const periodName = STATS_PERIODS.has(filters.period) ? filters.period : 'mois'
+  let periodName = STATS_PERIODS.has(filters.period) ? filters.period : 'mois'
+  const requestedYear = statsFilterText(filters.academicYear, 9)
+  if (requestedYear && requestedYear !== academicPeriodForValue(casablancaToday()).academicYear && ['semaine', 'mois'].includes(periodName)) periodName = 'annee'
   const cycle = STATS_CYCLES.has(filters.cycle) ? filters.cycle : ''
-  const niveau = statsFilterText(filters.niveau)
+  const niveau = canonicalStatsLevel(filters.niveau)
   const classe = statsFilterText(filters.classe)
   const matiere = statsFilterText(filters.matiere)
-  const range = statsDateRange(periodName)
+  const range = statsDateRange(periodName, requestedYear)
 
-  const [elevesSnap, usersSnap, notesSnap, absencesSnap, devoirsSnap, coefDoc] = await Promise.all([
+  const [elevesSnap, usersSnap, notesSnap, absencesSnap, devoirsSnap, coefDoc, classesSnap] = await Promise.all([
     db.collection('eleves').get(),
     db.collection('users').get(),
     db.collection('notes').where('academicYear', '==', range.academicYear).get(),
     db.collection('absences').where('date', '>=', range.from).where('date', '<=', range.to).get(),
     db.collection('devoirs').where('academicYear', '==', range.academicYear).get(),
     db.collection('settings').doc('coefficients').get(),
+    db.collection('schoolClasses').get(),
   ])
   const toRows = (snap) => snap.docs.map((row) => ({ id: row.id, ...row.data() }))
   const allStudentRows = toRows(elevesSnap)
@@ -1176,10 +1188,11 @@ async function resolveScope(filters) {
   const knownStudentIds = new Set(allStudentRows.map((row) => row.id))
 
   const cycleEleves = allEleves.filter((row) => !cycle || row.cycle === cycle)
-  const niveauOptions = [...new Set(cycleEleves.map((row) => statsFilterText(row.niveau)).filter(Boolean))]
+  const configuredClasses = toRows(classesSnap).filter(row => !row.archived).map(row => ({ ...row, niveau: row.level, classe: row.name, cycle: cycleFromStudent({ niveau: row.level, classe: row.name }) })).filter(row => !cycle || row.cycle === cycle)
+  const niveauOptions = [...new Set([...cycleEleves, ...configuredClasses].map((row) => canonicalStatsLevel(row.niveau)).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))
-  const levelEleves = cycleEleves.filter((row) => !niveau || statsFilterText(row.niveau) === niveau)
-  const classeOptions = [...new Set(levelEleves.map((row) => statsFilterText(row.classe)).filter(Boolean))]
+  const levelEleves = cycleEleves.filter((row) => !niveau || canonicalStatsLevel(row.niveau) === niveau)
+  const classeOptions = [...new Set([...levelEleves, ...configuredClasses.filter(row => !niveau || canonicalStatsLevel(row.niveau) === niveau)].map((row) => statsFilterText(row.classe)).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))
   const scopeEleves = levelEleves.filter((row) => !classe || statsFilterText(row.classe) === classe)
   const scopeIds = new Set(scopeEleves.map((row) => row.id))
@@ -1202,15 +1215,25 @@ async function resolveScope(filters) {
     })
   }
   const subjectMap = new Map()
-  scopedNotes.forEach((row) => {
+  scopedNotes.filter(row => !range.semestre || row.semestre === range.semestre).forEach((row) => {
     const key = statsFilterText(row.matiere) || statsFilterText(row.subject) || statsFilterText(row.matiereLabel)
     if (key) {
       const entry = subjectEntry(key)
         || subjectEntry(row.matiereLabel)
         || subjectEntry(row.subject)
-      subjectMap.set(key, entry?.canonical || statsFilterText(row.matiereLabel) || statsFilterText(row.subject) || key)
+      const label = entry?.canonical || statsFilterText(row.matiereLabel) || statsFilterText(row.subject) || key
+      subjectMap.set(entry?.canonical || key, label)
     }
   })
+  const coefficientSettings = coefDoc.exists ? coefDoc.data() : {}
+  const relevantLevels = niveau ? [niveau] : niveauOptions
+  const configuredSubjects = relevantLevels.flatMap(level => Object.keys(coefficientSettings.parNiveau?.[level] || {}))
+  if (!configuredSubjects.length) configuredSubjects.push(...Object.keys(coefficientSettings.matieres || {}))
+  for (const label of configuredSubjects) {
+    if (coefficientSettings.archivedSubjects?.includes(label) || (niveau && coefficientSettings.excludedByLevel?.[niveau]?.includes(label))) continue
+    const canonical = subjectEntry(label)?.canonical || label
+    if (!subjectMap.has(canonical)) subjectMap.set(canonical, canonical)
+  }
   const subjectOptions = [...subjectMap.entries()]
     .map(([value, label]) => ({ value, label }))
     .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
@@ -1382,6 +1405,7 @@ exports.getFilteredSchoolStats = onCall(async (request) => {
 
   const raw = request.data && typeof request.data === 'object' ? request.data : {}
   const result = await filteredSchoolStats({
+    academicYear: statsFilterText(raw.academicYear, 9),
     period: statsFilterText(raw.period, 10),
     cycle: statsFilterText(raw.cycle, 20),
     niveau: statsFilterText(raw.niveau),
@@ -1444,6 +1468,7 @@ exports.getStatsStudents = onCall(async (request) => {
   }
 
   const scope = await resolveScope({
+    academicYear: statsFilterText(scopeInput.academicYear, 9),
     period: statsFilterText(scopeInput.period, 10),
     cycle: statsFilterText(scopeInput.cycle, 20),
     niveau: statsFilterText(scopeInput.niveau),
@@ -1648,6 +1673,7 @@ exports.getStatsGradeDetails = onCall(async (request) => {
   const requestedSubject = statsFilterText(raw.matiere) || statsFilterText(scopeInput.matiere)
   const requestedClass = statsFilterText(raw.classe) || statsFilterText(scopeInput.classe)
   const scope = await resolveScope({
+    academicYear: statsFilterText(scopeInput.academicYear, 9),
     period: statsFilterText(scopeInput.period, 10),
     cycle: statsFilterText(scopeInput.cycle, 20),
     niveau: statsFilterText(scopeInput.niveau),
