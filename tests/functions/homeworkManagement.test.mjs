@@ -59,10 +59,26 @@ await test('Existing submissions are preserved by cancellation; further edits bl
   assert.equal((await db.doc('homeworkSubmissions/hmCancel_child').get()).get('status'), 'submitted')
   await assert.rejects(manageHomework(db, 'hmTeacher', edit('hmCancel', 'after-cancel')), { code: 'failed-precondition' })
 })
+const storageUrl = path => `https://firebasestorage.googleapis.com/v0/b/mojammaa-sgs.firebasestorage.app/o/${path}?alt=media&token=t`
 await test('Invalid dates, blank titles and unsafe attachments rejected', async () => {
-  for (const changes of [{ dateLimite: '2026-02-30' }, { titre: ' ' }, { attachments: [{ url: 'javascript:alert(1)', name: 'bad', mime: 'text/plain' }] }]) {
+  const file = { url: storageUrl('devoirs%2FhmTeacher%2F1_consigne.pdf'), name: 'consigne.pdf', mime: 'application/pdf' }
+  for (const changes of [{ dateLimite: '2026-02-30' }, { titre: ' ' },
+    ...[{ url: 'javascript:alert(1)' }, { url: 'https://evil.example/consigne.pdf' },
+      { url: storageUrl('notes-imports%2Fx.xlsx') }, { url: file.url.replace('mojammaa-sgs.firebasestorage.app', 'other.appspot.com') },
+      // Traversées qui, une fois l'URL normalisée, sortent du bucket.
+      { url: storageUrl('devoirs%2F../../../../../b/attacker/o/phish.html') }, { url: storageUrl('devoirs%2F..%5C..%5Cx').replace('%5C', '\\') },
+      { url: storageUrl('devoirs%2F..%2Fnotes-imports%2Fx') }, { url: storageUrl('devoirs%2F%2E%2E%2Fx') }, { url: storageUrl('devoirs%2Fx#frag') },
+      { name: 'x'.repeat(201) }, { size: 26 * 1024 * 1024 }].map(bad => ({ attachments: [{ ...file, ...bad }] }))]) {
     assert.throws(() => validateChanges({ ...base, ...changes }), { code: 'invalid-argument' })
   }
+  assert.equal(validateChanges({ ...base, attachments: [{ ...file, size: 4 * 1024 * 1024 }] }).attachments.length, 1)
+})
+await test('Fractional web-SDK versions match; non-numeric versions are refused', async () => {
+  await seed('hmFraction')
+  await db.doc('devoirs/hmFraction').update({ updatedAt: new admin.firestore.Timestamp(1790000000, 123456789) })
+  const version = 1790000000 * 1000 + 123456789 / 1e6 // Timestamp.toMillis() du SDK web, non arrondi
+  assert.equal((await manageHomework(db, 'hmTeacher', edit('hmFraction', 'fraction', { ...base, titre: 'Fraction' }, { version }))).status, 'updated')
+  await assert.rejects(manageHomework(db, 'hmTeacher', edit('hmFraction', 'nan', base, { version: 'abc' })), { code: 'invalid-argument' })
 })
 console.log(`${count} homework management checks passed`)
 await admin.app().delete()

@@ -1,4 +1,13 @@
 const fail = (code) => { throw Object.assign(new Error(code), { code }) }
+// Pièces jointes : uniquement les fichiers envoyés par l'app (StorageService → devoirs/{uid}/…).
+const ATTACHMENT_PREFIX = 'https://firebasestorage.googleapis.com/v0/b/mojammaa-sgs.firebasestorage.app/o/devoirs%2F'
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024 // même plafond que storage.rules
+// Le chemin d'objet est entièrement encodé (%2F) : un « / », « \ » ou « # » brut, ou un
+// segment « . »/« .. », ferait sortir l'URL normalisée du bucket (…/o/devoirs%2F../../../b/autre).
+const safeObjectPath = url => {
+  const [objectPath] = url.slice(ATTACHMENT_PREFIX.length).split('?')
+  return !/[/\\#]/.test(objectPath) && !/(^|%2F)(\.|%2E){1,2}(%2F|$)/i.test(objectPath)
+}
 
 function period(date) {
   const [year, month] = date.split('-').map(Number)
@@ -15,9 +24,9 @@ function validateChanges(value) {
     || new Date(value.dateLimite).toISOString().slice(0, 10) !== value.dateLimite
     || !Array.isArray(value.attachments) || value.attachments.length > 20) fail('invalid-argument')
   const attachments = value.attachments.map(a => {
-    if (!a || typeof a.url !== 'string' || !a.url.startsWith('https://')
-      || typeof a.name !== 'string' || typeof a.mime !== 'string'
-      || (a.size !== undefined && (!Number.isFinite(a.size) || a.size < 0))) fail('invalid-argument')
+    if (!a || typeof a.url !== 'string' || !a.url.startsWith(ATTACHMENT_PREFIX) || !safeObjectPath(a.url) || a.url.length > 2048
+      || typeof a.name !== 'string' || a.name.length > 200 || typeof a.mime !== 'string' || a.mime.length > 100
+      || (a.size !== undefined && (!Number.isFinite(a.size) || a.size < 0 || a.size > MAX_ATTACHMENT_BYTES))) fail('invalid-argument')
     return { url: a.url, name: a.name, mime: a.mime, ...(a.size !== undefined ? { size: a.size } : {}) }
   })
   return { titre: value.titre.trim(), description: value.description.trim(), type: value.type, dateLimite: value.dateLimite, attachments, ...period(value.dateLimite) }
@@ -27,7 +36,8 @@ function validateChanges(value) {
 async function manageHomework(db, uid, input, now = new Date()) {
   if (!uid) fail('unauthenticated')
   if (!input || !['edit', 'remove'].includes(input.action)
-    || !/^[\w-]{1,128}$/.test(input.id || '') || !/^[\w-]{1,128}$/.test(input.commandId || '')) fail('invalid-argument')
+    || !/^[\w-]{1,128}$/.test(input.id || '') || !/^[\w-]{1,128}$/.test(input.commandId || '')
+    || !Number.isFinite(input.version)) fail('invalid-argument')
   const changes = input.action === 'edit' ? validateChanges(input.changes) : null
   const ref = db.doc(`devoirs/${input.id}`)
   const receipt = db.doc(`homeworkCommands/${uid}_${input.commandId}`)
@@ -41,7 +51,9 @@ async function manageHomework(db, uid, input, now = new Date()) {
     const old = snapshot.data()
     if (user.get('role') !== 'admin' && old.teacherId !== uid) fail('permission-denied')
     if (old.cancelledAt) fail('failed-precondition')
-    if ((old.updatedAt?.toMillis?.() || 0) !== input.version) fail('failed-precondition')
+    // Le SDK web renvoie des millisecondes fractionnaires (toMillis non arrondi) ;
+    // l'Admin SDK arrondit à l'inférieur. On compare donc à la milliseconde près.
+    if ((old.updatedAt?.toMillis?.() || 0) !== Math.floor(input.version)) fail('failed-precondition')
     let result = { status: 'updated' }
     if (changes) {
       if (Object.keys(changes).every(key => JSON.stringify(changes[key]) === JSON.stringify(old[key]))) {
