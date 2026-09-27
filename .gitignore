@@ -62,3 +62,4 @@ yarn-error.*
 
 # Script output / scratch files
 /outputs/
+/output/
