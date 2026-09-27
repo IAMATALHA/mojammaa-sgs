@@ -1,4 +1,5 @@
 const { lessonKey, sessionCode } = require('./lib/attendanceProtocol')
+const { moroccoParts } = require('./lib/moroccoTime')
 const fail = code => { throw Object.assign(new Error(code), { code }) }
 const chunks = (list, size = 10) => Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size))
 const currentClasses = user => [...new Set([...(user.classes || []), user.classe].filter(Boolean))]
@@ -8,7 +9,7 @@ async function getDashboardActions(db, uid, input, now = new Date()) {
   const user = (await db.doc(`users/${uid}`).get()).data(), mode = input?.mode
   if (!user || !['parent', 'teacher', 'admin'].includes(mode)
     || (mode === 'teacher' && user.role !== 'professeur') || (mode === 'admin' && user.role !== 'admin')) fail('permission-denied')
-  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now).map(p => [p.type, p.value]))
+  const parts = moroccoParts(now)
   const today = `${parts.year}-${parts.month}-${parts.day}`, clock = `${parts.hour}:${parts.minute}`
   const yearStart = `${Number(parts.month) >= 9 ? parts.year : Number(parts.year) - 1}-09-01`
   const actions = []

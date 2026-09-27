@@ -1,4 +1,5 @@
 const { createHash } = require('node:crypto')
+const { moroccoParts } = require('./lib/moroccoTime')
 const fail = (code, message = code) => { throw Object.assign(new Error(message), { code }) }
 const hash = value => createHash('sha256').update(value).digest('hex')
 const idOk = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,257}$/.test(value)
@@ -9,9 +10,7 @@ const text = (value, max, required = false) => {
   if (typeof value !== 'string' || value.trim().length > max || (required && !value.trim())) fail('invalid-argument')
   return value.trim()
 }
-function localParts(date) {
-  return Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date).map(p => [p.type, p.value]))
-}
+const localParts = moroccoParts
 function slotTime(date, time) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time || '')) fail('invalid-argument')
   const target = Date.parse(`${date}T${time}:00Z`)

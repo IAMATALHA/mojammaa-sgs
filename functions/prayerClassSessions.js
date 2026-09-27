@@ -1,13 +1,9 @@
 'use strict'
 
 const { FieldValue } = require('firebase-admin/firestore')
+const { moroccoParts } = require('./lib/moroccoTime')
 
 const CASABLANCA_TIME_ZONE = 'Africa/Casablanca'
-// Décret 2.26.530 : le 20/09/2026 à 02:00 GMT+1, retour définitif à GMT.
-// Les données ICU du runtime peuvent encore appliquer l'ancien GMT+1.
-// Conserver Africa/Casablanca avant cette date pour les règles historiques.
-// Source : https://bdj.mmsp.gov.ma/Ar/Document/10664-D%C3%A9cret-n-2-26-530du-9-moharrem-1448-25-juin-2026.aspx
-const GMT_EFFECTIVE_AT = Date.parse('2026-09-20T01:00:00.000Z')
 const ACTIVE_STATUSES = new Set(['going', 'praying'])
 
 const DAY_ALIASES = Object.freeze({
@@ -32,21 +28,6 @@ const DAY_ALIASES = Object.freeze({
   saturday: 'saturday',
   samedi: 'saturday',
   sam: 'saturday',
-})
-
-const CASABLANCA_FORMATTER = new Intl.DateTimeFormat('en-CA', {
-  timeZone: CASABLANCA_TIME_ZONE,
-  weekday: 'long',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-})
-const GMT_FORMATTER = new Intl.DateTimeFormat('en-CA', {
-  ...CASABLANCA_FORMATTER.resolvedOptions(),
-  timeZone: 'UTC',
 })
 
 class PrayerClassSessionError extends Error {
@@ -89,11 +70,7 @@ function casablancaClock(now) {
   if (!(now instanceof Date) || Number.isNaN(now.getTime())) {
     throw new PrayerClassSessionError('internal', 'Server clock unavailable.')
   }
-  const parts = Object.fromEntries(
-    (now.getTime() >= GMT_EFFECTIVE_AT ? GMT_FORMATTER : CASABLANCA_FORMATTER).formatToParts(now)
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value]),
-  )
+  const parts = moroccoParts(now)
   const hour = Number(parts.hour)
   const minute = Number(parts.minute)
   if (!parts.year || !parts.month || !parts.day || !Number.isInteger(hour) || !Number.isInteger(minute)) {

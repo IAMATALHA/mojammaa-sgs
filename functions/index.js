@@ -20,6 +20,7 @@ const { getAuth } = require('firebase-admin/auth')
 const logger = require('firebase-functions/logger')
 const { createHash } = require('node:crypto')
 const { reconcileSchoolAlert } = require('./schoolAlerts')
+const { moroccoDate, moroccoParts } = require('./lib/moroccoTime')
 const { createMessageDelivery } = require('./messageDelivery')
 const { registerPushDevice, getPushTargets } = require('./pushDevices')
 const attendanceSubmission = require('./attendanceSubmission')
@@ -989,12 +990,8 @@ function academicPeriodForValue(value) {
   }
   const date = value && typeof value.toDate === 'function' ? value.toDate() : value
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit',
-  }).formatToParts(date)
-  const year = Number(parts.find((part) => part.type === 'year')?.value)
-  const month = Number(parts.find((part) => part.type === 'month')?.value)
-  return academicPeriodOf(year, month)
+  const parts = moroccoParts(date)
+  return academicPeriodOf(Number(parts.year), Number(parts.month))
 }
 
 function currentAcademicPeriod() {
@@ -1079,14 +1076,7 @@ function canonicalStatsLevel(value) {
 }
 
 function casablancaToday() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Casablanca',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date())
-  const part = (type) => parts.find((row) => row.type === type)?.value
-  return `${part('year')}-${part('month')}-${part('day')}`
+  return moroccoDate(new Date())
 }
 
 function shiftISODate(value, days) {

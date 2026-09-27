@@ -1,5 +1,6 @@
 const { createHash } = require('node:crypto')
 const { attendanceVersion, lessonKey, sessionCode } = require('./lib/attendanceProtocol')
+const { moroccoParts } = require('./lib/moroccoTime')
 const fail = (code, message) => { throw Object.assign(new Error(message || code), { code }) }
 const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 
@@ -9,8 +10,7 @@ function validateLesson(uid, input, user, schedule, now) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date || '') || typeof input.lessonKey !== 'string') fail('invalid-argument')
   const date = new Date(`${input.date}T12:00:00Z`)
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== input.date) fail('invalid-argument')
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now)
-  const values = Object.fromEntries(parts.map(p => [p.type, p.value]))
+  const values = moroccoParts(now)
   const today = `${values.year}-${values.month}-${values.day}`
   if (input.date > today || now.getTime() - date.getTime() > 7 * 86400_000) fail('failed-precondition', 'attendance-expired')
   const matches = (schedule?.weeklySlots || []).filter(slot => lessonKey(slot) === input.lessonKey)
