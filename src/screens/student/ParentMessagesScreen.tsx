@@ -271,11 +271,6 @@ export default function ParentMessagesScreen() {
               )}
               <Text style={[{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 12 }, dirStyle(localizedSubject(detail, lang))]}>{localizedSubject(detail, lang)}</Text>
               <Text style={[{ color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 10 }, dirStyle(localizedBody(detail, lang))]}>{localizedBody(detail, lang)}</Text>
-              {detail.type === 'appointment' && (
-                  <Pressable accessibilityRole="button" onPress={() => { setDetail(null); navigation.navigate('HomeTab', { screen: 'StudentAppointments' }) }} style={{ minHeight: 48, justifyContent: 'center', marginTop: 12 }}>
-                    <Text style={{ color: theme.primary, fontWeight: '700' }}>{t('appointments.title')}</Text>
-                  </Pressable>
-                )}
                 {(detail.attachments || []).filter(a => a.mime?.startsWith('image/')).map(a => (
                 <Image key={a.url} source={{ uri: a.url }}
                   accessibilityLabel={t('common.attachment')}

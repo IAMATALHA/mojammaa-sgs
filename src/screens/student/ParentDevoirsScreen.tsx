@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator,
 } from 'react-native'
@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { Check, Paperclip } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { Card, EmptyState, SectionHeader } from '../../components/dashboard'
@@ -28,6 +28,8 @@ export default function ParentDevoirsScreen() {
   const { loading, error, devoirs } = useParentDevoirs(parent.eleves)
   const navigation = useNavigation<NativeStackNavigationProp<StudentDevoirsStackParamList, 'StudentDevoirsList'>>()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
+  const route = useRoute<RouteProp<StudentDevoirsStackParamList, 'StudentDevoirsList'>>()
+  useEffect(() => { setSelectedChildId(route.params?.childId || 'all') }, [route.params])
 
   // Page ENTIÈRE de détail (remplace l'ancienne popup sans pièces jointes).
   const openDetail = (d: ParentDevoir) => {

@@ -4,5 +4,5 @@ import BasicSettingsScreen from '../../components/BasicSettingsScreen'
 
 export default function ParentSettingsScreen() {
   const { t } = useTranslation()
-  return <BasicSettingsScreen roleLabel={t('roles.parent')} />
+  return <BasicSettingsScreen roleLabel={t('roles.parent')} showNotificationSettings={false} />
 }

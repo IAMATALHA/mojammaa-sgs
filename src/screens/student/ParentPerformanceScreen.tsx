@@ -12,7 +12,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { StudentHomeStackParamList } from '../../navigation/types'
 import {
@@ -29,6 +29,8 @@ import type { ComportementDoc } from '../../services/comportementsService'
 import ScreenBackground from '../../components/ScreenBackground'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import { localeFor } from '../../utils/format'
+import { currentAcademicPeriod } from '../../utils/academicPeriod'
+import { behaviorInPeriod } from '../../utils/parentStatistics'
 import { dirStyle } from '../../utils/arabicText'
 
 export default function ParentPerformanceScreen() {
@@ -37,12 +39,13 @@ export default function ParentPerformanceScreen() {
   const nav = useNavigation<NativeStackNavigationProp<StudentHomeStackParamList>>()
 
   const parent = useParentData()
-  const { entries } = useParentComportements()
-  const [selectedChildId, setSelectedChildId] = useState<string>('')
+  const route = useRoute<RouteProp<StudentHomeStackParamList, 'StudentPerformance'>>()
+  const { entries, loading: behaviorLoading, error: behaviorError } = useParentComportements()
+  const [selectedChildId, setSelectedChildId] = useState<string>(route.params?.childId || '')
   const [scope, setScope] = useState<'semester' | 'academicYear'>('semester')
 
   useEffect(() => {
-    if (parent.children.length > 0 && !selectedChildId) {
+    if (parent.children.length > 0 && !parent.children.some(child => child.id === selectedChildId)) {
       setSelectedChildId(parent.children[0].id)
     }
   }, [parent.children, selectedChildId])
@@ -53,12 +56,16 @@ export default function ParentPerformanceScreen() {
   )
 
   const { loading, error, report, competenceReport } = useParentNotes(
-    selectedChildId, selectedEleve?.classe, scope, selectedEleve?.niveau,
+    selectedEleve?.codeMassar, selectedEleve?.classe, scope, selectedEleve?.niveau,
   )
 
+  useEffect(() => {
+    if (route.params?.childId) setSelectedChildId(route.params.childId)
+  }, [route.params?.childId])
+  const period = currentAcademicPeriod()
   const childComportements = useMemo(
-    () => entries.filter(e => e.eleveId === selectedChildId),
-    [entries, selectedChildId],
+    () => selectedEleve ? behaviorInPeriod(entries, selectedChildId, period, scope) : [],
+    [entries, selectedEleve, selectedChildId, period.academicYear, period.semestre, scope],
   )
   const behaviorStats = useMemo(() => ({
     merites:        childComportements.filter(e => e.kind === 'merite').length,
@@ -96,7 +103,7 @@ export default function ParentPerformanceScreen() {
             fontSize: theme.fontSize.small,
             marginTop: 2,
           }}>
-            {t('parent.performanceSubtitle')}
+            {parent.children.find(child => child.id === selectedChildId)?.firstName || t('parent.performanceSubtitle')} · {period.academicYear}{scope === 'semester' ? ' · ' + period.semestre : ''}
           </Text>
         </View>
       </View>
@@ -166,11 +173,11 @@ export default function ParentPerformanceScreen() {
         ) : null}
 
         {/* ── Bulletin ──────────────────────────────────── */}
-        {loading ? (
+        {loading || parent.loading ? (
           <View style={{ paddingVertical: 40, alignItems: 'center' }}>
             <ActivityIndicator color={theme.primary} />
           </View>
-        ) : !report && !competenceReport ? (
+        ) : error || parent.error ? null : !report && !competenceReport ? (
           <View style={{ paddingHorizontal: 20 }}>
             <Card>
               <EmptyState
@@ -190,8 +197,9 @@ export default function ParentPerformanceScreen() {
         <View style={styles.section}>
           <SectionHeader
             title={t('behavior.parentTitle')}
-            subtitle={t('behavior.parentSubtitle')}
+            subtitle={period.academicYear + (scope === 'semester' ? ' · ' + period.semestre : '')}
           />
+          {behaviorLoading || parent.loading ? <ActivityIndicator color={theme.primary} /> : behaviorError || parent.error ? <MessagesErrorBanner messageKey="common.dataLoadError" /> : <>
           <View style={styles.kpiRow}>
             <KpiChip value={behaviorStats.merites} label={t('behavior.merites')} color={theme.success} theme={theme} />
             <KpiChip value={behaviorStats.avertissements} label={t('behavior.avertissements')} color={theme.danger} theme={theme} />
@@ -214,6 +222,7 @@ export default function ParentPerformanceScreen() {
               ))
             )}
           </Card>
+          </>}
         </View>
       </ScrollView>
     </SafeAreaView>

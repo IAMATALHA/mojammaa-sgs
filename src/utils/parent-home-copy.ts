@@ -1,0 +1,52 @@
+const copy = {
+  fr: {
+    title: 'Le suivi de mon enfant', today: 'À la une', results: 'Voir les résultats',
+    children: 'Mes enfants', average: 'Moyenne pondérée', skills: 'Compétences acquises',
+    homework: 'Devoirs à venir', absences: 'Jours d’absence · ce mois',
+    progress: 'Devoirs à venir terminés', noHomework: 'Aucun devoir à venir publié.',
+    priorities: 'À votre attention', dueToday: 'Devoirs pour aujourd’hui',
+    dueDetail: 'À vérifier avec votre enfant', pending: 'Des devoirs à préparer',
+    pendingDetail: 'Consulter les consignes et les échéances',
+    absence: 'Absences à vérifier', absenceDetail: 'Consulter les jours non justifiés ce mois-ci',
+    calm: 'Aucune échéance urgente détectée', calmDetail: 'Les devoirs du jour et les absences du mois sont à jour.',
+    support: 'Faire le point sur les résultats', supportDetail: 'Consulter les matières et accompagner les progrès',
+    emptyGrades: 'Les résultats apparaîtront après leur publication.',
+    gradeNote: 'Moyenne du semestre, calculée avec les coefficients des matières.',
+    skillsNote: 'Compétences du semestre : acquises / évaluées.',
+    error: 'Certaines informations sont indisponibles.', retry: 'Réessayer', loading: 'Chargement du suivi…',
+    quick: 'Accès rapide', allFamily: 'Les services de votre espace parent',
+  },
+  ar: {
+    title: 'متابعة طفلي', today: 'نظرة عامة', results: 'عرض النتائج', children: 'أبنائي',
+    average: 'المعدل حسب المعاملات', skills: 'الكفايات المكتسبة', homework: 'الواجبات القادمة',
+    absences: 'أيام الغياب · هذا الشهر', progress: 'الواجبات القادمة المنجزة',
+    noHomework: 'لا توجد واجبات قادمة منشورة.', priorities: 'ما يستحق انتباهكم',
+    dueToday: 'واجبات موعدها اليوم', dueDetail: 'راجعوها مع طفلكم',
+    pending: 'واجبات للتحضير', pendingDetail: 'الاطلاع على التعليمات ومواعيد التسليم',
+    absence: 'غيابات تحتاج إلى مراجعة', absenceDetail: 'الاطلاع على أيام الغياب غير المبررة هذا الشهر',
+    calm: 'لا توجد مواعيد عاجلة حالياً', calmDetail: 'واجبات اليوم وغيابات الشهر لا تتطلب متابعة حالياً.',
+    support: 'متابعة النتائج الدراسية', supportDetail: 'الاطلاع على المواد ومواكبة التقدم',
+    emptyGrades: 'ستظهر النتائج فور نشرها.', gradeNote: 'معدل الدورة محسوب بمعاملات المواد.',
+    skillsNote: 'كفايات الدورة: المكتسبة / المُقيَّمة.', error: 'بعض المعلومات غير متاحة حالياً.',
+    retry: 'إعادة المحاولة', loading: 'جارٍ تحميل المتابعة…', quick: 'الوصول السريع',
+    allFamily: 'خدمات فضاء ولي الأمر',
+  },
+  en: {
+    title: 'My child’s school day', today: 'At a glance', results: 'View results', children: 'My children',
+    average: 'Weighted average', skills: 'Skills acquired', homework: 'Upcoming homework',
+    absences: 'Days absent · this month', progress: 'Upcoming homework completed',
+    noHomework: 'No upcoming homework published.', priorities: 'Needs your attention',
+    dueToday: 'Homework due today', dueDetail: 'Review it with your child',
+    pending: 'Homework to prepare', pendingDetail: 'Check instructions and deadlines',
+    absence: 'Absences to review', absenceDetail: 'Check this month’s unexcused days',
+    calm: 'No urgent deadlines detected', calmDetail: 'Today’s homework and this month’s absences are up to date.',
+    support: 'Review school results', supportDetail: 'Explore subjects and support progress',
+    emptyGrades: 'Results will appear once published.', gradeNote: 'Semester average, weighted by subject coefficients.',
+    skillsNote: 'Semester skills: acquired / assessed.', error: 'Some information is currently unavailable.',
+    retry: 'Retry', loading: 'Loading school updates…', quick: 'Quick access', allFamily: 'Your parent services',
+  },
+}
+
+export function parentHomeCopy(language: string) {
+  return copy[language.startsWith('ar') ? 'ar' : language.startsWith('en') ? 'en' : 'fr']
+}

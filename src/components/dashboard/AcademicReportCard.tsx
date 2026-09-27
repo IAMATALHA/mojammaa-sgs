@@ -100,14 +100,12 @@ export default function AcademicReportCard({ report }: AcademicReportCardProps) 
 
   const summary = useMemo(() => {
     const subjects = report.subjects
-    const classAvg = subjects.length > 0
-      ? round1(subjects.reduce((sum, subject) => sum + subject.classAvg, 0) / subjects.length)
-      : report.generalAvg
+    const classAvg = report.classGeneralAvg ?? report.generalAvg
     const classDelta = round1(report.generalAvg - classAvg)
     const strongSubjects = subjects.filter(subject => subject.average >= subject.classAvg).length
     const topSubject = [...subjects].sort((a, b) => b.average - a.average)[0]
     const focusSubject = [...subjects].sort(
-      (a, b) => (a.average - a.classAvg) - (b.average - b.classAvg),
+      (a, b) => report.hasClassComparison ? (a.average - a.classAvg) - (b.average - b.classAvg) : a.average - b.average,
     )[0]
 
     return { classAvg, classDelta, strongSubjects, topSubject, focusSubject }

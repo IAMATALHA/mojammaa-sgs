@@ -8,7 +8,7 @@ import {
 } from '../services/notesService'
 import { subscribeCoefficients, makeCoefOf, type CoefOf } from '../services/coefficientsService'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
-import { noteOn20, resolveBareme, weightedAverage } from '../utils/gradeScale'
+import { noteOn20, displayBareme, weightedAverage } from '../utils/gradeScale'
 
 export type ParentNotesScope = 'semester' | 'academicYear'
 
@@ -24,6 +24,7 @@ export interface ChildReportReal {
   semestre: string
   hasClassComparison: boolean
   generalAvg: number
+  classGeneralAvg?: number
   rank: string
   honor: 'felicitations' | 'encouragements' | 'avertissement' | null
   subjects: SubjectGradeReal[]
@@ -83,33 +84,35 @@ export function useParentNotes(
   niveau?: string,
 ) {
   const period = currentAcademicPeriod()
-  const [notes, setNotes] = useState<NoteDoc[]>([])
-  const [classStats, setClassStats] = useState<ClassStatsDoc | null>(null)
+  // Key every response to its child and period: never flash another child's results.
+  const key = JSON.stringify([eleveId, period.academicYear, period.semestre, scope])
+  const [snapshot, setSnapshot] = useState<{ key: string; notes: NoteDoc[]; error: string | null } | null>(null)
+  const notes = useMemo(() => snapshot?.key === key ? snapshot.notes : [], [snapshot, key])
   const [coefOf, setCoefOf] = useState<CoefOf | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [coefError, setCoefError] = useState<string | null>(null)
+  const loading = !!eleveId && (snapshot?.key !== key || (!coefOf && !coefError))
+  const error = (snapshot?.key === key ? snapshot.error : null) || coefError
+  const statsKey = JSON.stringify([classe, period.academicYear, period.semestre, scope])
+  const [statsSnapshot, setStatsSnapshot] = useState<{ key: string; value: ClassStatsDoc | null } | null>(null)
+  const classStats = statsSnapshot?.key === statsKey ? statsSnapshot.value : null
 
-  // Coefficients ministériels — mêmes valeurs que l'administration.
-  // `setState(fn)` interpréterait une fonction comme un updater : on l'emballe.
-  useEffect(() => {
-    return subscribeCoefficients(doc => setCoefOf(() => makeCoefOf(doc)), err => setError(err.message))
-  }, [])
+  useEffect(() => subscribeCoefficients(doc => {
+    setCoefOf(() => makeCoefOf(doc)); setCoefError(null)
+  }, err => { setCoefOf(null); setCoefError(err.message) }), [])
 
   useEffect(() => {
-    if (!eleveId) { setNotes([]); setLoading(false); return }
-    setLoading(true)
-    setError(null)
-    const unsub = subscribeNotesForEleve(
-      eleveId,
-      {
-        academicYear: period.academicYear,
-        ...(scope === 'semester' ? { semestre: period.semestre } : {}),
-      },
-      list => { setNotes(list); setError(null); setLoading(false) },
-      err => { setError(err.message); setLoading(false) },
-    )
-    return unsub
-  }, [eleveId, period.academicYear, period.semestre, scope])
+    if (!eleveId) return
+    let active = true
+    const unsub = subscribeNotesForEleve(eleveId, {
+      academicYear: period.academicYear,
+      ...(scope === 'semester' ? { semestre: period.semestre } : {}),
+    }, list => {
+      if (active) setSnapshot({ key, notes: list, error: null })
+    }, err => {
+      if (active) setSnapshot({ key, notes: [], error: err.message })
+    })
+    return () => { active = false; unsub() }
+  }, [key])
 
   const semestres = useMemo(() => {
     const set = new Set<string>()
@@ -125,12 +128,16 @@ export function useParentNotes(
   // Moyenne/rang de classe : agrégat serveur ANONYME (classStats) — plus
   // jamais les notes brutes des autres élèves (confidentialité).
   useEffect(() => {
-    if (scope !== 'semester' || !classe || !latestSemestre) { setClassStats(null); return }
-    getClassStats(classe, period.academicYear, latestSemestre).then(setClassStats).catch(() => setClassStats(null))
-  }, [classe, latestSemestre, period.academicYear, scope])
+    if (scope !== 'semester' || !classe) return
+    let active = true
+    getClassStats(classe, period.academicYear, period.semestre)
+      .then(value => { if (active) setStatsSnapshot({ key: statsKey, value }) })
+      .catch(() => { if (active) setStatsSnapshot({ key: statsKey, value: null }) })
+    return () => { active = false }
+  }, [statsKey])
 
   const report: ChildReportReal | null = useMemo(() => {
-    if (!latestSemestre || notes.length === 0) return null
+    if (!latestSemestre || notes.length === 0 || !coefOf || error) return null
 
     const currentNotes = notes.filter(n =>
       (scope === 'academicYear' || n.semestre === latestSemestre) && typeof n.note === 'number'
@@ -141,8 +148,7 @@ export function useParentNotes(
     // Barème d'AFFICHAGE (primaire /10, collège /20). Les agrégats de classe
     // sont déjà exprimés dans `classStats.bareme` : on s'y aligne pour que la
     // comparaison élève ↔ classe porte sur la même échelle.
-    const bareme: 10 | 20 = classStats?.bareme
-      || resolveBareme(currentNotes[0], classe)
+    const bareme = displayBareme({ bareme: classStats?.bareme, cycle: currentNotes[0].cycle, classe, niveau })
     const toDisplay = (on20: number) => on20 * (bareme / 20)
 
     // Les notes sont agrégées SUR 20 quel que soit leur barème d'origine : une
@@ -225,14 +231,17 @@ export function useParentNotes(
 
     return {
       semestre: scope === 'academicYear' ? `Année ${period.academicYear}` : latestSemestre,
-      hasClassComparison: scope === 'semester' && classStats != null,
+      hasClassComparison: scope === 'semester' && classStats != null && subjects.every(subject => Number.isFinite(classStats.subjectAvgs[subject.subject])),
+      classGeneralAvg: classStats ? weightedAverage(subjects.map(subject => ({
+        value: classStats.subjectAvgs[subject.subject], coef: coefOf(subject.subject, niveau),
+      }))) ?? undefined : undefined,
       generalAvg,
       rank,
       honor: computeHonor(generalAvgOn20, 20),
       subjects,
       bareme,
     }
-  }, [notes, classStats, coefOf, niveau, latestSemestre, prevSemestre, classe, period.academicYear, scope])
+  }, [notes, classStats, coefOf, error, niveau, latestSemestre, prevSemestre, classe, period.academicYear, scope])
 
   const competenceReport: ChildCompetenceReportReal | null = useMemo(() => {
     const competenceNotes = notes.filter(n => n.competence)
@@ -275,5 +284,5 @@ export function useParentNotes(
     }
   }, [notes, classe])
 
-  return { loading, error, notes, semestres, report, competenceReport }
+  return { loading, error, notes, semestres, report: loading || error ? null : report, competenceReport: loading || error ? null : competenceReport }
 }

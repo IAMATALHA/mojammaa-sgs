@@ -1,3 +1,5 @@
+import { useRoute, type RouteProp } from '@react-navigation/native'
+import type { StudentTabsParamList } from '../../navigation/types'
 /**
  * ParentAbsencesScreen — historique des absences / retards.
  *
@@ -42,6 +44,8 @@ export default function ParentAbsencesScreen() {
   const parent = useParentData()
   const { absences: live, error: absError } = useParentAbsences()
   const [selectedChildId, setSelectedChildId] = useState<string>('all')
+  const route = useRoute<RouteProp<StudentTabsParamList, 'StudentAbsences'>>()
+  useEffect(() => { setSelectedChildId(route.params?.childId || 'all') }, [route.params])
   const { profile } = useAuth()
   const [showDeclare, setShowDeclare] = useState(false)
   const [declarations, setDeclarations] = useState<AbsenceRequestDoc[]>([])

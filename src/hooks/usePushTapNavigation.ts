@@ -41,7 +41,8 @@ function navigateToMessages(role: MessageRole, messageId?: string) {
 
 function navigateToPickup(role: MessageRole) {
   if (!navigationRef.isReady() || role !== 'student') return false
-  navigationRef.navigate('HomeTab', { screen: 'StudentPickup' })
+  // Module reporté : les anciennes notifications restent sans lien cassé.
+  navigationRef.navigate('HomeTab', { screen: 'StudentHome' })
   return true
 }
 

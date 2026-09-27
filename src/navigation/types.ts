@@ -75,17 +75,15 @@ export type TeacherDashboardNav = CompositeNavigationProp<
 // ── Student / Parent ───────────────────────────────────────────────────────
 export type StudentHomeStackParamList = {
   StudentHome:         undefined
-  StudentAppointments: undefined
-  StudentPickup:       undefined
   StudentComportement: undefined
   StudentRessources:   undefined
-  StudentPerformance:  undefined
+  StudentPerformance:  { childId?: string } | undefined
   StudentEdt:          undefined
 }
 
 /** Onglet Devoirs = mini-pile : liste + détail plein écran (tab bar visible). */
 export type StudentDevoirsStackParamList = {
-  StudentDevoirsList: undefined
+  StudentDevoirsList: { childId?: string } | undefined
   StudentDevoirView:  DevoirDetailParams
 }
 
@@ -93,7 +91,7 @@ export type StudentTabsParamList = {
   HomeTab:          NavigatorScreenParams<StudentHomeStackParamList> | undefined
   StudentDevoirs:   NavigatorScreenParams<StudentDevoirsStackParamList> | undefined
   StudentNotes:     undefined
-  StudentAbsences:  undefined
+  StudentAbsences:  { childId?: string } | undefined
   StudentMessages:  { messageId?: string } | undefined
   StudentSettings:  undefined
 }

@@ -41,38 +41,42 @@ function hashOf(s: string): number {
   return h
 }
 
-export function useParentData(): ParentData {
+// The smart home loads only the selected child’s metrics with explicit readiness.
+export function useParentData(loadMetrics = true): ParentData {
   const period = currentAcademicPeriod()
   const { profile } = useAuth()
-  const [eleves, setEleves] = useState<EleveDoc[]>([])
+  const uid = profile?.uid || ''
+  const [family, setFamily] = useState<{ uid: string; eleves: EleveDoc[]; error: string | null } | null>(null)
+  const eleves = useMemo(() => family?.uid === uid ? family.eleves : [], [family, uid])
   const [absences, setAbsences] = useState<AbsenceDoc[]>([])
   const [notesByEleve, setNotesByEleve] = useState<Map<string, NoteDoc[]>>(new Map())
   const [devoirsByClasse, setDevoirsByClasse] = useState<Map<string, string[]>>(new Map())
   const [submissionStatus, setSubmissionStatus] = useState<Map<string, HomeworkSubmissionStatus>>(new Map())
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const loading = !!uid && family?.uid !== uid
+  const error = family?.uid === uid ? family.error : null
 
   useEffect(() => {
-    if (!profile?.uid) { setEleves([]); setLoading(false); return }
-    setLoading(true)
-    const unsub = subscribeChildrenOfParent(
-      profile.uid,
-      list => { setEleves(list); setLoading(false); setError(null) },
-      err => { setError(err.message); setLoading(false) },
+    if (!uid) return
+    let active = true
+    const unsub = subscribeChildrenOfParent(uid,
+      list => { if (active) setFamily({ uid, eleves: list, error: null }) },
+      err => { if (active) setFamily({ uid, eleves: [], error: err.message }) },
     )
-    return unsub
-  }, [profile?.uid])
+    return () => { active = false; unsub() }
+  }, [uid])
 
   useEffect(() => {
+    if (!loadMetrics) return
     const ids = eleves.map(e => e.codeMassar)
     if (ids.length === 0) { setAbsences([]); return }
     // Fenêtre au MOIS : la carte enfant n'affiche qu'un taux récent, et les
     // présences écrites à chaque séance rendraient l'année entière hors de prix.
     const unsub = subscribeAbsencesForEleves(ids, period, setAbsences)
     return unsub
-  }, [eleves.map(e => e.codeMassar).join('|'), period.academicYear, period.monthKey])
+  }, [loadMetrics, eleves.map(e => e.codeMassar).join('|'), period.academicYear, period.monthKey])
 
   useEffect(() => {
+    if (!loadMetrics) return
     if (eleves.length === 0) { setNotesByEleve(new Map()); return }
     const unsubs: Unsubscribe[] = []
     const map = new Map<string, NoteDoc[]>()
@@ -86,9 +90,10 @@ export function useParentData(): ParentData {
       }))
     })
     return () => unsubs.forEach(u => u())
-  }, [eleves.map(e => e.codeMassar).join('|'), period.academicYear, period.semestre])
+  }, [loadMetrics, eleves.map(e => e.codeMassar).join('|'), period.academicYear, period.semestre])
 
   useEffect(() => {
+    if (!loadMetrics) return
     const classes = [...new Set(eleves.map(e => e.classe).filter(Boolean))]
     if (classes.length === 0) { setDevoirsByClasse(new Map()); return }
     const today = localISODate()
@@ -116,9 +121,10 @@ export function useParentData(): ParentData {
       },
       () => {},
     )
-  }, [eleves.map(e => e.classe).join('|')])
+  }, [loadMetrics, eleves.map(e => e.classe).join('|')])
 
   useEffect(() => {
+    if (!loadMetrics) return
     if (!profile?.uid) { setSubmissionStatus(new Map()); return }
     return subscribeParentHomeworkSubmissions(
       profile.uid,
@@ -126,7 +132,7 @@ export function useParentData(): ParentData {
       rows => setSubmissionStatus(new Map(rows.map(row => [row.id, row.status]))),
       () => {},
     )
-  }, [profile?.uid, eleves.map(eleve => eleve.codeMassar || eleve.id || '').join('|')])
+  }, [loadMetrics, profile?.uid, eleves.map(eleve => eleve.codeMassar || eleve.id || '').join('|')])
 
   const children = useMemo(
     () => eleves.map(e => {

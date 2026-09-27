@@ -21,7 +21,10 @@ import { initialsOf } from '../utils/format'
 
 const APP_VERSION = Constants.expoConfig?.version ?? '—'
 
-export default function BasicSettingsScreen({ roleLabel }: { roleLabel: string }) {
+export default function BasicSettingsScreen({ roleLabel, showNotificationSettings = true }: {
+  roleLabel: string
+  showNotificationSettings?: boolean
+}) {
   const theme = useTheme()
   const { t, i18n } = useTranslation()
   const { profile, logout } = useAuth()
@@ -56,7 +59,7 @@ export default function BasicSettingsScreen({ roleLabel }: { roleLabel: string }
         </View>
 
         <WorkspaceSettingsGroup />
-        <NotificationSettingsGroup />
+        {showNotificationSettings && <NotificationSettingsGroup />}
 
         {/* Langue */}
         <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }, theme.shadows.xs]}>
