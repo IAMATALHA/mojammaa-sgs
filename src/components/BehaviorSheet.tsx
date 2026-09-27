@@ -15,7 +15,7 @@ import BottomSheet from './BottomSheet'
 import { collection, doc } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { recordComportement } from '../services/comportementsService'
-import { BEHAVIOR_REASONS, type BehaviorKind } from '../utils/behaviorTaxonomy'
+import { BEHAVIOR_REASONS, BEHAVIOR_OBSERVATIONS, type BehaviorKind } from '../utils/behaviorTaxonomy'
 import { dirStyle } from '../utils/arabicText'
 
 interface Props {
@@ -36,6 +36,7 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
   const [comment, setComment] = useState('')
   const [sending, setSending] = useState(false)
   const actionId = useRef<string | null>(null)
+  const sendingRef = useRef(false)
 
   const kindColor = kind === 'merite' ? theme.success : theme.danger
 
@@ -43,18 +44,21 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
   const close = () => { reset(); onClose() }
 
   const pickKind = (k: BehaviorKind) => {
+    if (sending) return
     setKind(k)
     setReason(null)  // les motifs ne se recoupent pas entre les deux familles
+    setComment('')
   }
 
   const submit = async () => {
-    if (!eleve || !teacher || !reason) return
+    if (!eleve || !teacher || !reason || sendingRef.current) return
     // Motif "Remarque" sans texte = entrée vide pour le parent → refuser.
     if (reason === 'other' && !comment.trim()) {
       Alert.alert(t('behavior.commentRequired'))
       return
     }
     setSending(true)
+    sendingRef.current = true
     try {
       actionId.current ??= doc(collection(db, 'comportements')).id
       await recordComportement({
@@ -72,10 +76,11 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
       Alert.alert(t('common.error'), e?.message)
     } finally {
       setSending(false)
+      sendingRef.current = false
     }
   }
 
-  const canSubmit = !!eleve && !!teacher && !!reason && !sending
+  const canSubmit = !!eleve && !!teacher && !!reason && (reason !== 'other' || !!comment.trim()) && !sending
 
   return (
     <BottomSheet dismissible={!sending} visible={visible} onClose={close}>
@@ -128,7 +133,7 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
           {BEHAVIOR_REASONS[kind].map(r => {
             const active = reason === r
             return (
-              <Pressable key={r} onPress={() => setReason(r)}
+              <Pressable key={r} disabled={sending} onPress={() => { if (r === 'other' || reason === 'other') setComment(''); setReason(r) }}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
                 accessibilityLabel={t(`behavior.reasons.${r}`)}
@@ -144,12 +149,31 @@ export default function BehaviorSheet({ visible, onClose, eleve, classe, date, s
           })}
         </View>
 
-        <Text style={[styles.label, { color: theme.textSoft }]}>{t('behavior.comment')}</Text>
+        {reason !== 'other' && <>
+          <Text style={[styles.label, { color: theme.textSoft }]}>{t('behavior.suggestions')}</Text>
+          <View style={styles.chipRow}>
+            {BEHAVIOR_OBSERVATIONS[kind].map(key => (
+              <Pressable key={key} disabled={sending} accessibilityRole="button"
+                onPress={() => setComment(t(`behavior.observations.${key}`))}
+                style={[styles.chip, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                <Text style={{ color: theme.text }}>{t(`behavior.observations.${key}`)}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>}
+        <Text style={[styles.label, { color: theme.textSoft }]}>{t(reason === 'other' ? 'behavior.otherDetail' : 'behavior.comment')}</Text>
         <TextInput
+          editable={!sending} autoCorrect spellCheck
           value={comment} onChangeText={setComment} multiline maxLength={300}
           accessibilityLabel={t('behavior.comment')}
           placeholder={t('behavior.commentPlaceholder')} placeholderTextColor={theme.textMuted}
           style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(comment)]} />
+
+        {reason && <View accessibilityLiveRegion="polite" style={{ marginTop: 14 }}>
+          <Text style={[styles.label, { color: theme.textSoft }]}>{t('behavior.preview')}</Text>
+          <Text selectable style={{ color: theme.text }}>{t(`behavior.${kind}`)} · {t(`behavior.reasons.${reason}`)}</Text>
+          {!!comment.trim() && <Text selectable style={[{ color: theme.text }, dirStyle(comment)]}>{comment.trim()}</Text>}
+        </View>}
 
         <TouchableOpacity onPress={submit} disabled={!canSubmit} activeOpacity={0.85}
           style={[styles.submitBtn, { backgroundColor: canSubmit ? kindColor : theme.surfaceAlt }]}>

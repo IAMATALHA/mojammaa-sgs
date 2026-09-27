@@ -945,6 +945,18 @@ const en = {
   },
 
   behavior: {
+    suggestions: "Suggested observations",
+    preview: "Preview before sending",
+    otherDetail: "Specify the reason (required)",
+    observations: {
+      keepGoing: "Keep up the good work.",
+      improvement: "Improvement has been observed.",
+      consistentEffort: "Effort has been consistent.",
+      severalReminders: "Despite several reminders.",
+      completeNextLesson: "To be completed before the next lesson.",
+      attentionNeeded: "More sustained attention is expected.",
+    },
+
     sheetTitle: 'Behavior action',
     merite: 'Merit',
     avertissement: 'Warning',
@@ -957,6 +969,17 @@ const en = {
     parentNotified: 'The parent has been notified.',
     noParentLinked: 'No parent is linked to this student — no notification sent.',
     reasons: {
+      lessonNotCopied: "Lesson not copied",
+      incompleteWork: "Unfinished work",
+      inattention: "Lack of attention in class",
+      talking: "Repeated talking in class",
+      interrupting: "Interrupting classmates",
+      lateToClass: "Late to class",
+      carefulWork: "Careful and diligent work",
+      progress: "Remarkable progress",
+      respectful: "Respectful behavior",
+      autonomy: "Independence and initiative",
+
       participation: 'Active participation',
       helpingOthers: 'Helping others',
       outstandingWork: 'Outstanding work',
@@ -967,7 +990,7 @@ const en = {
       homeworkNotDone: 'Homework not done',
       forgotMaterials: 'Forgot school materials',
       rulesNotFollowed: 'Rules not followed',
-      other: 'Free remark',
+      other: "Other reason",
     },
     classLog: 'Behavior log',
     entriesCount: '{{count}} entry(ies)',

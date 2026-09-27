@@ -957,6 +957,18 @@ const ar = {
   },
 
   behavior: {
+    suggestions: "ملاحظات مقترحة",
+    preview: "معاينة قبل الإرسال",
+    otherDetail: "حدد السبب (إلزامي)",
+    observations: {
+      keepGoing: "واصل على هذا المنوال.",
+      improvement: "لوحظ تحسن.",
+      consistentEffort: "يبذل مجهودات منتظمة.",
+      severalReminders: "رغم التنبيه عدة مرات.",
+      completeNextLesson: "يُستكمل قبل الحصة القادمة.",
+      attentionNeeded: "يُرجى التركيز أكثر أثناء الدرس.",
+    },
+
     sheetTitle: 'إجراء سلوكي',
     merite: 'إشادة',
     avertissement: 'إنذار',
@@ -969,6 +981,17 @@ const ar = {
     parentNotified: 'تم إشعار الولي.',
     noParentLinked: 'لا يوجد ولي مرتبط بهذا التلميذ — لم يُرسل أي إشعار.',
     reasons: {
+      lessonNotCopied: "الدرس غير مكتوب",
+      incompleteWork: "عمل غير مكتمل",
+      inattention: "قلة الانتباه في القسم",
+      talking: "كثرة الكلام أثناء الدرس",
+      interrupting: "مقاطعة الزملاء",
+      lateToClass: "التأخر عن الحصة",
+      carefulWork: "عمل جاد ومتقن",
+      progress: "تقدم ملحوظ",
+      respectful: "سلوك محترم",
+      autonomy: "الاستقلالية والمبادرة",
+
       participation: 'مشاركة نشيطة',
       helpingOthers: 'مساعدة الآخرين',
       outstandingWork: 'عمل متميز',
@@ -979,7 +1002,7 @@ const ar = {
       homeworkNotDone: 'واجب غير منجز',
       forgotMaterials: 'نسيان الأدوات المدرسية',
       rulesNotFollowed: 'عدم احترام التعليمات',
-      other: 'ملاحظة حرة',
+      other: "سبب آخر",
     },
     classLog: 'سجل السلوك',
     entriesCount: '{{count}} مدخل',

@@ -1,6 +1,17 @@
 const { createHash } = require('node:crypto')
 
 const REASONS = {
+  lessonNotCopied: ["Leçon non copiée", "الدرس غير مكتوب", "Lesson not copied"],
+  incompleteWork: ["Travail non terminé", "عمل غير مكتمل", "Unfinished work"],
+  inattention: ["Manque d’attention en classe", "قلة الانتباه في القسم", "Lack of attention in class"],
+  talking: ["Bavardages répétés", "كثرة الكلام أثناء الدرس", "Repeated talking in class"],
+  interrupting: ["Interruption des camarades", "مقاطعة الزملاء", "Interrupting classmates"],
+  lateToClass: ["Retard en classe", "التأخر عن الحصة", "Late to class"],
+  carefulWork: ["Travail sérieux et soigné", "عمل جاد ومتقن", "Careful and diligent work"],
+  progress: ["Progrès remarquables", "تقدم ملحوظ", "Remarkable progress"],
+  respectful: ["Comportement respectueux", "سلوك محترم", "Respectful behavior"],
+  autonomy: ["Autonomie et initiative", "الاستقلالية والمبادرة", "Independence and initiative"],
+
   participation: ['Participation active', 'مشاركة فعالة', 'Active participation'],
   helpingOthers: ['Aide aux autres', 'مساعدة الآخرين', 'Helping others'],
   outstandingWork: ['Travail exceptionnel', 'عمل متميز', 'Outstanding work'],

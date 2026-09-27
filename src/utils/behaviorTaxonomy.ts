@@ -14,10 +14,20 @@ export const BEHAVIOR_REASONS: Record<BehaviorKind, readonly string[]> = {
     'helpingOthers',     // Aider les autres
     'outstandingWork',   // Travail exceptionnel
     'remarkableEffort',  // Effort remarquable
+    'carefulWork',
+    'progress',
+    'respectful',
+    'autonomy',
     'research',          // Recherche / curiosité
     'other',             // Remarque libre
   ],
   avertissement: [
+    'lessonNotCopied',
+    'incompleteWork',
+    'inattention',
+    'talking',
+    'interrupting',
+    'lateToClass',
     'disrespect',        // Manque de respect
     'fighting',          // Bagarre
     'homeworkNotDone',   // Devoir non fait
@@ -26,3 +36,8 @@ export const BEHAVIOR_REASONS: Record<BehaviorKind, readonly string[]> = {
     'other',             // Remarque libre
   ],
 } as const
+
+export const BEHAVIOR_OBSERVATIONS: Record<BehaviorKind, readonly string[]> = {
+  merite: ['keepGoing', 'improvement', 'consistentEffort'],
+  avertissement: ['severalReminders', 'completeNextLesson', 'attentionNeeded'],
+}
