@@ -4,6 +4,9 @@ import { db, functions } from '../config/firebase'
 import type { Attachment } from './StorageService'
 
 export const homeworkCommandId = () => doc(collection(db, 'homeworkCommands')).id
+/** The server refused a stale version: the homework changed (or was cancelled) meanwhile. */
+export const isHomeworkConflict = (error: unknown) =>
+  (error as { code?: string } | null)?.code === 'functions/failed-precondition'
 export interface HomeworkChanges {
   titre: string
   description: string

@@ -8,6 +8,7 @@ const fr = {
     notify: "Prévenir les familles",
     notifyHint: "Décochez pour une simple correction de texte. Une modification de date, de type ou de pièce jointe est toujours signalée.",
     failed: "Action impossible. Actualisez le devoir et réessayez.",
+    conflict: "Ce devoir a été modifié ou annulé entre-temps. La version à jour est affichée : vérifiez-la, puis réessayez.",
     unavailable: "Ce devoir a été supprimé ou n’est plus accessible.",
     updated: "Modifié le {{date}}",
   },

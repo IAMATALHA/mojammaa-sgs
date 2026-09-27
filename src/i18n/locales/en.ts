@@ -8,6 +8,7 @@ const en = {
     notify: "Notify families",
     notifyHint: "Uncheck for a simple text correction. Changes to the due date, type or attachments always notify families.",
     failed: "Unable to save. Refresh the homework and try again.",
+    conflict: "This homework was changed or cancelled in the meantime. The latest version is now shown: check it, then try again.",
     unavailable: "This homework was deleted or is no longer accessible.",
     updated: "Updated on {{date}}",
   },

@@ -27,7 +27,7 @@ import HomeworkTeacherTracking from '../../components/homework/HomeworkTeacherTr
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import { CreateDevoirModal, type Devoir } from '../teacher/TeacherDevoirsScreen'
-import { homeworkCommandId, manageHomework } from '../../services/homework-management'
+import { homeworkCommandId, isHomeworkConflict, manageHomework } from '../../services/homework-management'
 
 function fmtDate(iso?: string): string {
   if (!iso) return '—'
@@ -72,8 +72,11 @@ export default function DevoirDetailScreen() {
         commandId.current ??= homeworkCommandId()
         await manageHomework({ id: live.id, commandId: commandId.current, version: live.updatedAt?.toMillis() || 0, action: 'remove' })
         commandId.current = null
-      } catch { Alert.alert(t('common.error'), t('homeworkManagement.failed')) }
-      finally { setRemoving(false) }
+      } catch (e) {
+        // En conflit, l'abonnement en direct affiche déjà la version à jour.
+        if (isHomeworkConflict(e)) commandId.current = null
+        Alert.alert(t('common.error'), t(isHomeworkConflict(e) ? 'homeworkManagement.conflict' : 'homeworkManagement.failed'))
+      } finally { setRemoving(false) }
     } },
   ])
 

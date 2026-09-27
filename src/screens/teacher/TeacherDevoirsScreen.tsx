@@ -34,7 +34,7 @@ import { uploadAttachment, type Attachment } from '../../services/StorageService
 import { broadcastToClasses } from '../../services/messagesService';
 import type { UserProfile } from '../../types';
 import { academicPeriodForDate, currentAndNextAcademicYears, localISODate } from '../../utils/academicPeriod'
-import { homeworkCommandId, manageHomework } from '../../services/homework-management'
+import { homeworkCommandId, isHomeworkConflict, manageHomework } from '../../services/homework-management'
 
 export interface Devoir {
   id:           string
@@ -114,8 +114,13 @@ export default function TeacherDevoirsScreen() {
         await manageHomework({ id: d.id, commandId, version: d.updatedAt?.toMillis() || 0, action: 'remove' })
         removeCommands.current.delete(d.id)
         await load()
-      } catch { Alert.alert(t('common.error'), t('homeworkManagement.failed')) }
-      finally { setRemoving(false) }
+      } catch (e) {
+        if (!isHomeworkConflict(e)) { Alert.alert(t('common.error'), t('homeworkManagement.failed')); return }
+        // Version périmée : nouvelle intention sur la version à jour.
+        removeCommands.current.delete(d.id)
+        Alert.alert(t('common.error'), t('homeworkManagement.conflict'))
+        await load()
+      } finally { setRemoving(false) }
     } },
   ])
 
@@ -406,6 +411,13 @@ export function CreateDevoirModal({
 
       onCreated()
     } catch (e: any) {
+      if (editing && isHomeworkConflict(e)) {
+        // Version périmée : on ferme, l'écran parent affiche la version à jour.
+        commandId.current = null
+        Alert.alert(t('common.error'), t('homeworkManagement.conflict'))
+        onCreated()
+        return
+      }
       console.error('[TeacherDevoirs] homework creation failed', {
         code: e?.code || null,
         message: e?.message || String(e),
