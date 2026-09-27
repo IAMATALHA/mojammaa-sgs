@@ -27,11 +27,11 @@ L'app crée désormais les devoirs via `manageHomework` (action `create`). Publi
 
 ## 1. Vérifications juste avant le build
 
-- [ ] `git status` propre, sur le commit qui sera buildé.
-- [ ] `npm run typecheck` et `npm test` (41 fichiers, sans émulateur).
-- [ ] `npm run test:emulator` (règles, devoirs, prière… ; `export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home`).
-- [ ] `npx expo-doctor` puis `npm run verify:rules`.
-- [ ] `eas fingerprint:compare --build-id afbb3736-6fcf-4d49-8920-ba28c65ac116` : noter ce qui diffère côté natif.
+- [x] (27/09, avant le passage en 1.0.17, sur `54a84b2`) `git status` propre.
+- [x] `npm run typecheck` et `npm test` : 141 tests OK.
+- [x] `npm run test:emulator` : 8/8 fichiers OK (règles, devoirs, prière… ; `export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home`).
+- [x] `npx expo-doctor` 18/18 puis `npm run verify:rules` en phase.
+- [x] `eas fingerprint:compare --build-id afbb3736-6fcf-4d49-8920-ba28c65ac116` : seuls `.easignore`, `.gitignore` et les scripts de `package.json` diffèrent ; aucun module natif modifié.
 - [ ] Quota de builds EAS du mois disponible (plan gratuit, remis à zéro chaque mois).
 
 ## 2. Dernière OTA sur le runtime 1.0.16 — avant de changer de version
@@ -48,8 +48,8 @@ Après le passage à 1.0.17, `eas update` publie pour le runtime 1.0.17 : les in
 
 ## 3. Passage en 1.0.17
 
-- [ ] `app.json` → `"version": "1.0.17"`, commit `chore(release): bump version 1.0.16 → 1.0.17`.
-- [ ] Recommandé : dans `eas.json` → `submit.production.android`, ajouter `"releaseStatus": "draft"` pour que la version arrive en brouillon dans la Play Console au lieu d'être déployée à 100 % dès la validation Google.
+- [x] `app.json` → `"version": "1.0.17"`, commit `chore(release): bump version 1.0.16 → 1.0.17`.
+- [x] Recommandé : dans `eas.json` → `submit.production.android`, ajouter `"releaseStatus": "draft"` pour que la version arrive en brouillon dans la Play Console au lieu d'être déployée à 100 % dès la validation Google.
 
 ## 4. Build et soumission
 
