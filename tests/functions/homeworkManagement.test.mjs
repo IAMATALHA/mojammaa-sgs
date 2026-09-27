@@ -9,11 +9,18 @@ const db = admin.firestore()
 const base = { titre: 'Test', description: 'Consigne', type: 'Maison', dateLimite: '2026-10-01', attachments: [] }
 const seed = async id => db.doc(`devoirs/${id}`).set({ ...base, teacherId: 'hmTeacher', classeId: 'TEST', academicYear: '2026-2027', semestre: 'S1', monthKey: '2026-10' })
 await Promise.all([
-  db.doc('users/hmTeacher').set({ role: 'professeur' }),
+  db.doc('users/hmTeacher').set({ role: 'professeur', classes: ['TEST'], prenom: 'Prof', nom: 'Test', matiere: 'Mathématiques' }),
   db.doc('users/hmOther').set({ role: 'professeur' }),
   db.doc('users/hmAdmin').set({ role: 'admin' }),
   db.doc('users/hmParent').set({ role: 'parent' }),
+  // Destinataires : parents des élèves ACTIFS de la classe (dédoublonnés).
+  db.doc('eleves/hmChildA').set({ classe: 'TEST', parentUid: 'hmParent' }),
+  db.doc('eleves/hmChildB').set({ classe: 'TEST', parentUid: 'hmParent', active: true }),
+  db.doc('eleves/hmChildC').set({ classe: 'TEST', parentUid: 'hmParent2' }),
+  db.doc('eleves/hmGone').set({ classe: 'TEST', parentUid: 'hmFormerParent', active: false }),
+  db.doc('eleves/hmOrphan').set({ classe: 'TEST' }),
 ])
+const recipients = async id => (await db.doc(`messages/${id}`).get()).data()
 let count = 0
 const test = async (name, fn) => { await fn(); count++; console.log(`✓ ${name}`) }
 const edit = (id, commandId, changes = base, extra = {}) => ({ id, commandId, action: 'edit', version: 0, changes, ...extra })
@@ -25,6 +32,11 @@ await test('Owner edits; duplicate commands send exactly one notification', asyn
   assert.equal(saved.get('monthKey'), '2027-02'); assert.equal(saved.get('semestre'), 'S2')
   assert.equal(saved.get('teacherId'), 'hmTeacher'); assert.equal(saved.get('classeId'), 'TEST')
   assert.equal((await db.collection('messages').where('fromId', '==', 'hmTeacher').get()).size, 1)
+  // Régression prod (24/09) : toType 'class' n'atteignait aucun parent (no_recipient).
+  const sent = await recipients('homework_hmTeacher_hmEditCmd')
+  assert.equal(sent.toType, 'user')
+  assert.deepEqual([...sent.toIds].sort(), ['hmParent', 'hmParent2'])
+  assert.equal(sent.classe, 'TEST')
 })
 await test('Colleague, parent and anonymous writes are refused', async () => {
   for (const uid of ['hmOther', 'hmParent', null]) {
@@ -79,6 +91,35 @@ await test('Fractional web-SDK versions match; non-numeric versions are refused'
   const version = 1790000000 * 1000 + 123456789 / 1e6 // Timestamp.toMillis() du SDK web, non arrondi
   assert.equal((await manageHomework(db, 'hmTeacher', edit('hmFraction', 'fraction', { ...base, titre: 'Fraction' }, { version }))).status, 'updated')
   await assert.rejects(manageHomework(db, 'hmTeacher', edit('hmFraction', 'nan', base, { version: 'abc' })), { code: 'invalid-argument' })
+})
+const create = (id, commandId, extra = {}) => ({ id, commandId, action: 'create', classeId: 'TEST', changes: { ...base, titre: 'Nouveau' }, ...extra })
+await test('Teacher creates in own class; parents notified in three languages; replay-safe', async () => {
+  const input = create('hmNew', 'createCmd')
+  const [first, second] = await Promise.all([manageHomework(db, 'hmTeacher', input), manageHomework(db, 'hmTeacher', input)])
+  assert.deepEqual(first, { status: 'created', id: 'hmNew' }); assert.deepEqual(second, first)
+  const saved = (await db.doc('devoirs/hmNew').get()).data()
+  assert.equal(saved.teacherId, 'hmTeacher'); assert.equal(saved.teacherNom, 'Prof Test'); assert.equal(saved.classeId, 'TEST')
+  assert.equal(saved.academicYear, '2026-2027'); assert.equal(saved.createdVia, 'manageHomework'); assert.equal(saved.updatedAt, undefined)
+  const sent = await recipients('homework_hmTeacher_createCmd')
+  assert.equal(sent.toType, 'user'); assert.deepEqual([...sent.toIds].sort(), ['hmParent', 'hmParent2'])
+  assert.equal(sent.subject, '📚 Nouveau devoir · Mathématiques'); assert.ok(sent.subjectAr && sent.bodyEn.includes('Nouveau'))
+  // Le devoir créé s'édite ensuite avec la version 0 (jamais modifié).
+  assert.equal((await manageHomework(db, 'hmTeacher', edit('hmNew', 'editNew', { ...base, titre: 'Nouveau 2' }))).status, 'updated')
+})
+await test('Creation refused outside own classes, for parents, on existing ids and bad classes', async () => {
+  await assert.rejects(manageHomework(db, 'hmOther', create('hmForeign', 'foreign')), { code: 'permission-denied' })
+  await assert.rejects(manageHomework(db, 'hmParent', create('hmByParent', 'byParent')), { code: 'permission-denied' })
+  await assert.rejects(manageHomework(db, null, create('hmAnon', 'anon')), { code: 'unauthenticated' })
+  await assert.rejects(manageHomework(db, 'hmTeacher', create('hmEdit', 'overwrite')), { code: 'already-exists' })
+  for (const classeId of ['', ' TEST', 'A/B', 'x'.repeat(61), 42]) {
+    await assert.rejects(manageHomework(db, 'hmTeacher', create('hmBadClass', `bad-${String(classeId).length}`, { classeId })), { code: 'invalid-argument' })
+  }
+  await assert.rejects(manageHomework(db, 'hmTeacher', create('hmBadUrl', 'badUrl', { changes: { ...base, attachments: [{ url: 'https://evil.example/x.pdf', name: 'x', mime: 'application/pdf' }] } })), { code: 'invalid-argument' })
+  assert.equal((await db.doc('devoirs/hmForeign').get()).exists, false)
+})
+await test('Admin may create for any class; no message when the class has no parent', async () => {
+  assert.equal((await manageHomework(db, 'hmAdmin', create('hmAdminNew', 'adminNew', { classeId: 'EMPTY' }))).status, 'created')
+  assert.equal((await db.doc('messages/homework_hmAdmin_adminNew').get()).exists, false)
 })
 console.log(`${count} homework management checks passed`)
 await admin.app().delete()
