@@ -53,8 +53,8 @@ Après le passage à 1.0.17, `eas update` publie pour le runtime 1.0.17 : les in
 
 ## 4. Build et soumission
 
-- [ ] `eas build -p android --profile production --auto-submit`
-- [ ] Noter ici l'identifiant du build et le versionCode (48 si aucun build production depuis le 06/09).
+- [x] `eas build -p android --profile production --auto-submit` (27/09, depuis `7c47027`).
+- [x] Build `b7c2153d-d4ca-4c82-8b07-39f09182be4e`, versionCode **48**, terminé à 13:51 UTC. Soumission EAS `104238c4-db0a-4d72-b65d-202b29f1ff70` : FINISHED. Vérifié via l'API Google Play (lecture seule) : piste production = 1.0.17 (48) en **draft**, 1.0.16 (47) toujours `completed`.
 - [ ] Contrôler l'archive : `functions/lib/collegeEvaluationPolicy.json` présent, `.secrets`, `data`, `backups` et `output` absents.
 
 ## 5. Recette sur téléphone — avant d'ouvrir le déploiement
@@ -71,6 +71,8 @@ APK signé sans nouveau build : Play Console → Explorateur d'app bundles → v
 - [ ] Appel d'une séance, messagerie, statistiques admin.
 
 ## 6. Publication Google Play
+
+- [ ] Le brouillon 1.0.17 n'a pas encore de notes de version : les ajouter (ci-dessous) dans la Play Console avant le déploiement.
 
 - [ ] Déploiement progressif : 20 %, puis 100 % après 48 h si Android vitals est stable.
 - [ ] Notes de version (balises seules, sans libellé à l'intérieur) :
