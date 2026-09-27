@@ -59,6 +59,8 @@ Après le passage à 1.0.17, `eas update` publie pour le runtime 1.0.17 : les in
 
 ## 5. Recette sur téléphone — avant d'ouvrir le déploiement
 
+> **Non faite** : décision de Youssef (27/09) de publier directement à 100 %. Risque accepté, atténué par : aucun module natif modifié depuis 1.0.16 ; le même JavaScript tournait déjà chez les utilisateurs 1.0.16 via l'OTA `9c988c2`. Les points ci-dessous restent à vérifier en conditions réelles.
+
 APK signé sans nouveau build : Play Console → Explorateur d'app bundles → version 1.0.17 → Téléchargements → APK universel signé.
 
 - [ ] Premier lancement : nouvelle interface visible immédiatement, sans attendre d'OTA.
@@ -72,9 +74,10 @@ APK signé sans nouveau build : Play Console → Explorateur d'app bundles → v
 
 ## 6. Publication Google Play
 
-- [ ] Le brouillon 1.0.17 n'a pas encore de notes de version : les ajouter (ci-dessous) dans la Play Console avant le déploiement.
+- [x] Notes de version FR/AR/EN ajoutées et version passée de `draft` à `completed` (**100 %**, sans déploiement progressif, choix de Youssef) le 27/09 via l'API Google Play (édition validée puis publiée `13103155380886801420`, lancée par Youssef). Vérifié ensuite en lecture seule : production = 1.0.17 (48) `completed`, notes fr-FR/ar/en-US. Google examine la version avant sa mise en ligne effective (quelques heures à ~2 jours).
+- [ ] Surveiller Android vitals (plantages, ANR) les premiers jours.
 
-- [ ] Déploiement progressif : 20 %, puis 100 % après 48 h si Android vitals est stable.
+- [x] ~~Déploiement progressif~~ : publication directe à 100 % (voir ci-dessus).
 - [ ] Notes de version (balises seules, sans libellé à l'intérieur) :
 
 ```
@@ -98,8 +101,8 @@ Tant que des téléphones restent en 1.0.16, chaque correctif JavaScript est pub
 
 ## 8. Clôture
 
-- [ ] `git tag v1.0.17` sur le commit buildé, puis `git push origin --tags`.
-- [ ] Compléter ce fichier : identifiant du build, versionCode, date de mise en ligne, pourcentage de déploiement.
+- [x] Tag `v1.0.17` sur `7c47027` (commit buildé), poussé.
+- [x] Build `b7c2153d`, versionCode 48, publié à 100 % le 27/09 (en attente de l'examen Google).
 - [ ] Fusionner la branche dans `main` quand la version est stable.
 
 ## Hors build — à planifier
