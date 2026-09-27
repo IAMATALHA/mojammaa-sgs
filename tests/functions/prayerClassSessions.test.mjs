@@ -74,6 +74,40 @@ await Promise.all([
 ])
 
 console.log('\n── Horloge et créneau en cours ──')
+await test('retour GMT : transition exacte, minuit, Ramadan et absence de GMT+1 futur', async () => {
+  const cases = [
+    ['2026-09-20T00:59:59.999Z', '2026-09-20', 'sunday', 119],
+    ['2026-09-20T01:00:00.000Z', '2026-09-20', 'sunday', 60],
+    ['2026-09-21T12:25:17.000Z', '2026-09-21', 'monday', 745],
+    ['2026-09-21T23:30:00.000Z', '2026-09-21', 'monday', 1410],
+    ['2026-09-22T00:00:00.000Z', '2026-09-22', 'tuesday', 0],
+    ['2026-03-01T12:25:00.000Z', '2026-03-01', 'sunday', 745],
+    ['2027-07-15T12:25:00.000Z', '2027-07-15', 'thursday', 745],
+  ]
+  for (const [iso, serviceDate, day, minuteOfDay] of cases) {
+    const clock = casablancaClock(new Date(iso))
+    assert(clock.serviceDate === serviceDate && clock.day === day && clock.minuteOfDay === minuteOfDay,
+      `${iso}: ${JSON.stringify(clock)}`)
+  }
+})
+await test('incident GMT : départ autorisé à 12:25, création refusée avant et après le cours', async () => {
+  await db.collection('users').doc('profGMT').set({ role: 'professeur', classes: ['GMT-test'] })
+  await db.collection('schedules').doc('profGMT').set({ weeklySlots: [
+    { day: 'monday', startTime: '11:30', endTime: '12:30', durationMin: 60, classe: 'GMT-test' },
+  ] })
+  for (const time of ['11:29:59', '12:30:00', '13:25:00']) {
+    await expectCode('failed-precondition', startPrayerClassSession(db, {
+      uid: 'profGMT', classe: 'GMT-test', now: new Date(`2026-09-21T${time}Z`),
+    }))
+    assert(!(await db.collection('prayerClassSessions').doc('2026-09-21_GMT-test').get()).exists,
+      'une session a été créée hors cours')
+  }
+  const result = await startPrayerClassSession(db, {
+    uid: 'profGMT', classe: 'GMT-test', now: new Date('2026-09-21T12:25:17Z'),
+  })
+  assert(result.changed === true && result.status === 'going', 'départ GMT refusé')
+  assert(result.serviceDate === '2026-09-21', 'date GMT incorrecte')
+})
 await test('date, jour et heure sont dérivés en Africa/Casablanca', async () => {
   const clock = casablancaClock(DURING_WEDNESDAY_CLASS)
   assert(clock.serviceDate === '2026-07-15', `date inattendue: ${clock.serviceDate}`)
