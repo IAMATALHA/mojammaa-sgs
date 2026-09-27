@@ -103,8 +103,10 @@ Tant que des téléphones restent en 1.0.16, chaque correctif JavaScript est pub
 
 - [x] Règles Firestore déployées (ruleset `e1ba974c`, `fe64d1c`) : un prof ne lit que SES devoirs, et seulement les annonces de l'administration parmi les messages tagués `classe`. Source live vérifiée identique au fichier avant/après.
 - [x] Conséquence client : l'en-tête du dossier de classe prof affiche « 0 élèves · 0 devoirs » (requête `classeId` désormais refusée). Correctif `73588a1` (SES devoirs, `allSettled`).
-- [ ] OTA runtime 1.0.17 depuis `73588a1` (Android + iOS).
-- [ ] OTA runtime 1.0.16 depuis le worktree `~/mojammaa-sgs-ota-1016`, branche `hotfix/1.0.16-dossier-classe` (`c9fa1f4` = `v1.0.16-final` + cherry-pick), Android + iOS ; puis déplacer le tag `v1.0.16-final` sur `c9fa1f4`.
+- [x] OTA runtime 1.0.17 publiée le 27/09 depuis `16332c0` (arbre propre, contient `73588a1`) : groupe `a6fa988f-efd8-4a41-bc4b-ccdcd4a6a6f1`, Android `01a0e3b4-9f00-750a-b7a8-1989f9b9894a`, iOS `01a0e3b4-9f00-7123-b1d0-b1037933c7bc`.
+- [x] OTA runtime 1.0.16 publiée le 27/09 depuis le worktree `~/mojammaa-sgs-ota-1016`, branche `hotfix/1.0.16-dossier-classe` (`c9fa1f4` = `9c988c2` + cherry-pick ; seul écart : lien `node_modules` non suivi) : groupe `56b89ac3-8b1a-48cb-82f5-cc71fc613d75`, Android `01a0e3b5-cded-77cc-9550-2950c9db34c0`, iOS `01a0e3b5-cded-7664-9b30-3c66b59c947e`.
+- [x] Identifiants servis vérifiés pour `production` sur 1.0.16 et 1.0.17, Android et iOS.
+- [x] Tag `v1.0.16-final` déplacé en local de `9c988c2` sur `c9fa1f4`. Reste : pousser le tag (`git push -f origin v1.0.16-final`) et la branche `hotfix/1.0.16-dossier-classe`.
 
 ## 8. Clôture
 
