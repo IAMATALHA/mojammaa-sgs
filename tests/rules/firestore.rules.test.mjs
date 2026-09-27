@@ -1537,17 +1537,22 @@ const hwFile = path => ({ url: `https://firebasestorage.googleapis.com/v0/b/moja
 const hwCreate = (id, attachments, uid = 'prof1') => setDoc(doc(asUser(uid), `devoirs/${id}`), { classeId: '1A', teacherId: uid, titre: 'Test', attachments })
 await allow('prof creates homework with an app attachment', hwCreate('hwAttOk', [hwFile('devoirs%2Fprof1%2F1_cours..v2.pdf')]))
 await allow('prof creates homework without attachments', hwCreate('hwAttNone', []))
+// Limite exacte : la validation doit tenir dans les 1 000 expressions de Firestore.
+await allow('prof creates homework with 20 app attachments (limit)', hwCreate('hwAtt20', Array.from({ length: 20 }, (_, i) => hwFile(`devoirs%2Fprof1%2F${i}_page.jpg`))))
+await deny('prof cannot create homework with 21 attachments', hwCreate('hwAtt21', Array.from({ length: 21 }, (_, i) => hwFile(`devoirs%2Fprof1%2F${i}_page.jpg`))))
+await deny('prof cannot hide an external URL at the last position (index 19)', hwCreate('hwAttLast', [
+  ...Array.from({ length: 19 }, (_, i) => hwFile(`devoirs%2Fprof1%2F${i}_page.jpg`)), { ...hwFile('devoirs%2Fx'), url: 'https://evil.example/x.pdf' }]))
 for (const [label, attachment] of [
   ['external URL', { ...hwFile('devoirs%2Fx'), url: 'https://evil.example/consigne.pdf' }],
   ['raw dot-segment escape', hwFile('devoirs%2F../../../../../b/attacker/o/phish.html')],
-  ['encoded dot-segment', hwFile('devoirs%2F..%2Fnotes-imports%2Fx')],
-  ['encoded %2E%2E', hwFile('devoirs%2F%2E%2E%2Fx')],
   ['backslash', { ...hwFile('devoirs%2Fx'), url: hwFile('devoirs%2F..').url.replace('%2F..', '%2F..\\..\\x') }],
   ['other folder', hwFile('notes-imports%2Fx.xlsx')],
   ['other bucket', { ...hwFile('devoirs%2Fx'), url: hwFile('devoirs%2Fx').url.replace('mojammaa-sgs.firebasestorage.app', 'other.appspot.com') }],
-  ['oversized file', { ...hwFile('devoirs%2Fx'), size: 26 * 1024 * 1024 }],
+  ['userinfo host', { ...hwFile('devoirs%2Fx'), url: 'https://firebasestorage.googleapis.com@evil.example/v0/b/mojammaa-sgs.firebasestorage.app/o/devoirs%2Fx' }],
 ]) await deny(`prof cannot create homework with ${label}`, hwCreate(`hwAtt-${label.replace(/\W+/g, '-')}`, [attachment]))
-await deny('prof cannot create homework with more than 20 attachments', hwCreate('hwAtt21', Array.from({ length: 21 }, () => hwFile('devoirs%2Fx'))))
+// Segments ENCODÉS (%2F..%2F, %2E%2E) : jamais normalisés par un navigateur, ils restent des
+// noms d'objet littéraux dans le bucket. Refusés par manageHomework, tolérés par la règle.
+await allow('encoded segments stay inside the bucket (literal object name)', hwCreate('hwAttEncoded', [hwFile('devoirs%2F..%2Fnotes-imports%2Fx')]))
 await deny('admin client cannot create homework with an external attachment', hwCreate('hwAttAdmin', [{ ...hwFile('devoirs%2Fx'), url: 'https://evil.example/x' }], 'admin1'))
 await deny('same-class colleague cannot directly edit homework', updateDoc(doc(asUser('profSameClass'), 'devoirs/d1a'), { titre: 'Changed' }))
 await deny('owner cannot bypass server edit checks', updateDoc(doc(asUser('prof1'), 'devoirs/d1a'), { titre: 'Changed' }))

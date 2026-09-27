@@ -53,39 +53,35 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/devoirs/$(homeworkId))
         && get(/databases/$(database)/documents/devoirs/$(homeworkId)).data.teacherId == myUid();
     }
-    // Pièce jointe de devoir : fichier envoyé par l'app (bucket du projet, dossier
-    // devoirs/), chemin entièrement encodé (%2F) sans / \ # bruts ni segment . ou ..
-    // (sinon l'URL normalisée sort du bucket). Miroir de functions/homeworkManagement.js.
-    function safeHomeworkAttachment(a) {
-      return a is map && a.url is string && a.url.size() <= 2048
-        && a.url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?')
-        && !a.url.matches('.*/o/([^?]*%2F)?([.]|%2[Ee]){1,2}(%2F[^?]*)?([?].*)?')
-        && a.name is string && a.name.size() <= 200
-        && a.mime is string && a.mime.size() <= 100
-        && (!('size' in a) || (a.size is number && a.size >= 0 && a.size <= 26214400));
-    }
+    // Pièces jointes d'un devoir créé par une ANCIENNE installation (addDoc) : l'URL
+    // doit désigner un fichier de l'app (bucket du projet, dossier devoirs/). Sans « / »
+    // ni « \ » bruts après devoirs%2F, un navigateur ne peut normaliser aucun « .. » :
+    // l'URL reste dans le bucket (les %2F / %2E encodés sont des noms d'objet littéraux).
+    // Une seule expression régulière par pièce jointe : Firestore limite une requête à
+    // 1 000 expressions ; mesuré à plus de 60 pièces jointes, la limite est 20.
+    // Nom, type, taille et segments encodés sont vérifiés par manageHomework (nouveau parcours).
     function safeHomeworkAttachments(list) {
       return list is list && list.size() <= 20
-        && (list.size() <= 0 || safeHomeworkAttachment(list[0]))
-        && (list.size() <= 1 || safeHomeworkAttachment(list[1]))
-        && (list.size() <= 2 || safeHomeworkAttachment(list[2]))
-        && (list.size() <= 3 || safeHomeworkAttachment(list[3]))
-        && (list.size() <= 4 || safeHomeworkAttachment(list[4]))
-        && (list.size() <= 5 || safeHomeworkAttachment(list[5]))
-        && (list.size() <= 6 || safeHomeworkAttachment(list[6]))
-        && (list.size() <= 7 || safeHomeworkAttachment(list[7]))
-        && (list.size() <= 8 || safeHomeworkAttachment(list[8]))
-        && (list.size() <= 9 || safeHomeworkAttachment(list[9]))
-        && (list.size() <= 10 || safeHomeworkAttachment(list[10]))
-        && (list.size() <= 11 || safeHomeworkAttachment(list[11]))
-        && (list.size() <= 12 || safeHomeworkAttachment(list[12]))
-        && (list.size() <= 13 || safeHomeworkAttachment(list[13]))
-        && (list.size() <= 14 || safeHomeworkAttachment(list[14]))
-        && (list.size() <= 15 || safeHomeworkAttachment(list[15]))
-        && (list.size() <= 16 || safeHomeworkAttachment(list[16]))
-        && (list.size() <= 17 || safeHomeworkAttachment(list[17]))
-        && (list.size() <= 18 || safeHomeworkAttachment(list[18]))
-        && (list.size() <= 19 || safeHomeworkAttachment(list[19]));
+        && (list.size() <= 0 || list[0].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 1 || list[1].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 2 || list[2].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 3 || list[3].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 4 || list[4].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 5 || list[5].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 6 || list[6].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 7 || list[7].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 8 || list[8].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 9 || list[9].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 10 || list[10].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 11 || list[11].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 12 || list[12].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 13 || list[13].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 14 || list[14].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 15 || list[15].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 16 || list[16].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 17 || list[17].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 18 || list[18].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'))
+        && (list.size() <= 19 || list[19].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?'));
     }
     function validHomeworkSubmissionStatus(status) {
       return status in [
