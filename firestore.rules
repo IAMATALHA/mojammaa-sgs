@@ -49,6 +49,13 @@ service cloud.firestore {
     function teacherTeaches(classe) {
       return isTeacher() && (classe in myClasses() || classe == myDoc().classe);
     }
+    // Annonce de l'administration adressée à une classe que j'enseigne
+    // (lecture prof des diffusions de classe — cf. match /messages).
+    function adminAnnonceToMyClass() {
+      return teacherTeaches(resource.data.get('classe', ''))
+        && resource.data.get('fromRole', '') == 'admin'
+        && resource.data.get('category', '') == 'admin';
+    }
     function ownsHomework(homeworkId) {
       return exists(/databases/$(database)/documents/devoirs/$(homeworkId))
         && get(/databases/$(database)/documents/devoirs/$(homeworkId)).data.teacherId == myUid();
@@ -532,14 +539,14 @@ service cloud.firestore {
       // Lecture scopée (défense en profondeur — le filtre client par teacherId
       // ne suffit pas à empêcher l'énumération directe de la collection) :
       //   - admin  : tout
-      //   - prof   : SES devoirs (teacherId) OU une classe qu'il enseigne
-      //              → un prof ne lit plus les devoirs des autres profs/classes
+      //   - prof   : SES devoirs (teacherId) uniquement — un collègue de la
+      //              même classe ne lit pas les devoirs des autres profs
+      //              (décision Youssef, 27/09/2026)
       //   - responsable légal : classes exactes de guardianAccess, document
       //              serveur dérivé des liens eleves.parentUid (quel que soit
       //              son rôle principal).
       allow read: if isAdmin()
-        || (isTeacher() && (resource.data.teacherId == myUid()
-                            || teacherTeaches(resource.data.classeId)))
+        || (isTeacher() && resource.data.teacherId == myUid())
         || guardianHasClass(resource.data.classeId);
       // Les versions récentes créent via manageHomework (Admin SDK) ; cette règle
       // ne sert plus qu'aux anciennes installations (addDoc). Leurs pièces jointes
@@ -682,11 +689,12 @@ service cloud.firestore {
       allow read: if isSignedIn() && myUid() in resource.data.toIds;
       // Statement dédié pour la même raison que ci-dessus (requête
       // where('classe','==',X) du prof, cf. mojammaa-admin/Messages.tsx
-      // subscribeClasse) : un prof lit les diffusions ADRESSÉES à SA classe
-      // (champ `classe`, écrit par le compose web/app sur les messages
-      // toType:'user'/toIds ciblant une classe). Ne concerne QUE les profs —
-      // les parents reçoivent déjà ces messages via toIds (leur uid y figure).
-      allow read: if isSignedIn() && teacherTeaches(resource.data.get('classe', ''));
+      // subscribeClasse) : un prof lit les ANNONCES DE L'ADMINISTRATION à SA
+      // classe (champ `classe`, compose web admin : fromRole/category 'admin').
+      // Les devoirs et alertes des autres profs portent aussi `classe` mais
+      // visent les parents : un collègue ne les lit pas (27/09/2026). Ne
+      // concerne QUE les profs — les parents reçoivent ces messages via toIds.
+      allow read: if isSignedIn() && adminAnnonceToMyClass();
       allow read: if isSignedIn() && (
         resource.data.fromId == myUid()
         || (resource.data.toIds is list && myUid() in resource.data.toIds)
@@ -694,7 +702,7 @@ service cloud.firestore {
         || (resource.data.toType == 'parents'
             && hasGuardianAccess())
         || (resource.data.toType == 'teachers' && isTeacher())
-        || teacherTeaches(resource.data.get('classe', ''))
+        || adminAnnonceToMyClass()
         // Compat ancien format (champ `toId` string) — cf. messagesService legacy.
         || resource.data.toId == myUid()
         || resource.data.toId == 'all'

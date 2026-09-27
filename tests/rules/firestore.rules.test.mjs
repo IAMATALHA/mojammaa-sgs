@@ -150,6 +150,18 @@ await testEnv.withSecurityRulesDisabled(async (ctx) => {
     seed('messages/legacy1', {
       subject: 'Ancien', body: 'Format legacy', fromId: 'admin1', toId: 'prof1',
     }),
+    // Notification de devoir de prof1 aux parents de 1A (cf. manageHomework)
+    seed('messages/hw1a', {
+      type: 'announcement', category: 'homework', subject: 'Nouveau devoir', body: 'B',
+      fromId: 'prof1', fromRole: 'professeur', toType: 'user', toIds: ['parent1'],
+      classe: '1A', readBy: [], status: 'sent',
+    }),
+    // Annonce de l'administration à la classe 1A (compose web admin)
+    seed('messages/admin1a', {
+      type: 'announcement', category: 'admin', subject: 'Sortie', body: 'B',
+      fromId: 'admin1', fromRole: 'admin', toType: 'user', toIds: ['parent1'],
+      classe: '1A', readBy: [], status: 'sent',
+    }),
     seed('messages/parentsBroadcast', {
       type: 'announcement', subject: 'Parents', body: 'Information parents',
       fromId: 'admin1', fromRole: 'admin', toType: 'parents', toIds: [],
@@ -625,6 +637,33 @@ await deny('parent lit la note d\'un autre enfant',
   getDoc(doc(asUser('parent1'), 'notes/n2')))
 await allow('destinataire lit son message',
   getDoc(doc(asUser('prof1'), 'messages/m1')))
+
+console.log('\n── 10-bis. Cloison entre profs d\'une même classe (27/09/2026) ──')
+await allow('prof lit SON devoir',
+  getDoc(doc(asUser('prof1'), 'devoirs/d1a')))
+await allow('prof liste SES devoirs (teacherId + année)',
+  getDocs(query(collection(asUser('prof1'), 'devoirs'),
+    where('teacherId', '==', 'prof1'), where('academicYear', 'in', ['2025-2026']))))
+await deny('collègue de la même classe lit le devoir d\'un autre prof',
+  getDoc(doc(asUser('profSameClass'), 'devoirs/d1a')))
+await deny('collègue de la même classe liste les devoirs de la classe',
+  getDocs(query(collection(asUser('profSameClass'), 'devoirs'), where('classeId', '==', '1A'))))
+await allow('auteur lit sa notification de devoir',
+  getDoc(doc(asUser('prof1'), 'messages/hw1a')))
+await deny('collègue de la même classe lit la notification de devoir d\'un autre prof',
+  getDoc(doc(asUser('profSameClass'), 'messages/hw1a')))
+await deny('collègue interroge tous les messages tagués de sa classe',
+  getDocs(query(collection(asUser('profSameClass'), 'messages'), where('classe', '==', '1A'))))
+await allow('prof lit l\'annonce de l\'administration à SA classe',
+  getDoc(doc(asUser('profSameClass'), 'messages/admin1a')))
+await allow('prof interroge les annonces admin de SA classe (requête web)',
+  getDocs(query(collection(asUser('profSameClass'), 'messages'),
+    where('classe', '==', '1A'), where('fromRole', '==', 'admin'), where('category', '==', 'admin'))))
+await deny('prof interroge les annonces admin d\'une classe qu\'il n\'enseigne pas',
+  getDocs(query(collection(asUser('prof2'), 'messages'),
+    where('classe', '==', '1A'), where('fromRole', '==', 'admin'), where('category', '==', 'admin'))))
+await allow('parent destinataire lit toujours la notification de devoir',
+  getDoc(doc(asUser('parent1'), 'messages/hw1a')))
 
 console.log('\n── 10a. Devoirs : preuve parent et décision professeur ──')
 const homeworkProof = (eleveId = 'e1', parentUid = 'parent1') => ({
