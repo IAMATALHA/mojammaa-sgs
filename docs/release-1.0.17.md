@@ -140,6 +140,19 @@ Les familles vivent aussi à l'étranger : tout numéro international est accept
 - Retour arrière si l'écran de connexion pose problème — republier les groupes précédents :
   `eas update:republish --group d686c92b-f0e4-46e7-ad0c-af52956539cc` (1.0.17) puis, depuis `~/mojammaa-sgs-ota-1016`, `eas update:republish --group b1518218-ace9-4038-ac3a-47abacc68e96` (1.0.16).
 
+### Audit du 28/09 — correctifs F1 à F11 (28/09, nuit)
+
+Rapport : `docs/audit-2026-09-28.md`. Décision Youssef : un parent détaché perd l'accès à ses anciennes preuves (F8).
+
+- [x] Correctifs : mojammaa-sgs `0238f66` (rapport et scripts de preuve `6a41d84`), mojammaa-admin `69a700f` (F1).
+- [x] Tests : `tsc`, 162 tests Node, 10 fichiers émulateur (400 contrôles Firestore, Storage, transactions réelles F4, clé de libération F9, appel F10/F11), `expo-doctor` 18/18, exports Android et iOS, fonctions admin 65/65. Contre-épreuve : les nouveaux tests échouent sur l'ancien code ; les deux scripts d'audit affichent NOT REPRODUCED pour les 11 cas.
+- [x] Fonctions déployées par nom : default `registerPushDevice`, `onEleveGuardianAccessWritten`, `loadAttendance`, `submitAttendance` (mises à jour), `reconcileGuardianAccess` (tous les jours 03:30) et `onAbsenceRequestWritten` (créées) ; admin `parentPhoneLogin`. Logs après déploiement : aucune erreur ni avertissement.
+- [x] Règles Firestore `6199d811` et Storage `78e3257a` déployées ; `verify:rules` en phase.
+- [x] `guardian-access:dry-run` (lecture seule) : 7 responsables liés, 7 documents, 0 écart — le premier passage nocturne ne change rien.
+- Compatibilité : règles et fonctions acceptent les apps 1.0.16 et 1.0.17 actuelles (familles et profs ouvrent les fichiers par l'URL enregistrée ; seule l'affiche admin porte une pièce jointe de message ; aucune app ne modifie l'auteur ou la classe d'une ressource).
+- [ ] **OTA non publiée** (F2 champ téléphone, F5/F7 assainissement à la lecture, F9 déconnexion hors ligne, alertes d'activation, message « journée annulée ») : tester d'abord sur un vrai téléphone Android et iPhone — suppression d'un espace au milieu du numéro, activation (compte existant, numéro déjà pris), déconnexion en mode avion puis reconnexion. Puis runtime 1.0.17, puis 1.0.16 depuis `~/mojammaa-sgs-ota-1016` (cherry-pick de `0238f66`).
+- Retour arrière serveur : règles et fonctions nommées redéployées depuis `f5b919b` (mobile) et `65ac82f` (admin) ; supprimer `reconcileGuardianAccess` et `onAbsenceRequestWritten` si besoin.
+
 ## 8. Clôture
 
 - [x] Tag `v1.0.17` sur `7c47027` (commit buildé), poussé.
