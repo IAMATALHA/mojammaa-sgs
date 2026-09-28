@@ -332,18 +332,23 @@ service cloud.firestore {
       allow read:           if isSignedIn() && (uid == myUid() || isAdmin());
       // Créer/supprimer un compte : SUPERADMIN uniquement.
       allow create, delete: if isSuperAdmin();
+      // authPhoneE164 / parentLoginEnabled : capacité « connexion parent par
+      // téléphone », posée par redeemParentInvitation (mojammaa-admin) et lue
+      // par parentPhoneLogin. Écrite côté serveur uniquement (ou superadmin).
       allow update: if isSuperAdmin()
         // Admin : gère les profils (nom, classes, matière…) mais PAS le rôle,
         // ni la localisation de connexion (dérivée serveur, cf. Cloud Function
         // recordLoginLocation — jamais éditable, sinon perd toute valeur de preuve).
         || (isAdmin() &&
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'lastLoginLocation']))
+            !request.resource.data.diff(resource.data).affectedKeys()
+               .hasAny(['role', 'lastLoginLocation', 'authPhoneE164', 'parentLoginEnabled']))
         // Soi-même : son profil SAUF champs sensibles (anti auto-élévation) et
         // SAUF lastLoginLocation (sinon on pourrait se falsifier sa propre
         // localisation — seule la Cloud Function, via l'Admin SDK, l'écrit).
         || (isSignedIn() && uid == myUid() &&
             !request.resource.data.diff(resource.data).affectedKeys()
-               .hasAny(['role', 'classes', 'classe', 'matiere', 'cycle', 'uid', 'lastLoginLocation']));
+               .hasAny(['role', 'classes', 'classe', 'matiere', 'cycle', 'uid', 'lastLoginLocation',
+                        'authPhoneE164', 'parentLoginEnabled']));
     }
 
     // Document calculé côté serveur depuis `eleves.parentUid`. Un client ne

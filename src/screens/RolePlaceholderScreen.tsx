@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
+import { loginIdentifierLabel } from '../utils/parentIdentity'
 
 interface Props {
   title:    string
@@ -38,7 +39,7 @@ export default function RolePlaceholderScreen({ title, subtitle, tabKey }: Props
           </Text>
           {profile ? (
             <Text style={[styles.roleSub, { color: theme.textSoft }]}>
-              {profile.prenom} {profile.nom} · {profile.email}
+              {profile.prenom} {profile.nom} · {loginIdentifierLabel(profile)}
             </Text>
           ) : null}
         </View>

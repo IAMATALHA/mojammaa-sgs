@@ -19,8 +19,12 @@ export interface UserProfile {
   uid:     string
   nom:     string
   prenom:  string
-  email:   string
+  // Absent pour un parent activé sans e-mail : son identifiant de connexion
+  // est alors `authPhoneE164` (l'e-mail Auth technique n'est jamais stocké ici).
+  email?:  string
   telephone?: string
+  authPhoneE164?: string            // mobile de connexion, écrit par le serveur uniquement
+  parentLoginEnabled?: boolean      // idem : autorise la connexion par téléphone
   role:    RoleRaw
   classe?:  string                // legacy : classe unique (1 prof = 1 classe)
   classes?: string[]              // nouveau : tableau de classes attribuées
