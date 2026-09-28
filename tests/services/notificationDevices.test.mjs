@@ -6,7 +6,13 @@ const source = fs.readFileSync(new URL('../../src/services/NotificationService.t
 const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
 function harness() {
   const data = new Map(), calls = [], auth = { currentUser: { uid: 'parent' } }, i18n = { language: 'fr' }
-  let granted = true, registered = true, token = 'ExpoPushToken[test]', getToken = async () => ({ data: token })
+  let granted = true, registered = true, token = 'ExpoPushToken[test]', deviceToken = 'fcm-device-1', androidEmits = false
+  // Comme Android (PushTokenModule.kt) : chaque lecture du jeton émet aussi
+  // l'événement « nouveau jeton », même inchangé.
+  let getToken = async () => {
+    if (androidEmits && rotation) setTimeout(() => rotation({ type: 'android', data: deviceToken }), 0)
+    return { data: token }
+  }
   let foreground, rotation, channelEnabled = true, timeout = false, handler, rejection = null
   const notifications = {
     setNotificationHandler(value) { handler = value }, setNotificationChannelAsync: async () => {},
@@ -44,6 +50,8 @@ function harness() {
     foreground: () => foreground('active'), rotate: () => rotation(),
     blockChannel: () => { channelEnabled = false }, timeout: () => { timeout = true },
     reject: code => { rejection = code }, handler: () => handler,
+    androidEmits: () => { androidEmits = true }, deviceToken: value => { deviceToken = value },
+    emitDeviceToken: () => rotation({ type: 'android', data: deviceToken }),
   }
 }
 test('Stable installation survives token rotation and synchronizes the selected language', async () => {
@@ -142,4 +150,35 @@ test('Signed out: a late notification for the old account is not shown in the ap
   h.auth.currentUser = null
   const shown = await h.handler().handleNotification()
   assert.equal(shown.shouldShowBanner || shown.shouldShowList || shown.shouldPlaySound, false)
+})
+
+// ── 28/09 : boucle d'enregistrement sur Android (≈ 2 appels/s constatés en production) ──
+const settle = (ms = 40) => new Promise(resolve => setTimeout(resolve, ms))
+test('Android token event on every fetch no longer loops registrations', async () => {
+  const h = harness(); h.androidEmits()
+  await h.service.registerForPushNotificationsAsync('parent')
+  const stop = h.service.startNotificationSync('parent')
+  await settle(); await settle()
+  assert.equal(h.calls.length, 1, `registrations: ${h.calls.length}`)
+  h.foreground(); await settle()
+  assert.equal(h.calls.length, 1, 'an identical foreground refresh is not resent to the server')
+  stop()
+})
+test('A genuinely new device token still re-registers', async () => {
+  const h = harness(); h.androidEmits()
+  await h.service.registerForPushNotificationsAsync('parent')
+  const stop = h.service.startNotificationSync('parent')
+  await settle()
+  h.deviceToken('fcm-device-2'); h.token('ExpoPushToken[rotated]'); h.emitDeviceToken(); await settle()
+  assert.equal(h.calls.at(-1).token, 'ExpoPushToken[rotated]')
+  assert.equal(h.calls.length, 2)
+  stop()
+})
+test('After logout, the next login registers again even with the same token', async () => {
+  const h = harness()
+  await h.service.registerForPushNotificationsAsync('parent')
+  await h.service.clearPushToken('parent')
+  h.service.startNotificationSync('parent') // nouvelle session : stoppingUid remis à zéro
+  await h.service.registerForPushNotificationsAsync('parent')
+  assert.deepEqual(h.calls.map(c => c.enabled), [true, false, true])
 })
