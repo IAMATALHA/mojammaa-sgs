@@ -9,7 +9,9 @@ import type { AuthStackParamList } from '../../navigation/types'
 import { auth, functions } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
 import { signInParentWithPhone } from '../../services/parentAuthService'
-import { formatLoginPhone, formatLoginPhoneForConfirmation, normalizeLoginPhone } from '../../utils/parentIdentity'
+import PhoneNumberField from '../../components/PhoneNumberField'
+import { formatLoginPhone, formatLoginPhoneForConfirmation } from '../../utils/parentIdentity'
+import { emptyPhoneFieldValue, phoneFieldValidity, type PhoneFieldValue } from '../../utils/phoneCountries'
 
 type RedeemRequest = { code: string; prenom: string; nom: string; email?: string; password: string; telephone: string }
 type RedeemResponse = { loginEmail?: string; loginPhone?: string | null }
@@ -34,20 +36,21 @@ export default function ParentActivationScreen() {
   const [code, setCode] = useState('')
   const [prenom, setPrenom] = useState('')
   const [nom, setNom] = useState('')
-  const [telephone, setTelephone] = useState('')
+  const [phone, setPhone] = useState<PhoneFieldValue>(() => emptyPhoneFieldValue())
+  const [showPhoneErrors, setShowPhoneErrors] = useState(false)
   const [password, setPassword] = useState('')
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const activate = async (typedEmail: string, phone: string | null) => {
+  const activate = async (typedEmail: string, phoneE164: string | null) => {
     setLoading(true); setError('')
     try {
       const redeem = httpsCallable<RedeemRequest, RedeemResponse>(functions, 'redeemParentInvitation')
       const { data } = await redeem({
         code: code.trim(), prenom: prenom.trim(), nom: nom.trim(),
         ...(typedEmail ? { email: typedEmail } : {}),
-        password, telephone: telephone.trim(),
+        password, telephone: phoneE164 ?? '',
       })
       const loginEmail = data?.loginEmail || typedEmail
       if (!loginEmail) throw new Error('redeemParentInvitation: identifiant manquant')
@@ -64,10 +67,10 @@ export default function ParentActivationScreen() {
         // Compte déjà existant (autre enfant) : on s'y connecte puis on lui
         // ajoute ce code, par le même identifiant que celui qui a collisionné.
         try {
-          if (failure.reason === 'phone' && phone) await signInParentWithPhone(phone, password)
+          if (failure.reason === 'phone' && phoneE164) await signInParentWithPhone(phoneE164, password)
           else if (typedEmail) await signInWithEmailAndPassword(auth, typedEmail, password)
           else throw e
-          await httpsCallable(functions, 'linkParentInvitation')({ code: code.trim(), telephone: telephone.trim() })
+          await httpsCallable(functions, 'linkParentInvitation')({ code: code.trim(), telephone: phoneE164 ?? '' })
         } catch {
           setError(t('parentActivation.linkError'))
         }
@@ -90,20 +93,28 @@ export default function ParentActivationScreen() {
       return
     }
     const typedEmail = email.trim()
-    const phone = telephone.trim() ? normalizeLoginPhone(telephone) : null
-    if (!typedEmail && !telephone.trim()) { setError(t('parentActivation.phoneRequired')); return }
-    if (!typedEmail && !phone) { setError(t('parentActivation.invalidPhone')); return }
-    // Avec un e-mail, un numéro non reconnu reste un simple contact.
-    if (!phone) { void activate(typedEmail, null); return }
+    const validity = phoneFieldValidity(phone)
+    if (!typedEmail && validity.status === 'empty') {
+      setShowPhoneErrors(true)
+      setError(t('parentActivation.phoneRequired'))
+      return
+    }
+    // Numéro commencé mais incomplet ou invalide : le champ dit pourquoi.
+    if (validity.status !== 'empty' && validity.status !== 'valid') {
+      setShowPhoneErrors(true)
+      setError(t('parentActivation.invalidPhone'))
+      return
+    }
+    if (validity.status !== 'valid') { void activate(typedEmail, null); return }
+    const phoneE164 = validity.e164
     // Ce numéro devient un identifiant de connexion (et la destination d'un
-    // lien de réinitialisation) : une faute de frappe, ou un « 06… » français
-    // tapé sans +33 (donc lu comme marocain), se corrige ici.
+    // lien de réinitialisation) : dernier contrôle du pays et des chiffres.
     Alert.alert(
       t('parentActivation.confirmPhoneTitle'),
-      t('parentActivation.confirmPhoneBody', { phone: formatLoginPhoneForConfirmation(phone) }),
+      t('parentActivation.confirmPhoneBody', { phone: formatLoginPhoneForConfirmation(phoneE164) }),
       [
         { text: t('parentActivation.confirmPhoneEdit'), style: 'cancel' },
-        { text: t('parentActivation.confirmPhoneOk'), onPress: () => { void activate(typedEmail, phone) } },
+        { text: t('parentActivation.confirmPhoneOk'), onPress: () => { void activate(typedEmail, phoneE164) } },
       ],
     )
   }
@@ -118,7 +129,14 @@ export default function ParentActivationScreen() {
         <TextInput value={code} onChangeText={setCode} autoCapitalize="characters" accessibilityLabel={t('parentActivation.code')} placeholder={t('parentActivation.code')} placeholderTextColor={theme.textMuted} style={inputStyle} />
         <TextInput value={prenom} onChangeText={setPrenom} accessibilityLabel={t('parentActivation.firstName')} placeholder={t('parentActivation.firstName')} placeholderTextColor={theme.textMuted} style={inputStyle} />
         <TextInput value={nom} onChangeText={setNom} accessibilityLabel={t('parentActivation.lastName')} placeholder={t('parentActivation.lastName')} placeholderTextColor={theme.textMuted} style={inputStyle} />
-        <TextInput value={telephone} onChangeText={setTelephone} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" maxLength={40} accessibilityLabel={t('parentActivation.phone')} placeholder={t('parentActivation.phone')} placeholderTextColor={theme.textMuted} style={inputStyle} />
+        <PhoneNumberField
+          value={phone}
+          onChange={next => { setPhone(next); if (error) setError('') }}
+          label={t('parentActivation.phone')}
+          helper={t('parentActivation.phoneHelper')}
+          showValidationError={showPhoneErrors}
+          errorMessage={showPhoneErrors && !email.trim() && phoneFieldValidity(phone).status === 'empty' ? t('parentActivation.phoneRequired') : undefined}
+        />
         <TextInput value={password} onChangeText={setPassword} secureTextEntry autoComplete="new-password" textContentType="newPassword" accessibilityLabel={t('parentActivation.password')} placeholder={t('parentActivation.password')} placeholderTextColor={theme.textMuted} style={inputStyle} />
         <TextInput value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" accessibilityLabel={t('parentActivation.email')} placeholder={t('parentActivation.email')} placeholderTextColor={theme.textMuted} style={inputStyle} />
         <Pressable onPress={submit} disabled={loading} accessibilityRole="button" accessibilityState={{ disabled: loading, busy: loading }} style={[styles.button, { backgroundColor: theme.primary, opacity: loading ? 0.7 : 1 }]}>

@@ -1,9 +1,11 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View, Text, TextInput, Image, StyleSheet, useWindowDimensions,
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
-  Alert, Linking, TouchableOpacity, Pressable,
+  Alert, Linking, TouchableOpacity, Pressable, I18nManager,
 } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as Haptics from 'expo-haptics'
 import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated'
 import { MotiView } from 'moti'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -13,14 +15,25 @@ import { useTranslation } from 'react-i18next'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { AuthStackParamList } from '../../navigation/types'
-import { Globe, User, Lock } from 'lucide-react-native'
+import { Globe, Lock, Mail, Smartphone } from 'lucide-react-native'
 import { auth, functions } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
 import LanguagePicker from '../../components/LanguagePicker'
+import PhoneNumberField from '../../components/PhoneNumberField'
 import { signInParentWithPhone } from '../../services/parentAuthService'
 import { classifyParentLoginError, isEmailIdentifier, normalizeLoginPhone } from '../../utils/parentIdentity'
+import {
+  OTHER_COUNTRY_ISO, emptyPhoneFieldValue, findPhoneCountry, phoneFieldValidity, type PhoneFieldValue,
+} from '../../utils/phoneCountries'
 
 const PRIVACY_URL = 'https://mojammaa-sgs.web.app/privacy'
+
+// Mode et pays mémorisés : les parents retrouvent « Téléphone » et leur pays,
+// le personnel « E-mail », sans rien rechoisir.
+type LoginMode = 'phone' | 'email'
+const LOGIN_MODE_KEY = '@mojammaa/login/mode'
+const LOGIN_COUNTRY_KEY = '@mojammaa/login/phoneCountry'
+const LOGIN_MODES: LoginMode[] = ['phone', 'email']
 
 export default function LoginScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>()
@@ -28,14 +41,48 @@ export default function LoginScreen() {
   const { t } = useTranslation()
   const insets = useSafeAreaInsets()
   const { width: screenWidth } = useWindowDimensions()
-  // E-mail, ou numéro de téléphone pour les parents activés sans e-mail.
+  const [mode, setMode] = useState<LoginMode>('phone')
+  const [phone, setPhone] = useState<PhoneFieldValue>(() => emptyPhoneFieldValue())
+  const [showPhoneErrors, setShowPhoneErrors] = useState(false)
+  // Mode e-mail (un numéro tapé ici reste accepté, par compatibilité).
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [langOpen, setLangOpen] = useState(false)
+  const [segmentWidth, setSegmentWidth] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    AsyncStorage.multiGet([LOGIN_MODE_KEY, LOGIN_COUNTRY_KEY]).then(entries => {
+      if (cancelled) return
+      const saved = Object.fromEntries(entries)
+      const savedMode = saved[LOGIN_MODE_KEY]
+      if (savedMode === 'phone' || savedMode === 'email') setMode(savedMode)
+      const iso = saved[LOGIN_COUNTRY_KEY]
+      if (iso && (iso === OTHER_COUNTRY_ISO || findPhoneCountry(iso))) {
+        setPhone(current => (current.raw ? current : emptyPhoneFieldValue(iso)))
+      }
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  const switchMode = (next: LoginMode) => {
+    if (next === mode) return
+    setMode(next)
+    setError('')
+    setShowPhoneErrors(false)
+    Haptics.selectionAsync().catch(() => {})
+    AsyncStorage.setItem(LOGIN_MODE_KEY, next).catch(() => {})
+  }
 
   const forgotPassword = async () => {
+    // Pas d'e-mail derrière un numéro : c'est l'école qui envoie le lien de
+    // réinitialisation par WhatsApp (page Comptes du site d'administration).
+    if (mode === 'phone') {
+      Alert.alert(t('login.phoneResetTitle'), t('login.phoneResetBody'))
+      return
+    }
     const target = identifier.trim()
     if (!target) {
       setError(t('login.forgotPrompt'))
@@ -65,16 +112,12 @@ export default function LoginScreen() {
     })
   }
 
-  const submitWithPhone = async (target: string) => {
-    const phone = normalizeLoginPhone(target)
-    if (!phone) {
-      setError(t('login.errorInvalidPhone'))
-      return
-    }
+  const submitWithPhone = async (phoneE164: string, rememberIso?: string) => {
     setLoading(true)
     setError('')
     try {
-      await signInParentWithPhone(phone, password)
+      await signInParentWithPhone(phoneE164, password)
+      if (rememberIso) AsyncStorage.setItem(LOGIN_COUNTRY_KEY, rememberIso).catch(() => {})
     } catch (e) {
       const failure = classifyParentLoginError(e)
       if (failure === 'invalid-phone') setError(t('login.errorInvalidPhone'))
@@ -87,13 +130,34 @@ export default function LoginScreen() {
   }
 
   const submit = async () => {
+    if (mode === 'phone') {
+      const validity = phoneFieldValidity(phone)
+      if (validity.status !== 'valid') {
+        // Le champ affiche lui-même pourquoi le numéro n'est pas accepté.
+        setShowPhoneErrors(true)
+        setError(validity.status === 'empty' ? t('login.errorRequired') : '')
+        return
+      }
+      if (!password) {
+        setError(t('login.errorRequired'))
+        return
+      }
+      await submitWithPhone(validity.e164, phone.iso)
+      return
+    }
+
     const target = identifier.trim()
     if (!target || !password) {
       setError(t('login.errorRequired'))
       return
     }
     if (!isEmailIdentifier(target)) {
-      await submitWithPhone(target)
+      const phoneE164 = normalizeLoginPhone(target)
+      if (!phoneE164) {
+        setError(t('login.errorInvalidPhone'))
+        return
+      }
+      await submitWithPhone(phoneE164)
       return
     }
 
@@ -188,28 +252,70 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            {/* Identifiant (e-mail ou téléphone) with icon */}
-            <View style={[styles.inputWrap, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <TextInput
-                value={identifier}
-                onChangeText={setIdentifier}
-                accessibilityLabel={t('login.identifier')}
-                placeholder={t('login.identifier')}
-                placeholderTextColor={theme.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="username"
-                textContentType="username"
-                keyboardType="email-address"
-                style={[styles.input, { color: theme.text, fontFamily: theme.fonts.regular }]}
-              />
-              <View style={styles.inputIcon}>
-                <User size={18} color={theme.textMuted} strokeWidth={1.75} />
-              </View>
+            {/* Téléphone | E-mail — pastille coulissante */}
+            <View
+              accessibilityRole="tablist"
+              onLayout={e => setSegmentWidth(e.nativeEvent.layout.width)}
+              style={[styles.segment, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}
+            >
+              {segmentWidth > 0 ? (
+                <MotiView
+                  animate={{ translateX: (mode === 'email' ? 1 : 0) * ((segmentWidth - 8) / 2) * (I18nManager.isRTL ? -1 : 1) }}
+                  transition={{ type: 'spring', damping: 18, stiffness: 220 }}
+                  style={[styles.segmentThumb, { width: (segmentWidth - 8) / 2, backgroundColor: theme.card }, theme.shadows.xs]}
+                />
+              ) : null}
+              {LOGIN_MODES.map(item => {
+                const active = mode === item
+                const Icon = item === 'phone' ? Smartphone : Mail
+                return (
+                  <Pressable
+                    key={item}
+                    onPress={() => switchMode(item)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                    style={styles.segmentItem}
+                  >
+                    <Icon size={16} color={active ? theme.primary : theme.textMuted} strokeWidth={2} />
+                    <Text style={{ fontSize: 14, color: active ? theme.text : theme.textSoft, fontFamily: active ? theme.fonts.semibold : theme.fonts.medium }}>
+                      {t(item === 'phone' ? 'login.modePhone' : 'login.modeEmail')}
+                    </Text>
+                  </Pressable>
+                )
+              })}
             </View>
 
+            {mode === 'phone' ? (
+              <PhoneNumberField
+                value={phone}
+                onChange={next => { setPhone(next); if (error) setError('') }}
+                shape="pill"
+                showValidationError={showPhoneErrors}
+                returnKeyType="next"
+              />
+            ) : (
+              <View style={[styles.inputWrap, { marginBottom: 12, backgroundColor: theme.card, borderColor: theme.border }]}>
+                <TextInput
+                  value={identifier}
+                  onChangeText={setIdentifier}
+                  accessibilityLabel={t('login.email')}
+                  placeholder={t('login.email')}
+                  placeholderTextColor={theme.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                  textContentType="username"
+                  keyboardType="email-address"
+                  style={[styles.input, { color: theme.text, fontFamily: theme.fonts.regular }]}
+                />
+                <View style={styles.inputIcon}>
+                  <Mail size={18} color={theme.textMuted} strokeWidth={1.75} />
+                </View>
+              </View>
+            )}
+
             {/* Password input with icon */}
-            <View style={[styles.inputWrap, { marginTop: 12, backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={[styles.inputWrap, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <TextInput
                 value={password}
                 onChangeText={setPassword}
@@ -384,6 +490,29 @@ const styles = StyleSheet.create({
   formSection: {
     width: '100%',
     marginTop: 20,
+  },
+  segment: {
+    flexDirection: 'row',
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 4,
+    marginBottom: 16,
+  },
+  segmentThumb: {
+    position: 'absolute',
+    top: 4,
+    bottom: 4,
+    start: 4,
+    borderRadius: 24,
+  },
+  segmentItem: {
+    flex: 1,
+    height: 42,
+    borderRadius: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   inputWrap: {
     flexDirection: 'row',
