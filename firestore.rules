@@ -115,10 +115,28 @@ service cloud.firestore {
         && data.parentUid ==
           get(/databases/$(database)/documents/eleves/$(data.eleveId)).data.get('parentUid', '');
     }
+    // Preuve parent (audit 2026-09-28, F7) : uniquement un fichier déposé par
+    // l'app dans le dossier Storage du parent connecté
+    // (homework-submissions/{uid}/…), jamais une URL externe. Pas de « % »
+    // après le dossier : les noms de fichier de l'app sont déjà assainis, et
+    // un segment encodé ne peut pas remonter vers un autre dossier. name/mime
+    // doivent être des textes (l'app appelle mime.startsWith).
+    function validProofAttachment(item) {
+      return item is map
+        && item.url is string
+        && item.url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/homework-submissions%2F' + myUid() + '%2F[^/\\\\#?%]+([?][^#]*)?')
+        && item.name is string
+        && item.mime is string;
+    }
     function validParentHomeworkProof(data) {
       return data.attachments is list
         && data.attachments.size() > 0
         && data.attachments.size() <= 5
+        && validProofAttachment(data.attachments[0])
+        && (data.attachments.size() <= 1 || validProofAttachment(data.attachments[1]))
+        && (data.attachments.size() <= 2 || validProofAttachment(data.attachments[2]))
+        && (data.attachments.size() <= 3 || validProofAttachment(data.attachments[3]))
+        && (data.attachments.size() <= 4 || validProofAttachment(data.attachments[4]))
         && data.get('parentComment', '') is string
         && data.get('parentComment', '').size() <= 500
         && data.submittedAt == request.time
@@ -183,6 +201,24 @@ service cloud.firestore {
     // import de notes committent par chunks (src/utils/firestoreBatch.ts).
     function eleveIsInClasse(eleveId, classe) {
       return get(/databases/$(database)/documents/eleves/$(eleveId)).data.classe == classe;
+    }
+    // Pièces jointes d'un message (audit 2026-09-28, F5) : seule l'affiche
+    // d'annonce de l'administration en porte (1 aujourd'hui, 3 = marge), et
+    // uniquement depuis le dossier annonces/ de son auteur. Un parent pouvait
+    // envoyer `mime: 42` et faire planter la messagerie de l'administration.
+    function validAnnouncementAttachment(item) {
+      return item is map
+        && item.url is string
+        && item.url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/annonces%2F' + myUid() + '%2F[^/\\\\#?%]+([?][^#]*)?')
+        && item.name is string
+        && item.mime is string;
+    }
+    function validAnnouncementAttachments(list) {
+      return list is list
+        && list.size() <= 3
+        && (list.size() <= 0 || validAnnouncementAttachment(list[0]))
+        && (list.size() <= 1 || validAnnouncementAttachment(list[1]))
+        && (list.size() <= 2 || validAnnouncementAttachment(list[2]));
     }
     // Champs non modifiés par cet update (immutabilité sélective).
     function untouched(fields) {
@@ -594,6 +630,8 @@ service cloud.firestore {
             && request.resource.data.reviewedByUid == myUid()
             && request.resource.data.createdAt == request.time
             && request.resource.data.updatedAt == request.time
+            // Décision sans envoi du parent : aucune pièce jointe (F7).
+            && request.resource.data.get('attachments', []) == []
             && request.resource.data.keys().hasOnly([
               'homeworkId', 'eleveId', 'classeId', 'parentUid', 'teacherId',
               'status', 'attachments', 'parentComment', 'reviewedAt',
@@ -660,9 +698,13 @@ service cloud.firestore {
       allow create: if isAdmin()
         || (teacherTeaches(request.resource.data.classeId)
             && request.resource.data.teacherId == myUid());
+      // Le prof propriétaire ne change ni l'auteur ni la classe : sinon il
+      // publiait hors de ses classes (la règle create l'interdit) et attribuait
+      // son contenu à un collègue (audit 2026-09-28, F6).
       allow update: if isSignedIn()
         && (
-          resource.data.teacherId == myUid() || isAdmin()
+          isAdmin()
+          || (resource.data.teacherId == myUid() && untouched(['teacherId', 'classeId']))
           || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy'])
         )
         && selfAppendOnly('viewedBy');
@@ -737,6 +779,9 @@ service cloud.firestore {
         // Les alertes et leur suivi sont écrits exclusivement par le serveur.
         && !request.resource.data.keys().hasAny(['push', 'automation', 'appointmentId', 'appointmentAudience'])
         && !(request.resource.data.get('type', '') in ['attendance', 'behavior', 'appointment'])
+        && (!request.resource.data.keys().hasAny(['attachments'])
+            || (isAdmin() && !createsAsGuardian()
+                && validAnnouncementAttachments(request.resource.data.attachments)))
         && (!(isParent() || createsAsGuardian()) || parentMessageToAdministration())
         && (request.resource.data.toType == 'user'
             || (request.resource.data.toType == 'administration' && createsAsGuardian())
@@ -792,7 +837,9 @@ service cloud.firestore {
         && (
           (isAdmin() && untouched(['fromId', 'fromNom', 'fromRole',
                                    'toType', 'toIds', 'toId', 'classe',
-                                   'eleveId', 'createdAt', 'push', 'automation', 'type', 'appointmentId', 'appointmentAudience']))
+                                   'eleveId', 'createdAt', 'push', 'automation', 'type', 'appointmentId', 'appointmentAudience'])
+            && (untouched(['attachments'])
+                || validAnnouncementAttachments(request.resource.data.attachments)))
           || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy'])
         )
         && selfAppendOnly('readBy')

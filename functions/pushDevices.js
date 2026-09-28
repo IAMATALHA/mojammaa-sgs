@@ -1,6 +1,13 @@
-const { createHash } = require('node:crypto')
+const { createHash, randomBytes, timingSafeEqual } = require('node:crypto')
 const TOKEN_RE = /^(Expo|Exponent)PushToken\[[^\]]+\]$/
+const DEVICE_ID_RE = /^[A-Za-z0-9_-]{16,80}$/
 const tokenKey = token => createHash('sha256').update(token).digest('hex')
+// Clé de libération : remise au téléphone à chaque activation, seule son
+// empreinte est conservée. Elle permet au téléphone de couper ses
+// notifications APRÈS une déconnexion locale faite hors ligne, quand il n'a
+// plus de session Firebase (audit 2026-09-28, F9).
+const releaseKeyHash = key => createHash('sha256').update(`push-release:${key}`).digest('hex')
+const sameHash = (a, b) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 const languageOf = value => /^ar/.test(value || '') ? 'ar' : /^en/.test(value || '') ? 'en' : 'fr'
 const error = code => Object.assign(new Error(code), { code })
 
@@ -8,13 +15,15 @@ const error = code => Object.assign(new Error(code), { code })
 // same phone transfers that installation, without changing other phones.
 async function registerPushDevice(db, uid, input) {
   if (!uid) throw error('unauthenticated')
-  if (!/^[A-Za-z0-9_-]{16,80}$/.test(input?.deviceId || '')
+  if (!DEVICE_ID_RE.test(input?.deviceId || '')
     || !Number.isSafeInteger(input.revision) || input.revision < 1
     || typeof input.enabled !== 'boolean'
     || (input.enabled && !input.token)
     || (input.token !== undefined && (typeof input.token !== 'string' || !TOKEN_RE.test(input.token) || input.token.length > 300))
     || !['ios', 'android', 'web'].includes(input.platform)) throw error('invalid-argument')
   const ref = db.collection('pushDevices').doc(input.deviceId)
+  // Générée hors transaction : une relance de la transaction garde la même clé.
+  const releaseKey = input.enabled ? randomBytes(32).toString('base64url') : null
   const applied = await db.runTransaction(async tx => {
     const [user, previous] = await Promise.all([tx.get(db.collection('users').doc(uid)), tx.get(ref)])
     if (!user.exists && input.enabled) throw error('permission-denied')
@@ -31,7 +40,8 @@ async function registerPushDevice(db, uid, input) {
       tx.set(oldOwner.ref, { enabled: false, updatedAt: new Date() }, { merge: true })
     }
     const data = { uid, deviceId: input.deviceId, token, enabled: input.enabled, revision: input.revision,
-      language: languageOf(input.language), platform: input.platform, updatedAt: new Date() }
+      language: languageOf(input.language), platform: input.platform, updatedAt: new Date(),
+      releaseKeyHash: releaseKey ? releaseKeyHash(releaseKey) : old?.uid === uid ? old.releaseKeyHash ?? null : null }
     tx.set(ref, data)
     if (input.enabled || !tokenOwner?.exists || (tokenOwner.get('uid') === uid && tokenOwner.get('deviceId') === input.deviceId)) {
       tx.set(db.collection('pushTokenOwners').doc(tokenKey(token)), {
@@ -44,7 +54,38 @@ async function registerPushDevice(db, uid, input) {
     }
     return true
   })
-  return { enabled: input.enabled, applied }
+  return { enabled: input.enabled, applied, ...(applied && releaseKey ? { releaseKey } : {}) }
+}
+
+/**
+ * Coupure SANS session, par la clé de libération du téléphone (F9). Refusée
+ * si la clé ne correspond pas ; sans effet si le téléphone a été réenregistré
+ * depuis (révision plus récente, p. ex. un autre compte s'y est connecté).
+ */
+async function releasePushDevice(db, input) {
+  if (!DEVICE_ID_RE.test(input?.deviceId || '')
+    || !Number.isSafeInteger(input.revision) || input.revision < 1
+    || typeof input.releaseKey !== 'string' || input.releaseKey.length < 32 || input.releaseKey.length > 128) throw error('invalid-argument')
+  const ref = db.collection('pushDevices').doc(input.deviceId)
+  const applied = await db.runTransaction(async tx => {
+    const device = await tx.get(ref)
+    const old = device.data()
+    if (!old || typeof old.releaseKeyHash !== 'string'
+      || !sameHash(old.releaseKeyHash, releaseKeyHash(input.releaseKey))) throw error('permission-denied')
+    if ((old.revision || 0) >= input.revision) return false
+    const [owner, user] = await Promise.all([
+      old.token ? tx.get(db.collection('pushTokenOwners').doc(tokenKey(old.token))) : null,
+      tx.get(db.collection('users').doc(old.uid)),
+    ])
+    // Usage unique : la prochaine activation remet une nouvelle clé.
+    tx.update(ref, { enabled: false, revision: input.revision, releaseKeyHash: null, updatedAt: new Date() })
+    if (owner?.exists && owner.get('uid') === old.uid && owner.get('deviceId') === input.deviceId) {
+      tx.update(owner.ref, { enabled: false, updatedAt: new Date() })
+    }
+    if (user.exists && old.token && user.get('expoPushToken') === old.token) tx.update(user.ref, { expoPushToken: null })
+    return true
+  })
+  return { enabled: false, applied }
 }
 
 async function getPushTargets(db, uids) {
@@ -100,4 +141,4 @@ function messageCopy(message, language) {
   }
 }
 
-module.exports = { registerPushDevice, getPushTargets, invalidatePushTarget, messageCopy, languageOf }
+module.exports = { registerPushDevice, releasePushDevice, getPushTargets, invalidatePushTarget, messageCopy, languageOf }

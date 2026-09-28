@@ -114,6 +114,7 @@ export default function TeacherAttendanceScreen() {
         e?.message === 'attendance-scope-changed' ? 'offlineAttendance.scopeChanged'
           : e?.message === 'attendance-not-started' ? 'offlineAttendance.notStarted'
             : e?.message === 'attendance-expired' ? 'offlineAttendance.expired'
+              : e?.message === 'attendance-day-cancelled' ? 'offlineAttendance.dayCancelled'
               : ['functions/permission-denied', 'functions/failed-precondition', 'functions/invalid-argument'].includes(e?.code)
                 ? 'offlineAttendance.reloadFailed' : 'offlineAttendance.firstLoad'))
       else if (replaceDraft) setError(t('offlineAttendance.reloadFailed'))

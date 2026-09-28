@@ -627,6 +627,10 @@ await allow('destinataire lit son message',
   getDoc(doc(asUser('prof1'), 'messages/m1')))
 
 console.log('\n── 10a. Devoirs : preuve parent et décision professeur ──')
+const STORAGE_URL = 'https://firebasestorage.googleapis.com/v0/b/mojammaa-sgs.firebasestorage.app/o/'
+const proofFile = (name, uid = 'parent1', mime = 'image/jpeg') => ({
+  url: `${STORAGE_URL}homework-submissions%2F${uid}%2F1759000000000_${name}?alt=media&token=t`, name, mime,
+})
 const homeworkProof = (eleveId = 'e1', parentUid = 'parent1') => ({
   homeworkId: 'd1a',
   eleveId,
@@ -634,7 +638,7 @@ const homeworkProof = (eleveId = 'e1', parentUid = 'parent1') => ({
   parentUid,
   teacherId: 'prof1',
   status: 'submitted',
-  attachments: [{ url: 'https://example.test/proof.jpg', name: 'proof.jpg', mime: 'image/jpeg' }],
+  attachments: [proofFile('proof.jpg', parentUid)],
   parentComment: 'Travail joint',
   submittedAt: serverTimestamp(),
   submittedByUid: parentUid,
@@ -688,7 +692,7 @@ await allow('prof propriétaire valide le rendu',
 await deny('parent ne réécrit plus une décision validée',
   updateDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e1'), {
     status: 'submitted',
-    attachments: [{ url: 'https://example.test/new.jpg', name: 'new.jpg', mime: 'image/jpeg' }],
+    attachments: [proofFile('new.jpg')],
     parentComment: 'Nouvelle version',
     submittedAt: serverTimestamp(),
     submittedByUid: 'parent1',
@@ -705,7 +709,7 @@ await allow('prof marque un autre élève non rendu',
 await allow('parent répond à non rendu avec une preuve tardive à revalider',
   updateDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e3'), {
     status: 'submitted_late',
-    attachments: [{ url: 'https://example.test/late.pdf', name: 'late.pdf', mime: 'application/pdf' }],
+    attachments: [proofFile('late.pdf', 'parent1', 'application/pdf')],
     parentComment: 'Envoi tardif',
     submittedAt: serverTimestamp(),
     submittedByUid: 'parent1',
@@ -1578,9 +1582,100 @@ await testEnv.withSecurityRulesDisabled(async ctx => {
 })
 await deny('parent cannot submit work after cancellation', setDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e6'), {
   homeworkId: 'd1a', eleveId: 'e6', classeId: '1A', parentUid: 'parent1', teacherId: 'prof1',
-  status: 'submitted', attachments: [{ url: 'https://example.com/test.pdf', name: 'Test', mime: 'application/pdf' }],
+  status: 'submitted', attachments: [proofFile('test.pdf', 'parent1', 'application/pdf')],
   parentComment: '', submittedAt: serverTimestamp(), submittedByUid: 'parent1', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
 }))
+
+console.log('\n── 15. Audit 2026-09-28 : pièces jointes et ressources ──')
+await testEnv.withSecurityRulesDisabled(async ctx => {
+  await setDoc(doc(ctx.firestore(), 'devoirs/dAudit'), { classeId: '1A', teacherId: 'prof1', titre: 'Audit' })
+})
+const auditProof = attachments => setDoc(doc(asUser('parent1'), 'homeworkSubmissions/dAudit_e6'), {
+  ...homeworkProof('e6'), homeworkId: 'dAudit', attachments,
+})
+// F7 : uniquement les fichiers du parent connecté, dans son dossier Storage.
+for (const [label, attachments] of [
+  ['external URL (audit case)', [{ url: 'https://example.invalid/untrusted.jpg', name: 'a.jpg', mime: 'image/jpeg' }]],
+  ['external URL hidden at the last position (index 4)', [...Array.from({ length: 4 }, (_, i) => proofFile(`${i}.jpg`)), { ...proofFile('x.jpg'), url: 'https://evil.example/x.jpg' }]],
+  ["another parent's folder", [proofFile('a.jpg', 'parent2')]],
+  ['homework folder instead of proofs', [{ ...proofFile('a.jpg'), url: `${STORAGE_URL}devoirs%2Fprof1%2Fa.pdf?alt=media` }]],
+  ['encoded path escape', [{ ...proofFile('a.jpg'), url: `${STORAGE_URL}homework-submissions%2Fparent1%2F..%2F..%2Fdevoirs%2Fprof1%2Fa.pdf` }]],
+  ['other bucket', [{ ...proofFile('a.jpg'), url: proofFile('a.jpg').url.replace('mojammaa-sgs.firebasestorage.app', 'other.appspot.com') }]],
+  ['userinfo host', [{ ...proofFile('a.jpg'), url: proofFile('a.jpg').url.replace('https://firebasestorage.googleapis.com', 'https://firebasestorage.googleapis.com@evil.example') }]],
+  ['numeric mime', [{ ...proofFile('a.jpg'), mime: 42 }]],
+  ['object name', [{ ...proofFile('a.jpg'), name: { x: 1 } }]],
+  ['null entry', [null]],
+  ['6 attachments', Array.from({ length: 6 }, (_, i) => proofFile(`${i}.jpg`))],
+]) await deny(`F7 parent proof refused: ${label}`, auditProof(attachments))
+// Limite exacte (5) : doit tenir dans le budget de 1 000 expressions.
+await allow('F7 parent proof with 5 of his own uploaded files (limit)',
+  auditProof(Array.from({ length: 5 }, (_, i) => proofFile(`${i}_page.jpg`))))
+await deny('F7 teacher decision cannot carry attachments',
+  setDoc(doc(asUser('prof1'), 'homeworkSubmissions/dAudit_e5'), {
+    homeworkId: 'dAudit', eleveId: 'e5', classeId: '1A', parentUid: 'parent1', teacherId: 'prof1',
+    status: 'not_submitted', attachments: [proofFile('x.jpg')], parentComment: '',
+    reviewedAt: serverTimestamp(), reviewedByUid: 'prof1', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  }))
+await allow('F7 teacher decision without attachments still works',
+  setDoc(doc(asUser('prof1'), 'homeworkSubmissions/dAudit_e5'), {
+    homeworkId: 'dAudit', eleveId: 'e5', classeId: '1A', parentUid: 'parent1', teacherId: 'prof1',
+    status: 'not_submitted', attachments: [], parentComment: '',
+    reviewedAt: serverTimestamp(), reviewedByUid: 'prof1', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  }))
+
+// F5 : pièces jointes de message = affiches de l'administration uniquement.
+const poster = (name, uid = 'admin1', extra = {}) => ({
+  url: `${STORAGE_URL}annonces%2F${uid}%2F1759000000000_${name}?alt=media&token=t`, name, mime: 'image/jpeg', ...extra,
+})
+const adminAnnouncement = attachments => addDoc(collection(asUser('admin1'), 'messages'), {
+  type: 'announcement', subject: 'S', body: 'B', fromId: 'admin1', fromRole: 'admin',
+  toType: 'all', toIds: [], readBy: [], status: 'sent', attachments,
+})
+await deny('F5 parent message with a malformed attachment (audit case)',
+  addDoc(collection(asUser('parent1'), 'messages'), {
+    ...parentMessage, attachments: [{ url: 'https://example.invalid/a', name: 'a', mime: 42 }],
+  }))
+await deny('F5 parent message with a well-formed attachment (parents never attach)',
+  addDoc(collection(asUser('parent1'), 'messages'), { ...parentMessage, attachments: [poster('a.jpg', 'parent1')] }))
+await deny('F5 teacher message with an attachment',
+  addDoc(collection(asUser('prof1'), 'messages'), {
+    type: 'direct', subject: 'S', body: 'B', fromId: 'prof1', fromRole: 'professeur',
+    toType: 'user', toIds: ['parent1'], readBy: [], status: 'sent', attachments: [poster('a.jpg', 'prof1')],
+  }))
+await allow('F5 parent message without attachments still works',
+  addDoc(collection(asUser('parent1'), 'messages'), parentMessage))
+await allow('F5 admin announcement with 3 posters (limit)',
+  adminAnnouncement([poster('1.jpg'), poster('2.jpg'), poster('3.jpg')]))
+for (const [label, attachments] of [
+  ['4 posters', [poster('1.jpg'), poster('2.jpg'), poster('3.jpg'), poster('4.jpg')]],
+  ['numeric mime', [poster('1.jpg', 'admin1', { mime: 42 })]],
+  ['external URL', [{ ...poster('1.jpg'), url: 'https://evil.example/p.jpg' }]],
+  ["another admin's folder", [poster('1.jpg', 'admin2')]],
+  ['null entry', [null]],
+  ['not a list', 'x'],
+]) await deny(`F5 admin announcement refused: ${label}`, adminAnnouncement(attachments))
+await testEnv.withSecurityRulesDisabled(async ctx => {
+  await setDoc(doc(ctx.firestore(), 'messages/withPoster'), {
+    type: 'announcement', subject: 'S', body: 'B', fromId: 'admin1', fromRole: 'admin',
+    toType: 'all', toIds: [], readBy: [], status: 'sent', attachments: [poster('1.jpg')],
+  })
+})
+await allow('F5 admin edits the body of an announcement with a poster',
+  updateDoc(doc(asUser('admin1'), 'messages/withPoster'), { body: 'Corrigé' }))
+await deny('F5 admin cannot replace a poster with a malformed attachment',
+  updateDoc(doc(asUser('admin1'), 'messages/withPoster'), { attachments: [{ url: 'x', name: 'a', mime: 42 }] }))
+
+// F6 : le prof propriétaire ne déplace pas sa ressource hors de ses classes.
+await deny('F6 owner moves a resource to a class he does not teach (audit case)',
+  updateDoc(doc(asUser('prof2'), 'ressources/res2b'), { classeId: '1A' }))
+await deny('F6 owner reassigns a resource to a colleague',
+  updateDoc(doc(asUser('prof2'), 'ressources/res2b'), { teacherId: 'prof1' }))
+await allow('F6 owner still edits the title of his resource',
+  updateDoc(doc(asUser('prof2'), 'ressources/res2b'), { titre: 'Ressource 2B v2' }))
+await allow('F6 admin can still reassign a resource',
+  updateDoc(doc(asUser('admin1'), 'ressources/res2b'), { classeId: '2B', teacherId: 'prof2' }))
+await allow('F6 a family still records its view (viewedBy self-append)',
+  updateDoc(doc(asUser('parent2'), 'ressources/res2b'), { viewedBy: arrayUnion('parent2') }))
 
 console.log('\n── 14. Connexion parent par téléphone : champs serveur ──')
 await deny('parent ne s’attribue pas un mobile de connexion',

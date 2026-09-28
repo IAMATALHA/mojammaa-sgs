@@ -30,7 +30,10 @@ import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { auth, db } from '../config/firebase'
 import type { RoleLogic, RoleRaw, UserProfile } from '../types'
-import { registerForPushNotificationsAsync, clearPushToken, recordLogin, startNotificationSync } from '../services/NotificationService'
+import {
+  registerForPushNotificationsAsync, recordLogin, retryPendingPushRelease,
+  startNotificationSync, startPendingPushReleaseRetry, stopPushForLogout,
+} from '../services/NotificationService'
 import { recordLoginDevice } from '../services/loginAudit'
 
 function rawToLogic(raw: RoleRaw | string | undefined): RoleLogic {
@@ -176,13 +179,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { stopPush(); stopAttendance() }
   }, [profile?.uid, profile?.role])
 
+  useEffect(() => startPendingPushReleaseRetry(), [])
+
   const logout = useCallback(async () => {
     // Clear the push token first so the next user on this device does not
-    // receive notifications meant for the previous account.
+    // receive notifications meant for the previous account. Offline, logout
+    // still ends the session; the push cleanup is retried without a session
+    // (audit 2026-09-28, F9).
     if (user?.uid) {
-      await clearPushToken(user.uid)
+      await stopPushForLogout(user.uid)
     }
     await signOut(auth)
+    void retryPendingPushRelease()
   }, [user])
 
   // Relecture manuelle ponctuelle (one-shot). Le profil est déjà suivi en

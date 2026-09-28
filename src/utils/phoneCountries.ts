@@ -146,6 +146,21 @@ function splitGroups(digits: string, groups: number[]): string {
 }
 
 /** Affichage pendant la saisie : « 06 12 34 56 78 », « 0470 12 34 56 »… */
+/**
+ * Chiffres nationaux après une saisie dans le champ mis en forme `display`.
+ * Effacer un espace de mise en forme retire le chiffre qui le précède À CET
+ * ENDROIT : l'ancien calcul retirait toujours le dernier chiffre du numéro,
+ * même quand on corrigeait le début (audit 2026-09-28, F2).
+ */
+export function digitsAfterFormattedEdit(previousDigits: string, display: string, text: string): string {
+  const digits = digitsOnly(text)
+  if (digits !== previousDigits || text.length >= display.length) return digits
+  let at = 0
+  while (at < text.length && text[at] === display[at]) at++
+  const before = digitsOnly(display.slice(0, at)).length
+  return before === 0 ? digits : digits.slice(0, before - 1) + digits.slice(before)
+}
+
 export function formatNationalInput(country: PhoneCountry, raw: string): string {
   const digits = digitsOnly(raw)
   if (country.trunkZero && digits.startsWith('0')) {

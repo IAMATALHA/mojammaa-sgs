@@ -22,13 +22,29 @@ service firebase.storage {
       ).data.role;
     }
 
+    // Dépôt de supports pédagogiques : compte enseignant ou administration.
+    // Posséder le sous-dossier ne suffit pas (audit 2026-09-28, F3).
+    function isStaffUploader() {
+      return currentRole() in ['professeur', 'admin'];
+    }
+
+    // Lecture SDK d'un support pédagogique : l'auteur et l'administration
+    // seulement (get ET list). Les familles et le prof ouvrent le fichier par
+    // l'URL signée enregistrée dans le devoir/la ressource, que les règles
+    // Firestore réservent déjà au bon public. Sans cette borne, un collègue
+    // exclu du devoir, ou n'importe quel parent, listait le dossier d'un prof
+    // et téléchargeait ses pièces jointes (audit 2026-09-28, F3).
+    function readsOwnFolderOrAdmin(ownerUid) {
+      return request.auth != null
+        && (request.auth.uid == ownerUid || currentRole() == 'admin');
+    }
+
     // Devoirs : seul le prof propriétaire peut écrire dans son sous-dossier.
-    // Lecture autorisée à tout utilisateur authentifié (parents, élèves,
-    // autres profs, admin) — sinon le parent ne pourrait pas télécharger
-    // la pièce jointe du devoir de son enfant.
+    // Lecture SDK : voir readsOwnFolderOrAdmin (les familles passent par l'URL).
     match /devoirs/{teacherUid}/{filename} {
-      allow read:  if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == teacherUid && isAllowedDoc();
+      allow read:  if readsOwnFolderOrAdmin(teacherUid);
+      allow write: if request.auth != null && request.auth.uid == teacherUid
+        && isAllowedDoc() && isStaffUploader();
     }
 
     // Preuves de devoir envoyées par les parents. L'écriture est limitée au
@@ -49,9 +65,15 @@ service firebase.storage {
           /databases/(default)/documents/devoirs/$(request.resource.metadata.homeworkId)
         ).data.classeId;
 
+      // Parent : seulement tant qu'il est ENCORE le responsable de l'élève.
+      // Un parent détaché perd l'accès à ses anciennes preuves (décision
+      // Youssef, audit 2026-09-28, F8).
       allow read: if request.auth != null
         && resource.metadata.parentUid == parentUid
-        && (request.auth.uid == parentUid
+        && ((request.auth.uid == parentUid
+             && firestore.get(
+               /databases/(default)/documents/eleves/$(resource.metadata.eleveId)
+             ).data.parentUid == parentUid)
             || currentRole() == 'admin'
             || firestore.get(
               /databases/(default)/documents/devoirs/$(resource.metadata.homeworkId)
@@ -65,10 +87,12 @@ service firebase.storage {
     }
 
     // Ressources pédagogiques : même modèle que les devoirs — le prof
-    // propriétaire écrit dans son sous-dossier, tout connecté peut lire.
+    // propriétaire écrit dans son sous-dossier ; lecture SDK bornée comme les
+    // devoirs, le public autorisé passe par l'URL de la ressource.
     match /ressources/{teacherUid}/{filename} {
-      allow read:  if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == teacherUid && isAllowedDoc();
+      allow read:  if readsOwnFolderOrAdmin(teacherUid);
+      allow write: if request.auth != null && request.auth.uid == teacherUid
+        && isAllowedDoc() && isStaffUploader();
     }
 
     // Affiches d'annonces (admin uniquement). Le rôle est vérifié via

@@ -7,7 +7,7 @@ import {
   assertSucceeds,
 } from '@firebase/rules-unit-testing'
 import { doc, setDoc } from 'firebase/firestore'
-import { getBytes, ref, uploadBytes } from 'firebase/storage'
+import { getBytes, listAll, ref, uploadBytes } from 'firebase/storage'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const testEnv = await initializeTestEnvironment({
@@ -58,5 +58,36 @@ await assertSucceeds(getBytes(ref(storageAs('admin1'), proofPath)))
 await assertFails(getBytes(ref(storageAs('prof2'), proofPath)))
 await assertFails(getBytes(ref(testEnv.unauthenticatedContext().storage(), proofPath)))
 
-console.log('storage homework proofs: 4 accès autorisés/refusés validés')
+// ── Audit 2026-09-28, F3 : supports pédagogiques (devoirs/, ressources/) ──
+const pdf = { contentType: 'application/pdf' }
+const homeworkFile = 'devoirs/prof1/1759000000000_consigne.pdf'
+const resourceFile = 'ressources/prof1/1759000000000_cours.pdf'
+await assertSucceeds(uploadBytes(ref(storageAs('prof1'), homeworkFile), bytes, pdf))
+await assertSucceeds(uploadBytes(ref(storageAs('prof1'), resourceFile), bytes, pdf))
+await assertFails(uploadBytes(ref(storageAs('parent1'), 'devoirs/parent1/x.pdf'), bytes, pdf))
+await assertFails(uploadBytes(ref(storageAs('parent1'), 'ressources/parent1/x.pdf'), bytes, pdf))
+await assertSucceeds(uploadBytes(ref(storageAs('admin1'), 'devoirs/admin1/x.pdf'), bytes, pdf))
+for (const path of [homeworkFile, resourceFile]) {
+  await assertSucceeds(getBytes(ref(storageAs('prof1'), path)))
+  await assertSucceeds(getBytes(ref(storageAs('admin1'), path)))
+  await assertFails(getBytes(ref(storageAs('prof2'), path)))   // collègue exclu (cas de l'audit)
+  await assertFails(getBytes(ref(storageAs('parent2'), path)))
+  await assertFails(getBytes(ref(testEnv.unauthenticatedContext().storage(), path)))
+}
+await assertSucceeds(listAll(ref(storageAs('prof1'), 'devoirs/prof1')))
+await assertSucceeds(listAll(ref(storageAs('admin1'), 'devoirs/prof1')))
+await assertFails(listAll(ref(storageAs('parent2'), 'devoirs/prof1')))   // cas de l'audit
+await assertFails(listAll(ref(storageAs('prof2'), 'devoirs/prof1')))
+await assertFails(listAll(ref(storageAs('parent2'), 'ressources/prof1')))
+
+// ── Audit 2026-09-28, F8 : un parent détaché perd l'accès à ses preuves ──
+await testEnv.withSecurityRulesDisabled(async ctx => {
+  await setDoc(doc(ctx.firestore(), 'eleves/e1'), { classe: '1A', parentUid: 'parent2' })
+})
+await assertFails(getBytes(ref(storageAs('parent1'), proofPath)))
+await assertSucceeds(getBytes(ref(storageAs('prof1'), proofPath)))
+await assertSucceeds(getBytes(ref(storageAs('admin1'), proofPath)))
+await assertFails(getBytes(ref(storageAs('parent2'), proofPath)))   // le nouveau parent non plus
+
+console.log('storage homework proofs + audit 2026-09-28 (F3, F8): accès autorisés/refusés validés')
 await testEnv.cleanup()

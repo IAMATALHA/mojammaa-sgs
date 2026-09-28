@@ -1,4 +1,5 @@
 const { createHash } = require('node:crypto')
+const { FieldValue } = require('firebase-admin/firestore')
 const { attendanceVersion, lessonKey, sessionCode } = require('./lib/attendanceProtocol')
 const { moroccoParts } = require('./lib/moroccoTime')
 const fail = (code, message) => { throw Object.assign(new Error(message || code), { code }) }
@@ -22,10 +23,18 @@ function validateLesson(uid, input, user, schedule, now) {
   return { slot, seance: sessionCode(slot) }
 }
 
+// Journée marquée « cours annulés » dans le calendrier de l'école : aucun
+// appel ne peut y être chargé ni enregistré (audit 2026-09-28, F10). Vérifié
+// APRÈS validateLesson : un prof hors classe reste refusé pour ce motif-là.
+function assertLessonDayOpen(calendar) {
+  if (calendar.exists && calendar.get('annuleCours') === true) fail('failed-precondition', 'attendance-day-cancelled')
+}
+
 async function loadAttendance(db, uid, input, now = new Date()) {
   if (!uid) fail('unauthenticated')
   const [user, schedule] = await Promise.all([db.doc(`users/${uid}`).get(), db.doc(`schedules/${uid}`).get()])
   const { slot, seance } = validateLesson(uid, input, user.data(), schedule.data(), now)
+  assertLessonDayOpen(await db.doc(`joursScolaires/${input.date}`).get())
   const [children, records] = await Promise.all([
     db.collection('eleves').where('classe', '==', slot.classe).get(),
     db.collection('absences').where('classe', '==', slot.classe).where('date', '==', input.date).where('seance', '==', seance).get(),
@@ -58,6 +67,9 @@ async function submitAttendance(db, uid, input, now = new Date()) {
       return { saved: true, replayed: true, versions: previous.get('versions') }
     }
     const { slot, seance } = validateLesson(uid, input, user.data(), schedule.data(), now)
+    // Relu dans la transaction : un brouillon hors ligne préparé avant
+    // l'annulation de la journée est refusé lui aussi.
+    assertLessonDayOpen(await tx.get(db.doc(`joursScolaires/${input.date}`)))
     const children = await tx.get(db.collection('eleves').where('classe', '==', slot.classe))
     const active = children.docs.filter(d => d.get('active') !== false)
     if (active.length !== input.rows.length || active.some(d => !input.rows.some(r => r.id === d.id))) fail('failed-precondition', 'attendance-roster-changed')
@@ -73,15 +85,20 @@ async function submitAttendance(db, uid, input, now = new Date()) {
     input.rows.forEach((row, i) => {
       const child = active.find(d => d.id === row.id)
       const declaration = requests.docs.find(d => d.get('eleveId') === row.id && d.get('status') !== 'declined')
+      const justifiedBy = row.status === 'absent' ? declaration : null
       const values = {
         eleveId: row.id, eleveNom: child.get('nom') || '', elevePrenom: child.get('prenom') || '',
         classe: slot.classe, date: input.date, seance, statut: row.status, professorId: uid,
         createdAt: now, updatedAt: now, attendanceVersion: input.operationId,
         academicYear: `${start}-${start + 1}`, semestre: month >= 9 || month <= 1 ? 'S1' : 'S2', monthKey: input.date.slice(0, 7),
-        ...(row.status === 'absent' && declaration ? { justified: true, raison: declaration.get('reason') || '' } : {}),
+        ...(justifiedBy ? { justified: true, raison: justifiedBy.get('reason') || '', justificationRequestId: justifiedBy.id } : {}),
       }
-      versions[row.id] = attendanceVersion({ ...records[i].data(), ...values })
-      tx.set(refs[i], values, { merge: true })
+      // Seule une déclaration active justifie une absence. Sans elle (refusée,
+      // retirée, élève présent ou en retard), l'ancienne justification est
+      // effacée : l'écriture fusionnée la conservait (audit 2026-09-28, F11).
+      const { justified: _j, raison: _r, justificationRequestId: _k, ...unjustified } = records[i].data() || {}
+      versions[row.id] = attendanceVersion(justifiedBy ? { ...records[i].data(), ...values } : { ...unjustified, ...values })
+      tx.set(refs[i], justifiedBy ? values : { ...values, ...JUSTIFICATION_CLEARED }, { merge: true })
       if (row.status === 'absent' && declaration?.get('status') === 'pending') {
         tx.update(declaration.ref, { status: 'approved', decidedBy: uid, decidedAt: now })
       }
@@ -90,4 +107,29 @@ async function submitAttendance(db, uid, input, now = new Date()) {
     return { saved: true, replayed: false, versions }
   })
 }
-module.exports = { loadAttendance, submitAttendance, validateLesson }
+const JUSTIFICATION_CLEARED = Object.freeze({
+  justified: FieldValue.delete(), raison: FieldValue.delete(), justificationRequestId: FieldValue.delete(),
+})
+
+/**
+ * Une déclaration refusée ou retirée ne justifie plus rien : retire la
+ * justification automatique des absences de l'élève ce jour-là, sauf si une
+ * autre déclaration active la couvre encore (F11). Appelé par le trigger
+ * absenceRequests ; la justification ne vient que des déclarations.
+ */
+async function clearStaleJustification(db, { eleveId, date }, now = new Date()) {
+  if (typeof eleveId !== 'string' || !eleveId || eleveId.includes('/')
+    || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return 0
+  return db.runTransaction(async tx => {
+    const [requests, records] = await Promise.all([
+      tx.get(db.collection('absenceRequests').where('eleveId', '==', eleveId).where('date', '==', date)),
+      tx.get(db.collection('absences').where('eleveId', '==', eleveId).where('date', '==', date)),
+    ])
+    if (requests.docs.some(d => d.get('status') !== 'declined')) return 0
+    const stale = records.docs.filter(d => d.get('justified') === true)
+    stale.forEach(d => tx.update(d.ref, { ...JUSTIFICATION_CLEARED, updatedAt: now }))
+    return stale.length
+  })
+}
+
+module.exports = { loadAttendance, submitAttendance, validateLesson, clearStaleJustification }

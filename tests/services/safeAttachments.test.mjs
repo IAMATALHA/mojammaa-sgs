@@ -9,7 +9,7 @@ const module = { exports: {} }
 new Function('require', 'module', 'exports', output)(() => ({}), module, module.exports)
 const { safeAttachments } = module.exports
 
-const file = { url: 'https://firebasestorage.googleapis.com/v0/b/b/o/devoirs%2Fx', name: 'consigne.pdf', mime: 'application/pdf', size: 1024 }
+const file = { url: 'https://firebasestorage.googleapis.com/v0/b/mojammaa-sgs.firebasestorage.app/o/devoirs%2Fx?alt=media&token=t', name: 'consigne.pdf', mime: 'application/pdf', size: 1024 }
 
 test('valid attachments are kept unchanged', () => {
   assert.deepEqual(safeAttachments([file]), [file])
@@ -33,4 +33,15 @@ test('an invalid size is ignored, the attachment kept', () => {
 
 test('non-array values give an empty list', () => {
   for (const raw of [undefined, null, 'x', 42, { 0: file }]) assert.deepEqual(safeAttachments(raw), [])
+})
+
+test('only files from the app bucket are shown or opened (audit 2026-09-28, F7)', () => {
+  for (const url of [
+    'https://example.invalid/untrusted.jpg',                                  // cas de l'audit
+    'https://firebasestorage.googleapis.com/v0/b/other.appspot.com/o/x',       // autre bucket
+    'https://firebasestorage.googleapis.com@evil.example/v0/b/mojammaa-sgs.firebasestorage.app/o/x',
+    'http://firebasestorage.googleapis.com/v0/b/mojammaa-sgs.firebasestorage.app/o/x',
+    'javascript:alert(1)',
+    '',
+  ]) assert.deepEqual(safeAttachments([{ ...file, url }, file]), [file], url)
 })

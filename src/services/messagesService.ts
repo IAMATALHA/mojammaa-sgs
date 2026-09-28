@@ -28,14 +28,16 @@ import {
   collection, query, where, addDoc, onSnapshot, updateDoc, doc,
   serverTimestamp, getDocs, arrayUnion, limit,
   type Unsubscribe, type Query, type DocumentData, type Timestamp,
+  type QueryDocumentSnapshot, type QuerySnapshot,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
-import { toDoc, toDocs } from './firestore'
+import { toDoc } from './firestore'
 import { isActiveEleve, type EleveDoc } from './elevesService'
 import { getParentsDirectory, getStaffDirectory } from './directoryService'
 import type { UserProfile } from '../types'
 import type { Attachment } from './StorageService'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
+import { safeAttachments } from '../utils/attachments'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../config/firebase'
 
@@ -97,12 +99,24 @@ export function subscribeDeliveryIssues(
   return onSnapshot(query(collection(db, 'messages'),
     where('push.status', 'in', ['no_recipient', 'no_device', 'failed', 'partial_failure', 'blocked', 'retrying']),
     limit(100),
-  ), snap => onChange(toDocs<MessageDoc>(snap).sort(
+  ), snap => onChange(readMessages(snap).sort(
     (a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0),
   )), err => onError?.(err))
 }
 
 const COL = 'messages'
+
+/**
+ * Lecture d'un message : pièces jointes assainies ici, une seule fois, pour
+ * tous les écrans (admin, prof, parent, accueil). Un parent pouvait écrire
+ * `mime: 42` et faire planter la messagerie de l'administration (audit
+ * 2026-09-28, F5) ; les règles le refusent désormais, ceci couvre l'historique.
+ */
+function readMessage(snap: QueryDocumentSnapshot<DocumentData>): MessageDoc {
+  const message = toDoc<MessageDoc>(snap)
+  return message.attachments === undefined ? message : { ...message, attachments: safeAttachments(message.attachments) }
+}
+const readMessages = (snap: QuerySnapshot<DocumentData>) => snap.docs.map(readMessage)
 
 // ── Create ───────────────────────────────────────────────────────────────
 
@@ -166,7 +180,7 @@ export function subscribeMessages(
     buckets.set(bucketId, new Map())
     return onSnapshot(q, snap => {
       const next = new Map<string, MessageDoc>()
-      snap.docs.forEach(d => next.set(d.id, toDoc<MessageDoc>(d)))
+      snap.docs.forEach(d => next.set(d.id, readMessage(d)))
       buckets.set(bucketId, next)
       apply()
     }, handleErr(label))
@@ -233,7 +247,7 @@ export function subscribeSentMessages(
       where('academicYear', '==', period.academicYear),
     ),
     snap => onChange(
-      toDocs<MessageDoc>(snap)
+      readMessages(snap)
         .filter(message => !(message.deletedBy || []).includes(uid))
         .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)),
     ),
@@ -257,7 +271,7 @@ export function subscribeTeacherMessages(
       where('academicYear', '==', period.academicYear),
     ),
     snap => onChange(
-      toDocs<MessageDoc>(snap)
+      readMessages(snap)
         .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)),
     ),
     err => onError?.(err),
