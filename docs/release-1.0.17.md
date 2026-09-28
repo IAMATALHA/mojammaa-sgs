@@ -119,6 +119,17 @@ Tant que des téléphones restent en 1.0.16, chaque correctif JavaScript est pub
 - [x] Tag `v1.0.16-final` déplacé en local de `c9fa1f4` sur `8dea223`. Reste : pousser le tag et la branche `hotfix/1.0.16-dossier-classe`.
 - [ ] Recette avec un vrai numéro : activation sans e-mail, reconnexion par le numéro, lien WhatsApp depuis Comptes puis nouveau mot de passe (confirme que la production accepte l'identifiant `@parents.mojammaa.invalid` à la création).
 
+### Numéros de connexion de tout pays (28/09, suite)
+
+Les familles vivent aussi à l'étranger : tout numéro international est accepté (indicatif obligatoire hors Maroc ; sans indicatif, numéro marocain 05/06/07). Confirmation à l'activation au format international avec drapeau.
+
+- [x] Serveur (mojammaa-admin `a248009`) : `redeemParentInvitation`, `parentPhoneLogin`, `createParentPasswordResetLink` redéployées par nom. Règles inchangées.
+- [x] Admin web (`vercel --prod`, mojammaa.com) : affichage des indicatifs dans Comptes, tickets, `formatWaTel` corrigé pour les numéros « +… »/« 00… » (messagerie comprise). Chunks servis vérifiés.
+- [x] OTA runtime 1.0.17 depuis `ec0cb3e` : groupe `d686c92b-f0e4-46e7-ad0c-af52956539cc`, Android `01a0e8c0-df17-7aed-80ac-af764688c065`, iOS `01a0e8c0-df17-7b6e-afa4-b303e4d3ff20`.
+- [x] OTA runtime 1.0.16 depuis `~/mojammaa-sgs-ota-1016`, `b40e1db` (= `8dea223` + cherry-pick de `ec0cb3e`, `tsc` et tests OK) : groupe `b1518218-ace9-4038-ac3a-47abacc68e96`, Android `01a0e8c1-efe9-71b9-a784-fabee05214a4`, iOS `01a0e8c1-efe9-7197-aea2-f0edf358f341`.
+- [x] Identifiants servis vérifiés (`eas update:list`) sur 1.0.16 et 1.0.17. Tag local `v1.0.16-final` déplacé sur `b40e1db`.
+- [ ] Recette : ajouter un numéro étranger (ex. +32 ou +33) au scénario ci-dessus.
+
 ## 8. Clôture
 
 - [x] Tag `v1.0.17` sur `7c47027` (commit buildé), poussé.
