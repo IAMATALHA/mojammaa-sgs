@@ -157,6 +157,18 @@ Rapport : `docs/audit-2026-09-28.md`. Décision Youssef : un parent détaché pe
 - Retour arrière de l'app — republier les groupes précédents : `eas update:republish --group 6cc9a417-851f-48be-93be-e13ea741d67e` (1.0.17) puis, depuis `~/mojammaa-sgs-ota-1016`, `eas update:republish --group 10741101-0d4e-44d4-9f87-8065b7c87441` (1.0.16). Le serveur déjà déployé reste compatible avec ces versions.
 - Retour arrière serveur : règles et fonctions nommées redéployées depuis `f5b919b` (mobile) et `65ac82f` (admin) ; supprimer `reconcileGuardianAccess` et `onAbsenceRequestWritten` si besoin.
 
+### Boucle d'enregistrement push Android + site d'administration (29/09, nuit)
+
+Constat dans Cloud Logging : `registerPushDevice` appelée ≈ 2 fois par seconde depuis un seul téléphone Android (521 appels en 25 min ; rafales de 100 à 400 par 10 min depuis au moins le 27/09). Cause : sur Android, chaque lecture du jeton émet aussi l'événement « nouveau jeton » (PushTokenModule.kt), que l'app traitait comme un changement.
+
+- [x] Correctif app `4d38d8c` : seul un jeton réellement nouveau relance l'enregistrement ; envoi identique (compte, jeton, langue) répété au plus toutes les 10 min. Contre-épreuve : le test de boucle ne se termine jamais sur l'ancien code. `tsc`, 165 tests.
+- [x] OTA runtime 1.0.17 depuis `4d38d8c` (arbre propre) : groupe `5d727455-7cee-489a-be14-b09030eeffc6`, Android `01a0ea56-3047-7009-851d-b8f29b2e968d`, iOS `01a0ea56-3047-7aed-82ef-ff16704f5d2e`.
+- [x] OTA runtime 1.0.16 depuis `~/mojammaa-sgs-ota-1016`, `1a1ec57` (= `bb23287` + cherry-pick de `4d38d8c`, sans conflit ; `tsc` OK, 165/165 avec `functions/node_modules` lié le temps du test) : groupe `c765d3e8-46e7-4434-bf48-3d3a5c70cbc6`, Android `01a0ea57-975c-784a-b2cf-909c4c54b7d9`, iOS `01a0ea57-975c-7b0a-beeb-2a6107716977`. Tag local `v1.0.16-final` → `1a1ec57`.
+- [x] Identifiants servis vérifiés (`eas update:list`) : `5d727455` sur 1.0.17, `c765d3e8` sur 1.0.16.
+- [ ] Vérifier dans Cloud Logging, après redémarrage des apps Android, que les rafales de `registerPushDevice` ont disparu.
+- Retour arrière de l'app : republier `6f81fc32` (1.0.17) et `31337519` (1.0.16).
+- [x] Site d'administration (mojammaa-admin `0dd1012`, `vercel --prod` depuis un arbre propre du commit — le dossier de travail garde des modifications locales sans rapport) : chargement après connexion sans cascade (`9f05cdf`), élèves et comptes lus une fois par session (`f4713d7`), tableau de bord « Aujourd'hui » à base de comptages (`0dd1012`). Fichiers servis par mojammaa.com vérifiés identiques au build testé (`index-CCSE_sF7.js`, `Dashboard-Du6JMMe7.js`). Retour arrière : `vercel rollback` vers le déploiement précédent.
+
 ## 8. Clôture
 
 - [x] Tag `v1.0.17` sur `7c47027` (commit buildé), poussé.
