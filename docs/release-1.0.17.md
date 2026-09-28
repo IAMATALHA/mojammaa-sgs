@@ -131,6 +131,15 @@ Les familles vivent aussi à l'étranger : tout numéro international est accept
 - [ ] Recette : ajouter un numéro étranger (ex. +32 ou +33) au scénario ci-dessus.
 - [x] Admin web (mojammaa-admin `65ac82f`, `vercel --prod`) : page Codes parents — bouton WhatsApp sous chaque fiche générée (numéro de la fiche élève, message bilingue avec code, lien Play Store et étapes), copie si pas de numéro, repère « envoyé ». Chunk servi vérifié.
 
+### Champ téléphone avec sélecteur de pays (28/09, soir)
+
+- [x] App (`cfe13f1`) : `PhoneNumberField` (drapeau + indicatif, recherche FR/EN/AR, 40 pays + « Autre pays », mise en forme par pays, états focus/erreur/valide) sur l'activation et la connexion ; connexion « Téléphone | E-mail » mémorisée. Serveur inchangé (E.164 = point fixe de `normalizeLoginPhone`, testé pour chaque pays).
+- [x] OTA runtime 1.0.17 depuis `cfe13f1` : groupe `6cc9a417-851f-48be-93be-e13ea741d67e`, Android `01a0e94f-100d-7b02-b1f2-2805a9cb6c58`, iOS `01a0e94f-100d-775a-921d-6349fadc244f`.
+- [x] OTA runtime 1.0.16 depuis `ec64300` (= `b40e1db` + cherry-pick de `cfe13f1`, `tsc` et tests OK) : groupe `10741101-0d4e-44d4-9f87-8065b7c87441`, Android `01a0e950-24cf-7fa5-aecf-b7281eb4c06b`, iOS `01a0e950-24cf-7815-91f8-993aba1688f5`. Tag local `v1.0.16-final` → `ec64300`.
+- [ ] **Publié sans rendu visuel vérifié** (pas de Xcode, émulateur Android bloqué : disque plein ; Expo Go iPhone en SDK 57). À contrôler en premier sur un vrai téléphone : écran de connexion (pastille, champ, sélecteur de pays) et activation.
+- Retour arrière si l'écran de connexion pose problème — republier les groupes précédents :
+  `eas update:republish --group d686c92b-f0e4-46e7-ad0c-af52956539cc` (1.0.17) puis, depuis `~/mojammaa-sgs-ota-1016`, `eas update:republish --group b1518218-ace9-4038-ac3a-47abacc68e96` (1.0.16).
+
 ## 8. Clôture
 
 - [x] Tag `v1.0.17` sur `7c47027` (commit buildé), poussé.
