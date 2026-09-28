@@ -15,12 +15,18 @@ function notificationLanguage(value: string): AppLanguage {
 }
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldSetBadge: false,
-  }),
+  // Aucun compte connecté : une notification encore adressée à l'ancien compte
+  // (coupure différée après une déconnexion hors ligne) ne s'affiche pas dans
+  // l'app (audit 2026-09-28, F9).
+  handleNotification: async () => {
+    const visible = !!auth.currentUser;
+    return {
+      shouldPlaySound: visible,
+      shouldShowBanner: visible,
+      shouldShowList: visible,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 function getExpoProjectId(): string | undefined {
@@ -72,17 +78,29 @@ async function installationId(): Promise<string> {
   return deviceIdPromise
 }
 
-async function saveDevice(userId: string, enabled: boolean, token?: string) {
-  const deviceId = await installationId()
-  if (token) await AsyncStorage.setItem('@mojammaa/push-token-v1', token)
+// Clé de libération remise par le serveur à chaque activation, et coupure en
+// attente après une déconnexion hors ligne (audit 2026-09-28, F9).
+const RELEASE_KEY = '@mojammaa/push-release-key-v1'
+const PENDING_RELEASE = '@mojammaa/push-release-pending-v1'
+type PendingRelease = { deviceId: string; revision: number; releaseKey: string }
+
+async function nextRevision(): Promise<number> {
   const previousRevision = Number(await AsyncStorage.getItem('@mojammaa/push-revision-v1') || 0)
   if (!Number.isSafeInteger(previousRevision) || previousRevision < 0) throw new Error('invalid-device-revision')
   const revision = previousRevision + 1
   await AsyncStorage.setItem('@mojammaa/push-revision-v1', String(revision))
-  const result = await httpsCallable<unknown, { applied: boolean }>(functions, 'registerPushDevice', { timeout: 10_000 })({
+  return revision
+}
+
+async function saveDevice(userId: string, enabled: boolean, token?: string) {
+  const deviceId = await installationId()
+  if (token) await AsyncStorage.setItem('@mojammaa/push-token-v1', token)
+  const revision = await nextRevision()
+  const result = await httpsCallable<unknown, { applied: boolean; releaseKey?: string }>(functions, 'registerPushDevice', { timeout: 10_000 })({
     deviceId, revision, enabled, ...(token ? { token } : {}),
     platform: Platform.OS, language: notificationLanguage(i18n.language),
   })
+  if (typeof result.data.releaseKey === 'string') await AsyncStorage.setItem(RELEASE_KEY, result.data.releaseKey)
   await AsyncStorage.setItem('@mojammaa/push-state-v1', JSON.stringify({ uid: userId, registered: enabled && result.data.applied !== false }))
 }
 
@@ -102,6 +120,56 @@ export async function clearPushToken(userId: string) {
   }
   await saveDevice(userId, false, token || undefined)
   } catch (error) { stoppingUid = null; throw error }
+}
+
+/**
+ * Déconnexion : coupe les notifications du compte avant la fermeture de la
+ * session quand c'est possible. Hors ligne ou service indisponible, ne bloque
+ * jamais la déconnexion : la coupure est mise en attente et rejouée sans
+ * session, avec la clé de libération de ce téléphone (audit 2026-09-28, F9).
+ */
+export async function stopPushForLogout(userId: string): Promise<'cleared' | 'deferred'> {
+  try {
+    await bounded(clearPushToken(userId), 8_000)
+    return 'cleared'
+  } catch {
+    try {
+      const releaseKey = await AsyncStorage.getItem(RELEASE_KEY)
+      // Installation jamais réenregistrée depuis cette version : pas de clé,
+      // l'installation passera au prochain compte connecté sur ce téléphone.
+      if (releaseKey) {
+        const pending: PendingRelease = { deviceId: await installationId(), revision: await nextRevision(), releaseKey }
+        await AsyncStorage.setItem(PENDING_RELEASE, JSON.stringify(pending))
+      }
+    } catch { /* Le stockage local ne doit pas empêcher la déconnexion. */ }
+    return 'deferred'
+  }
+}
+
+/** Rejoue une coupure en attente ; conservée seulement si le réseau manque. */
+export async function retryPendingPushRelease(): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(PENDING_RELEASE)
+    if (!raw) return
+    const pending = JSON.parse(raw) as PendingRelease
+    try {
+      await httpsCallable(functions, 'registerPushDevice', { timeout: 10_000 })({
+        deviceId: pending.deviceId, revision: pending.revision, releaseKey: pending.releaseKey, enabled: false,
+      })
+    } catch (error) {
+      const code = (error as { code?: unknown })?.code
+      // Clé refusée ou demande invalide : la rejouer ne changera rien.
+      if (code !== 'functions/permission-denied' && code !== 'functions/invalid-argument') return
+    }
+    await AsyncStorage.removeItem(PENDING_RELEASE)
+  } catch { /* Nouvel essai au prochain retour au premier plan. */ }
+}
+
+/** Relance la coupure en attente à chaque retour de l'app au premier plan. */
+export function startPendingPushReleaseRetry() {
+  void retryPendingPushRelease()
+  const appState = AppState.addEventListener('change', state => { if (state === 'active') void retryPendingPushRelease() })
+  return () => appState.remove()
 }
 
 export async function registerForPushNotificationsAsync(userId: string, requestPermission = true): Promise<void> {

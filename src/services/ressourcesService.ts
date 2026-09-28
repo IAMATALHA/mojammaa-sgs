@@ -22,6 +22,7 @@ import { db } from '../config/firebase'
 import { subscribeChunked } from './chunkedQuery'
 import type { Attachment } from './StorageService'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
+import { safeAttachments } from '../utils/attachments'
 
 export interface RessourceDoc {
   id?:          string
@@ -74,7 +75,9 @@ export function subscribeRessourcesForClasses(
     ),
     rows => onChange(
       // Tri après fusion des chunks : chaque listener ne voit que ses classes.
-      [...rows].sort(
+      // Pièces jointes assainies à la lecture (même risque que les messages,
+      // audit 2026-09-28, F5/F7).
+      rows.map(row => ({ ...row, attachments: safeAttachments(row.attachments) })).sort(
         (a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0),
       ),
     ),

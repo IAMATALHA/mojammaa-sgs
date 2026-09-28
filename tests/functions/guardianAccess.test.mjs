@@ -8,6 +8,15 @@ function fakeFirestore(children) {
   const writes = []
   return {
     writes,
+    // Les écritures ne passent QUE par la transaction : la référence du
+    // document n'expose ni set ni delete (audit 2026-09-28, F4).
+    async runTransaction(fn) {
+      return fn({
+        get: query => query.get(),
+        set: (ref, data) => { writes.push({ type: 'set', uid: ref.uid, data }) },
+        delete: ref => { writes.push({ type: 'delete', uid: ref.uid }) },
+      })
+    },
     collection(name) {
       if (name === 'eleves') {
         return {
@@ -30,14 +39,7 @@ function fakeFirestore(children) {
         }
       }
       assert.equal(name, 'guardianAccess')
-      return {
-        doc(uid) {
-          return {
-            async set(data) { writes.push({ type: 'set', uid, data }) },
-            async delete() { writes.push({ type: 'delete', uid }) },
-          }
-        },
-      }
+      return { doc: uid => ({ uid }) }
     },
   }
 }

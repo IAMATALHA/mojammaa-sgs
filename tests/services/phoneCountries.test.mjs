@@ -16,7 +16,7 @@ function load(name, cache = {}) {
 const {
   PHONE_COUNTRIES, SUGGESTED_COUNTRY_ISOS, OTHER_COUNTRY_ISO, findPhoneCountry, flagOf, countryName,
   searchPhoneCountries, formatNationalInput, phonePlaceholder, phoneFieldValidity, phoneFieldE164,
-  parseInternationalInput, phoneFieldFromE164,
+  parseInternationalInput, phoneFieldFromE164, digitsAfterFormattedEdit,
 } = load('phoneCountries')
 const { normalizeLoginPhone } = load('parentIdentity')
 
@@ -118,4 +118,24 @@ test('flags come from the ISO code', () => {
   assert.equal(flagOf('MA'), '🇲🇦')
   assert.equal(flagOf('BE'), '🇧🇪')
   assert.equal(flagOf(OTHER_COUNTRY_ISO), '🌐')
+})
+
+test('deleting a formatting space removes the digit at that place, never the last one (audit F2)', () => {
+  const ma = findPhoneCountry('MA')
+  const raw = '0612345678'
+  const display = formatNationalInput(ma, raw)
+  assert.equal(display, '06 12 34 56 78')
+  const edit = text => digitsAfterFormattedEdit(raw, display, text)
+  // Cas de l'audit : l'espace après « 06 » effacé → le « 6 » part, le « 8 » final reste.
+  assert.equal(edit('0612 34 56 78'), '012345678')
+  // Espace du milieu, puis dernier espace.
+  assert.equal(edit('06 1234 56 78'), '061345678')
+  assert.equal(edit('06 12 34 5678'), '061234578')
+  // Effacement d'un chiffre, ajout, remplacement d'une sélection, collage : chiffres tapés gardés.
+  assert.equal(edit('06 12 34 56 7'), '061234567')
+  assert.equal(edit('06 12 34 56 789'), '06123456789')
+  assert.equal(edit('06 99 56 78'), '06995678')
+  assert.equal(edit('0698765432'), '0698765432')
+  // Rien ne change quand le texte n'a pas raccourci.
+  assert.equal(edit(display), raw)
 })

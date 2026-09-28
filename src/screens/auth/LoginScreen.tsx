@@ -25,14 +25,10 @@ import { classifyParentLoginError, isEmailIdentifier, normalizeLoginPhone } from
 import {
   OTHER_COUNTRY_ISO, emptyPhoneFieldValue, findPhoneCountry, phoneFieldValidity, type PhoneFieldValue,
 } from '../../utils/phoneCountries'
+import { LOGIN_COUNTRY_KEY, LOGIN_MODE_KEY, type LoginMode } from '../../utils/loginPreferences'
 
 const PRIVACY_URL = 'https://mojammaa-sgs.web.app/privacy'
 
-// Mode et pays mémorisés : les parents retrouvent « Téléphone » et leur pays,
-// le personnel « E-mail », sans rien rechoisir.
-type LoginMode = 'phone' | 'email'
-const LOGIN_MODE_KEY = '@mojammaa/login/mode'
-const LOGIN_COUNTRY_KEY = '@mojammaa/login/phoneCountry'
 const LOGIN_MODES: LoginMode[] = ['phone', 'email']
 
 export default function LoginScreen() {

@@ -22,7 +22,7 @@ const { createHash } = require('node:crypto')
 const { reconcileSchoolAlert } = require('./schoolAlerts')
 const { moroccoDate, moroccoParts } = require('./lib/moroccoTime')
 const { createMessageDelivery } = require('./messageDelivery')
-const { registerPushDevice, getPushTargets } = require('./pushDevices')
+const { registerPushDevice, releasePushDevice, getPushTargets } = require('./pushDevices')
 const attendanceSubmission = require('./attendanceSubmission')
 const appointments = require('./appointments')
 const { getDashboardActions } = require('./dashboardActions')
@@ -51,6 +51,7 @@ const {
 const {
   affectedGuardianUids,
   rebuildGuardianAccess,
+  reconcileAllGuardianAccess,
 } = require('./guardianAccess')
 const {
   buildParentsDirectory,
@@ -137,7 +138,14 @@ async function pushTargetsForUids(uids) {
 }
 
 exports.registerPushDevice = onCall(async request => {
-  try { return await registerPushDevice(db, request.auth?.uid, request.data) }
+  try {
+    // Une clé de libération désigne la coupure différée d'une déconnexion hors
+    // ligne (F9) : elle ne dépend pas de la session, éventuellement déjà celle
+    // d'un autre compte sur ce téléphone.
+    return typeof request.data?.releaseKey === 'string'
+      ? await releasePushDevice(db, request.data)
+      : await registerPushDevice(db, request.auth?.uid, request.data)
+  }
   catch (error) {
     if (['unauthenticated', 'permission-denied', 'invalid-argument'].includes(error.code)) {
       throw new HttpsError(error.code, error.message)
@@ -424,6 +432,17 @@ exports.onEleveGuardianAccessWritten = onDocumentWritten('eleves/{eleveId}', asy
     active: results.filter((result) => result.active).length,
   })
 })
+
+// Filet de sécurité (audit 2026-09-28, F4) : le trigger ci-dessus n'est pas
+// rejoué en cas d'échec ; ce passage nocturne réaligne chaque droit sur les
+// liens eleves.parentUid actuels (~150 familles : quelques secondes).
+exports.reconcileGuardianAccess = onSchedule(
+  { schedule: 'every day 03:30', timeZone: 'Africa/Casablanca', timeoutSeconds: 300 },
+  async () => {
+    const result = await reconcileAllGuardianAccess(db, FieldValue)
+    logger.info('Guardian access reconciled', result)
+  },
+)
 
 async function fetchExpoPushReceipts(ids) {
   const receipts = {}
@@ -892,6 +911,17 @@ exports.flushClassStatsDirty = onSchedule(
 // triggers ne patchent QUE les docs où les champs manquent. Dérivations
 // identiques à scripts/backfillAcademicPeriods.js : date métier d'abord
 // (date d'absence, échéance de devoir), date de création sinon.
+// Déclaration d'absence refusée ou retirée : la justification automatique
+// qu'elle avait donnée à l'absence disparaît (audit 2026-09-28, F11). Sans
+// effet sur les alertes, qui ne réagissent qu'au statut de présence.
+exports.onAbsenceRequestWritten = onDocumentWritten('absenceRequests/{requestId}', async (event) => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null
+  const after = event.data?.after?.exists ? event.data.after.data() : null
+  if (!before || before.status === 'declined' || (after && after.status !== 'declined')) return
+  const cleared = await attendanceSubmission.clearStaleJustification(db, { eleveId: before.eleveId, date: before.date })
+  if (cleared) logger.info('Stale absence justification cleared', { records: cleared })
+})
+
 exports.onAbsenceCreated = onDocumentCreated('absences/{absenceId}', async (event) => {
   if (!event.data) return
   const data = event.data.data() || {}

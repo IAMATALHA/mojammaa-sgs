@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AlertCircle, Check, ChevronDown, Search, Smartphone, X } from 'lucide-react-native'
 import { useTheme, type Theme } from '../contexts/ThemeContext'
 import {
-  OTHER_COUNTRY_ISO, SUGGESTED_COUNTRY_ISOS, countryName, digitsOnly, findPhoneCountry, flagOf,
+  OTHER_COUNTRY_ISO, SUGGESTED_COUNTRY_ISOS, countryName, digitsAfterFormattedEdit, digitsOnly, findPhoneCountry, flagOf,
   formatNationalInput, parseInternationalInput, phoneFieldValidity, phonePlaceholder, searchPhoneCountries,
   type PhoneCountry, type PhoneFieldValue,
 } from '../utils/phoneCountries'
@@ -86,9 +86,8 @@ export default function PhoneNumberField({
       onChange({ iso: OTHER_COUNTRY_ISO, raw: text.replace(/[^\d+\s().-]/g, '').slice(0, 24) })
       return
     }
-    let digits = digitsOnly(text)
     // Effacement d'un espace de mise en forme : on retire le chiffre qui le précède.
-    if (digits === digitsOnly(value.raw) && text.length < display.length) digits = digits.slice(0, -1)
+    const digits = digitsAfterFormattedEdit(digitsOnly(value.raw), display, text)
     onChange({ iso: value.iso, raw: digits.slice(0, MAX_TYPED_DIGITS) })
   }
 

@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict')
-const { registerPushDevice, getPushTargets, invalidatePushTarget } = require('../../functions/pushDevices')
+const { registerPushDevice, releasePushDevice, getPushTargets, invalidatePushTarget } = require('../../functions/pushDevices')
 const { createMessageDelivery } = require('../../functions/messageDelivery')
 const { loadAttendance, submitAttendance } = require('../../functions/attendanceSubmission')
 const { lessonKey, attendanceVersion } = require('../../functions/lib/attendanceProtocol')
@@ -134,6 +134,40 @@ module.exports = async function secondLotCases(db, test) {
     await h.process(ref)
     assert.equal(h.requests[0].payload.length, 1)
     assert.equal(h.requests[0].payload[0].to, job.targets[1].token)
+  })
+
+  // ── Audit 2026-09-28, F9 : coupure différée d'une déconnexion hors ligne ──
+  await Promise.all(['released', 'nextUser', 'deniedNext'].map(uid => db.doc(`users/${uid}`).set({ role: 'parent' })))
+  await test('An offline logout is released later with the phone key, once', async () => {
+    const { releaseKey } = await register('released', 'offline_logout')
+    assert.equal(typeof releaseKey, 'string')
+    const deviceId = phone('offline_logout').deviceId
+    await assert.rejects(releasePushDevice(db, { deviceId, revision: ++revision, releaseKey: 'x'.repeat(43) }), { code: 'permission-denied' })
+    assert.equal((await targets('released')).length, 1, 'a wrong key changes nothing')
+    assert.equal((await releasePushDevice(db, { deviceId, revision: ++revision, releaseKey })).applied, true)
+    assert.equal((await targets('released')).length, 0)
+    await assert.rejects(releasePushDevice(db, { deviceId, revision: ++revision, releaseKey }), { code: 'permission-denied' })
+  })
+  await test('A late release cannot cut the notifications of the next account on the phone', async () => {
+    const { releaseKey } = await register('released', 'handover')
+    const staleRevision = ++revision
+    await register('nextUser', 'handover')
+    await assert.rejects(releasePushDevice(db, { deviceId: phone('handover').deviceId, revision: staleRevision, releaseKey }), { code: 'permission-denied' })
+    assert.equal((await targets('nextUser')).length, 1)
+  })
+  await test('If the next account refuses notifications, the release still silences the old one', async () => {
+    const { releaseKey } = await register('released', 'refused')
+    const pendingRevision = ++revision
+    const refused = await register('deniedNext', 'refused', { enabled: false })
+    assert.equal(refused.applied, false, 'another account cannot disable this installation')
+    assert.equal((await targets('released')).length, 1, 'old account still targeted before the release')
+    assert.equal((await releasePushDevice(db, { deviceId: phone('refused').deviceId, revision: pendingRevision, releaseKey })).applied, true)
+    assert.equal((await targets('released')).length, 0)
+  })
+  await test('Release input is validated before any read', async () => {
+    for (const input of [null, { deviceId: '../x', revision: 1, releaseKey: 'k'.repeat(43) }, { deviceId: 'installation_valid_____', revision: 0, releaseKey: 'k'.repeat(43) }, { deviceId: 'installation_valid_____', revision: 1, releaseKey: 'short' }]) {
+      await assert.rejects(releasePushDevice(db, input), { code: 'invalid-argument' })
+    }
   })
 
   const teacher = 'offlineTeacher', now = new Date('2026-09-05T13:00:00Z')

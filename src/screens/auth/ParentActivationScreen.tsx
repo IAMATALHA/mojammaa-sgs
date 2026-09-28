@@ -12,6 +12,7 @@ import { signInParentWithPhone } from '../../services/parentAuthService'
 import PhoneNumberField from '../../components/PhoneNumberField'
 import { formatLoginPhone, formatLoginPhoneForConfirmation } from '../../utils/parentIdentity'
 import { emptyPhoneFieldValue, phoneFieldValidity, type PhoneFieldValue } from '../../utils/phoneCountries'
+import { rememberLoginMode } from '../../utils/loginPreferences'
 
 type RedeemRequest = { code: string; prenom: string; nom: string; email?: string; password: string; telephone: string }
 type RedeemResponse = { loginEmail?: string; loginPhone?: string | null }
@@ -55,24 +56,47 @@ export default function ParentActivationScreen() {
       const loginEmail = data?.loginEmail || typedEmail
       if (!loginEmail) throw new Error('redeemParentInvitation: identifiant manquant')
       await signInWithEmailAndPassword(auth, loginEmail, password)
+      // Les alertes ci-dessous sont natives : la connexion remplace déjà cet
+      // écran par l'accueil, un message dans l'écran ne serait jamais vu.
       if (data?.loginPhone) {
+        rememberLoginMode('phone', phone.iso)
         Alert.alert(
           t('parentActivation.successTitle'),
           t('parentActivation.successPhoneBody', { phone: formatLoginPhone(data.loginPhone) }),
         )
+      } else if (phoneE164) {
+        // Numéro confirmé mais refusé comme identifiant (déjà pris par un autre
+        // compte, refusé par Auth) : le compte ne se connecte que par e-mail.
+        // Le dire, sinon le parent réessaiera avec son numéro (audit 2026-09-28).
+        rememberLoginMode('email')
+        Alert.alert(
+          t('parentActivation.successTitle'),
+          t('parentActivation.successEmailOnlyBody', { email: loginEmail }),
+        )
+      } else {
+        rememberLoginMode('email')
       }
     } catch (e) {
       const failure = callableFailure(e)
       if (failure.code === 'functions/already-exists') {
         // Compte déjà existant (autre enfant) : on s'y connecte puis on lui
         // ajoute ce code, par le même identifiant que celui qui a collisionné.
+        let signedIn = false
         try {
-          if (failure.reason === 'phone' && phoneE164) await signInParentWithPhone(phoneE164, password)
+          const byPhone = failure.reason === 'phone' && !!phoneE164
+          if (byPhone) await signInParentWithPhone(phoneE164, password)
           else if (typedEmail) await signInWithEmailAndPassword(auth, typedEmail, password)
           else throw e
+          signedIn = true
+          rememberLoginMode(byPhone ? 'phone' : 'email', byPhone ? phone.iso : undefined)
           await httpsCallable(functions, 'linkParentInvitation')({ code: code.trim(), telephone: phoneE164 ?? '' })
+          Alert.alert(t('parentActivation.linkedTitle'), t('parentActivation.linkedBody'))
         } catch {
-          setError(t('parentActivation.linkError'))
+          // Connecté mais rattachement échoué : cet écran a déjà disparu au
+          // changement de session, seule une alerte native reste visible et
+          // dit comment récupérer l'enfant manquant (audit 2026-09-28).
+          if (signedIn) Alert.alert(t('parentActivation.linkErrorTitle'), t('parentActivation.linkErrorSignedIn'))
+          else setError(t('parentActivation.linkError'))
         }
       } else if (failure.code === 'functions/invalid-argument') {
         setError(t(failure.reason === 'phone-required' ? 'parentActivation.phoneRequired'
