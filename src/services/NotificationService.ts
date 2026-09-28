@@ -56,6 +56,10 @@ export async function recordLogin(userId: string) {
 }
 
 type DeviceState = { uid: string; registered: boolean }
+// Dernier enregistrement confirmé par le serveur : un envoi identique (même
+// compte, même jeton, même langue) n'est répété qu'après ce délai.
+const REREGISTER_AFTER_MS = 10 * 60_000
+let lastRegistration: { key: string; at: number } | null = null
 let registrationEpoch = 0
 let deviceIdPromise: Promise<string> | null = null
 let registrationQueue: Promise<unknown> = Promise.resolve()
@@ -107,6 +111,7 @@ async function saveDevice(userId: string, enabled: boolean, token?: string) {
 export async function clearPushToken(userId: string) {
   stoppingUid = userId
   registrationEpoch++
+  lastRegistration = null
   try {
   await registrationQueue.catch(() => {})
   if (Platform.OS === 'web') return
@@ -189,12 +194,19 @@ export async function registerForPushNotificationsAsync(userId: string, requestP
       }
       const granted = permissions.granted || permissions.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
       if (epoch !== registrationEpoch || auth.currentUser?.uid !== userId) return
-      if (!granted) { await saveDevice(userId, false, await AsyncStorage.getItem('@mojammaa/push-token-v1') || undefined); return }
+      if (!granted) {
+        lastRegistration = null
+        await saveDevice(userId, false, await AsyncStorage.getItem('@mojammaa/push-token-v1') || undefined)
+        return
+      }
       const projectId = getExpoProjectId()
       if (!projectId) throw new Error('missing-project')
       const token = (await bounded(Notifications.getExpoPushTokenAsync({ projectId }))).data
       if (epoch !== registrationEpoch || auth.currentUser?.uid !== userId) return
+      const key = JSON.stringify([userId, token, notificationLanguage(i18n.language)])
+      if (lastRegistration?.key === key && Date.now() - lastRegistration.at < REREGISTER_AFTER_MS) return
       await saveDevice(userId, true, token)
+      lastRegistration = { key, at: Date.now() }
     } catch {
       // A permission alone does not prove that the server registered this phone.
       await AsyncStorage.setItem('@mojammaa/push-state-v1', JSON.stringify({ uid: userId, registered: false }))
@@ -230,6 +242,16 @@ export function startNotificationSync(uid: string) {
   stoppingUid = null
   const refresh = () => { void registerForPushNotificationsAsync(uid, false).catch(() => {}) }
   const appState = AppState.addEventListener('change', state => { if (state === 'active') refresh() })
-  const tokenListener = Platform.OS !== 'web' ? Notifications.addPushTokenListener(refresh) : null
+  // Android émet cet événement à CHAQUE lecture du jeton, y compris celle que
+  // fait getExpoPushTokenAsync pendant l'enregistrement : y réagir relançait
+  // l'enregistrement sans fin (≈ 2 appels/s depuis un seul téléphone, constaté
+  // en production le 28/09). Seul un jeton réellement nouveau relance.
+  let lastDeviceToken: string | null = null
+  const tokenListener = Platform.OS !== 'web' ? Notifications.addPushTokenListener(event => {
+    const deviceToken = typeof event?.data === 'string' ? event.data : null
+    if (deviceToken && deviceToken === lastDeviceToken) return
+    lastDeviceToken = deviceToken
+    refresh()
+  }) : null
   return () => { appState.remove(); tokenListener?.remove() }
 }
