@@ -129,6 +129,7 @@ Les familles vivent aussi à l'étranger : tout numéro international est accept
 - [x] OTA runtime 1.0.16 depuis `~/mojammaa-sgs-ota-1016`, `b40e1db` (= `8dea223` + cherry-pick de `ec0cb3e`, `tsc` et tests OK) : groupe `b1518218-ace9-4038-ac3a-47abacc68e96`, Android `01a0e8c1-efe9-71b9-a784-fabee05214a4`, iOS `01a0e8c1-efe9-7197-aea2-f0edf358f341`.
 - [x] Identifiants servis vérifiés (`eas update:list`) sur 1.0.16 et 1.0.17. Tag local `v1.0.16-final` déplacé sur `b40e1db`.
 - [ ] Recette : ajouter un numéro étranger (ex. +32 ou +33) au scénario ci-dessus.
+- [x] Admin web (mojammaa-admin `65ac82f`, `vercel --prod`) : page Codes parents — bouton WhatsApp sous chaque fiche générée (numéro de la fiche élève, message bilingue avec code, lien Play Store et étapes), copie si pas de numéro, repère « envoyé ». Chunk servi vérifié.
 
 ## 8. Clôture
 
