@@ -99,7 +99,8 @@ export default function AdminUsersScreen() {
           <Text style={[styles.name, { color: theme.text }]}>
             {item.prenom} {item.nom}
           </Text>
-          <Text style={{ color: theme.textSoft, fontSize: 12, marginTop: 1 }}>{item.email}</Text>
+          {/* Absent pour un parent activé sans e-mail : son téléphone suit. */}
+          {item.email ? <Text style={{ color: theme.textSoft, fontSize: 12, marginTop: 1 }}>{item.email}</Text> : null}
           {item.telephone ? <Text style={{ color: theme.textSoft, fontSize: 12, marginTop: 3 }}>{item.telephone}</Text> : null}
           <View style={styles.tagsRow}>
             <View style={[styles.tag, { backgroundColor: rc.bg }]}>

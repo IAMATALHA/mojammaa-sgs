@@ -1621,6 +1621,26 @@ await deny('parent cannot submit work after cancellation', setDoc(doc(asUser('pa
   parentComment: '', submittedAt: serverTimestamp(), submittedByUid: 'parent1', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
 }))
 
+console.log('\n── 14. Connexion parent par téléphone : champs serveur ──')
+await deny('parent ne s’attribue pas un mobile de connexion',
+  updateDoc(doc(asUser('parent1'), 'users/parent1'), { authPhoneE164: '+212612345678' }))
+await deny('parent ne s’accorde pas la connexion par téléphone',
+  updateDoc(doc(asUser('parent1'), 'users/parent1'), { parentLoginEnabled: true }))
+await deny('admin ordinaire ne change pas le mobile de connexion d’un parent',
+  updateDoc(doc(asUser('admin1'), 'users/parent1'), { authPhoneE164: '+212600000000' }))
+await deny('admin ordinaire ne change pas la capacité de connexion par téléphone',
+  updateDoc(doc(asUser('admin1'), 'users/parent1'), { parentLoginEnabled: false }))
+await allow('parent modifie toujours son téléphone de contact',
+  updateDoc(doc(asUser('parent1'), 'users/parent1'), { telephone: '0612345678' }))
+await allow('admin modifie toujours le nom d’un parent',
+  updateDoc(doc(asUser('admin1'), 'users/parent1'), { nom: 'Rent' }))
+await allow('superadmin peut couper la connexion par téléphone',
+  updateDoc(doc(asUser('super1'), 'users/parent1'), { parentLoginEnabled: false }))
+await deny('aucun client, même superadmin, ne lit les compteurs anti-bourrinage',
+  getDoc(doc(asUser('super1'), 'parentPhoneAuthRateLimits/global-login')))
+await deny('aucun client n’écrit les compteurs anti-bourrinage',
+  setDoc(doc(asUser('admin1'), 'parentPhoneAuthRateLimits/global-login'), { count: 0 }))
+
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)
 if (failed.length) {

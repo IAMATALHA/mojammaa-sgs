@@ -1,4 +1,5 @@
 import NotificationSettingsGroup from './NotificationSettingsGroup'
+import { loginIdentifierLabel } from '../utils/parentIdentity'
 /**
  * BasicSettingsScreen — écran Réglages partagé (prof + parent).
  * Liste groupée sobre : profil avec avatar, langue, version, déconnexion.
@@ -52,7 +53,7 @@ export default function BasicSettingsScreen({ roleLabel, showNotificationSetting
             <View style={{ flex: 1, marginStart: 12 }}>
               <Text style={[styles.rowTitle, { color: theme.text, fontFamily: theme.fonts.bold, fontSize: 15 }]}>{fullName}</Text>
               <Text numberOfLines={1} style={[styles.rowSub, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>
-                {profile?.email || ''} · {roleLabel}
+                {loginIdentifierLabel(profile) || ''} · {roleLabel}
               </Text>
             </View>
           </View>

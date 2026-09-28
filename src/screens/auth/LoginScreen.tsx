@@ -17,6 +17,8 @@ import { Globe, User, Lock } from 'lucide-react-native'
 import { auth, functions } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
 import LanguagePicker from '../../components/LanguagePicker'
+import { signInParentWithPhone } from '../../services/parentAuthService'
+import { classifyParentLoginError, isEmailIdentifier, normalizeMoroccanMobile } from '../../utils/parentIdentity'
 
 const PRIVACY_URL = 'https://mojammaa-sgs.web.app/privacy'
 
@@ -26,16 +28,23 @@ export default function LoginScreen() {
   const { t } = useTranslation()
   const insets = useSafeAreaInsets()
   const { width: screenWidth } = useWindowDimensions()
-  const [email, setEmail] = useState('')
+  // E-mail, ou mobile marocain pour les parents activés sans e-mail.
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [langOpen, setLangOpen] = useState(false)
 
   const forgotPassword = async () => {
-    const target = email.trim()
+    const target = identifier.trim()
     if (!target) {
       setError(t('login.forgotPrompt'))
+      return
+    }
+    // Pas d'e-mail derrière un numéro : c'est l'école qui envoie le lien de
+    // réinitialisation par WhatsApp (page Comptes du site d'administration).
+    if (!isEmailIdentifier(target)) {
+      Alert.alert(t('login.phoneResetTitle'), t('login.phoneResetBody'))
       return
     }
     try {
@@ -56,9 +65,35 @@ export default function LoginScreen() {
     })
   }
 
+  const submitWithPhone = async (target: string) => {
+    const phone = normalizeMoroccanMobile(target)
+    if (!phone) {
+      setError(t('login.errorInvalidPhone'))
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      await signInParentWithPhone(phone, password)
+    } catch (e) {
+      const failure = classifyParentLoginError(e)
+      if (failure === 'invalid-phone') setError(t('login.errorInvalidPhone'))
+      else if (failure === 'wrong-credentials') setError(t('login.errorWrongPassword'))
+      else if (failure === 'rate-limited') setError(t('login.errorTooMany'))
+      else setError(t('login.errorUnavailable'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const submit = async () => {
-    if (!email.trim() || !password) {
+    const target = identifier.trim()
+    if (!target || !password) {
       setError(t('login.errorRequired'))
+      return
+    }
+    if (!isEmailIdentifier(target)) {
+      await submitWithPhone(target)
       return
     }
 
@@ -66,7 +101,7 @@ export default function LoginScreen() {
     setError('')
 
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password)
+      await signInWithEmailAndPassword(auth, target, password)
       // Le journal des sessions n'est PAS appelé ici : AuthContext le fait au
       // chargement du profil, ce qui couvre à la fois ce login et les reprises
       // de session. Deux points d'appel écriraient dans la même entrée.
@@ -153,16 +188,18 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            {/* Email input with icon */}
+            {/* Identifiant (e-mail ou téléphone) with icon */}
             <View style={[styles.inputWrap, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <TextInput
-                value={email}
-                onChangeText={setEmail}
-                accessibilityLabel={t('login.email')}
-                placeholder={t('login.email')}
+                value={identifier}
+                onChangeText={setIdentifier}
+                accessibilityLabel={t('login.identifier')}
+                placeholder={t('login.identifier')}
                 placeholderTextColor={theme.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete="username"
+                textContentType="username"
                 keyboardType="email-address"
                 style={[styles.input, { color: theme.text, fontFamily: theme.fonts.regular }]}
               />
