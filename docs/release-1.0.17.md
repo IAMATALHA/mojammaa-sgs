@@ -108,6 +108,17 @@ Tant que des téléphones restent en 1.0.16, chaque correctif JavaScript est pub
 - [x] Identifiants servis vérifiés pour `production` sur 1.0.16 et 1.0.17, Android et iOS.
 - [x] Tag `v1.0.16-final` déplacé en local de `9c988c2` sur `c9fa1f4`. Reste : pousser le tag (`git push -f origin v1.0.16-final`) et la branche `hotfix/1.0.16-dossier-classe`.
 
+### Connexion parent par mobile, activation sans e-mail (28/09)
+
+- [x] Serveur (mojammaa-admin `12d57bd`, codebase `admin`, déployé par nom) : `redeemParentInvitation` et `linkParentInvitation` mises à jour, `parentPhoneLogin` et `createParentPasswordResetLink` créées (europe-west1).
+- [x] Règles Firestore déployées (ruleset `5721f64e`, `60b8a01`) : `authPhoneE164` / `parentLoginEnabled` réservés au serveur et au superadmin. `verify:rules` : en phase.
+- [x] Admin web (`vercel --prod`, alias mojammaa.com) : bouton lien WhatsApp dans Comptes, page de réinitialisation, tickets. Chunks servis vérifiés.
+- [x] OTA runtime 1.0.17 publiée le 28/09 depuis `60b8a01` (branche `feat/parent-phone-login`, arbre propre) : groupe `723ce77a-e8db-4b61-9da8-dbc1e4ae3ef0`, Android `01a0e874-500b-70d3-998d-497c3b634c89`, iOS `01a0e874-500b-7dac-936a-fc92c1afbab6`. Une première tentative a échoué sans rien publier (« Asset processing timed out », deux envois simultanés) : publier les runtimes l'un après l'autre.
+- [x] OTA runtime 1.0.16 publiée le 28/09 depuis `~/mojammaa-sgs-ota-1016`, `8dea223` (= `c9fa1f4` + cherry-pick de `60b8a01`, `tsc` et tests OK ; seul écart : lien `node_modules` non suivi) : groupe `ac939618-9ae3-449e-acec-20689981ef73`, Android `01a0e880-2494-731a-9898-26ab8e098eaf`, iOS `01a0e880-2494-747c-9aae-027f5396d60e`. Une tentative précédente est restée bloquée 8 min sur un appel réseau Expo avant l'export (0 % CPU) : arrêtée sans rien publier, puis relancée.
+- [x] Identifiants servis vérifiés (`eas update:list`) : dernière mise à jour `production` = `723ce77a` sur 1.0.17 et `ac939618` sur 1.0.16, Android et iOS.
+- [x] Tag `v1.0.16-final` déplacé en local de `c9fa1f4` sur `8dea223`. Reste : pousser le tag et la branche `hotfix/1.0.16-dossier-classe`.
+- [ ] Recette avec un vrai numéro : activation sans e-mail, reconnexion par le numéro, lien WhatsApp depuis Comptes puis nouveau mot de passe (confirme que la production accepte l'identifiant `@parents.mojammaa.invalid` à la création).
+
 ## 8. Clôture
 
 - [x] Tag `v1.0.17` sur `7c47027` (commit buildé), poussé.
