@@ -9,7 +9,7 @@ import type { AuthStackParamList } from '../../navigation/types'
 import { auth, functions } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
 import { signInParentWithPhone } from '../../services/parentAuthService'
-import { formatMoroccanMobile, normalizeMoroccanMobile } from '../../utils/parentIdentity'
+import { formatLoginPhone, formatLoginPhoneForConfirmation, normalizeLoginPhone } from '../../utils/parentIdentity'
 
 type RedeemRequest = { code: string; prenom: string; nom: string; email?: string; password: string; telephone: string }
 type RedeemResponse = { loginEmail?: string; loginPhone?: string | null }
@@ -23,8 +23,9 @@ function callableFailure(error: unknown): { code: string; reason: string } {
 }
 
 /**
- * Activation d'un compte parent avec le code remis par l'école. Le mobile
- * suffit pour se connecter ensuite ; l'e-mail est facultatif.
+ * Activation d'un compte parent avec le code remis par l'école. Le numéro de
+ * téléphone (Maroc ou étranger) suffit pour se connecter ensuite ; l'e-mail
+ * est facultatif.
  */
 export default function ParentActivationScreen() {
   const theme = useTheme()
@@ -54,7 +55,7 @@ export default function ParentActivationScreen() {
       if (data?.loginPhone) {
         Alert.alert(
           t('parentActivation.successTitle'),
-          t('parentActivation.successPhoneBody', { phone: formatMoroccanMobile(data.loginPhone) }),
+          t('parentActivation.successPhoneBody', { phone: formatLoginPhone(data.loginPhone) }),
         )
       }
     } catch (e) {
@@ -71,7 +72,9 @@ export default function ParentActivationScreen() {
           setError(t('parentActivation.linkError'))
         }
       } else if (failure.code === 'functions/invalid-argument') {
-        setError(t(failure.reason === 'phone-required' ? 'parentActivation.phoneRequired' : 'parentActivation.invalidDetails'))
+        setError(t(failure.reason === 'phone-required' ? 'parentActivation.phoneRequired'
+          : failure.reason === 'invalid-phone' ? 'parentActivation.invalidPhone'
+            : 'parentActivation.invalidDetails'))
       } else {
         setError(t('parentActivation.error'))
       }
@@ -87,23 +90,22 @@ export default function ParentActivationScreen() {
       return
     }
     const typedEmail = email.trim()
-    const phone = telephone.trim() ? normalizeMoroccanMobile(telephone) : null
-    if (!typedEmail) {
-      if (!telephone.trim()) { setError(t('parentActivation.phoneRequired')); return }
-      if (!phone) { setError(t('parentActivation.invalidPhone')); return }
-      // Sans e-mail, ce numéro devient l'identifiant : une faute de frappe
-      // empêcherait toute connexion ultérieure.
-      Alert.alert(
-        t('parentActivation.confirmPhoneTitle'),
-        t('parentActivation.confirmPhoneBody', { phone: formatMoroccanMobile(phone) }),
-        [
-          { text: t('parentActivation.confirmPhoneEdit'), style: 'cancel' },
-          { text: t('parentActivation.confirmPhoneOk'), onPress: () => { void activate('', phone) } },
-        ],
-      )
-      return
-    }
-    void activate(typedEmail, phone)
+    const phone = telephone.trim() ? normalizeLoginPhone(telephone) : null
+    if (!typedEmail && !telephone.trim()) { setError(t('parentActivation.phoneRequired')); return }
+    if (!typedEmail && !phone) { setError(t('parentActivation.invalidPhone')); return }
+    // Avec un e-mail, un numéro non reconnu reste un simple contact.
+    if (!phone) { void activate(typedEmail, null); return }
+    // Ce numéro devient un identifiant de connexion (et la destination d'un
+    // lien de réinitialisation) : une faute de frappe, ou un « 06… » français
+    // tapé sans +33 (donc lu comme marocain), se corrige ici.
+    Alert.alert(
+      t('parentActivation.confirmPhoneTitle'),
+      t('parentActivation.confirmPhoneBody', { phone: formatLoginPhoneForConfirmation(phone) }),
+      [
+        { text: t('parentActivation.confirmPhoneEdit'), style: 'cancel' },
+        { text: t('parentActivation.confirmPhoneOk'), onPress: () => { void activate(typedEmail, phone) } },
+      ],
+    )
   }
 
   const inputStyle = [styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]
