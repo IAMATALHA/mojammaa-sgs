@@ -18,7 +18,7 @@ import { auth, functions } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
 import LanguagePicker from '../../components/LanguagePicker'
 import { signInParentWithPhone } from '../../services/parentAuthService'
-import { classifyParentLoginError, isEmailIdentifier, normalizeMoroccanMobile } from '../../utils/parentIdentity'
+import { classifyParentLoginError, isEmailIdentifier, normalizeLoginPhone } from '../../utils/parentIdentity'
 
 const PRIVACY_URL = 'https://mojammaa-sgs.web.app/privacy'
 
@@ -28,7 +28,7 @@ export default function LoginScreen() {
   const { t } = useTranslation()
   const insets = useSafeAreaInsets()
   const { width: screenWidth } = useWindowDimensions()
-  // E-mail, ou mobile marocain pour les parents activés sans e-mail.
+  // E-mail, ou numéro de téléphone pour les parents activés sans e-mail.
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -66,7 +66,7 @@ export default function LoginScreen() {
   }
 
   const submitWithPhone = async (target: string) => {
-    const phone = normalizeMoroccanMobile(target)
+    const phone = normalizeLoginPhone(target)
     if (!phone) {
       setError(t('login.errorInvalidPhone'))
       return
