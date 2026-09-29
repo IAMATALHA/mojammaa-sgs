@@ -169,6 +169,16 @@ Constat dans Cloud Logging : `registerPushDevice` appelée ≈ 2 fois par second
 - Retour arrière de l'app : republier `6f81fc32` (1.0.17) et `31337519` (1.0.16).
 - [x] Site d'administration (mojammaa-admin `0dd1012`, `vercel --prod` depuis un arbre propre du commit — le dossier de travail garde des modifications locales sans rapport) : chargement après connexion sans cascade (`9f05cdf`), élèves et comptes lus une fois par session (`f4713d7`), tableau de bord « Aujourd'hui » à base de comptages (`0dd1012`). Fichiers servis par mojammaa.com vérifiés identiques au build testé (`index-CCSE_sF7.js`, `Dashboard-Du6JMMe7.js`). Retour arrière : `vercel rollback` vers le déploiement précédent.
 
+### Cache d'enregistrement push : régressions de `4d38d8c` (29/09, matin)
+
+Revue Codex de `4d38d8c` : le cache de 10 min masquait deux cas (P2), plus un troisième relevé en seconde revue. (1) Déconnexion pendant l'appel serveur : la requête en cours réécrivait le cache vidé par la déconnexion, et le même compte reconnecté en moins de 10 min n'était pas réenregistré. (2) Échec (jeton ou serveur injoignable) : cache conservé, enregistrement ignoré au retour du réseau, état « non enregistré » affiché, bouton « Actualiser » compris. (3) Refus du serveur (`applied: false`) : un cache antérieur n'était pas vidé.
+
+- [x] Correctif app `25c4156` : cache écrit seulement si le serveur a appliqué la demande sans déconnexion entre-temps, vidé sur tout échec ou refus ; « Actualiser » interroge toujours le serveur. Déduplication de l'écouteur (arrêt de la boucle) inchangée. Contre-épreuve : 4 des nouveaux tests échouent sur `4d38d8c`, le 5e (refus après succès) sur la première version du correctif. `tsc`, 170/170.
+- [x] OTA runtime 1.0.17 depuis `25c4156` (arbre propre) : groupe `71711c18-00d8-414d-ade6-ad900e8756ac`, Android `01a0ec29-3fb6-72be-93b0-3af4fab97a6a`, iOS `01a0ec29-3fb6-7783-ad93-795412d386d8`.
+- [x] OTA runtime 1.0.16 depuis `~/mojammaa-sgs-ota-1016`, `d7ecb14` (= `1a1ec57` + cherry-pick de `25c4156`, sans conflit ; `tsc` OK, 170/170 avec `functions/node_modules` lié le temps du test ; seul fichier non suivi : le lien `node_modules`, d'où l'astérisque sur le commit EAS) : groupe `c7f9e8d5-d4c5-48bb-8632-ea8e3c53d5a5`, Android `01a0ec2a-9652-7005-9393-39e3de1eb6ac`, iOS `01a0ec2a-9652-71fe-8736-9dfb729910f0`. Tag local `v1.0.16-final` → `d7ecb14`.
+- [x] Identifiants servis vérifiés (`eas update:list`) : `71711c18` sur 1.0.17, `c7f9e8d5` sur 1.0.16.
+- Retour arrière de l'app : republier `5d727455` (1.0.17) et, depuis `~/mojammaa-sgs-ota-1016`, `c765d3e8` (1.0.16).
+
 ## 8. Clôture
 
 - [x] Tag `v1.0.17` sur `7c47027` (commit buildé), poussé.
