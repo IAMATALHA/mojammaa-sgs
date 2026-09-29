@@ -22,7 +22,7 @@ export default function NotificationSettingsGroup() {
   const activate = async () => {
     if (!profile?.uid || busy) return
     setBusy(true)
-    try { await registerForPushNotificationsAsync(profile.uid); await refresh() }
+    try { await registerForPushNotificationsAsync(profile.uid, true, { force: true }); await refresh() }
     finally { setBusy(false) }
   }
   return (

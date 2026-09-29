@@ -105,7 +105,9 @@ async function saveDevice(userId: string, enabled: boolean, token?: string) {
     platform: Platform.OS, language: notificationLanguage(i18n.language),
   })
   if (typeof result.data.releaseKey === 'string') await AsyncStorage.setItem(RELEASE_KEY, result.data.releaseKey)
-  await AsyncStorage.setItem('@mojammaa/push-state-v1', JSON.stringify({ uid: userId, registered: enabled && result.data.applied !== false }))
+  const applied = result.data.applied !== false
+  await AsyncStorage.setItem('@mojammaa/push-state-v1', JSON.stringify({ uid: userId, registered: enabled && applied }))
+  return applied
 }
 
 export async function clearPushToken(userId: string) {
@@ -177,7 +179,11 @@ export function startPendingPushReleaseRetry() {
   return () => appState.remove()
 }
 
-export async function registerForPushNotificationsAsync(userId: string, requestPermission = true): Promise<void> {
+/**
+ * `force` ignore le cache de 10 min : réservé au bouton « Actualiser », une
+ * action explicite de l'utilisateur qui doit toujours interroger le serveur.
+ */
+export async function registerForPushNotificationsAsync(userId: string, requestPermission = true, { force = false } = {}): Promise<void> {
   const epoch = registrationEpoch
   const operation = async () => {
     if (stoppingUid === userId || auth.currentUser?.uid !== userId || epoch !== registrationEpoch || Platform.OS === 'web') return
@@ -204,10 +210,17 @@ export async function registerForPushNotificationsAsync(userId: string, requestP
       const token = (await bounded(Notifications.getExpoPushTokenAsync({ projectId }))).data
       if (epoch !== registrationEpoch || auth.currentUser?.uid !== userId) return
       const key = JSON.stringify([userId, token, notificationLanguage(i18n.language)])
-      if (lastRegistration?.key === key && Date.now() - lastRegistration.at < REREGISTER_AFTER_MS) return
-      await saveDevice(userId, true, token)
-      lastRegistration = { key, at: Date.now() }
+      if (!force && lastRegistration?.key === key && Date.now() - lastRegistration.at < REREGISTER_AFTER_MS) return
+      const applied = await saveDevice(userId, true, token)
+      // Une déconnexion pendant l'appel (epoch changé) a déjà vidé le cache :
+      // ne pas le réécrire, sinon la reconnexion suivante serait ignorée. Un
+      // enregistrement refusé par le serveur invalide aussi un cache antérieur,
+      // pour que l'essai suivant repasse par le serveur.
+      lastRegistration = applied && epoch === registrationEpoch ? { key, at: Date.now() } : null
     } catch {
+      // Tout échec invalide le cache : l'essai suivant repasse par le serveur
+      // et rétablit l'état local.
+      lastRegistration = null
       // A permission alone does not prove that the server registered this phone.
       await AsyncStorage.setItem('@mojammaa/push-state-v1', JSON.stringify({ uid: userId, registered: false }))
     }
