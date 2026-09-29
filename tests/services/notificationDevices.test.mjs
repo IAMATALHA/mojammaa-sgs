@@ -13,7 +13,7 @@ function harness() {
     if (androidEmits && rotation) setTimeout(() => rotation({ type: 'android', data: deviceToken }), 0)
     return { data: token }
   }
-  let foreground, rotation, channelEnabled = true, timeout = false, handler, rejection = null
+  let foreground, rotation, channelEnabled = true, timeout = false, handler, rejection = null, applied = true, serverGate = null
   const notifications = {
     setNotificationHandler(value) { handler = value }, setNotificationChannelAsync: async () => {},
     AndroidImportance: { MAX: 5, NONE: 0 }, IosAuthorizationStatus: { PROVISIONAL: 3 },
@@ -30,9 +30,11 @@ function harness() {
     'firebase/firestore': { collection: () => ({}), doc: () => ({ id: 'installation-test' }), setDoc: async () => {}, serverTimestamp: () => ({}) },
     'firebase/functions': { httpsCallable: () => async input => {
       calls.push(input)
+      if (serverGate) await serverGate
       if (!registered) throw Object.assign(new Error('offline'), { code: 'functions/unavailable' })
       if (rejection) throw Object.assign(new Error('refused'), { code: rejection })
       // Le serveur remet une clé de libération à chaque activation appliquée.
+      if (!applied) return { data: { applied: false } }
       return { data: input.enabled && !input.releaseKey ? { applied: true, releaseKey: `release-key-${input.revision}` } : { applied: true } }
     } },
     '../config/firebase': { auth, db: {}, functions: {} },
@@ -52,6 +54,9 @@ function harness() {
     reject: code => { rejection = code }, handler: () => handler,
     androidEmits: () => { androidEmits = true }, deviceToken: value => { deviceToken = value },
     emitDeviceToken: () => rotation({ type: 'android', data: deviceToken }),
+    serverApplies: value => { applied = value },
+    // Retient les réponses du serveur jusqu'à l'appel de la fonction renvoyée.
+    holdServer: () => { let release; serverGate = new Promise(resolve => { release = () => { serverGate = null; resolve() } }); return release },
   }
 }
 test('Stable installation survives token rotation and synchronizes the selected language', async () => {
@@ -181,4 +186,59 @@ test('After logout, the next login registers again even with the same token', as
   h.service.startNotificationSync('parent') // nouvelle session : stoppingUid remis à zéro
   await h.service.registerForPushNotificationsAsync('parent')
   assert.deepEqual(h.calls.map(c => c.enabled), [true, false, true])
+})
+
+// ── Revue Codex du 29/09 sur 4d38d8c : le cache de 10 min ne doit rien masquer ──
+test('Logout during server registration cannot leave the next login unregistered', async () => {
+  const h = harness()
+  const release = h.holdServer()
+  const registering = h.service.registerForPushNotificationsAsync('parent')
+  await settle()
+  assert.equal(h.calls.length, 1, 'the enable request is waiting on the server')
+  const logout = h.service.clearPushToken('parent')
+  release()
+  await registering; await logout
+  h.service.startNotificationSync('parent') // reconnexion du même compte, < 10 min
+  await h.service.registerForPushNotificationsAsync('parent', false)
+  assert.deepEqual(h.calls.map(c => c.enabled), [true, false, true])
+  assert.equal(await h.service.notificationDiagnostics(), 'enabled')
+})
+test('A failed token lookup never hides the recovered registration status', async () => {
+  const h = harness()
+  await h.service.registerForPushNotificationsAsync('parent', false)
+  h.delayToken(async () => { throw new Error('offline') })
+  await h.service.registerForPushNotificationsAsync('parent', false)
+  assert.equal(await h.service.notificationDiagnostics(), 'unregistered')
+  h.delayToken(async () => ({ data: 'ExpoPushToken[test]' }))
+  await h.service.registerForPushNotificationsAsync('parent', false)
+  assert.equal(await h.service.notificationDiagnostics(), 'enabled')
+  assert.equal(h.calls.length, 2)
+})
+test('A registration the server did not apply is retried, not cached', async () => {
+  const h = harness(); h.serverApplies(false)
+  await h.service.registerForPushNotificationsAsync('parent', false)
+  assert.equal(await h.service.notificationDiagnostics(), 'unregistered')
+  h.serverApplies(true)
+  await h.service.registerForPushNotificationsAsync('parent', false)
+  assert.equal(h.calls.length, 2)
+  assert.equal(await h.service.notificationDiagnostics(), 'enabled')
+})
+test('The manual refresh button always asks the server', async () => {
+  const h = harness()
+  await h.service.registerForPushNotificationsAsync('parent', false)
+  await h.service.registerForPushNotificationsAsync('parent', false)
+  assert.equal(h.calls.length, 1, 'automatic refreshes still use the cache')
+  await h.service.registerForPushNotificationsAsync('parent', true, { force: true })
+  assert.equal(h.calls.length, 2)
+})
+test('A refused refresh invalidates an older successful cache', async () => {
+  const h = harness()
+  await h.service.registerForPushNotificationsAsync('parent', false)
+  h.serverApplies(false)
+  await h.service.registerForPushNotificationsAsync('parent', true, { force: true })
+  assert.equal(await h.service.notificationDiagnostics(), 'unregistered')
+  h.serverApplies(true)
+  await h.service.registerForPushNotificationsAsync('parent', false)
+  assert.equal(h.calls.length, 3, 'the automatic retry reaches the server')
+  assert.equal(await h.service.notificationDiagnostics(), 'enabled')
 })
