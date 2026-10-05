@@ -1,5 +1,5 @@
 import type { TeacherDashboardNav } from '../../navigation/types'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, Pressable, Modal, ScrollView,
   ActivityIndicator, TouchableOpacity, TextInput, Alert,
@@ -16,7 +16,7 @@ import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   subscribeMessages, subscribeSentMessages, markAsRead, deleteMessage,
-  broadcastToParents, broadcastPersonalized,
+  broadcastToParents, broadcastPersonalized, newPersonalizedSendAttempt,
   type MessageDoc,
 } from '../../services/messagesService'
 import { listEleves, type EleveDoc } from '../../services/elevesService'
@@ -300,6 +300,9 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
   const [body, setBody] = useState('')
   const [urgent, setUrgent] = useState(false)
   const [sending, setSending] = useState(false)
+  const sendingRef = useRef(false)
+  const sentRef = useRef(false)
+  const [personalizedAttempt] = useState(newPersonalizedSendAttempt)
 
   // Student selection
   const [eleves, setEleves] = useState<EleveDoc[]>([])
@@ -425,7 +428,8 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
   const canSend = parentUids.length > 0 && subject.trim().length > 0 && body.trim().length > 0
 
   const handleSend = async () => {
-    if (!profile || !canSend) return
+    if (!profile || !canSend || sendingRef.current || sentRef.current) return
+    sendingRef.current = true
     setSending(true)
     const teacher = { uid: profile.uid, nom: profile.nom, prenom: profile.prenom }
     try {
@@ -439,12 +443,12 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
             parentUid: e.parentUid!,
             body:      body.split(ELEVE_PLACEHOLDER).join(elevePrenom(e)).trim(),
             label:     `${eleveName(e)} · ${e.classe}`,
-            eleveId:   e.codeMassar,
+            eleveId:   eleveKey(e),
           }))
         const r = await broadcastPersonalized({
           recipients, subject: subject.trim(), classe: selectedClasses.join(', '),
           urgent, category: 'announcement', teacher,
-        })
+        }, personalizedAttempt)
         parentsTargeted = r.parentsTargeted
       } else {
         // Generic: a single message to all selected parents.
@@ -455,6 +459,7 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
         parentsTargeted = r.parentsTargeted
       }
 
+      sentRef.current = true
       Alert.alert(
         t('teacher.messageSent'),
         parentsTargeted === 0 ? t('teacher.noParents') : `${parentsTargeted} parent(s)`,
@@ -462,17 +467,17 @@ function ComposeModal({ theme, t, lang, profile, onClose }: {
       )
     } catch (e: any) {
       Alert.alert(t('teacher.sendFailed'), e?.message)
-    } finally { setSending(false) }
+    } finally { sendingRef.current = false; setSending(false) }
   }
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible transparent animationType="slide" onRequestClose={() => { if (!sendingRef.current) onClose() }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <SafeAreaView edges={['top']} style={[cs.container, { backgroundColor: theme.bg }]}>
           {/* Header */}
           <View style={cs.header}>
             <Text style={{ color: theme.text, fontWeight: '800', fontSize: 18, flex: 1 }}>{t('teacher.newMessage')}</Text>
-            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')}><X size={22} color={theme.text} strokeWidth={2} /></Pressable>
+            <Pressable onPress={onClose} disabled={sending} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')}><X size={22} color={theme.text} strokeWidth={2} /></Pressable>
           </View>
 
           <ScrollView contentContainerStyle={cs.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>

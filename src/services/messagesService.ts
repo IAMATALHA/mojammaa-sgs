@@ -25,12 +25,12 @@
  */
 
 import {
-  collection, query, where, addDoc, onSnapshot, updateDoc, doc,
-  serverTimestamp, getDocs, arrayUnion, limit,
+  collection, query, where, addDoc, onSnapshot, updateDoc, doc, setDoc,
+  serverTimestamp, getDocs, getDocsFromServer, documentId, arrayUnion, limit,
   type Unsubscribe, type Query, type DocumentData, type Timestamp,
   type QueryDocumentSnapshot, type QuerySnapshot,
 } from 'firebase/firestore'
-import { db } from '../config/firebase'
+import { auth, db } from '../config/firebase'
 import { toDoc } from './firestore'
 import { isActiveEleve, type EleveDoc } from './elevesService'
 import { getParentsDirectory, getStaffDirectory } from './directoryService'
@@ -148,6 +148,79 @@ export async function sendMessage(msg: Omit<MessageDoc, 'createdAt' | 'id'>): Pr
   clean.createdAt = serverTimestamp()
   const ref = await addDoc(collection(db, COL), clean)
   return ref.id
+}
+
+interface PersonalizedSendEntry {
+  id: string
+  message: Record<string, unknown>
+  attempted: boolean
+  completed: boolean
+  pending?: Promise<void>
+}
+
+/** One instance per compose form; keep it after an error until the user closes the form. */
+export interface PersonalizedSendAttempt {
+  entries: Map<string, PersonalizedSendEntry>
+}
+
+export const newPersonalizedSendAttempt = (): PersonalizedSendAttempt => ({ entries: new Map() })
+
+// Firestore may return nested maps (e.g. attachments) in a different key order.
+const stableMessageJson = (value: unknown): string => JSON.stringify(value, (_key, item) =>
+  item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
+    : item)
+
+/**
+ * An unchanged personalized message keeps its ID across retries. Reconcile an
+ * uncertain write with the SERVER before resending; never replace a delivered
+ * message (its readBy, deletedBy and push state may already have changed).
+ * A query scoped to the author also works when the document does not exist:
+ * a direct get of an absent message is not authorized for teachers by the rules.
+ */
+async function sendPersonalizedOnce(msg: Omit<MessageDoc, 'createdAt' | 'id'>, attempt: PersonalizedSendAttempt): Promise<void> {
+  const signature = stableMessageJson(msg)
+  let entry = attempt.entries.get(signature)
+  if (!entry) {
+    // Freeze the payload, including its academic period, before the first write.
+    const message = JSON.parse(signature) as Record<string, unknown>
+    Object.assign(message, { readBy: [], deletedBy: [], status: 'sent' }, currentAcademicPeriod())
+    entry = { id: doc(collection(db, COL)).id, message, attempted: false, completed: false }
+    attempt.entries.set(signature, entry)
+  }
+  const saved = entry
+  if (auth.currentUser?.uid !== msg.fromId) throw new Error('auth/user-mismatch')
+  if (saved.completed) return
+  if (saved.pending) return saved.pending
+
+  const reconcile = async (): Promise<boolean> => {
+    const snapshot = await getDocsFromServer(query(collection(db, COL),
+      where('fromId', '==', msg.fromId), where(documentId(), '==', saved.id), limit(1)))
+    if (snapshot.empty) return false
+    const existing = snapshot.docs[0].data()
+    // Receipt/delivery state is intentionally excluded; content/envelope changes
+    // are a conflict, not permission to overwrite or silently create a duplicate.
+    const mutable = new Set(['readBy', 'deletedBy', 'status'])
+    const matches = Object.entries(saved.message).every(([key, value]) =>
+      mutable.has(key) || stableMessageJson(existing[key]) === stableMessageJson(value))
+    if (!matches) throw new Error('messages/retry-content-changed')
+    return true
+  }
+
+  saved.pending = (async () => {
+    if (saved.attempted && await reconcile()) { saved.completed = true; return }
+    if (auth.currentUser?.uid !== msg.fromId) throw new Error('auth/user-mismatch')
+    saved.attempted = true
+    try {
+      await setDoc(doc(db, COL, saved.id), { ...saved.message, createdAt: serverTimestamp() })
+    } catch (error) {
+      // A competing/previous successful create is protected by immutable
+      // createdAt in the rules. Confirm the actual document before accepting it.
+      if ((error as { code?: string })?.code !== 'permission-denied' || !await reconcile()) throw error
+    }
+    saved.completed = true
+  })()
+  try { await saved.pending } finally { saved.pending = undefined }
 }
 
 // ── Delete ───────────────────────────────────────────────────────────────
@@ -456,15 +529,15 @@ export async function broadcastPersonalized(p: {
   teacher:    { uid: string; nom: string; prenom: string }
   fromRole?:  string
   attachments?: Attachment[]
-}): Promise<{ messagesWritten: number; pushSent: number; parentsTargeted: number }> {
+}, attempt: PersonalizedSendAttempt): Promise<{ messagesWritten: number; pushSent: number; parentsTargeted: number }> {
   const result = { messagesWritten: 0, pushSent: 0, parentsTargeted: 0 }
   if (p.recipients.length === 0) return result
 
   const fromNom = `${p.teacher.prenom} ${p.teacher.nom}`.trim()
 
-  // One message doc per (student → parent). Push is sent server-side per doc.
+  // One stable message per (student → parent) in this compose attempt.
   for (const r of p.recipients) {
-    await sendMessage({
+    await sendPersonalizedOnce({
       type:     'announcement',
       subject:  p.subject,
       body:     r.body,
@@ -483,7 +556,7 @@ export async function broadcastPersonalized(p: {
       attachments: p.attachments,
       readBy:   [],
       status:   'sent',
-    })
+    }, attempt)
   }
   result.messagesWritten = p.recipients.length
   result.parentsTargeted = new Set(p.recipients.map(r => r.parentUid)).size
