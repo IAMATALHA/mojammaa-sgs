@@ -197,7 +197,11 @@ Audit Codex (`mojammaa-admin/docs/messages-audit-2026-10-05.md`). Le groupe 1 (s
 - [x] Fonctions déployées par nom le 05/10 (19:50 UTC) : default `registerPushDevice`, `onMessageCreated`, `retryMessageDeliveries`, `retryMessageDelivery`. Journaux sans avertissement ni erreur après déploiement. Site d'administration mojammaa-admin `d103b58` (enregistrement du navigateur, désactivation à la déconnexion, service worker) en ligne.
 - Retour arrière F05 : redéployer ces 4 fonctions depuis `13ccbe4` ; site : `vercel rollback`.
 - [ ] Recette réelle : un compte admin/prof recharge mojammaa.com, accepte les notifications → un appareil `platform: web` apparaît dans `pushDevices` → un message reçu affiche une notification navigateur.
-- Reste : R01 (destinataires vérifiés côté serveur).
+- [x] Revue Codex de F06/F05 (`mojammaa-admin/docs/messages-review-claude-2026-10-05.md`) : 4 défauts confirmés et corrigés. RC02 (reprise F06 refusée aux profs sur un message non créé : écrire d'abord, relire seulement après refus), RC04 (nettoyage des jetons morts isolé de l'envoi, FCM et Expo), RC01 serveur (`uid` dans les notifications navigateur) : `712cccf`. RC01/RC03 site : `5616f4b`. Contre-épreuves : 5 défauts « NOT REPRODUCED » avec le script de Codex, contrôles intacts ; app 183, règles 421, communications 69, navigateur 11, F06 avec vraies règles 4.
+- [x] Fonctions redéployées le 05/10 (≈22:05 UTC) : default `onMessageCreated`, `retryMessageDeliveries`, `retryMessageDelivery` ; journaux sans avertissement. Site `5616f4b` en ligne (service worker vérifiant le compte connecté).
+- [x] OTA 1.0.17 depuis `712cccf` : Android `a9acb928-f4a5-4d0f-a107-dab075e18134`, iOS `bebd07fd-4645-49ed-99ee-81c76434fb3b`. OTA 1.0.16 depuis `bbbac4d` (= `0708f92` + diff `src` de `712cccf`, 183/183) : Android `a2ccacb0-fb7d-49fc-96a0-bbc9c752c6a5`, iOS `6089f83e-9a96-4f25-9526-7b4732b57038`. Tag local `v1.0.16-final` → `bbbac4d`.
+- Retour arrière : OTA `d0105169`/`6da5582f` (1.0.17) et `edb6257f`/`7e9b1975` (1.0.16) ; fonctions depuis `5f10e5b` ; site `vercel rollback`.
+- Reste : R01 (destinataires vérifiés côté serveur) ; recette réelle des notifications navigateur.
 
 ## 8. Clôture
 
