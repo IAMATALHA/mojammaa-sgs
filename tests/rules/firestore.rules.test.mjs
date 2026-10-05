@@ -1736,6 +1736,41 @@ await deny('aucun client, même superadmin, ne lit les compteurs anti-bourrinage
 await deny('aucun client n’écrit les compteurs anti-bourrinage',
   setDoc(doc(asUser('admin1'), 'parentPhoneAuthRateLimits/global-login'), { count: 0 }))
 
+console.log('\n── 16. Audit messagerie 2026-10-05 : champs à la création, accusés ──')
+// F03 : un objet à la place d'un tableau faisait planter la boîte de réception.
+await deny('F03 parent ne crée pas un message avec deletedBy non-tableau',
+  addDoc(collection(asUser('parent1'), 'messages'), { ...parentMessage, deletedBy: { invalid: true } }))
+await deny('F03 corps de message non textuel refusé',
+  addDoc(collection(asUser('prof1'), 'messages'), { type: 'direct', subject: 'S', body: { html: 1 }, fromId: 'prof1', fromRole: 'professeur', toType: 'user', toIds: ['parent1'], readBy: [] }))
+await deny('F03 objet démesuré refusé',
+  addDoc(collection(asUser('prof1'), 'messages'), { type: 'direct', subject: 'x'.repeat(301), body: 'B', fromId: 'prof1', fromRole: 'professeur', toType: 'user', toIds: ['parent1'], readBy: [] }))
+await deny('F03 date de création non horodatée refusée',
+  addDoc(collection(asUser('prof1'), 'messages'), { type: 'direct', subject: 'S', body: 'B', fromId: 'prof1', fromRole: 'professeur', toType: 'user', toIds: ['parent1'], readBy: [], createdAt: 'hier' }))
+// F04b : l'expéditeur ne fabrique ni lecture ni suppression chez le destinataire.
+await deny('F04b accusé de lecture prérempli refusé',
+  addDoc(collection(asUser('parent1'), 'messages'), { ...parentMessage, readBy: ['admin1'] }))
+await deny('F04b message masqué d’avance chez le destinataire refusé',
+  addDoc(collection(asUser('parent1'), 'messages'), { ...parentMessage, deletedBy: ['admin1'] }))
+await allow('message normal avec corbeille vide et date serveur accepté',
+  addDoc(collection(asUser('prof1'), 'messages'), { type: 'direct', subject: 'S', body: 'B', fromId: 'prof1', fromRole: 'professeur', toType: 'user', toIds: ['parent1'], readBy: [], deletedBy: [], createdAt: serverTimestamp() }))
+// F04a : s'ajouter aux accusés suppose d'être dans l'audience du message.
+await deny('F04a compte tiers ne marque pas lu un message privé',
+  updateDoc(doc(asUser('parent2'), 'messages/m1'), { readBy: arrayUnion('parent2') }))
+await deny('F04a compte tiers ne masque pas un message privé',
+  updateDoc(doc(asUser('parent2'), 'messages/m1'), { deletedBy: arrayUnion('parent2') }))
+await deny('F04a prof d’une autre classe ne marque pas lue une annonce de classe',
+  updateDoc(doc(asUser('prof2'), 'messages/admin1a'), { readBy: arrayUnion('prof2') }))
+await allow('l’expéditeur masque son propre envoi',
+  updateDoc(doc(asUser('parent1'), 'messages/m1'), { deletedBy: arrayUnion('parent1') }))
+await allow('parent destinataire d’une diffusion « parents » la marque lue',
+  updateDoc(doc(asUser('parent1'), 'messages/parentsBroadcast'), { readBy: arrayUnion('parent1') }))
+await allow('prof de la classe marque lue l’annonce de l’administration',
+  updateDoc(doc(asUser('profSameClass'), 'messages/admin1a'), { readBy: arrayUnion('profSameClass') }))
+await allow('admin marque lue une demande de la boîte commune',
+  updateDoc(doc(asUser('admin1'), 'messages/adminInbox'), { readBy: arrayUnion('admin1') }))
+await allow('destinataire d’un ancien message legacy le marque lu',
+  updateDoc(doc(asUser('prof1'), 'messages/legacy1'), { readBy: arrayUnion('prof1') }))
+
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)
 if (failed.length) {

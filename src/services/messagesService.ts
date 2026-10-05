@@ -114,8 +114,25 @@ const COL = 'messages'
  */
 function readMessage(snap: QueryDocumentSnapshot<DocumentData>): MessageDoc {
   const message = toDoc<MessageDoc>(snap)
-  return message.attachments === undefined ? message : { ...message, attachments: safeAttachments(message.attachments) }
+  const raw = message as unknown as Record<string, unknown>
+  const normalized: Record<string, unknown> = {}
+  // Audit messagerie 2026-10-05 (F03) : un objet à la place du tableau
+  // `deletedBy` faisait planter toute la boîte de réception (`.includes`), et
+  // un texte non textuel plantait l'affichage. Les règles refusent désormais
+  // ces documents à la création ; ceci couvre l'historique. Un champ absent
+  // reste absent (ancien format).
+  for (const key of ['readBy', 'deletedBy', 'toIds'] as const) {
+    if (raw[key] !== undefined && !isStringList(raw[key])) normalized[key] = stringList(raw[key])
+  }
+  for (const key of ['subject', 'body', 'subjectAr', 'bodyAr', 'fromNom', 'toLabel'] as const) {
+    if (raw[key] !== undefined && typeof raw[key] !== 'string') normalized[key] = ''
+  }
+  if (message.attachments !== undefined) normalized.attachments = safeAttachments(message.attachments)
+  return Object.keys(normalized).length ? { ...message, ...normalized } as MessageDoc : message
 }
+const stringList = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+const isStringList = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === 'string')
 const readMessages = (snap: QuerySnapshot<DocumentData>) => snap.docs.map(readMessage)
 
 // ── Create ───────────────────────────────────────────────────────────────

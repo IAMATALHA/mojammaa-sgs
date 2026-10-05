@@ -189,6 +189,41 @@ service cloud.firestore {
     }
     // Les familles écrivent à la boîte commune de l'administration, ou
     // répondent à UN administrateur dont le rôle est vérifié en direct.
+    // Audit messagerie 2026-10-05 (F03/F04b) : à la création, accusés et
+    // corbeille VIDES (sinon l'expéditeur fabrique une fausse lecture ou masque
+    // le message chez le destinataire) et champs lus par les lecteurs du bon
+    // type (un objet à la place du tableau `deletedBy` faisait planter la boîte
+    // de réception). Tailles larges : 35 / 184 caractères au plus en base.
+    function validNewMessageFields(data) {
+      return data.get('readBy', []) is list && data.get('readBy', []).size() == 0
+        && data.get('deletedBy', []) is list && data.get('deletedBy', []).size() == 0
+        && data.get('toIds', []) is list
+        && data.get('subject', '') is string && data.get('subject', '').size() <= 300
+        && data.get('body', '') is string && data.get('body', '').size() <= 10000
+        && data.get('subjectAr', '') is string && data.get('subjectAr', '').size() <= 300
+        && data.get('bodyAr', '') is string && data.get('bodyAr', '').size() <= 10000
+        && data.get('fromNom', '') is string && data.get('fromNom', '').size() <= 200
+        && data.get('toLabel', '') is string && data.get('toLabel', '').size() <= 200
+        && (!data.keys().hasAny(['createdAt']) || data.createdAt is timestamp);
+    }
+    // Audit F04a : s'ajouter à readBy/deletedBy suppose d'être dans l'audience
+    // du message (mêmes cas que la lecture, champs absents tolérés par .get) —
+    // sinon un compte tiers falsifiait l'accusé d'un message qu'il ne peut pas
+    // lire. L'expéditeur peut masquer son propre envoi.
+    function messageAudienceIncludesMe() {
+      let m = resource.data;
+      return m.get('fromId', '') == myUid()
+        || myUid() in m.get('toIds', [])
+        || m.get('toType', '') == 'all'
+        || (m.get('toType', '') == 'parents' && hasGuardianAccess())
+        || (m.get('toType', '') == 'teachers' && isTeacher())
+        || adminAnnonceToMyClass()
+        || m.get('toId', '') == myUid()
+        || m.get('toId', '') == 'all'
+        || (m.get('toId', '') == 'parents' && hasGuardianAccess())
+        || (m.get('toId', '') == 'teachers' && isTeacher())
+        || isAdmin();
+    }
     function parentMessageToAdministration() {
       let data = request.resource.data;
       return data.get('type', '') == 'direct'
@@ -784,6 +819,7 @@ service cloud.firestore {
       // borne réelle par destinataire viendra du refactor deliveries (CF).
       allow create: if isSignedIn()
         && request.resource.data.fromId == myUid()
+        && validNewMessageFields(request.resource.data)
         // Les alertes et leur suivi sont écrits exclusivement par le serveur.
         && !request.resource.data.keys().hasAny(['push', 'automation', 'appointmentId', 'appointmentAudience'])
         && !(request.resource.data.get('type', '') in ['attendance', 'behavior', 'appointment'])
@@ -848,7 +884,8 @@ service cloud.firestore {
                                    'eleveId', 'createdAt', 'push', 'automation', 'type', 'appointmentId', 'appointmentAudience'])
             && (untouched(['attachments'])
                 || validAnnouncementAttachments(request.resource.data.attachments)))
-          || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy'])
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy'])
+              && messageAudienceIncludesMe())
         )
         && selfAppendOnly('readBy')
         && selfAppendOnly('deletedBy');
