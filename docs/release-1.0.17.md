@@ -193,7 +193,11 @@ Audit Codex (`mojammaa-admin/docs/messages-audit-2026-10-05.md`). Le groupe 1 (s
 - [x] OTA runtime 1.0.17 depuis `9a820a0` : Android `d0105169-bf4f-4525-a9ec-3b65d167abf5`, iOS `6da5582f-17a8-49bc-bfcc-04b9567b5e1c`. Envoi de l'empreinte (fingerprint) EAS en échec réseau (`ENOTFOUND storage.googleapis.com`, passager) : sans effet sur la mise à jour, la politique est `runtimeVersion: appVersion`.
 - [x] OTA runtime 1.0.16 depuis `~/mojammaa-sgs-ota-1016`, `0708f92` (= `1f4ddc4` + le diff `src` de `9a820a0`, sans conflit ; `tsc`, 183/183) : Android `edb6257f-3884-4b9c-9bad-90c71feffa4c`, iOS `7e9b1975-f973-4237-b056-a63867077ac1`. Tag local `v1.0.16-final` → `0708f92`.
 - Retour arrière F06 : republier `69c91908`/`18c7c259` (1.0.17) et `bfd9186b`/`b5e56347` (1.0.16).
-- Restent : F05 (notifications navigateur), R01 (destinataires vérifiés côté serveur).
+- [x] F05 `f6e0bcd` : canal navigateur (FCM via le SDK Admin) dans le moteur d'envoi, registre des appareils ouvert aux jetons FCM du web (fournisseur `fcm`), Smart Pickup limité aux téléphones. 9 tests émulateur (`tests/functions/webPush.test.mjs`, le premier échoue sur l'ancien code), app 183/183, communications 69/69. Vérifié avant déploiement : API FCM active, compte `21853485219-compute@` (Editor) avec `cloudmessaging.messages.create` ; seul `0238f66` (déjà en prod, sans effet sur l'envoi) sépare le code déployé de ces fonctions.
+- [x] Fonctions déployées par nom le 05/10 (19:50 UTC) : default `registerPushDevice`, `onMessageCreated`, `retryMessageDeliveries`, `retryMessageDelivery`. Journaux sans avertissement ni erreur après déploiement. Site d'administration mojammaa-admin `d103b58` (enregistrement du navigateur, désactivation à la déconnexion, service worker) en ligne.
+- Retour arrière F05 : redéployer ces 4 fonctions depuis `13ccbe4` ; site : `vercel rollback`.
+- [ ] Recette réelle : un compte admin/prof recharge mojammaa.com, accepte les notifications → un appareil `platform: web` apparaît dans `pushDevices` → un message reçu affiche une notification navigateur.
+- Reste : R01 (destinataires vérifiés côté serveur).
 
 ## 8. Clôture
 
