@@ -7,6 +7,13 @@ const MAX_ATTEMPTS = 5
 const RECEIPT_DELAY = 15 * 60_000
 const RECEIPT_EXPIRY = 24 * 60 * 60_000
 const LEASE_MS = 4 * 60_000
+// Canal navigateur (audit messagerie 2026-10-05, F05) : FCM via le SDK Admin.
+// Pas de reçu différé comme Expo : une réponse « success » de FCM vaut remise
+// au service de notification du navigateur (état « transmitted »).
+const FCM_UNREGISTERED = new Set(['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'])
+const FCM_RETRYABLE = new Set(['messaging/internal-error', 'messaging/server-unavailable', 'messaging/unavailable',
+  'messaging/quota-exceeded', 'messaging/message-rate-exceeded', 'messaging/device-message-rate-exceeded', 'messaging/unknown-error'])
+const defaultSendFcm = messages => require('firebase-admin/messaging').getMessaging().sendEach(messages)
 const millis = value => typeof value?.toMillis === 'function' ? value.toMillis() : new Date(value).getTime()
 const retryDelay = attempts => Math.min(60 * 60_000, 60_000 * 2 ** (attempts - 1))
 
@@ -32,7 +39,7 @@ function summarize(targets, recipientCount, now) {
   }
 }
 
-function createMessageDelivery(db, { resolveRecipients, fetchImpl = fetch, now = Date.now }) {
+function createMessageDelivery(db, { resolveRecipients, fetchImpl = fetch, now = Date.now, sendFcm = defaultSendFcm }) {
   async function recipientsAllowed(message) {
     const sender = message.fromId ? await db.collection('users').doc(message.fromId).get() : null
     if (sender?.get('role') !== 'parent' && message.fromRole !== 'parent') return true
@@ -168,7 +175,39 @@ function createMessageDelivery(db, { resolveRecipients, fetchImpl = fetch, now =
           return true
         })
         if (!ready.length) { await save(false); continue }
-        const payload = ready.map(t => {
+        const browsers = ready.filter(t => t.provider === 'fcm')
+        if (browsers.length) {
+          const messages = browsers.map(t => {
+            const copy = messageCopy(message, t.language)
+            return {
+              token: t.token,
+              // Données seules : le service worker du site affiche la
+              // notification (le SDK n'en affiche pas une seconde).
+              data: {
+                title: (message.priority === 'urgent' ? '🚨 ' : '') + copy.title, body: copy.body,
+                messageId: messageRef.id, type: message.category || 'announcement', link: '/messages',
+              },
+              webpush: { headers: { Urgency: 'high', TTL: String(24 * 60 * 60) } },
+            }
+          })
+          try {
+            const result = await sendFcm(messages)
+            browsers.forEach((target, index) => {
+              const response = result?.responses?.[index]
+              if (response?.success) {
+                target.state = 'transmitted'
+                delete target.error
+              } else {
+                const code = response?.error?.code || 'fcm_error'
+                fail(target, code, FCM_RETRYABLE.has(code))
+              }
+            })
+            await Promise.all(browsers.filter(target => FCM_UNREGISTERED.has(target.error)).map(target => invalidatePushTarget(db, target)))
+          } catch { browsers.forEach(t => fail(t, 'network_error', true)) }
+        }
+        const phones = ready.filter(t => t.provider !== 'fcm')
+        if (!phones.length) { await save(false); continue }
+        const payload = phones.map(t => {
           const copy = messageCopy(message, t.language)
           return {
             to: t.token, sound: 'default', priority: 'high', channelId: 'default',
@@ -181,7 +220,7 @@ function createMessageDelivery(db, { resolveRecipients, fetchImpl = fetch, now =
         })
         try {
           const response = await post(SEND_URL, payload)
-          ready.forEach((target, index) => {
+          phones.forEach((target, index) => {
             const ticket = Array.isArray(response.json?.data) ? response.json.data[index] : null
             if (response.ok && ticket?.status === 'ok' && typeof ticket.id === 'string') {
               Object.assign(target, { state: 'accepted', ticketId: ticket.id, acceptedAt: now(), dueAt: now() + RECEIPT_DELAY })
@@ -192,8 +231,8 @@ function createMessageDelivery(db, { resolveRecipients, fetchImpl = fetch, now =
                 || (response.ok && (!ticket || code === 'MessageRateExceeded')))
             }
           })
-          await Promise.all(ready.filter(target => target.error === 'DeviceNotRegistered').map(target => invalidatePushTarget(db, target)))
-        } catch { ready.forEach(t => fail(t, 'network_error', true)) }
+          await Promise.all(phones.filter(target => target.error === 'DeviceNotRegistered').map(target => invalidatePushTarget(db, target)))
+        } catch { phones.forEach(t => fail(t, 'network_error', true)) }
         await save(false)
       }
     }

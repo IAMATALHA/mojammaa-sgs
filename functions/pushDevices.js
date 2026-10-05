@@ -1,5 +1,12 @@
 const { createHash, randomBytes, timingSafeEqual } = require('node:crypto')
 const TOKEN_RE = /^(Expo|Exponent)PushToken\[[^\]]+\]$/
+// Jeton FCM d'un navigateur (site d'administration ; audit messagerie
+// 2026-10-05, F05) : alphabet base64url et « : », longueur bornée.
+const FCM_TOKEN_RE = /^[A-Za-z0-9_:-]{100,1024}$/
+// Téléphones : Expo (qui relaie vers FCM/APNs) ; navigateur : FCM directement.
+const providerFor = platform => platform === 'web' ? 'fcm' : 'expo'
+const validToken = (provider, token) => typeof token === 'string'
+  && (provider === 'fcm' ? FCM_TOKEN_RE.test(token) : token.length <= 300 && TOKEN_RE.test(token))
 const DEVICE_ID_RE = /^[A-Za-z0-9_-]{16,80}$/
 const tokenKey = token => createHash('sha256').update(token).digest('hex')
 // Clé de libération : remise au téléphone à chaque activation, seule son
@@ -19,8 +26,8 @@ async function registerPushDevice(db, uid, input) {
     || !Number.isSafeInteger(input.revision) || input.revision < 1
     || typeof input.enabled !== 'boolean'
     || (input.enabled && !input.token)
-    || (input.token !== undefined && (typeof input.token !== 'string' || !TOKEN_RE.test(input.token) || input.token.length > 300))
-    || !['ios', 'android', 'web'].includes(input.platform)) throw error('invalid-argument')
+    || !['ios', 'android', 'web'].includes(input.platform)
+    || (input.token !== undefined && !validToken(providerFor(input.platform), input.token))) throw error('invalid-argument')
   const ref = db.collection('pushDevices').doc(input.deviceId)
   // Générée hors transaction : une relance de la transaction garde la même clé.
   const releaseKey = input.enabled ? randomBytes(32).toString('base64url') : null
@@ -40,7 +47,7 @@ async function registerPushDevice(db, uid, input) {
       tx.set(oldOwner.ref, { enabled: false, updatedAt: new Date() }, { merge: true })
     }
     const data = { uid, deviceId: input.deviceId, token, enabled: input.enabled, revision: input.revision,
-      language: languageOf(input.language), platform: input.platform, updatedAt: new Date(),
+      language: languageOf(input.language), platform: input.platform, provider: providerFor(input.platform), updatedAt: new Date(),
       releaseKeyHash: releaseKey ? releaseKeyHash(releaseKey) : old?.uid === uid ? old.releaseKeyHash ?? null : null }
     tx.set(ref, data)
     if (input.enabled || !tokenOwner?.exists || (tokenOwner.get('uid') === uid && tokenOwner.get('deviceId') === input.deviceId)) {
@@ -98,19 +105,20 @@ async function getPushTargets(db, uids) {
       db.getAll(...chunk.map(uid => db.collection('users').doc(uid))),
     ])
     const existingUsers = new Set(users.filter(user => user.exists).map(user => user.id))
-    const candidates = devices.docs.filter(d => d.get('enabled') && existingUsers.has(d.get('uid'))).map(d => ({ ...d.data(), deviceId: d.id }))
+    const candidates = devices.docs.filter(d => d.get('enabled') && existingUsers.has(d.get('uid')))
+      .map(d => ({ ...d.data(), deviceId: d.id, provider: d.get('provider') || providerFor(d.get('platform')) }))
     for (const user of users) {
       const token = user.get('expoPushToken')
-      if (TOKEN_RE.test(token || '')) candidates.push({ uid: user.id, token, language: languageOf(user.get('notificationLanguage')) })
+      if (TOKEN_RE.test(token || '')) candidates.push({ uid: user.id, token, provider: 'expo', language: languageOf(user.get('notificationLanguage')) })
     }
     const owners = candidates.length ? await db.getAll(...candidates.map(t => db.collection('pushTokenOwners').doc(tokenKey(t.token)))) : []
     candidates.forEach((target, index) => {
       const owner = owners[index]
-      if (!TOKEN_RE.test(target.token) || seen.has(target.token)) return
+      if (!validToken(target.provider, target.token) || seen.has(target.token)) return
       if (owner.exists && (!owner.get('enabled') || owner.get('uid') !== target.uid
         || (target.deviceId && owner.get('deviceId') !== target.deviceId))) return
       seen.add(target.token)
-      targets.push({ uid: target.uid, token: target.token, language: languageOf(target.language), ...(target.deviceId ? { deviceId: target.deviceId } : {}) })
+      targets.push({ uid: target.uid, token: target.token, provider: target.provider, language: languageOf(target.language), ...(target.deviceId ? { deviceId: target.deviceId } : {}) })
     })
   }
   return targets

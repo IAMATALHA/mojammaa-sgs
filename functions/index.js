@@ -134,7 +134,9 @@ async function resolveRecipientUids(data) {
 
 /** Shared device registry for both school messages and Smart Pickup. */
 async function pushTargetsForUids(uids) {
-  return { targets: await getPushTargets(db, uids), invalid: 0 }
+  // Smart Pickup ne vise que les téléphones (parents, chauffeurs) et passe
+  // par Expo : les navigateurs (FCM) sont servis par messageDelivery seul.
+  return { targets: (await getPushTargets(db, uids)).filter(target => target.provider !== 'fcm'), invalid: 0 }
 }
 
 exports.registerPushDevice = onCall(async request => {
