@@ -84,7 +84,8 @@ await test('Un administrateur équipé seulement d’un navigateur reçoit la no
   const sent = h.fcmCalls[0][0]
   assert.equal(sent.token, fcmToken('admin'))
   assert.equal(sent.notification, undefined, 'données seules : le service worker affiche la notification')
-  assert.deepEqual(Object.keys(sent.data).sort(), ['body', 'link', 'messageId', 'title', 'type'])
+  assert.deepEqual(Object.keys(sent.data).sort(), ['body', 'link', 'messageId', 'title', 'type', 'uid'])
+  assert.equal(sent.data.uid, 'admin', 'le service worker vérifie le compte connecté (revue RC01)')
   assert.ok(Object.values(sent.data).every(value => typeof value === 'string'))
   assert.equal(JSON.stringify((await ref.get()).data()).includes(fcmToken('admin')), false, 'jamais de jeton dans le message')
 })
@@ -130,6 +131,61 @@ await test('Déconnexion du site : le navigateur ne reçoit plus rien', async ()
   await h.enqueue(ref); await h.process(ref)
   assert.equal((await ref.get()).get('push.status'), 'no_device')
   assert.equal(h.fcmCalls.length, 0)
+})
+
+// Revue RC04 : une panne du nettoyage d'un jeton mort ne doit jamais remettre
+// en file un envoi déjà accepté (FCM comme Expo).
+const { readFileSync } = await import('node:fs')
+function engineWithFailingCleanup(options) {
+  const devices = require('../../functions/pushDevices')
+  let cleanups = 0
+  const module = { exports: {} }
+  new Function('require', 'module', 'exports', readFileSync(new URL('../../functions/messageDelivery.js', import.meta.url), 'utf8'))(name => {
+    if (name === './pushDevices') return { ...devices, invalidatePushTarget: async (...args) => {
+      if (++cleanups === 1) throw new Error('firestore unavailable')
+      return devices.invalidatePushTarget(...args)
+    } }
+    return require(name)
+  }, module, module.exports)
+  let time = Date.now()
+  return { ...module.exports.createMessageDelivery(db, { now: () => time, resolveRecipients: async m => m.toIds, ...options }), advance: ms => { time += ms } }
+}
+await test('Panne du nettoyage d’un jeton FCM mort : le navigateur accepté n’est pas renvoyé', async () => {
+  await register('teacher', 'alive'); await register('teacher', 'dead')
+  let sends = 0
+  const h = engineWithFailingCleanup({
+    fetchImpl: async () => ({ status: 200, ok: true, json: async () => ({ data: [{ status: 'ok', id: 'x' }] }) }),
+    sendFcm: async messages => ({ responses: messages.map(m => {
+      if (m.token === fcmToken('dead')) return { success: false, error: { code: 'messaging/registration-token-not-registered' } }
+      if (m.token === fcmToken('alive')) sends++
+      return { success: true }
+    }) }),
+  })
+  const ref = await message('cleanup-fcm', { fromId: 'admin', fromRole: 'admin', toIds: ['teacher'] })
+  await h.enqueue(ref); await h.process(ref)
+  h.advance(61_000); await h.process(ref)
+  h.advance(61_000); await h.process(ref)
+  assert.equal(sends, 1)
+  assert.notEqual((await ref.get()).get('push.status'), 'retrying')
+})
+await test('Panne du nettoyage d’un jeton Expo mort : le téléphone accepté n’est pas renvoyé', async () => {
+  await db.doc('users/second').set({ role: 'parent', expoPushToken: expoToken('second') })
+  await db.doc('users/third').set({ role: 'parent', expoPushToken: expoToken('third') })
+  let sends = 0
+  const h = engineWithFailingCleanup({
+    sendFcm: async () => { throw new Error('FCM must not be called') },
+    fetchImpl: async (url, options) => {
+      const payload = JSON.parse(options.body)
+      if (url.includes('getReceipts')) return { status: 200, ok: true, json: async () => ({ data: {} }) }
+      sends += payload.filter(m => m.to === expoToken('second')).length
+      return { status: 200, ok: true, json: async () => ({ data: payload.map(m => m.to === expoToken('third')
+        ? { status: 'error', details: { error: 'DeviceNotRegistered' } } : { status: 'ok', id: 'ticket-second' }) }) }
+    },
+  })
+  const ref = await message('cleanup-expo', { fromId: 'admin', fromRole: 'admin', toIds: ['second', 'third'] })
+  await h.enqueue(ref); await h.process(ref)
+  h.advance(61_000); await h.process(ref)
+  assert.equal(sends, 1)
 })
 
 console.log(`${passed} web push tests passed (Firestore emulator, mocked Expo and FCM; no real notification).`)

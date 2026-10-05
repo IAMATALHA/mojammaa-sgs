@@ -93,6 +93,14 @@ function createMessageDelivery(db, { resolveRecipients, fetchImpl = fetch, now =
     delete target.ticketId
   }
 
+  // Désactiver les appareils désabonnés APRÈS avoir enregistré les résultats
+  // du fournisseur : une panne ici ne doit jamais remettre en file des envois
+  // déjà acceptés (revue RC04). L'appareil restant actif sera réessayé, puis
+  // nettoyé, au prochain envoi qui le visera.
+  async function cleanUp(targets) {
+    await Promise.all(targets.map(target => invalidatePushTarget(db, target).catch(() => {})))
+  }
+
   async function process(messageRef) {
     const jobRef = db.collection('messageDeliveryJobs').doc(messageRef.id)
     const owner = randomUUID()
@@ -183,17 +191,20 @@ function createMessageDelivery(db, { resolveRecipients, fetchImpl = fetch, now =
               token: t.token,
               // Données seules : le service worker du site affiche la
               // notification (le SDK n'en affiche pas une seconde).
+              // `uid` : le service worker n'affiche le contenu que si ce compte
+              // est bien celui connecté dans ce navigateur (revue RC01).
               data: {
                 title: (message.priority === 'urgent' ? '🚨 ' : '') + copy.title, body: copy.body,
-                messageId: messageRef.id, type: message.category || 'announcement', link: '/messages',
+                messageId: messageRef.id, type: message.category || 'announcement', link: '/messages', uid: t.uid,
               },
               webpush: { headers: { Urgency: 'high', TTL: String(24 * 60 * 60) } },
             }
           })
-          try {
-            const result = await sendFcm(messages)
+          let result = null
+          try { result = await sendFcm(messages) } catch { browsers.forEach(t => fail(t, 'network_error', true)) }
+          if (result) {
             browsers.forEach((target, index) => {
-              const response = result?.responses?.[index]
+              const response = result.responses?.[index]
               if (response?.success) {
                 target.state = 'transmitted'
                 delete target.error
@@ -202,8 +213,8 @@ function createMessageDelivery(db, { resolveRecipients, fetchImpl = fetch, now =
                 fail(target, code, FCM_RETRYABLE.has(code))
               }
             })
-            await Promise.all(browsers.filter(target => FCM_UNREGISTERED.has(target.error)).map(target => invalidatePushTarget(db, target)))
-          } catch { browsers.forEach(t => fail(t, 'network_error', true)) }
+            await cleanUp(browsers.filter(target => FCM_UNREGISTERED.has(target.error)))
+          }
         }
         const phones = ready.filter(t => t.provider !== 'fcm')
         if (!phones.length) { await save(false); continue }
@@ -231,8 +242,8 @@ function createMessageDelivery(db, { resolveRecipients, fetchImpl = fetch, now =
                 || (response.ok && (!ticket || code === 'MessageRateExceeded')))
             }
           })
-          await Promise.all(phones.filter(target => target.error === 'DeviceNotRegistered').map(target => invalidatePushTarget(db, target)))
         } catch { phones.forEach(t => fail(t, 'network_error', true)) }
+        await cleanUp(phones.filter(target => target.error === 'DeviceNotRegistered'))
         await save(false)
       }
     }

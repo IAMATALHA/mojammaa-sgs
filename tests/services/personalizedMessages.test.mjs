@@ -21,7 +21,10 @@ function harness() {
       const id = q.filters.find(f => f.field === '__name__').value
       const author = q.filters.find(f => f.field === 'fromId').value
       const data = docs.get(id)
-      const result = data?.fromId === author ? [{ id, data: () => structuredClone(data) }] : []
+      // Comme les vraies règles (revue Codex RC02) : une requête sur un
+      // identifiant ABSENT est évaluée comme une lecture directe, refusée.
+      if (!data) throw Object.assign(new Error('missing message'), { code: 'permission-denied' })
+      const result = data.fromId === author ? [{ id, data: () => structuredClone(data) }] : []
       return { empty: !result.length, docs: result }
     },
     setDoc: async (ref, data) => {
@@ -68,22 +71,23 @@ test('lost acknowledgement: retry preserves receipts, deletion, push and created
   const before = structuredClone(message)
   await h.send()
   assert.equal(h.docs.size, 2)
-  assert.equal(h.writes.length, 2)
+  // 2e essai du 1er destinataire refusé par les règles (déjà créé), puis confirmé.
+  assert.equal(h.writes.length, 3)
   assert.deepEqual(h.docs.get(id), before)
 })
 
-test('an unavailable server check cannot trigger a blind resend', async () => {
+test('an unavailable server check never produces a duplicate', async () => {
   const h = harness()
   h.hooks.afterWrite = () => { throw networkError() }
   await assert.rejects(h.send())
   h.hooks.afterWrite = null
   h.hooks.beforeRead = () => { throw networkError() }
   await assert.rejects(h.send())
-  assert.equal(h.writes.length, 1)
+  // La nouvelle écriture vise le même identifiant : refusée, aucun doublon.
+  assert.equal(h.docs.size, 1)
   h.hooks.beforeRead = null
   await h.send()
   assert.equal(h.docs.size, 2)
-  assert.equal(h.writes.length, 2)
 })
 
 test('concurrent double send shares pending writes per recipient', async () => {
@@ -152,7 +156,7 @@ test('attachment map ordering does not change the operation or cause a conflict'
   saved.attachments = [{ mime: 'image/png', name: 'test.png', url: 'https://example.invalid/test' }]
   await h.send({ ...params, attachments: saved.attachments })
   assert.equal(h.docs.size, 2)
-  assert.equal(h.writes.length, 2)
+  assert.equal(h.writes.length, 3)
 })
 
 test('uncertain message modified on the server is a conflict, never overwritten', async () => {
@@ -162,7 +166,7 @@ test('uncertain message modified on the server is a conflict, never overwritten'
   const saved = [...h.docs.values()][0]
   saved.body = 'Edited by administration'
   await assert.rejects(h.send(), /messages\/retry-content-changed/)
-  assert.equal(h.writes.length, 1)
+  assert.equal(h.docs.size, 1)
   assert.equal(saved.body, 'Edited by administration')
 })
 
@@ -173,7 +177,7 @@ test('an uncertain message keeps its original academic period across month bound
   h.setPeriod({ academicYear: '2026-2027', semestre: 'S1', monthKey: '2026-11' })
   await h.send()
   assert.equal(h.docs.size, 2)
-  assert.equal(h.writes.length, 2)
+  assert.equal(h.writes.length, 3)
   assert.equal([...h.docs.values()][0].monthKey, '2026-10')
 })
 
