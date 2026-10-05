@@ -172,11 +172,13 @@ const stableMessageJson = (value: unknown): string => JSON.stringify(value, (_ke
     : item)
 
 /**
- * An unchanged personalized message keeps its ID across retries. Reconcile an
- * uncertain write with the SERVER before resending; never replace a delivered
- * message (its readBy, deletedBy and push state may already have changed).
- * A query scoped to the author also works when the document does not exist:
- * a direct get of an absent message is not authorized for teachers by the rules.
+ * An unchanged personalized message keeps its ID across retries. Every attempt
+ * WRITES first with that frozen ID: an absent message is created; an already
+ * created one is refused by the rules (immutable envelope and createdAt), so a
+ * retry can never duplicate nor overwrite (readBy, deletedBy, push preserved).
+ * Only after that refusal is the document read back to confirm it is ours and
+ * unchanged. Never read first: a query on an ABSENT id is evaluated like a
+ * direct get and refused to teachers (revue Codex du 5 octobre, RC02).
  */
 async function sendPersonalizedOnce(msg: Omit<MessageDoc, 'createdAt' | 'id'>, attempt: PersonalizedSendAttempt): Promise<void> {
   const signature = stableMessageJson(msg)
@@ -208,14 +210,14 @@ async function sendPersonalizedOnce(msg: Omit<MessageDoc, 'createdAt' | 'id'>, a
   }
 
   saved.pending = (async () => {
-    if (saved.attempted && await reconcile()) { saved.completed = true; return }
     if (auth.currentUser?.uid !== msg.fromId) throw new Error('auth/user-mismatch')
     saved.attempted = true
     try {
       await setDoc(doc(db, COL, saved.id), { ...saved.message, createdAt: serverTimestamp() })
     } catch (error) {
-      // A competing/previous successful create is protected by immutable
-      // createdAt in the rules. Confirm the actual document before accepting it.
+      // Refused: the message most likely exists already (lost acknowledgement).
+      // Confirm the actual document — readable now that it exists — before
+      // accepting it; any other refusal or a mismatch is reported.
       if ((error as { code?: string })?.code !== 'permission-denied' || !await reconcile()) throw error
     }
     saved.completed = true
