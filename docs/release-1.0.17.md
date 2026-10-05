@@ -179,6 +179,18 @@ Revue Codex de `4d38d8c` : le cache de 10 min masquait deux cas (P2), plus un tr
 - [x] Identifiants servis vérifiés (`eas update:list`) : `71711c18` sur 1.0.17, `c7f9e8d5` sur 1.0.16.
 - Retour arrière de l'app : republier `5d727455` (1.0.17) et, depuis `~/mojammaa-sgs-ota-1016`, `c765d3e8` (1.0.16).
 
+### Audit messagerie du 05/10 — groupe 2 (05/10, soir)
+
+Audit Codex (`mojammaa-admin/docs/messages-audit-2026-10-05.md`). Le groupe 1 (site seul) est en ligne depuis mojammaa-admin `37c8e9a`.
+
+- [x] Règles `59f827a` : à la création d'un message, accusés/corbeille vides et champs typés et bornés (F03, F04b) ; s'ajouter à `readBy`/`deletedBy` suppose d'être dans l'audience (F04a). 16 cas ajoutés (415/415), communications 69/69. Écart avec la prod vérifié avant déploiement : 38 lignes ajoutées, 1 seule modifiée. Déployées le 05/10 à 18:40 UTC (ruleset `5f0bf089`), relues identiques au fichier. Retour arrière : republier le ruleset `6199d811`.
+- [x] App `59f827a` : `readMessage()` normalise les tableaux et textes des anciens documents (plus de plantage de la boîte de réception). `tsc`, 170/170.
+- [x] OTA runtime 1.0.17 depuis `59f827a` (arbre propre ; seul changement d'app depuis la dernière OTA) : Android `69c91908-8ca7-4ccd-884e-ee93a2dde0b3`, iOS `18c7c259-e6b5-4ef5-b588-4bc710c4f3df`.
+- [x] OTA runtime 1.0.16 depuis `~/mojammaa-sgs-ota-1016`, `1f4ddc4` (= `d7ecb14` + le seul diff de `messagesService.ts`, sans conflit ; `tsc` OK, 170/170 avec `functions/node_modules` lié le temps du test) : Android `bfd9186b-495c-4838-a8ec-371a1df21461`, iOS `b5e56347-35f8-4320-93c7-5d0949ea1205`. Tag local `v1.0.16-final` → `1f4ddc4`.
+- [x] Identifiants servis vérifiés (`eas update:list`).
+- Retour arrière de l'app : republier `71711c18` (1.0.17) et, depuis `~/mojammaa-sgs-ota-1016`, `c7f9e8d5` (1.0.16).
+- Restent : F06 (envois personnalisés idempotents), F05 (notifications navigateur), R01 (destinataires vérifiés côté serveur).
+
 ## 8. Clôture
 
 - [x] Tag `v1.0.17` sur `7c47027` (commit buildé), poussé.
