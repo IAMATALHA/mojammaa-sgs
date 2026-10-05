@@ -25,7 +25,7 @@ import {
 import {
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, collection, collectionGroup, query, where,
   orderBy, limit,
-  arrayUnion, writeBatch, serverTimestamp, deleteField,
+  arrayUnion, writeBatch, serverTimestamp, deleteField, documentId,
 } from 'firebase/firestore'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -1770,6 +1770,26 @@ await allow('admin marque lue une demande de la boîte commune',
   updateDoc(doc(asUser('admin1'), 'messages/adminInbox'), { readBy: arrayUnion('admin1') }))
 await allow('destinataire d’un ancien message legacy le marque lu',
   updateDoc(doc(asUser('prof1'), 'messages/legacy1'), { readBy: arrayUnion('prof1') }))
+
+// F06 : l'envoi personnalisé idempotent (messagesService.sendPersonalizedOnce)
+// s'appuie sur trois comportements réels des règles.
+const personalized = {
+  type: 'announcement', category: 'announcement', subject: 'Perso', body: 'Bonjour A', fromId: 'prof1',
+  fromRole: 'professeur', fromNom: 'Un Prof', toType: 'user', toIds: ['parent1'], classe: '1A',
+  eleveId: 'e1', readBy: [], deletedBy: [], status: 'sent',
+}
+await allow('F06 création d’un message personnalisé à identifiant fixe',
+  setDoc(doc(asUser('prof1'), 'messages/f06-stable'), { ...personalized, createdAt: serverTimestamp() }))
+await deny('F06 une reprise ne réécrit jamais un message déjà créé',
+  setDoc(doc(asUser('prof1'), 'messages/f06-stable'), { ...personalized, createdAt: serverTimestamp() }))
+await allow('F06 l’auteur vérifie son message sur le serveur (fromId + identifiant)',
+  getDocs(query(collection(asUser('prof1'), 'messages'), where('fromId', '==', 'prof1'), where(documentId(), '==', 'f06-stable'))))
+await allow('F06 admin : création d’un message personnalisé à identifiant fixe',
+  setDoc(doc(asUser('admin1'), 'messages/f06-admin'), { ...personalized, fromId: 'admin1', fromRole: 'admin', fromNom: 'Admin', createdAt: serverTimestamp() }))
+await deny('F06 admin : une reprise ne réécrit pas non plus un message déjà créé',
+  setDoc(doc(asUser('admin1'), 'messages/f06-admin'), { ...personalized, fromId: 'admin1', fromRole: 'admin', fromNom: 'Admin', createdAt: serverTimestamp() }))
+await deny('F06 un autre compte ne sonde pas les envois d’un professeur',
+  getDocs(query(collection(asUser('parent2'), 'messages'), where('fromId', '==', 'prof1'), where(documentId(), '==', 'f06-stable'))))
 
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)

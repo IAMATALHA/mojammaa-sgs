@@ -1,5 +1,5 @@
 import type { AdminDashboardNav } from '../../navigation/types'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, Pressable, Modal, ScrollView,
   ActivityIndicator, TouchableOpacity, TextInput, Alert,
@@ -20,7 +20,7 @@ import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   subscribeMessages, subscribeSentMessages, subscribeTeacherMessages, markAsRead, deleteMessage,
-  sendMessage, subscribeDeliveryIssues, broadcast, broadcastToParents, broadcastPersonalized, getRecipientsList,
+  sendMessage, subscribeDeliveryIssues, broadcast, broadcastToParents, broadcastPersonalized, newPersonalizedSendAttempt, getRecipientsList,
   type MessageDoc, type MessageToType,
 } from '../../services/messagesService'
 import { listEleves, type EleveDoc } from '../../services/elevesService'
@@ -375,8 +375,12 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
   const [bodyAr, setBodyAr] = useState('')
   const [urgent, setUrgent] = useState(false)
   const [sending, setSending] = useState(false)
+  const sendingRef = useRef(false)
+  const sentRef = useRef(false)
+  const [personalizedAttempt] = useState(newPersonalizedSendAttempt)
   // Affiche (poster) optionnelle — uploadée vers annonces/{adminUid}/ à l'envoi.
   const [poster, setPoster] = useState<{ uri: string; name: string; mime: string } | null>(null)
+  const uploadedPoster = useRef<{ source: NonNullable<typeof poster>; attachment: Attachment } | null>(null)
 
   const [availableClasses, setAvailableClasses] = useState<string[]>([])
   const [allParents, setAllParents] = useState<Recipient[]>([])
@@ -543,7 +547,8 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
   }
 
   const handleSend = async () => {
-    if (!profile || !canSend) return
+    if (!profile || !canSend || sendingRef.current || sentRef.current) return
+    sendingRef.current = true
     setSending(true)
     const fromNom = `${profile.prenom} ${profile.nom}`.trim()
     const fromRole = profile.role || 'admin'
@@ -556,7 +561,11 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
       // Upload de l'affiche AVANT les writes Firestore (échec → rien d'envoyé).
       let attachments: Attachment[] | undefined
       if (poster) {
-        attachments = [await uploadAttachment(poster.uri, 'annonces', profile.uid, poster.name, poster.mime)]
+        if (uploadedPoster.current?.source !== poster) {
+          uploadedPoster.current = { source: poster,
+            attachment: await uploadAttachment(poster.uri, 'annonces', profile.uid, poster.name, poster.mime) }
+        }
+        attachments = [uploadedPoster.current.attachment]
       }
 
       if (targetMode === 'class') {
@@ -569,12 +578,12 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
               body:      body.split(ELEVE_PLACEHOLDER).join(elevePrenom(e)).trim(),
               bodyAr:    arBody ? arBody.split(ELEVE_PLACEHOLDER).join(elevePrenom(e)).trim() : undefined,
               label:     `${eleveName(e)} · ${e.classe}`,
-              eleveId:   e.codeMassar,
+              eleveId:   eleveKey(e),
             }))
           const r = await broadcastPersonalized({
             recipients, subject: subject.trim(), subjectAr: arSubject, classe: selectedClasses.join(', '),
             urgent, category: 'announcement', teacher: sender, fromRole, attachments,
-          })
+          }, personalizedAttempt)
           reach = r.parentsTargeted
         } else {
           // Générique : un seul message aux parents des élèves sélectionnés.
@@ -614,6 +623,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
         reach = toIds.length || allParents.length + allTeachers.length
       }
 
+      sentRef.current = true
       Alert.alert(
         t('admin.sent'),
         `${targetLabel}${reach ? ` · ${reach}` : ''}`,
@@ -621,7 +631,7 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
       )
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message)
-    } finally { setSending(false) }
+    } finally { sendingRef.current = false; setSending(false) }
   }
 
   const switchMode = (mode: TargetMode) => {
@@ -640,12 +650,12 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
   ]
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible transparent animationType="slide" onRequestClose={() => { if (!sendingRef.current) onClose() }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <SafeAreaView edges={['top']} style={[cs.container, { backgroundColor: theme.bg }]}>
           <View style={cs.header}>
             <Text style={{ color: theme.text, fontWeight: '800', fontSize: 18, flex: 1 }}>{t('teacher.newMessage')}</Text>
-            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')}><X size={22} color={theme.text} strokeWidth={2} /></Pressable>
+            <Pressable onPress={onClose} disabled={sending} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.close')}><X size={22} color={theme.text} strokeWidth={2} /></Pressable>
           </View>
 
           <ScrollView contentContainerStyle={cs.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
