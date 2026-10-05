@@ -189,7 +189,11 @@ Audit Codex (`mojammaa-admin/docs/messages-audit-2026-10-05.md`). Le groupe 1 (s
 - [x] OTA runtime 1.0.16 depuis `~/mojammaa-sgs-ota-1016`, `1f4ddc4` (= `d7ecb14` + le seul diff de `messagesService.ts`, sans conflit ; `tsc` OK, 170/170 avec `functions/node_modules` lié le temps du test) : Android `bfd9186b-495c-4838-a8ec-371a1df21461`, iOS `b5e56347-35f8-4320-93c7-5d0949ea1205`. Tag local `v1.0.16-final` → `1f4ddc4`.
 - [x] Identifiants servis vérifiés (`eas update:list`).
 - Retour arrière de l'app : republier `71711c18` (1.0.17) et, depuis `~/mojammaa-sgs-ota-1016`, `c7f9e8d5` (1.0.16).
-- Restent : F06 (envois personnalisés idempotents), F05 (notifications navigateur), R01 (destinataires vérifiés côté serveur).
+- [x] F06 `9a820a0` (conçu et testé par Codex dans une copie temporaire, repris par Claude) : chaque message personnalisé garde son identifiant pendant toute la vie du formulaire ; une écriture incertaine est vérifiée sur le serveur avant renvoi ; un message reçu n'est jamais réécrit ; double envoi bloqué ; affiche téléversée une fois. 13 tests (11 échouent sur l'ancien service), 6 cas de règles (421/421), app 183/183.
+- [x] OTA runtime 1.0.17 depuis `9a820a0` : Android `d0105169-bf4f-4525-a9ec-3b65d167abf5`, iOS `6da5582f-17a8-49bc-bfcc-04b9567b5e1c`. Envoi de l'empreinte (fingerprint) EAS en échec réseau (`ENOTFOUND storage.googleapis.com`, passager) : sans effet sur la mise à jour, la politique est `runtimeVersion: appVersion`.
+- [x] OTA runtime 1.0.16 depuis `~/mojammaa-sgs-ota-1016`, `0708f92` (= `1f4ddc4` + le diff `src` de `9a820a0`, sans conflit ; `tsc`, 183/183) : Android `edb6257f-3884-4b9c-9bad-90c71feffa4c`, iOS `7e9b1975-f973-4237-b056-a63867077ac1`. Tag local `v1.0.16-final` → `0708f92`.
+- Retour arrière F06 : republier `69c91908`/`18c7c259` (1.0.17) et `bfd9186b`/`b5e56347` (1.0.16).
+- Restent : F05 (notifications navigateur), R01 (destinataires vérifiés côté serveur).
 
 ## 8. Clôture
 
