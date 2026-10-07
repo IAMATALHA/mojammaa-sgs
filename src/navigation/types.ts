@@ -105,17 +105,19 @@ export type StudentDashboardNav = CompositeNavigationProp<
 // ── Admin ──────────────────────────────────────────────────────────────────
 export type AdminTabsParamList = {
   AdminDashboard:    undefined
+  AdminSchoolTab:    undefined
   AdminStatsTab:     undefined
   AdminCalendarTab:  undefined
-  AdminMessages:     { messageId?: string; initialTab?: 'inbox' | 'issues' } | undefined
-  AdminSettings:     undefined
+  AdminMessages:     { messageId?: string; initialTab?: 'inbox' | 'issues'; compose?: boolean } | undefined
 }
 
 export type AdminStackParamList = {
   AdminTabs:      NavigatorScreenParams<AdminTabsParamList> | undefined
+  AdminSettings:  undefined
+  AdminClasses:   undefined
   AdminCalendar:  undefined
   AdminAbsences:  undefined
-  AdminRollCalls: { classe?: string } | undefined
+  AdminRollCalls: { classe?: string; missingOnly?: boolean } | undefined
   AdminDevoirs:   undefined
   AdminDevoirView: DevoirDetailParams
   AdminMatiereDetail: { matiere?: string; classe?: string; scope?: AppliedScope } | undefined
@@ -129,6 +131,7 @@ export type AdminStackParamList = {
     band?: string
     side?: 'below' | 'passing'
     progression?: StudentProgressionQuery
+    focusSearch?: boolean
   }
   AdminAttendanceStats: { scope: AppliedScope }
   AdminStudentFile:     { eleveId: string; scope: AppliedScope }

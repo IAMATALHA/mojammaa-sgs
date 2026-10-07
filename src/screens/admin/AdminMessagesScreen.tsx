@@ -67,6 +67,12 @@ export default function AdminMessagesScreen() {
   const [loadError, setLoadError] = useState(false)
   const [detail, setDetail] = useState<MessageDoc | null>(null)
   const [showCompose, setShowCompose] = useState(false)
+  useEffect(() => {
+    if (route.params?.compose) {
+      setShowCompose(true)
+      navigation.setParams({ compose: undefined })
+    }
+  }, [route.params?.compose, navigation])
   const [deliveryIssues, setDeliveryIssues] = useState<MessageDoc[]>([])
   const [issuesError, setIssuesError] = useState(false)
   const [replyText, setReplyText] = useState('')

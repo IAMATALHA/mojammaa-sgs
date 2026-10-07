@@ -141,6 +141,27 @@ export const palette = {
   infoSoft: light.status.infoSurface,
 } as const
 
+/** Administration — direction « institutionnel chaleureux ». */
+export const adminPalette = {
+  ivory: '#F7F4EE',
+  navy: '#1D3557',
+  navyDark: '#142741',
+  navySurface: '#EAF0F5',
+  navyBorder: '#CCD6E2',
+  copper: '#9D5C3D',
+  copperSurface: '#F6EADB',
+  white: '#FFFFFF',
+  grouped: '#EFEAE2',
+  border: '#E6DED2',
+  borderStrong: '#D4C8B8',
+  secondary: '#606876',
+  // Texte et filets posés sur la carte bleu nuit du bilan.
+  onNavySoft: 'rgba(255,255,255,0.72)',
+  onNavyLine: 'rgba(255,255,255,0.16)',
+  copperLight: '#E3A983',
+  live: '#86E0A9',
+} as const
+
 export const spacing = {
   xs: 4,
   sm: 8,

@@ -96,6 +96,7 @@ export default function AdminRollCallsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<AdminStackParamList>>()
   const route = useRoute<RouteProp<AdminStackParamList, 'AdminRollCalls'>>()
   const selectedClass = route.params?.classe
+  const missingOnly = route.params?.missingOnly ?? false
   const [sessions, setSessions] = useState<RollCallSession[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -126,15 +127,18 @@ export default function AdminRollCallsScreen() {
 
   useEffect(() => { load() }, [load])
 
-  const visibleSessions = useMemo(() => selectedClass ? sessions.filter(session => session.classe === selectedClass) : sessions, [sessions, selectedClass])
-  const summary = useMemo(() => summarizeRollCallSessions(visibleSessions), [visibleSessions])
+  const scopedSessions = useMemo(() => selectedClass ? sessions.filter(session => session.classe === selectedClass) : sessions, [sessions, selectedClass])
+  const visibleSessions = useMemo(() => missingOnly
+    ? scopedSessions.filter(session => !session.done && session.timing !== 'upcoming')
+    : scopedSessions, [scopedSessions, missingOnly])
+  const summary = useMemo(() => summarizeRollCallSessions(scopedSessions), [scopedSessions])
   const currentSessions = useMemo(
-    () => visibleSessions.filter(session => session.timing === 'current'),
-    [visibleSessions],
+    () => scopedSessions.filter(session => session.timing === 'current'),
+    [scopedSessions],
   )
 
   return (
-    <ScreenLayout title={selectedClass ? `${copy.title} · ${selectedClass}` : copy.title}>
+    <ScreenLayout title={selectedClass ? `${copy.title} · ${selectedClass}` : missingOnly ? copy.missing : copy.title}>
       {error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}>
           <Text numberOfLines={3} style={[styles.errorText, { color: theme.danger, fontFamily: theme.fonts.semibold }]}>
@@ -193,10 +197,10 @@ export default function AdminRollCallsScreen() {
         {loading ? (
           <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
         ) : visibleSessions.length === 0 ? (
-          <EmptyState text={copy.noSessions} theme={theme} />
+          <EmptyState text={missingOnly ? copy.noMissing : copy.noSessions} theme={theme} />
         ) : (
           <>
-            <SessionSection
+            {!missingOnly ? <SessionSection
               title={copy.current}
               count={currentSessions.length}
               emptyText={copy.noCurrent}
@@ -205,7 +209,7 @@ export default function AdminRollCallsScreen() {
               theme={theme}
               isAr={isAr}
               onOpenAbsences={() => nav.navigate('AdminAbsences')}
-            />
+            /> : null}
             <SessionSection
               title={copy.missing}
               count={summary.missingSessions.length}
@@ -216,7 +220,7 @@ export default function AdminRollCallsScreen() {
               isAr={isAr}
               onOpenAbsences={() => nav.navigate('AdminAbsences')}
             />
-            <SessionSection
+            {!missingOnly ? <SessionSection
               title={copy.all}
               count={visibleSessions.length}
               sessions={visibleSessions}
@@ -224,7 +228,7 @@ export default function AdminRollCallsScreen() {
               theme={theme}
               isAr={isAr}
               onOpenAbsences={() => nav.navigate('AdminAbsences')}
-            />
+            /> : null}
           </>
         )}
       </ScrollView>

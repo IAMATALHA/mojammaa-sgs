@@ -28,3 +28,34 @@ export function summarizeAdminHome(sessions: RollCallSession[], closed: boolean)
       : missingClasses.length > 0 ? 'pending' : 'complete',
   }
 }
+
+export interface AdminCurrentLessons {
+  classes: number
+  recorded: number
+  until: string
+}
+
+const minutes = (hm?: string | null) => {
+  const [h, m] = (hm ?? '').split(':').map(Number)
+  return hm && Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : NaN
+}
+
+/** Lessons running now: classes in session, classes already called, and when the first of them ends. */
+export function summarizeCurrentLessons(sessions: RollCallSession[]): AdminCurrentLessons | null {
+  const classes = new Map<string, boolean>()
+  let until = Infinity
+  for (const session of sessions) {
+    if (session.timing !== 'current') continue
+    classes.set(session.classe, (classes.get(session.classe) ?? true) && session.done)
+    const start = minutes(session.startTime)
+    const explicit = minutes(session.endTime)
+    const end = Number.isNaN(explicit) ? start + (session.durationMin && session.durationMin > 0 ? session.durationMin : 60) : explicit
+    if (!Number.isNaN(end)) until = Math.min(until, end)
+  }
+  if (classes.size === 0) return null
+  return {
+    classes: classes.size,
+    recorded: [...classes.values()].filter(Boolean).length,
+    until: Number.isFinite(until) ? `${String(Math.floor(until / 60)).padStart(2, '0')}:${String(until % 60).padStart(2, '0')}` : '',
+  }
+}

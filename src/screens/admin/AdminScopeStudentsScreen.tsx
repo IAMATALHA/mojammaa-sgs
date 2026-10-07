@@ -323,6 +323,8 @@ export default function AdminScopeStudentsScreen() {
       <View style={[styles.searchBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <Search size={16} color={theme.textMuted} />
         <TextInput
+          autoFocus={route.params.focusSearch}
+          accessibilityLabel={t('admin.statsSearchStudent')}
           value={search}
           onChangeText={setSearch}
           placeholder={t('admin.statsSearchStudent')}
@@ -342,6 +344,7 @@ export default function AdminScopeStudentsScreen() {
       ) : (
         <FlatList
           contentInsetAdjustmentBehavior="automatic"
+          keyboardShouldPersistTaps="handled"
           data={sections}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.list}
