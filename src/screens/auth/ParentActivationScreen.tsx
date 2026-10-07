@@ -149,6 +149,9 @@ export default function ParentActivationScreen() {
       <ScrollView contentContainerStyle={[styles.root, { backgroundColor: theme.bg }]} keyboardShouldPersistTaps="handled">
         <Text style={[styles.title, { color: theme.text }]}>{t('parentActivation.title')}</Text>
         <Text style={[styles.subtitle, { color: theme.textSoft }]}>{t('parentActivation.subtitle')}</Text>
+        {/* Un prof ou un parent déjà inscrit qui active ici obtient un SECOND compte
+            si son numéro n'est pas celui du compte existant (incident du 2026-10-07). */}
+        <Text style={[styles.hint, { color: theme.text, backgroundColor: theme.primarySurface }]}>{t('parentActivation.existingAccountHint')}</Text>
         {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
         <TextInput value={code} onChangeText={setCode} autoCapitalize="characters" accessibilityLabel={t('parentActivation.code')} placeholder={t('parentActivation.code')} placeholderTextColor={theme.textMuted} style={inputStyle} />
         <TextInput value={prenom} onChangeText={setPrenom} accessibilityLabel={t('parentActivation.firstName')} placeholder={t('parentActivation.firstName')} placeholderTextColor={theme.textMuted} style={inputStyle} />
@@ -174,4 +177,4 @@ export default function ParentActivationScreen() {
   )
 }
 
-const styles = StyleSheet.create({ root: { flexGrow: 1, padding: 28, justifyContent: 'center' }, title: { fontSize: 26, fontWeight: '800', textAlign: 'center' }, subtitle: { fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 10, marginBottom: 24 }, error: { textAlign: 'center', marginBottom: 12, lineHeight: 19 }, input: { height: 52, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, marginBottom: 12, fontSize: 15 }, button: { height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginTop: 10 }, buttonText: { color: '#fff', fontSize: 15, fontWeight: '700' }, back: { alignItems: 'center', marginTop: 18 }, backText: { fontSize: 13, textDecorationLine: 'underline' } })
+const styles = StyleSheet.create({ root: { flexGrow: 1, padding: 28, justifyContent: 'center' }, title: { fontSize: 26, fontWeight: '800', textAlign: 'center' }, subtitle: { fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 10, marginBottom: 24 }, hint: { fontSize: 13, lineHeight: 19, textAlign: 'center', padding: 12, borderRadius: 12, overflow: 'hidden', marginTop: -10, marginBottom: 20 }, error: { textAlign: 'center', marginBottom: 12, lineHeight: 19 }, input: { height: 52, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, marginBottom: 12, fontSize: 15 }, button: { height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginTop: 10 }, buttonText: { color: '#fff', fontSize: 15, fontWeight: '700' }, back: { alignItems: 'center', marginTop: 18 }, backText: { fontSize: 13, textDecorationLine: 'underline' } })
