@@ -19,3 +19,29 @@ export async function signInParentWithPhone(phoneE164: string, password: string)
   if (!data?.loginEmail) throw new Error('parentPhoneLogin: réponse incomplète')
   await signInWithEmailAndPassword(auth, data.loginEmail, password)
 }
+
+/** Longueur d'un code d'activation, une fois tirets et espaces retirés. */
+export const INVITATION_CODE_LENGTH = 10
+
+/** Même normalisation que le serveur : `abc-defg-hij` → `ABCDEFGHIJ`. */
+export function normalizeInvitationCode(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
+export type LinkedChild = { studentName: string; classe: string }
+
+/**
+ * Rattache un enfant au compte CONNECTÉ (parent, prof ou chauffeur) avec le
+ * code remis par l'école (`linkParentInvitation`, codebase admin). C'est la
+ * voie à donner au personnel : l'écran d'activation, déconnecté, crée un
+ * second compte parent dès que le numéro saisi n'est pas celui du compte
+ * existant (incident du 2026-10-07).
+ */
+export async function linkChildWithCode(code: string): Promise<LinkedChild> {
+  const callable = httpsCallable<{ code: string; telephone: string }, Partial<LinkedChild>>(
+    functions,
+    'linkParentInvitation',
+  )
+  const { data } = await callable({ code: normalizeInvitationCode(code), telephone: '' })
+  return { studentName: data?.studentName || '', classe: data?.classe || '' }
+}

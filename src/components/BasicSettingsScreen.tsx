@@ -16,6 +16,7 @@ import Constants from 'expo-constants'
 import ScreenLayout from './ScreenLayout'
 import LanguagePicker from './LanguagePicker'
 import WorkspaceSettingsGroup from './WorkspaceSettingsGroup'
+import AddChildSettingsGroup from './AddChildSettingsGroup'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
 import { initialsOf } from '../utils/format'
@@ -60,6 +61,7 @@ export default function BasicSettingsScreen({ roleLabel, showNotificationSetting
         </View>
 
         <WorkspaceSettingsGroup />
+        <AddChildSettingsGroup />
         {showNotificationSettings && <NotificationSettingsGroup />}
 
         {/* Langue */}

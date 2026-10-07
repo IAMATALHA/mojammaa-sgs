@@ -75,6 +75,27 @@ const en = {
     retryParent: 'Unable to check · Try again',
   },
 
+  addChild: {
+    title: 'Add a child',
+    rowHint: 'With the activation code provided by the school',
+    subtitle: 'Enter the code provided by the school. The child will be added to this account, without creating another one.',
+    code: 'Activation code',
+    submit: 'Add to my account',
+    done: 'Done',
+    childFallback: 'The student',
+    successTitle: 'Child added',
+    successStaff: '{{child}} is now linked to your account. Open “Parent workspace” in My workspaces to follow their schooling.',
+    successParent: '{{child}} is now linked to your account and appears on your home screen.',
+    errors: {
+      format: 'The code has 10 characters (letters and digits), for example ABC-DEFG-HIJ.',
+      notFound: 'Unknown or already used code. Check it or ask the school for a new code.',
+      inactive: 'This code is no longer active (already used or expired). Ask the school for a new code.',
+      alreadyLinked: 'This student is already linked to another account. Please contact the school.',
+      notAllowed: 'This account cannot be responsible for a student.',
+      generic: 'Could not add the child. Check your connection and try again.',
+    },
+  },
+
   days: {
     saturday: 'Saturday', sunday: 'Sunday', monday: 'Monday', tuesday: 'Tuesday',
     wednesday: 'Wednesday', thursday: 'Thursday', friday: 'Friday',
@@ -113,6 +134,7 @@ const en = {
   parentActivation: {
     title: 'Activate a parent account',
     subtitle: 'Enter the code provided by the school. Your phone number (Morocco or abroad) and a password are then enough to sign in; email is optional.',
+    existingAccountHint: 'Already have a Mojammaa account (teacher, parent, driver, administration)? Do not create a second one: sign in, then Settings → Add a child.',
     code: 'Activation code',
     firstName: 'First name',
     lastName: 'Last name',
@@ -137,7 +159,7 @@ const en = {
     linkedTitle: 'Child added',
     linkedBody: 'This code has been added to your existing account.',
     linkErrorTitle: 'Child not added',
-    linkErrorSignedIn: 'You are signed in, but this child could not be added to your account. Sign out, then enter the code again on the activation screen, or contact the school.',
+    linkErrorSignedIn: 'You are signed in, but this child could not be added to your account. Try again from Settings → Add a child, or contact the school.',
     error: 'Activation failed. Check the code.',
   },
 

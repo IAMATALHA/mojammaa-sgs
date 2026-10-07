@@ -75,6 +75,27 @@ const fr = {
     retryParent: 'Vérification impossible · Réessayer',
   },
 
+  addChild: {
+    title: 'Ajouter un enfant',
+    rowHint: 'Avec le code d’activation remis par l’école',
+    subtitle: 'Saisissez le code remis par l’école. L’enfant sera ajouté à ce compte, sans en créer un autre.',
+    code: 'Code d’activation',
+    submit: 'Ajouter à mon compte',
+    done: 'Terminé',
+    childFallback: 'L’élève',
+    successTitle: 'Enfant ajouté',
+    successStaff: '{{child}} est lié à votre compte. Ouvrez « Espace parent » dans Mes espaces pour suivre sa scolarité.',
+    successParent: '{{child}} est lié à votre compte et apparaît sur votre accueil.',
+    errors: {
+      format: 'Le code compte 10 caractères (lettres et chiffres), par exemple ABC-DEFG-HIJ.',
+      notFound: 'Code inconnu ou déjà utilisé. Vérifiez-le ou demandez un nouveau code à l’école.',
+      inactive: 'Ce code n’est plus actif (déjà utilisé ou expiré). Demandez un nouveau code à l’école.',
+      alreadyLinked: 'Cet élève est déjà lié à un autre compte. Contactez l’école.',
+      notAllowed: 'Ce compte ne peut pas être responsable d’un élève.',
+      generic: 'Ajout impossible. Vérifiez votre connexion puis réessayez.',
+    },
+  },
+
   days: {
     saturday: 'Samedi', sunday: 'Dimanche', monday: 'Lundi', tuesday: 'Mardi',
     wednesday: 'Mercredi', thursday: 'Jeudi', friday: 'Vendredi',
@@ -113,6 +134,7 @@ const fr = {
   parentActivation: {
     title: 'Activer un compte parent',
     subtitle: 'Saisissez le code remis par l’école. Votre numéro de téléphone (Maroc ou étranger) et un mot de passe suffisent ensuite pour vous connecter ; l’e-mail est facultatif.',
+    existingAccountHint: 'Déjà un compte Mojammaa (professeur, parent, chauffeur, direction) ? Ne créez pas un second compte : connectez-vous, puis Réglages → Ajouter un enfant.',
     code: 'Code d’activation',
     firstName: 'Prénom',
     lastName: 'Nom',
@@ -137,7 +159,7 @@ const fr = {
     linkedTitle: 'Enfant ajouté',
     linkedBody: 'Ce code a été ajouté à votre compte existant.',
     linkErrorTitle: 'Enfant non ajouté',
-    linkErrorSignedIn: 'Votre compte est ouvert, mais cet enfant n’a pas pu y être ajouté. Déconnectez-vous puis saisissez de nouveau le code sur l’écran d’activation, ou contactez l’école.',
+    linkErrorSignedIn: 'Votre compte est ouvert, mais cet enfant n’a pas pu y être ajouté. Réessayez depuis Réglages → Ajouter un enfant, ou contactez l’école.',
     error: 'Activation impossible. Vérifiez le code.',
   },
 

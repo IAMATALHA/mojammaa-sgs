@@ -9,6 +9,7 @@ import Constants from 'expo-constants';
 import ScreenLayout from '../../components/ScreenLayout';
 import LanguagePicker from '../../components/LanguagePicker';
 import WorkspaceSettingsGroup from '../../components/WorkspaceSettingsGroup';
+import AddChildSettingsGroup from '../../components/AddChildSettingsGroup';
 import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -59,6 +60,7 @@ export default function AdminSettingsScreen() {
         </View>
 
         <WorkspaceSettingsGroup />
+        <AddChildSettingsGroup />
         <NotificationSettingsGroup />
 
         {/* Langue + outils admin */}
