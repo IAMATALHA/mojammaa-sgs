@@ -553,7 +553,7 @@ function buildDashboardData(cache: SnapshotCache): DashboardData {
   }
 }
 
-export default function AdminStatsScreen() {
+export default function AdminStatsScreen({ classesOnly = false }: { classesOnly?: boolean }) {
   const theme = useTheme()
   const { t } = useTranslation()
   const nav = useNavigation<AdminDashboardNav>()
@@ -713,7 +713,7 @@ export default function AdminStatsScreen() {
   }, [])
 
   return (
-    <ScreenLayout title={t('admin.statsTitle')}>
+    <ScreenLayout title={t(classesOnly ? 'admin.classesTitle' : 'admin.statsTitle')}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -728,7 +728,7 @@ export default function AdminStatsScreen() {
           <View style={styles.loading}><ActivityIndicator color={theme.primary} /></View>
         ) : data ? (
           <>
-            <GeneralReport
+            {!classesOnly ? <GeneralReport
               data={data}
               scope={applied ?? {
                 ...filters,
@@ -742,7 +742,7 @@ export default function AdminStatsScreen() {
               onOpenScope={() => setPickerRequest('cycle')}
               onOpenPeriod={() => setPickerRequest('period')}
               onTile={openTile}
-            />
+            /> : null}
             <StatsFilters
               value={filters}
               options={filterOptions}
@@ -755,7 +755,7 @@ export default function AdminStatsScreen() {
               theme={theme}
               t={t}
             />
-            <ViewTabs value={view} onChange={(v) => { setView(v); setSelectedNiveau(null) }} theme={theme} t={t} />
+            {!classesOnly ? <ViewTabs value={view} onChange={(v) => { setView(v); setSelectedNiveau(null) }} theme={theme} t={t} /> : null}
             {view === 'subjects' ? <SubjectsView data={data} onOpenNotes={openNotes} onOpenBand={openBand} theme={theme} t={t} /> : null}
             {view === 'niveaux' ? (
               selectedNiveau != null ? (

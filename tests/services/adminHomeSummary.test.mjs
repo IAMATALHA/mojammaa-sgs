@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { summarizeAdminHome } from '../../src/utils/admin-home-summary.ts'
+import { summarizeAdminHome, summarizeCurrentLessons } from '../../src/utils/admin-home-summary.ts'
 
 const session = (classe, seance, timing = 'past', done = false) => ({ classe, seance, timing, done })
 test('upcoming lessons never make a class late or incomplete', () => {
@@ -29,4 +29,13 @@ test('school closure suppresses attendance alerts even with scheduled lessons', 
   assert.deepEqual(summarizeAdminHome([session('A', 'S1')], true), {
     expectedClasses: 0, completedClasses: 0, missingClasses: [], status: 'closed',
   })
+})
+
+test('current lessons count each class once and end at the earliest finishing lesson', () => {
+  const now = (classe, startTime, endTime, done = false, durationMin) => ({ classe, seance: startTime, startTime, endTime, durationMin, timing: 'current', done })
+  assert.deepEqual(summarizeCurrentLessons([
+    now('A', '10:00', '11:00', true), now('A', '10:00', '11:00'), now('B', '10:30', null, true, 45), session('C', 'S1'),
+  ]), { classes: 2, recorded: 1, until: '11:00' })
+  assert.deepEqual(summarizeCurrentLessons([now('A', '08:30', null)]), { classes: 1, recorded: 0, until: '09:30' })
+  assert.equal(summarizeCurrentLessons([session('A', 'S1', 'upcoming')]), null)
 })

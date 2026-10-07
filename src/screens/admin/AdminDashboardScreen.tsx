@@ -1,35 +1,32 @@
 import React, { useCallback, useRef, useState } from 'react'
-import { Alert, AppState } from 'react-native'
+import { AppState } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
 import { collection, getDocs, query, where } from 'firebase/firestore'
-import { httpsCallable } from 'firebase/functions'
-import { db, functions } from '../../config/firebase'
+import { db } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
 import type { AdminDashboardNav } from '../../navigation/types'
-import type { AppliedScope, StatsScope } from '../../types/stats'
 import type { AbsenceDoc } from '../../services/absencesService'
 import { toDocs } from '../../services/firestore'
 import { getJourScolaire, getJoursScolaires } from '../../services/calendarService'
 import { localISODate } from '../../utils/academicPeriod'
 import { buildTodayRollCallSessions, rollCallSessionKey, type RollCallSlot } from '../../utils/rollCalls'
-import { summarizeAdminHome } from '../../utils/admin-home-summary'
-import { adminHomeCopy } from '../../utils/admin-home-copy'
+import { summarizeAdminHome, summarizeCurrentLessons } from '../../utils/admin-home-summary'
+import { useAdminStudentDirectory } from '../../hooks/use-admin-student-directory'
 import AdminHomeView, { type AdminHomeData } from '../../components/dashboard/admin-home-view'
 
-export default function AdminDashboardScreen() {
+export default function AdminDashboardScreen({ unreadMessages }: { unreadMessages: number }) {
   const theme = useTheme()
   const { i18n } = useTranslation()
   const nav = useNavigation<AdminDashboardNav>()
   const [data, setData] = useState<AdminHomeData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [openingStudents, setOpeningStudents] = useState(false)
+  const { openingStudents, openStudents } = useAdminStudentDirectory()
   const request = useRef(0)
   const focused = useRef(false)
-  const directoryRequest = useRef(false)
 
   const load = useCallback(async () => {
     const id = ++request.current
@@ -58,12 +55,12 @@ export default function AdminDashboardScreen() {
         if (record.classe && record.seance) completed.add(rollCallSessionKey(record.classe, record.seance))
       }
       const now = new Date()
-      const summary = summarizeAdminHome(
-        buildTodayRollCallSessions(toDocs<RollCallSlot>(schedule), completed, now),
-        Boolean(jour?.annuleCours),
-      )
+      const closed = Boolean(jour?.annuleCours)
+      const sessions = buildTodayRollCallSessions(toDocs<RollCallSlot>(schedule), completed, now)
+      const summary = summarizeAdminHome(sessions, closed)
       const event = calendar.find(day => day.date > today && day.type !== 'normal' && day.label.trim())
       setData({ ...summary, absents: absent.size, pointed: pointed.size, updatedAt: now.getTime(),
+        current: closed ? null : summarizeCurrentLessons(sessions),
         dayLabel: jour?.label, event: event ? { date: event.date, label: event.label } : undefined })
     } catch {
       if (id === request.current && focused.current) setError(true)
@@ -81,35 +78,20 @@ export default function AdminDashboardScreen() {
     return () => { focused.current = false; request.current++; subscription.remove() }
   }, [load]))
 
-  const openStudents = async () => {
-    if (directoryRequest.current) return
-    directoryRequest.current = true
-    setOpeningStudents(true)
-    try {
-      // The existing directory requires the scope actually returned by the server.
-      const result = await httpsCallable<StatsScope, { applied: AppliedScope }>(functions, 'getFilteredSchoolStats', { timeout: 15000 })({
-        period: 'mois', cycle: '', niveau: '', classe: '', matiere: '',
-      })
-      if (!result.data.applied) throw new Error('Missing scope')
-      if (focused.current) nav.navigate('AdminScopeStudents', { scope: result.data.applied, segment: 'all' })
-    } catch {
-      if (focused.current) Alert.alert(adminHomeCopy(i18n.language).directoryError)
-    } finally {
-      directoryRequest.current = false
-      setOpeningStudents(false)
-    }
-  }
-
-  return <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.surface }}>
+  return <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: theme.bg }}>
     <StatusBar style="dark" />
-    <AdminHomeView language={i18n.language} data={data} loading={loading} error={error}
+    <AdminHomeView language={i18n.language} data={data} loading={loading} error={error} unreadMessages={unreadMessages}
       openingStudents={openingStudents} onRefresh={() => { void load() }}
       onAbsences={() => nav.navigate('AdminAbsences')}
-      onCalls={classe => nav.navigate('AdminRollCalls', classe ? { classe } : undefined)}
-      onStudents={() => { void openStudents() }}
-      onTeachers={() => nav.navigate('AdminUsers', { role: 'professeur' })}
+      onCalls={() => nav.navigate('AdminRollCalls')}
+      onMissingCalls={() => nav.navigate('AdminRollCalls', { missingOnly: true })}
+      onMissingClass={classe => nav.navigate('AdminRollCalls', { classe, missingOnly: true })}
+      onSearch={() => { void openStudents(true) }}
       onMessage={() => nav.navigate('AdminMessages', { initialTab: 'inbox' })}
+      onCompose={() => nav.navigate('AdminMessages', { compose: true })}
+      onAppointments={() => nav.navigate('AdminAppointments')}
       onHomework={() => nav.navigate('AdminDevoirs')}
+      onProfile={() => nav.navigate('AdminSettings')}
       onCalendar={() => nav.navigate('AdminCalendarTab')} />
   </SafeAreaView>
 }
