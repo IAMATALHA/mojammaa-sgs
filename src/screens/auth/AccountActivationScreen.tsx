@@ -14,7 +14,7 @@ import {
   TeacherAccessFailure, activateTeacher, formatInvitationCode, previewActivationCode, signInAndLinkTeacher,
   teacherAccessReason, type TeacherAccessReason,
 } from '../../services/teacherAccessService'
-import { INVITATION_CODE_LENGTH, normalizeInvitationCode } from '../../services/parentAuthService'
+import { INVITATION_CODE_LENGTH, invitationCodeFromText, normalizeInvitationCode } from '../../services/parentAuthService'
 import { formatLoginPhone } from '../../utils/parentIdentity'
 import { emptyPhoneFieldValue, phoneFieldValidity, type PhoneFieldValue } from '../../utils/phoneCountries'
 import { rememberLoginMode } from '../../utils/loginPreferences'
@@ -224,7 +224,7 @@ export default function AccountActivationScreen() {
           {label(t('teacherActivation.code'))}
           <TextInput
             value={code}
-            onChangeText={next => { setCode(formatInvitationCode(next)); if (error) setError(null) }}
+            onChangeText={next => { setCode(formatInvitationCode(invitationCodeFromText(next) ?? next)); if (error) setError(null) }}
             autoCapitalize="characters"
             autoCorrect={false}
             autoComplete="off"

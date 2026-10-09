@@ -28,6 +28,20 @@ export function normalizeInvitationCode(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, '')
 }
 
+// Alphabet du serveur (parentInvitations.ts, generateCode) : ni I, ni O, ni 0, ni 1.
+const PASTED_CODE = /(?:^|[^A-Z0-9])([A-HJ-NP-Z2-9]{3})-([A-HJ-NP-Z2-9]{4})-([A-HJ-NP-Z2-9]{3})(?![A-Z0-9])/g
+
+/**
+ * Code présent dans un texte collé. WhatsApp ne copie que le message ENTIER
+ * (« Bonjour…, lien …#ABC-DEFG-HJK, Code : ABC-DEFG-HJK ») : sans cela, le
+ * champ garderait les dix premières lettres de « Bonjour… ». Renvoie le code
+ * formaté s'il est unique dans le texte, sinon `null` (saisie à la main).
+ */
+export function invitationCodeFromText(text: string): string | null {
+  const codes = new Set([...text.toUpperCase().matchAll(PASTED_CODE)].map(m => `${m[1]}-${m[2]}-${m[3]}`))
+  return codes.size === 1 ? [...codes][0] : null
+}
+
 export type LinkedChild = { studentName: string; classe: string }
 
 /**

@@ -9,7 +9,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { AuthStackParamList } from '../../navigation/types'
 import { auth, functions } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
-import { signInParentWithPhone } from '../../services/parentAuthService'
+import { invitationCodeFromText, signInParentWithPhone } from '../../services/parentAuthService'
 import PhoneNumberField from '../../components/PhoneNumberField'
 import { formatLoginPhone, formatLoginPhoneForConfirmation } from '../../utils/parentIdentity'
 import { emptyPhoneFieldValue, phoneFieldValidity, type PhoneFieldValue } from '../../utils/phoneCountries'
@@ -156,7 +156,7 @@ export default function ParentActivationScreen() {
             si son numéro n'est pas celui du compte existant (incident du 2026-10-07). */}
         <Text style={[styles.hint, { color: theme.text, backgroundColor: theme.primarySurface }]}>{t('parentActivation.existingAccountHint')}</Text>
         {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
-        <TextInput value={code} onChangeText={setCode} autoCapitalize="characters" accessibilityLabel={t('parentActivation.code')} placeholder={t('parentActivation.code')} placeholderTextColor={theme.textMuted} style={inputStyle} />
+        <TextInput value={code} onChangeText={next => setCode(invitationCodeFromText(next) ?? next)} autoCapitalize="characters" accessibilityLabel={t('parentActivation.code')} placeholder={t('parentActivation.code')} placeholderTextColor={theme.textMuted} style={inputStyle} />
         <TextInput value={prenom} onChangeText={setPrenom} accessibilityLabel={t('parentActivation.firstName')} placeholder={t('parentActivation.firstName')} placeholderTextColor={theme.textMuted} style={inputStyle} />
         <TextInput value={nom} onChangeText={setNom} accessibilityLabel={t('parentActivation.lastName')} placeholder={t('parentActivation.lastName')} placeholderTextColor={theme.textMuted} style={inputStyle} />
         <PhoneNumberField

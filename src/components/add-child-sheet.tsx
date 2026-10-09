@@ -13,7 +13,7 @@ import { UserRoundPlus } from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext'
 import BottomSheet from './BottomSheet'
 import {
-  INVITATION_CODE_LENGTH, linkChildWithCode, normalizeInvitationCode,
+  INVITATION_CODE_LENGTH, invitationCodeFromText, linkChildWithCode, normalizeInvitationCode,
 } from '../services/parentAuthService'
 
 interface Props {
@@ -90,11 +90,12 @@ export default function AddChildSheet({ visible, onClose, isStaff }: Props) {
         <Text style={[styles.label, { color: theme.textSoft }]}>{t('addChild.code')}</Text>
         <TextInput
           value={code}
-          onChangeText={value => { setCode(value); if (error) setError('') }}
+          // Pas de maxLength natif : il tronquerait un message WhatsApp collé
+          // avant d'en extraire le code. La limite de saisie reste 16 caractères.
+          onChangeText={value => { setCode(invitationCodeFromText(value) ?? value.slice(0, 16)); if (error) setError('') }}
           autoCapitalize="characters"
           autoCorrect={false}
           autoComplete="off"
-          maxLength={16}
           editable={!sending}
           returnKeyType="done"
           onSubmitEditing={() => { if (canSubmit) void submit() }}
