@@ -86,3 +86,21 @@ Recette restante : téléphone réel, ouverture/annulation du partage natif, Wha
 - **Corrigé ensuite (local, non publié) — code collé depuis WhatsApp** : WhatsApp ne copie que le message entier. Collé dans « Activer mon compte », le champ gardait les dix premières lettres de « Bonjour… » (`BON-JOUR-…`), refusées par le serveur ; écran parent et « Ajouter un enfant » (dont le `maxLength={16}` tronquait le collage) idem. `invitationCodeFromText` (`parentAuthService.ts`) extrait le code `XXX-XXXX-XXX` de l’alphabet serveur s’il est unique dans le texte ; la saisie manuelle ne change pas. `tests/services/invitationCode.test.mjs` rejoue les vrais messages professeur et parent (4 tests).
 - **Corrigé ensuite (local, non publié) — badge professeur** : un professeur qui se connecte par téléphone affichait « Révoquée » (rouge) dès que sa dernière invitation était révoquée, cas systématique après « Enregistrer le numéro » (le serveur révoque l’invitation en attente) ; sur le site, « Expirée » apparaissait même en vert. Règle désormais : connexion par téléphone affichée sauf invitation en attente. App : `teacherAccessBadge` + 3 cas de test (l’ancienne règle les fait échouer). Site : même règle dans `mojammaa-admin/src/pages/Parametres.tsx` (`tsc -b` OK ; l’erreur ESLint ligne 222 est antérieure), non déployé.
 - Vérifié après ces ajouts : `npx tsc --noEmit` OK, `npm test` **220/220**, 202 clés FR/EN/AR, `git diff --check` OK.
+
+## Publication des correctifs (nuit du 9 au 10 octobre)
+
+Commandes lancées par Youssef (le garde-fou du mode auto refuse `eas update` à l’agent), canal / branche / environnement `production`. Source : `bf1d1fd` (arbre propre) pour 1.0.17 ; copie isolée de `bf1d1fd` où seule la version d’`app.json` diffère (dossier `ios/` local retiré, ignoré de toute façon par `.easignore`), publiée avec `EAS_NO_VCS=1`, pour 1.0.16. Avant publication : TypeScript de la copie OK, exports Android et iOS OK.
+
+| Runtime | Plateforme | Groupe publié | Mise à jour servie | Bundle Hermes |
+|---|---|---|---|---|
+| 1.0.17 | android | `aed9a91d-abf1-465f-82b8-dcd62d6fd089` | `01a12309-83dc-76d7-a95a-eb1c561cfb89` | `bd858566…` |
+| 1.0.17 | ios | `8a3bc28a-794f-466d-9667-4fa60b03952d` | `01a1230a-825d-7dd5-8878-1cb6e41d7596` | `f7c3a7e9…` |
+| 1.0.16 | android | `f7e71f1c-5169-46bb-965e-1945f5a8b8ca` | `01a1230e-64d1-7e61-b8f8-406d858e075c` | `bd858566…` |
+| 1.0.16 | ios | `765551d4-bcc8-4927-a0a7-7ae3805b4512` | `01a1230f-57fd-7bf3-9fe1-7365c2412071` | `f7c3a7e9…` |
+
+- Contenu : commits `123c674` (espace administration + correctifs de la revue Codex et Claude) et `33da73b` (code collé depuis WhatsApp). Le badge corrigé côté site (`mojammaa-admin` `4c0cb84`) n’est **pas** déployé.
+- Bundles identiques entre 1.0.17 et 1.0.16 (même empreinte par plateforme) : même JavaScript sur les deux runtimes. Présence vérifiée dans les bundles du code de collage et des écrans Codes parents.
+- Service Expo Updates : les 4 requêtes plateforme/runtime du canal production renvoient exactement ces identifiants (4/4). Preuve locale : `output/teacher-activation-release-2026-10-09/published-and-served.json`.
+- Recette sur téléphone non faite. Rappel : la mise à jour se télécharge à l’ouverture et s’applique après fermeture complète puis réouverture.
+
+**Retour arrière** (`eas update:republish --group <groupe>`) : groupes « Espace administration » du 9 au soir — android 1.0.17 `1cdd4ac5-663c-4cd5-aff3-2079fed0f8a1`, ios 1.0.17 `e9d9a66d-1490-4186-8fa8-3f43e7006660`, android 1.0.16 `3a986ddf-1821-436c-af8c-2edb38a9c3d6`, ios 1.0.16 `4be3fbdc-e952-4fe6-802e-336bdc02a7d9`.
