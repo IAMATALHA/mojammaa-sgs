@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Alert,
   ActivityIndicator, RefreshControl,
@@ -13,6 +13,12 @@ import { db } from '../../config/firebase'
 import { toDoc } from '../../services/firestore'
 import { formatRelative } from '../../utils/format'
 import type { RoleRaw, UserProfile } from '../../types'
+import { KeyRound, Ticket } from 'lucide-react-native'
+import { useAuth } from '../../contexts/AuthContext'
+import AccountAccessSheet, { type AccessAccount } from '../../components/admin/account-access-sheet'
+import { isSuperAdmin, listTeacherAccess } from '../../services/adminAccessService'
+import { teacherAccessBadge, type AccessBadge, type TeacherAccessRow } from '../../utils/admin-access'
+import { hexWithAlpha } from '../../utils/format'
 
 interface UserRow {
   uid: string
@@ -48,6 +54,13 @@ export default function AdminUsersScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'admin' | 'professeur' | 'parent'>(route.params?.role ?? 'all')
+  // Accès (invitations professeurs, liens de réinitialisation) : superadmins seulement,
+  // vérifié de nouveau par le serveur à chaque action.
+  const { user } = useAuth()
+  const [superAdmin, setSuperAdmin] = useState(false)
+  const [accessRows, setAccessRows] = useState<Map<string, TeacherAccessRow> | null>(null)
+  const [accessLoading, setAccessLoading] = useState(false)
+  const [sheetAccount, setSheetAccount] = useState<AccessAccount | null>(null)
   useEffect(() => { setFilter(route.params?.role ?? 'all') }, [route.params?.role])
 
   const load = useCallback(async () => {
@@ -79,6 +92,30 @@ export default function AdminUsersScreen() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const loadAccess = useCallback(() => {
+    setAccessLoading(true)
+    listTeacherAccess()
+      .then(rows => setAccessRows(new Map(rows.map(row => [row.uid, row]))))
+      .catch(() => setAccessRows(new Map()))
+      .finally(() => setAccessLoading(false))
+  }, [])
+  useEffect(() => {
+    if (!user?.uid) return
+    let active = true
+    isSuperAdmin(user.uid)
+      .then(allowed => { if (!active) return; setSuperAdmin(allowed); if (allowed) loadAccess() })
+      .catch(() => {})
+    return () => { active = false }
+  }, [user?.uid, loadAccess])
+
+  const badgeLabel = useMemo(() => (badge: AccessBadge) => t(`adminAccess.badges.${badge}`), [t])
+  // Couleurs hexadécimales seulement (hexWithAlpha) ; état neutre = surfaces du thème.
+  const badgeStyle = (badge: AccessBadge) => {
+    const tone = badge === 'disabled' || badge === 'revoked' ? theme.danger
+      : badge === 'pending' ? theme.warning : badge === 'phone' ? theme.success : null
+    return tone ? { color: tone, backgroundColor: hexWithAlpha(tone, 0.1) } : { color: theme.textSoft, backgroundColor: theme.surfaceAlt }
+  }
 
   const displayed = filter === 'all' ? users : users.filter(u => u.role === filter)
   const counts = {
@@ -119,7 +156,26 @@ export default function AdminUsersScreen() {
               {t('admin.lastSeen', { time: lastSeen })}{platformLabel ? ` · ${platformLabel}` : ''}
             </Text>
           ) : null}
+          {superAdmin && item.role === 'professeur' && accessRows ? (() => {
+            const badge = teacherAccessBadge(accessRows.get(item.uid))
+            const look = badgeStyle(badge)
+            return (
+              <View style={[styles.accessBadge, { backgroundColor: look.backgroundColor }]}>
+                <Text style={{ color: look.color, fontSize: 11, fontFamily: theme.fonts.semibold }}>{badgeLabel(badge)}</Text>
+              </View>
+            )
+          })() : null}
         </View>
+        {superAdmin && (item.role === 'professeur' || item.role === 'parent') ? (
+          <TouchableOpacity
+            onPress={() => setSheetAccount({ uid: item.uid, prenom: item.prenom, nom: item.nom, role: item.role, telephone: item.telephone })}
+            accessibilityRole="button"
+            accessibilityLabel={t(item.role === 'professeur' ? 'adminAccess.openTeacher' : 'adminAccess.openParent', { name: `${item.prenom} ${item.nom}` })}
+            style={[styles.accessButton, { backgroundColor: theme.primarySurface }]}
+          >
+            {item.role === 'professeur' ? <Ticket size={18} color={theme.primary} /> : <KeyRound size={18} color={theme.primary} />}
+          </TouchableOpacity>
+        ) : null}
       </View>
     )
   }
@@ -171,9 +227,17 @@ export default function AdminUsersScreen() {
           keyExtractor={item => item.uid}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 24 }}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.primary} />}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { void load(); if (superAdmin) loadAccess() }} tintColor={theme.primary} />}
         />
       )}
+      <AccountAccessSheet
+        visible={sheetAccount !== null}
+        account={sheetAccount}
+        row={sheetAccount ? accessRows?.get(sheetAccount.uid) : undefined}
+        loading={accessLoading}
+        onClose={() => setSheetAccount(null)}
+        onChanged={loadAccess}
+      />
     </ScreenLayout>
   )
 }
@@ -186,6 +250,8 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '700' },
   tagsRow: { flexDirection: 'row', gap: 6, marginTop: 6 },
   tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  accessBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, marginTop: 6 },
+  accessButton: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginLeft: 10 },
 
   loading: { paddingVertical: 40, alignItems: 'center' },
   empty: { paddingVertical: 40, alignItems: 'center' },

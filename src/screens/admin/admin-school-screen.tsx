@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
 import { useTranslation } from 'react-i18next'
-import { BookOpen, CalendarDays, ClipboardCheck, TrendingUp, UserRound } from 'lucide-react-native'
+import { Award, BookOpen, CalendarDays, ClipboardCheck, KeyRound, Ticket, TrendingUp, UserRound } from 'lucide-react-native'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAdminStudentDirectory } from '../../hooks/use-admin-student-directory'
 import type { AdminDashboardNav } from '../../navigation/types'
@@ -44,6 +44,12 @@ export default function AdminSchoolScreen() {
         <AdminActionRow language={language} title={copy.homework} subtitle={copy.homeworkHint} Icon={BookOpen} onPress={() => nav.navigate('AdminDevoirs')} />
         <AdminActionRow language={language} title={copy.calendar} subtitle={copy.calendarHint} Icon={CalendarDays} onPress={() => nav.navigate('AdminCalendarTab')} />
         <AdminActionRow language={language} title={copy.analyses} subtitle={copy.analysesHint} Icon={TrendingUp} onPress={() => nav.navigate('AdminStatsTab')} />
+        <AdminActionRow language={language} title={copy.behavior} subtitle={copy.behaviorHint} Icon={Award} onPress={() => nav.navigate('AdminBehavior')} />
+      </View>
+      <View>
+        <Text accessibilityRole="header" style={[text, bold, { fontSize: fontSize.title }]}>{copy.management}</Text>
+        <AdminActionRow language={language} title={copy.accounts} subtitle={copy.accountsHint} Icon={KeyRound} onPress={() => nav.navigate('AdminUsers', { role: 'professeur' })} />
+        <AdminActionRow language={language} title={copy.parentCodes} subtitle={copy.parentCodesHint} Icon={Ticket} onPress={() => nav.navigate('AdminParentCodes')} />
       </View>
     </ScrollView>
   </SafeAreaView>

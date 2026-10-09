@@ -1791,6 +1791,23 @@ await deny('F06 admin : une reprise ne réécrit pas non plus un message déjà 
 await deny('F06 un autre compte ne sonde pas les envois d’un professeur',
   getDocs(query(collection(asUser('parent2'), 'messages'), where('fromId', '==', 'prof1'), where(documentId(), '==', 'f06-stable'))))
 
+// Requêtes exactes des nouveaux écrans mobiles d'administration (9 octobre).
+// La lecture globale et la liste des superadmins restent hors portée des
+// parents, professeurs et visiteurs, même en contournant la navigation.
+await allow('admin mobile lit les élèves pour générer les codes parents',
+  getDocs(collection(asUser('admin1'), 'eleves')))
+await allow('admin mobile lit le bilan global de comportement',
+  getDocs(collection(asUser('admin1'), 'comportements')))
+await allow('admin mobile vérifie son habilitation superadmin',
+  getDoc(doc(asUser('admin1'), 'config/superadmins')))
+for (const [role, db] of [['parent', asUser('parent1')], ['professeur', asUser('prof1')], ['visiteur', asGuest()]]) {
+  await deny(`${role} ne lit pas globalement les élèves comme l'administration`, getDocs(collection(db, 'eleves')))
+  await deny(`${role} ne lit pas le bilan global de comportement`, getDocs(collection(db, 'comportements')))
+  await deny(`${role} ne lit pas la liste des superadmins`, getDoc(doc(db, 'config/superadmins')))
+}
+await deny('admin mobile ne peut pas se déclarer superadmin',
+  updateDoc(doc(asUser('admin1'), 'config/superadmins'), { uids: arrayUnion('admin1') }))
+
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)
 if (failed.length) {

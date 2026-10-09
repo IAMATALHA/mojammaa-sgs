@@ -1,17 +1,17 @@
 /**
  * ThemeContext — identité unifiée dérivée du logo Mojammaa.
  *
- * Le thème commun reprend les couleurs du logo. AdminStack applique une
- * variante ivoire, bleu nuit et cuivre via le même contrat de tokens.
+ * Le thème commun reprend les couleurs du logo, pour TOUS les rôles :
+ * l'administration n'a plus de variante ivoire / bleu nuit / cuivre (9 oct. 2026).
  *
  * Public shape is preserved (`primary`, `primarySurface`, spacing,
  * radius, fonts) so every existing screen keeps compiling — they
  * just inherit the new look automatically.
  */
 
-import React, { createContext, useContext, useMemo } from 'react'
+import React, { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
-import { palette, adminPalette, spacing, radius, fonts, shadows, fontSize } from '../theme/designTokens'
+import { palette, spacing, radius, fonts, shadows, fontSize } from '../theme/designTokens'
 
 export interface Theme {
   // Brand
@@ -114,35 +114,10 @@ const THEME: Theme = {
 
 const ThemeContext = createContext<Theme>(THEME)
 
-// Scoped to AdminStack: other roles retain their existing brand palette.
-const ADMIN_THEME: Theme = {
-  ...THEME,
-  primary: adminPalette.navy,
-  primaryDark: adminPalette.navyDark,
-  primarySurface: adminPalette.navySurface,
-  primaryBorder: adminPalette.navyBorder,
-  accent: adminPalette.copper,
-  accentSurface: adminPalette.copperSurface,
-  warning: adminPalette.copper,
-  warningSurface: adminPalette.copperSurface,
-  cream: adminPalette.ivory,
-  bg: adminPalette.ivory,
-  surface: adminPalette.ivory,
-  surfaceAlt: adminPalette.grouped,
-  card: adminPalette.white,
-  border: adminPalette.border,
-  borderStrong: adminPalette.borderStrong,
-  text: adminPalette.navy,
-  textSoft: adminPalette.secondary,
-  textMuted: adminPalette.secondary,
-  watercolorA: 'transparent',
-  watercolorB: 'transparent',
-  watercolorC: 'transparent',
-}
-
-export function ThemeProvider({ children, variant = 'default' }: { children: ReactNode; variant?: 'default' | 'admin' }) {
-  const value = useMemo(() => variant === 'admin' ? ADMIN_THEME : THEME, [variant])
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+// Un seul thème pour tous les rôles : l'administration a plus d'écrans, pas
+// une autre identité visuelle (demande de Youssef, 9 oct. 2026).
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  return <ThemeContext.Provider value={THEME}>{children}</ThemeContext.Provider>
 }
 
 export function useTheme() {
