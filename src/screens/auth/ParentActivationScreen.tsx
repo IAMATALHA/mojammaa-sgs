@@ -3,7 +3,8 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, Sc
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
 import { useTranslation } from 'react-i18next'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
+import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { AuthStackParamList } from '../../navigation/types'
 import { auth, functions } from '../../config/firebase'
@@ -34,7 +35,9 @@ export default function ParentActivationScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>()
-  const [code, setCode] = useState('')
+  const route = useRoute<RouteProp<AuthStackParamList, 'ParentActivation'>>()
+  // Code déjà saisi sur « Activer mon compte » (reconnu comme code parent).
+  const [code, setCode] = useState(() => route.params?.code ?? '')
   const [prenom, setPrenom] = useState('')
   const [nom, setNom] = useState('')
   const [phone, setPhone] = useState<PhoneFieldValue>(() => emptyPhoneFieldValue())

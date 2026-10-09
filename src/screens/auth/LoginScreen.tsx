@@ -357,8 +357,10 @@ export default function LoginScreen() {
                 {t('login.forgotPassword')}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate('ParentActivation')} style={styles.forgot}>
-              <Text style={[styles.forgotText, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>{t('parentActivation.title')}</Text>
+            {/* Professeur ou parent : le code remis par l'école décide du parcours. */}
+            <TouchableOpacity onPress={() => navigation.navigate('AccountActivation')} style={styles.firstTime} accessibilityRole="button">
+              <Text style={[styles.forgotText, { color: theme.textSoft, fontFamily: theme.fonts.medium }]}>{t('login.firstTime')}</Text>
+              <Text style={[styles.forgotText, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>{t('login.activateAccount')}</Text>
             </TouchableOpacity>
           </Animated.View>
 
@@ -554,6 +556,13 @@ const styles = StyleSheet.create({
   },
   forgotText: {
     fontSize: 13,
+  },
+  firstTime: {
+    marginTop: 14,
+    alignItems: 'center',
+    gap: 2,
+    minHeight: 44,
+    justifyContent: 'center',
   },
 
   // Ornament

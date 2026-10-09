@@ -18,7 +18,10 @@ import type { AppliedScope, StudentProgressionQuery, StudentSegment } from '../t
 // ── Auth ───────────────────────────────────────────────────────────────────
 export type AuthStackParamList = {
   Login: undefined
-  ParentActivation: undefined
+  /** « Première connexion ? Activer mon compte » : le code décide du parcours. */
+  AccountActivation: undefined
+  /** `code` : code parent déjà saisi sur AccountActivation (jamais dans un lien). */
+  ParentActivation: { code?: string } | undefined
 }
 
 // ── Partagé ────────────────────────────────────────────────────────────────
