@@ -6,11 +6,13 @@
  *
  * Les messages reprennent ceux du site (mojammaa-admin : TeacherAccessModal,
  * ParentInvitations, Comptes) : un même professeur ou parent reçoit le même
- * texte, quel que soit l'outil de l'école. Les boutons PRÉPARENT un message
- * (WhatsApp, partage) : rien n'est envoyé automatiquement.
+ * texte, quel que soit l'outil de l'établissement. Les boutons PRÉPARENT un
+ * message (WhatsApp, partage) : rien n'est envoyé automatiquement.
+ *
+ * Format validé par Youssef (10 oct. 2026) : arabe d'abord, puis français,
+ * brefs ; le code seul sur sa ligne (en gras dans WhatsApp). On dit
+ * « l'établissement » / « المؤسسة », jamais « l'école » / « المدرسة ».
  */
-import { formatLoginPhone } from './parentIdentity'
-
 export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.youssefatalha.mojammaasgs'
 
 /** Activation parent sur le site : le code voyage après « # », jamais envoyé au serveur. */
@@ -43,16 +45,33 @@ export interface CreatedTeacherInvitation {
   revokedCount: number
 }
 
-/** Message bilingue de l'invitation professeur (identique au site). */
-export function teacherInvitationMessage(prenom: string, invitation: Pick<CreatedTeacherInvitation, 'code' | 'url' | 'mode'>, until: string): string {
+const GREETING_AR = 'السلام عليكم ورحمة الله،'
+
+/** Le code seul sur sa ligne, en gras dans WhatsApp : lisible et facile à recopier. */
+const codeLine = (code: string) => `*${code}*`
+
+/** Date limite d'une invitation, chacune dans la langue de son paragraphe. */
+export interface InvitationUntil {
+  ar: string
+  fr: string
+}
+
+/** Invitation professeur : arabe puis français (identique au site). */
+export function teacherInvitationMessage(prenom: string, invitation: Pick<CreatedTeacherInvitation, 'code' | 'url' | 'mode'>, until: InvitationUntil): string {
+  const activation = invitation.mode === 'activation'
   return [
-    `Bonjour ${prenom}, voici votre invitation pour activer votre compte professeur Mojammaa Al Maarifa (usage unique, valable jusqu'au ${until}) :`,
-    invitation.url,
-    `Code : ${invitation.code}`,
-    invitation.mode === 'activation'
-      ? 'Ouvrez le lien, ou dans l’application touchez « Première connexion ? Activer mon compte ». Saisissez votre numéro, puis choisissez votre mot de passe. Ne transmettez ce code à personne.'
-      : 'Ouvrez le lien, ou dans l’application touchez « Première connexion ? Activer mon compte », puis connectez-vous avec vos identifiants habituels. Votre mot de passe ne change pas. Ne transmettez ce code à personne.',
-    `مرحباً ${prenom}، هذه دعوتكم لتفعيل حساب الأستاذ(ة) على Mojammaa Al Maarifa، صالحة لاستعمال واحد إلى غاية ${until}. افتحوا الرابط أعلاه أو اختاروا في التطبيق «أول مرة؟ تفعيل حسابي»، وأدخلوا الرمز ${invitation.code}. لا تشاركوا هذا الرمز مع أي أحد.`,
+    `${GREETING_AR}\nهذا رمز تفعيل حساب الأستاذ(ة) ${prenom}، صالح لمرة واحدة إلى غاية ${until.ar}:`,
+    codeLine(invitation.code),
+    (activation
+      ? 'في التطبيق اضغطوا «أول مرة؟ تفعيل حسابي»، أدخلوا الرمز ورقم هاتفكم، ثم اختاروا كلمة المرور.'
+      : 'في التطبيق اضغطوا «أول مرة؟ تفعيل حسابي»، أدخلوا الرمز ثم سجّلوا الدخول ببياناتكم المعتادة. كلمة المرور لا تتغير.')
+      + ' الرمز شخصي، لا تشاركوه.',
+    `Bonjour ${prenom}, voici ci-dessus votre code d’activation du compte professeur (usage unique, valable jusqu’au ${until.fr}).\n`
+      + (activation
+        ? 'Dans l’application, touchez « Première connexion ? Activer mon compte », saisissez ce code et votre numéro, puis choisissez votre mot de passe.'
+        : 'Dans l’application, touchez « Première connexion ? Activer mon compte », saisissez ce code, puis connectez-vous avec vos identifiants habituels. Votre mot de passe ne change pas.')
+      + ' Code personnel, ne le partagez pas.',
+    `Sans application : ${invitation.url}`,
   ].join('\n\n')
 }
 
@@ -66,13 +85,15 @@ export interface ResetLink {
 
 /** Lien de réinitialisation (parent ou professeur), envoyé en conversation individuelle. */
 export function resetLinkMessage(prenom: string, link: ResetLink): string {
-  const byPhone = link.phoneIsLogin && link.phone
+  // Se connecter par téléphone n'a de sens que si ce numéro est l'identifiant du compte.
+  const byPhone = link.phoneIsLogin && Boolean(link.phone)
+  const hour = link.expiresInMinutes === 60
   return [
-    `Bonjour ${prenom}, voici votre lien Mojammaa Al Maarifa pour choisir un nouveau mot de passe (usage unique, valable ${link.expiresInMinutes} minutes) :`,
+    `${GREETING_AR}\nهذا رابط لاختيار كلمة مرور جديدة، صالح لمرة واحدة ولمدة ${hour ? 'ساعة' : `${link.expiresInMinutes} دقيقة`}:`,
     link.resetUrl,
-    byPhone ? `Connectez-vous ensuite avec votre numéro ${formatLoginPhone(link.phone!)} et ce nouveau mot de passe.` : '',
-    'مرحباً، هذا رابط لاختيار كلمة مرور جديدة لحسابكم على Mojammaa Al Maarifa، صالح لمرة واحدة ولمدة ساعة.'
-      + (byPhone ? ' ثم سجّلوا الدخول برقم هاتفكم وكلمة المرور الجديدة.' : ''),
+    byPhone ? 'ثم سجّلوا الدخول برقم هاتفكم وكلمة المرور الجديدة.' : '',
+    `Bonjour ${prenom}, voici ci-dessus votre lien pour choisir un nouveau mot de passe (usage unique, valable ${hour ? '1 heure' : `${link.expiresInMinutes} minutes`}).`
+      + (byPhone ? ' Connectez-vous ensuite avec votre numéro et ce nouveau mot de passe.' : ''),
   ].filter(Boolean).join('\n\n')
 }
 
@@ -89,15 +110,15 @@ export interface ParentCode {
  * professeurs) : même libellé ici et sur le site.
  */
 export function parentCodeMessage(item: ParentCode): string {
-  const link = parentActivationUrl(item.code)
+  const who = `${item.studentName}${item.classe ? ` (${item.classe})` : ''}`
   return [
-    `Bonjour, voici le code d’activation du compte parent Mojammaa Al Maarifa pour ${item.studentName}${item.classe ? ` (${item.classe})` : ''} : ${item.code}`,
-    `1. Installez l’application Mojammaa Connect : ${PLAY_STORE_URL}`,
-    '2. Touchez « Première connexion ? Activer mon compte ».',
-    '3. Saisissez ce code, votre numéro de téléphone (hors Maroc : avec l’indicatif du pays, ex. +33, +32, +49) et un mot de passe de votre choix. L’e-mail est facultatif.',
-    `Sur iPhone ou ordinateur, sans application : ${link} (le code est déjà rempli).`,
-    'Ce code est personnel : ne le partagez pas.',
-    `مرحباً، هذا رمز تفعيل حساب ولي الأمر للتلميذ(ة) ${item.studentName}: ${item.code}. ثبّتوا تطبيق Mojammaa Connect، ثم اضغطوا «أول مرة؟ تفعيل حسابي» وأدخلوا الرمز ورقم هاتفكم وكلمة مرور من اختياركم. على الآيفون أو الحاسوب، بدون تطبيق: ${link} . الرمز شخصي، لا تشاركوه.`,
+    `${GREETING_AR}\nهذا رمز تفعيل حساب ولي أمر التلميذ(ة) ${who}:`,
+    codeLine(item.code),
+    'ثبّتوا تطبيق Mojammaa Connect، ثم اضغطوا «أول مرة؟ تفعيل حسابي» وأدخلوا الرمز ورقم هاتفكم وكلمة مرور من اختياركم. الرمز شخصي، لا تشاركوه.',
+    `Bonjour, voici ci-dessus le code d’activation du compte parent de ${who}.\n`
+      + 'Installez Mojammaa Connect, touchez « Première connexion ? Activer mon compte », puis saisissez ce code, votre numéro et un mot de passe. Code personnel, ne le partagez pas.',
+    // Sur iPhone ou ordinateur, le lien du site arrive avec le code déjà rempli.
+    `Android : ${PLAY_STORE_URL}\niPhone / ordinateur : ${parentActivationUrl(item.code)}`,
   ].join('\n\n')
 }
 

@@ -143,7 +143,12 @@ export default function AccountAccessSheet({ visible, onClose, account, row, loa
     ? { color: tone, backgroundColor: hexWithAlpha(tone, 0.1), borderColor: hexWithAlpha(tone, 0.28) }
     : { color: theme.textSoft, backgroundColor: theme.surfaceAlt, borderColor: theme.border }
 
-  const invitationText = created ? teacherInvitationMessage(account.prenom, created, formatDate(created.expiresAtMs)) : ''
+  // Message arabe puis français : chaque paragraphe porte la date dans sa langue,
+  // quelle que soit la langue de l'administrateur.
+  const untilIn = (lang: string, ms: number) => new Date(ms).toLocaleString(lang, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+  const invitationText = created
+    ? teacherInvitationMessage(account.prenom, created, { ar: untilIn('ar-MA', created.expiresAtMs), fr: untilIn('fr-FR', created.expiresAtMs) })
+    : ''
   const resetText = reset ? resetLinkMessage(account.prenom, reset) : ''
   const shareMessage = async (message: string, phone: string | null) => {
     setError('')

@@ -27,11 +27,11 @@ const identity = load('utils/parentIdentity.ts')
 const access = load('utils/admin-access.ts', { './parentIdentity': identity })
 
 const CODE = 'ABC-DEFG-HJK'
-const teacherMessage = access.teacherInvitationMessage('Fictif', { code: CODE, url: `https://mojammaa.com/activer#${CODE}`, mode: 'activation' }, '16 octobre à 14:30')
+const teacherMessage = access.teacherInvitationMessage('Fictif', { code: CODE, url: `https://mojammaa.com/activer#${CODE}`, mode: 'activation' }, { ar: '16 أكتوبر 14:30', fr: '16 octobre à 14:30' })
 const parentMessage = access.parentCodeMessage({ studentId: 'x', studentName: 'Élève Fictif', classe: '2APIC-1', code: CODE })
 
 test('a whole WhatsApp invitation pasted in the code field gives back its code', () => {
-  // Avant : les dix premières lettres du message (« BON-JOUR-FIC »), refusées par le serveur.
+  // Avant : les dix premiers caractères latins du message, refusés par le serveur.
   assert.notEqual(auth.normalizeInvitationCode(teacherMessage).slice(0, 10), auth.normalizeInvitationCode(CODE))
   assert.equal(auth.invitationCodeFromText(teacherMessage), CODE)
   assert.equal(auth.invitationCodeFromText(parentMessage), CODE)
