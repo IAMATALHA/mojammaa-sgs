@@ -64,7 +64,7 @@ function copyFor(language: string) {
       passengerStatus: {
         scheduled: 'في الانتظار', boarded: 'صعد', dropped_off: 'تم إنزاله', absent: 'غائب', cancelled: 'ملغى',
       },
-      direction: { to_school: 'نحو المدرسة', from_school: 'العودة من المدرسة' },
+      direction: { to_school: 'نحو المؤسسة', from_school: 'العودة من المؤسسة' },
       waiting: 'في الانتظار', onboard: 'داخل المركبة', dropped: 'تم إنزالهم', absent: 'غياب',
       beginBoarding: 'بدء الصعود', startTrip: 'بدء الرحلة', markArrived: 'تأكيد الوصول',
       completeTrip: 'إنهاء الرحلة', boarded: 'تأكيد الصعود', droppedOff: 'تأكيد النزول',
@@ -118,7 +118,7 @@ function copyFor(language: string) {
 
   return {
     title: 'Transport scolaire', today: "Tournées d’aujourd’hui", trips: 'Tournées', passengers: 'Passagers',
-    noTrips: 'Aucune tournée aujourd’hui', noTripsHint: 'Les tournées attribuées par l’école apparaîtront ici.',
+    noTrips: 'Aucune tournée aujourd’hui', noTripsHint: 'Les tournées attribuées par l’établissement apparaîtront ici.',
     noPassengers: 'Aucun élève n’est affecté à cette tournée.', loading: 'Chargement des tournées…',
     loadError: 'Impossible de charger les tournées. Vérifiez la connexion puis réessayez.',
     passengerError: 'Impossible de charger la liste des élèves.', actionError: 'La modification n’a pas été enregistrée. Réessayez.',
@@ -133,7 +133,7 @@ function copyFor(language: string) {
     passengerStatus: {
       scheduled: 'En attente', boarded: 'À bord', dropped_off: 'Déposé', absent: 'Absent', cancelled: 'Annulé',
     },
-    direction: { to_school: 'Vers l’école', from_school: 'Retour de l’école' },
+    direction: { to_school: 'Vers l’établissement', from_school: 'Retour de l’établissement' },
     waiting: 'En attente', onboard: 'À bord', dropped: 'Déposés', absent: 'Absents',
     beginBoarding: 'Commencer l’embarquement', startTrip: 'Démarrer le trajet',
     markArrived: 'Confirmer l’arrivée', completeTrip: 'Terminer le trajet',

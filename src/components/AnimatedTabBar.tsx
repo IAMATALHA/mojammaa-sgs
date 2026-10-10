@@ -93,6 +93,10 @@ export default function AnimatedTabBar({ state, descriptors, navigation }: Botto
             </View>
             <Text
               numberOfLines={1}
+              // « Établissement » sur 5 onglets d'un écran de 360 dp : réduire
+              // légèrement plutôt que tronquer. Les libellés courts ne bougent pas.
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
               style={[
                 styles.label,
                 { color: focused ? theme.primary : theme.textSoft, fontFamily: theme.fonts.semibold },
