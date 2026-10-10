@@ -104,3 +104,23 @@ Commandes lancées par Youssef (le garde-fou du mode auto refuse `eas update` à
 - Recette sur téléphone non faite. Rappel : la mise à jour se télécharge à l’ouverture et s’applique après fermeture complète puis réouverture.
 
 **Retour arrière** (`eas update:republish --group <groupe>`) : groupes « Espace administration » du 9 au soir — android 1.0.17 `1cdd4ac5-663c-4cd5-aff3-2079fed0f8a1`, ios 1.0.17 `e9d9a66d-1490-4186-8fa8-3f43e7006660`, android 1.0.16 `3a986ddf-1821-436c-af8c-2edb38a9c3d6`, ios 1.0.16 `4be3fbdc-e952-4fe6-802e-336bdc02a7d9`.
+
+## Messages WhatsApp et « établissement » (nuit du 10 octobre)
+
+Demandé par Youssef : messages WhatsApp en arabe d'abord (« السلام عليكم ورحمة الله، هذا رمز تفعيل … »), puis en français, brefs, le code seul sur sa ligne ; et « l'établissement » / « المؤسسة » au lieu de « l'école » / « المدرسة » dans tous les textes (adjectifs « النقل المدرسي », « التقويم المدرسي » conservés, anglais inchangé). Publication faite par Claude à sa demande (« انشرها انت من طرفك »).
+
+- Code : app `35cdb53` (messages) et `7b6c961` (textes, 89 remplacements, libellé d'onglet réduit plutôt que tronqué) ; site `024f50d` (module unique `src/utils/accessMessages.ts`, mêmes textes que l'app) et `50b582c` (58 remplacements). La page d'accueil publique (`SchoolHome.tsx`, « École privée à Tétouan ») n'est pas modifiée : question posée à Youssef.
+- Vérifié : app `npm test` 220/220, site `npm test` 150/150, TypeScript OK des deux côtés, JSON valides, variables de traduction identiques FR/AR/EN.
+
+| Runtime | Plateforme | Groupe publié | Mise à jour servie | Bundle Hermes |
+|---|---|---|---|---|
+| 1.0.17 | android | `27707cd2-61e1-4415-8abc-5b27729408e2` | `01a1232d-e19b-7cb9-b904-08978bac3446` | `a0e58bb1…` |
+| 1.0.17 | ios | `d5fea7b3-d11e-4854-a633-89a2a328e757` | `01a1232e-af38-7435-9a65-477e082029dc` | `8758d22f…` |
+| 1.0.16 | android | `67cf2138-7f23-4a32-8388-8ab8dc25b610` | `01a1232f-5a36-746f-9175-eae05125894e` | `a0e58bb1…` |
+| 1.0.16 | ios | `4eb9fdd4-9fc5-447b-9715-4957ef75abef` | `01a12330-048c-7d0d-a0b6-a4da24c6f3b4` | `8758d22f…` |
+
+- 1.0.17 depuis `7b6c961` (arbre propre) ; 1.0.16 depuis une copie de `7b6c961` (seul `app.json` diffère, `EAS_NO_VCS=1`). Empreintes calculées avant publication par un export identique à EAS (une plateforme à la fois) : identiques entre runtimes et à celles publiées. Service Expo Updates : 4/4 conformes. Preuve : `output/teacher-activation-release-2026-10-09/published-and-served-2026-10-10.json`.
+- **Site** : `dpl_3DoEfnBceaFgqEgedoWHsPd8E3SE` (`vercel deploy --prod --skip-domain`, puis `vercel promote`). Contrôle sur mojammaa.com : `/`, `/activer`, `/parents/activer` en 200 ; `accessMessages`, `config` (traductions), `ParentInvitations`, `Comptes`, `TeacherAccessModal` et `index` servis **octet pour octet identiques** au build local. Le déploiement inclut aussi le badge `4c0cb84` et l'affiche `public/guide-parent/poster-activation.html` (modification non commitée, déjà en ligne avant).
+- Recette sur téléphone non faite.
+
+**Retour arrière** — app (`eas update:republish --group <groupe>`) : android 1.0.17 `aed9a91d-abf1-465f-82b8-dcd62d6fd089`, ios 1.0.17 `8a3bc28a-794f-466d-9667-4fa60b03952d`, android 1.0.16 `f7e71f1c-5169-46bb-965e-1945f5a8b8ca`, ios 1.0.16 `765551d4-bcc8-4927-a0a7-7ae3805b4512`. Site : `vercel promote dpl_CHQKNiLX4bnMYe2dUy2Ko6Qk7Tm2`.
