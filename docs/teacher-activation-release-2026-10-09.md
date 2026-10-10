@@ -124,3 +124,14 @@ Demandé par Youssef : messages WhatsApp en arabe d'abord (« السلام عل�
 - Recette sur téléphone non faite.
 
 **Retour arrière** — app (`eas update:republish --group <groupe>`) : android 1.0.17 `aed9a91d-abf1-465f-82b8-dcd62d6fd089`, ios 1.0.17 `8a3bc28a-794f-466d-9667-4fa60b03952d`, android 1.0.16 `f7e71f1c-5169-46bb-965e-1945f5a8b8ca`, ios 1.0.16 `765551d4-bcc8-4927-a0a7-7ae3805b4512`. Site : `vercel promote dpl_CHQKNiLX4bnMYe2dUy2Ko6Qk7Tm2`.
+
+## Build 1.0.17 (49) publié sur Google Play (10 octobre, matin)
+
+Pourquoi : le binaire 48 (27/09) précède la connexion par téléphone et le bouton « Première connexion ? Activer mon compte » ; une nouvelle installation montrait l'ancien écran au premier lancement. Version **inchangée (1.0.17)** : même runtime, les OTA 1.0.17 atteignent les deux binaires, pas de troisième runtime.
+
+- Avant le build : `eas fingerprint:compare --build-id b7c2153d…` → empreinte native `5bc75b58…` **identique** au build 48 (seul le JavaScript embarqué change).
+- Build `cd758760-bd98-45b9-9e83-4cae8b9402fe` depuis `a74eb90` (arbre propre), versionCode 49, terminé à 06:58 UTC. Soumission EAS `dcb72fcb-bd60-47ac-92aa-7d7fb54ccfdc` : FINISHED (07:00 UTC), arrivée en brouillon sur la piste production.
+- Publication par Claude à la demande de Youssef (« انشر المسودة في Play أنت من طرفك ») via l'API Google Play : essai en lecture seule (validation Google OK, édition supprimée), puis édition `06854009866046137874` validée et publiée. Piste production relue ensuite : **1.0.17 (49) `completed` (100 %)**, notes fr-FR/ar/en-US. Google examine la version avant sa mise en ligne.
+- Notes de version : FR « Connexion avec votre numéro de téléphone. Nouveau bouton « Première connexion ? Activer mon compte » pour les professeurs et les parents. Ajout d’un enfant depuis les Réglages. Espace administration renouvelé. Corrections et améliorations. » ; AR « تسجيل الدخول برقم الهاتف. زر جديد «أول مرة؟ تفعيل حسابي» للأساتذة وأولياء الأمور. إضافة طفل من الإعدادات. فضاء إدارة متجدد. إصلاحات وتحسينات. » ; EN équivalent.
+- Tag local `v1.0.17-49` → `a74eb90` (non poussé).
+- Reste : recette sur téléphone (premier lancement d'une installation neuve : nouvel écran sans attendre d'OTA) ; surveiller Android vitals.
