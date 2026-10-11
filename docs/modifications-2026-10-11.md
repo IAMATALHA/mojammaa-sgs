@@ -6,7 +6,7 @@ Tout ce qui a été changé ce jour-là dans l'application (`mojammaa-sgs`) et s
 
 | Élément | État |
 |---|---|
-| Application, Google Play production | **1.0.17 (49)**, inchangée |
+| Application, Google Play production | **1.0.18 (51)**, promue le soir à 100 % (voir section 12) ; en ligne après l'examen de Google |
 | Application, piste de test interne | **1.0.18 (51)**, recette des liens réussie sur le téléphone de Youssef (tests A à J) |
 | Site mojammaa.com | En ligne, déploiement `dpl_FUhqs1d9h8Mf9XxjmrBG3jSE9mY4` (voir section 11) |
 | Fonctions serveur | `deleteUserAccount` et `unlinkStudentParent` en ligne (europe-west1) |
@@ -158,7 +158,7 @@ Chaque publication du site a été contrôlée sur mojammaa.com : `index.html` e
 
 ## 10. Reste à décider
 
-- Promouvoir le build 51 en production, puis envoyer les nouveaux écrans aux versions 1.0.17 et 1.0.16.
+- ~~Promouvoir le build 51 en production~~ : fait le soir (section 12). Reste à envoyer les nouveaux écrans aux versions 1.0.17 et 1.0.16.
 - Écran de lancement (logo, écran clair, logo animé) et changement de langue un peu lent : options présentées, pas de décision.
 - Utiliser un élève de test dédié pour les essais, au lieu d'un vrai élève.
 - Page Paramètres du site : affiche encore « 6 caractères ».
@@ -174,3 +174,30 @@ Codex a aussi proposé une image d'aperçu pour les liens partagés dans WhatsAp
 
 Publication du soir : site `dpl_FUhqs1d9h8Mf9XxjmrBG3jSE9mY4` (retour arrière : `vercel promote dpl_G9daZ52jG3TG4w7XRoNTWRm67gpg --yes`), puis fonction `unlinkStudentParent` mise à jour.
 
+
+## 12. Promotion de la 1.0.18 en production (soir)
+
+Demandée par Youssef. Le build 51 de la piste de test interne est passé sur la piste de production, à 100 %, sans déploiement progressif (comme la 1.0.17).
+
+- Avant : production = 1.0.17 (49), test interne = 1.0.18 (51). Build 51 = EAS `9a8ac556`, commit `0436916`, étiquette `v1.0.18-51`. Depuis cette étiquette, seuls des scripts, des tests et des documents ont changé : rien qui entre dans l'application.
+- Aucune mise à jour OTA n'existe pour la version 1.0.18 : l'application installée exécute le code du build.
+- Publication par l'API Google Play : édition validée à blanc par Google, puis publiée (`11339571477451300427`).
+- Relu ensuite en lecture seule : production = 1.0.18 (51) `completed`, notes de version fr-FR, ar et en-US.
+- Google examine la version avant sa mise en ligne (quelques heures à environ deux jours). D'ici là, le Play Store sert encore la 1.0.17.
+- Retour arrière : impossible de revenir à la 1.0.17 sur Google Play. Un défaut de l'interface se corrige par OTA sur la version 1.0.18 ; un défaut natif demande un nouveau build (52).
+
+Notes de version publiées :
+
+```
+<fr-FR>
+Le lien d’activation reçu par WhatsApp ouvre directement l’application, avec le code déjà rempli. Nouveau bouton pour afficher le mot de passe. Confirmation du mot de passe à l’activation et messages d’erreur plus clairs. Corrections et améliorations.
+</fr-FR>
+<ar>
+رابط التفعيل المرسل عبر واتساب يفتح التطبيق مباشرة، ورمز التفعيل مكتوب مسبقاً. زر جديد لإظهار كلمة المرور. تأكيد كلمة المرور عند التفعيل ورسائل خطأ أوضح. إصلاحات وتحسينات.
+</ar>
+<en-US>
+The activation link sent by WhatsApp now opens the app directly, with the code already filled in. New button to show your password. Password confirmation on activation and clearer error messages. Fixes and improvements.
+</en-US>
+```
+
+Pas fait : l'envoi des nouveaux écrans aux versions 1.0.17 et 1.0.16 (OTA), et la surveillance des plantages (Android vitals) les premiers jours.

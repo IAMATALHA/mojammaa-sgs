@@ -15,7 +15,7 @@ import { INVITATION_CODE_LENGTH, invitationCodeFromText, normalizeInvitationCode
 import { formatInvitationCode } from '../../services/teacherAccessService'
 import PhoneNumberField from '../../components/PhoneNumberField'
 import PasswordField from '../../components/PasswordField'
-import { formatLoginPhone, formatLoginPhoneForConfirmation } from '../../utils/parentIdentity'
+import { formatLoginPhone, formatLoginPhoneForConfirmation, isHiddenParentEmail } from '../../utils/parentIdentity'
 import { emptyPhoneFieldValue, phoneFieldValidity, type PhoneFieldValue } from '../../utils/phoneCountries'
 import { rememberLoginMode } from '../../utils/loginPreferences'
 
@@ -67,6 +67,7 @@ export default function ParentActivationScreen() {
     const sentCode = normalizeInvitationCode(code)
     // Compte créé par le serveur : à partir de là, le code est consommé.
     let created = false
+    let recoveryMessage = ''
     try {
       const redeem = httpsCallable<RedeemRequest, RedeemResponse>(functions, 'redeemParentInvitation')
       const { data } = await redeem({
@@ -77,26 +78,32 @@ export default function ParentActivationScreen() {
       created = true
       const loginEmail = data?.loginEmail || typedEmail
       if (!loginEmail) throw new Error('redeemParentInvitation: identifiant manquant')
+      // Le serveur peut avoir refusé le téléphone tout en créant le compte
+      // par e-mail. Conserver l'identifiant accepté avant d'ouvrir la session :
+      // il reste utilisable si cette deuxième requête échoue.
+      if (data?.loginPhone) {
+        rememberLoginMode('phone', phone.iso)
+        recoveryMessage = t('parentActivation.successPhoneBody', { phone: formatLoginPhone(data.loginPhone) })
+      } else if (!isHiddenParentEmail(loginEmail)) {
+        rememberLoginMode('email')
+        recoveryMessage = t(phoneE164 ? 'parentActivation.successEmailOnlyBody' : 'parentActivation.successEmailBody', { email: loginEmail })
+      }
       await signInWithEmailAndPassword(auth, loginEmail, password)
       // Les alertes ci-dessous sont natives : la connexion remplace déjà cet
       // écran par l'accueil, un message dans l'écran ne serait jamais vu.
       if (data?.loginPhone) {
-        rememberLoginMode('phone', phone.iso)
         Alert.alert(
           t('parentActivation.successTitle'),
-          t('parentActivation.successPhoneBody', { phone: formatLoginPhone(data.loginPhone) }),
+          recoveryMessage,
         )
-      } else if (phoneE164) {
+      } else if (phoneE164 && recoveryMessage) {
         // Numéro confirmé mais refusé comme identifiant (déjà pris par un autre
         // compte, refusé par Auth) : le compte ne se connecte que par e-mail.
         // Le dire, sinon le parent réessaiera avec son numéro (audit 2026-09-28).
-        rememberLoginMode('email')
         Alert.alert(
           t('parentActivation.successTitle'),
-          t('parentActivation.successEmailOnlyBody', { email: loginEmail }),
+          recoveryMessage,
         )
-      } else {
-        rememberLoginMode('email')
       }
     } catch (e) {
       if (created) {
@@ -104,7 +111,7 @@ export default function ParentActivationScreen() {
         // répondrait « code déjà utilisé » alors que le compte existe.
         Alert.alert(
           t('parentActivation.successTitle'),
-          t('parentActivation.createdNoSession'),
+          [t('parentActivation.createdNoSession'), recoveryMessage].filter(Boolean).join('\n\n'),
           [{ text: t('teacherActivation.goLogin'), onPress: () => navigation.popToTop() }],
         )
         return

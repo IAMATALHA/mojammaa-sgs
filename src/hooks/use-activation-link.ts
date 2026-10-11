@@ -102,7 +102,11 @@ export function useActivationLink({ signedIn, ready, logout }: Options) {
     )
   }, [pending, ready, signedIn, logout, t])
 
-  const dismissChild = useCallback(() => setChildOpen(false), [])
+  const dismissChild = useCallback(() => {
+    // Une fermeture animée / alerte de la feuille précédente peut finir après
+    // l'arrivée d'un autre lien : elle ne doit pas fermer la nouvelle feuille.
+    if (child?.at === intentCount.current) setChildOpen(false)
+  }, [child])
 
   return { child, childOpen, dismissChild }
 }

@@ -48,8 +48,8 @@ async function main() {
     args: process.argv.slice(2),
     saveBackup(studentId, content) {
       const dir = path.join(ROOT, 'backups', `unlink-orphan-parent-${stamp}`)
-      fs.mkdirSync(dir, { recursive: true })
-      fs.writeFileSync(path.join(dir, `${studentId}.json`), JSON.stringify(content, null, 2))
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
+      fs.writeFileSync(path.join(dir, `${studentId}.json`), JSON.stringify(content, null, 2), { flag: 'wx', mode: 0o600 })
       return `${path.relative(ROOT, dir)}/${studentId}.json`
     },
   })

@@ -19,7 +19,7 @@ function world({ docs = {}, logins = {} } = {}) {
   }
   const lines = []
   const state = {
-    store, users, lines, deletedLogins: [], backups: [], beforeWrite: null,
+    store, users, lines, deletedLogins: [], backups: [], beforeWrite: null, afterWrite: null,
     out: { log: text => lines.push(text), error: text => lines.push(text) },
     db: {
       doc: path => ({ path, id: path.split('/').pop(), get: async () => snap(path) }),
@@ -48,6 +48,7 @@ function world({ docs = {}, logins = {} } = {}) {
           }
           store.set(path, next)
         }
+        state.afterWrite?.()
       },
     },
     auth: {
@@ -114,6 +115,7 @@ test('plan : l’identifiant de connexion n’est supprimé que s’il ne sert p
   const login = { email: 'x@example.test' }
   assert.equal(planOrphanUnlink({ student, profileExists: false, login }).deleteLogin, true)
   assert.equal(planOrphanUnlink({ student, profileExists: false, login, otherLinkedCount: 1 }).deleteLogin, false)
+  assert.equal(planOrphanUnlink({ student, profileExists: false, login, isSuperAdmin: true }).deleteLogin, false)
   assert.equal(planOrphanUnlink({ student, profileExists: false, login: { ...login, customClaims: { admin: true } } }).deleteLogin, false)
   assert.equal(planOrphanUnlink({ student, profileExists: false, login, options: { keepLogin: true } }).deleteLogin, false)
   assert.equal(planOrphanUnlink({ student, profileExists: false }).deleteLogin, false)
@@ -191,6 +193,67 @@ test('--commit : suppression de l’identifiant impossible → signalée, avec l
   assert.match(w.text(), /Authentication : gone/)
 })
 
+test('--commit : une coordonnée ou le nom parent corrigé après le plan ne sont jamais effacés', async () => {
+  for (const [field, value] of [['parentTel', '0699999999'], ['parentNom', 'Nom corrigé'], ['parentEmail', 'corrige@example.test']]) {
+    const w = orphan()
+    w.beforeWrite = () => w.store.set('eleves/A1', { ...w.store.get('eleves/A1'), [field]: value })
+    assert.equal(await w.run('A1', '--commit', '--clear-contact'), 1)
+    assert.equal(w.store.get('eleves/A1').parentUid, 'gone')
+    assert.equal(w.store.get('eleves/A1')[field], value)
+    assert.deepEqual(w.deletedLogins, [])
+  }
+})
+
+test('--commit : une correction d’un autre champ reste compatible avec le détachement', async () => {
+  const w = orphan()
+  w.beforeWrite = () => w.store.set('eleves/A1', { ...w.store.get('eleves/A1'), classe: '2APIC-1' })
+  assert.equal(await w.run('A1', '--commit'), 0)
+  assert.equal(w.store.get('eleves/A1').classe, '2APIC-1')
+  assert.equal(w.store.get('eleves/A1').parentUid, undefined)
+  assert.deepEqual(w.deletedLogins, ['gone'])
+})
+
+test('--commit : un superadmin sans profil ni claims garde son compte Auth', async () => {
+  const w = orphan({ docs: { 'config/superadmins': { uids: ['gone'] } } })
+  assert.equal(await w.run('A1', '--commit'), 0)
+  assert.equal(w.store.get('eleves/A1').parentUid, undefined)
+  assert.deepEqual(w.deletedLogins, [])
+  assert.ok(w.users.has('gone'))
+})
+
+test('--commit : configuration superadmin mal formée → compte Auth conservé', async () => {
+  const w = orphan({ docs: { 'config/superadmins': { uids: 'gone' } } })
+  assert.equal(await w.run('A1', '--commit'), 0)
+  assert.deepEqual(w.deletedLogins, [])
+})
+
+test('--commit : un compte modifié ou réutilisé après le détachement n’est pas supprimé', async () => {
+  const changes = [
+    w => w.store.set('users/gone', { role: 'parent' }),
+    w => w.store.set('eleves/C3', { parentUid: 'gone' }),
+    w => w.store.set('config/superadmins', { uids: ['gone'] }),
+    w => w.users.set('gone', { ...w.users.get('gone'), customClaims: { admin: true } }),
+    w => w.users.set('gone', { ...w.users.get('gone'), email: 'corrige@example.test' }),
+    w => w.users.set('gone', { ...w.users.get('gone'), metadata: { creationTime: 'compte-recree' } }),
+  ]
+  for (const change of changes) {
+    const w = orphan()
+    w.afterWrite = () => change(w)
+    assert.equal(await w.run('A1', '--commit'), 1)
+    assert.deepEqual(w.deletedLogins, [])
+    assert.ok(w.users.has('gone'))
+    assert.match(w.text(), /Identifiant conservé/)
+  }
+})
+
+test('--commit : Auth déjà supprimé pendant le détachement → succès sans nouvelle suppression', async () => {
+  const w = orphan()
+  w.afterWrite = () => w.users.delete('gone')
+  assert.equal(await w.run('A1', '--commit'), 0)
+  assert.deepEqual(w.deletedLogins, [])
+  assert.match(w.text(), /déjà supprimé/)
+})
+
 test('garde-fous de la ligne de commande', async () => {
   assert.equal(await orphan().run('--commit'), 1)
   assert.equal(await orphan().run('A1', '--force'), 1)
@@ -199,4 +262,18 @@ test('garde-fous de la ligne de commande', async () => {
   assert.equal(await options.run('A1', '--commit', '--keep-login', '--clear-contact'), 0)
   assert.deepEqual(options.deletedLogins, [])
   assert.equal(options.store.get('eleves/A1').parentEmail, undefined)
+})
+
+test('arguments ambigus ou chemin de document : refus avant toute lecture et écriture', async () => {
+  for (const args of [
+    ['A1', 'B2', '--commit'], ['A1/enfants/C3', '--commit'], ['../A1', '--commit'],
+    ['..', '--commit'], ['A1\\B2', '--commit'], ['', '--commit'], ['--clear-contact', '--keep-contact'],
+  ]) {
+    const w = orphan()
+    w.db.doc = () => { throw new Error('Aucune lecture ne doit être tentée') }
+    w.db.collection = () => { throw new Error('Aucune lecture ne doit être tentée') }
+    assert.equal(await w.run(...args), 1)
+    assert.deepEqual(w.deletedLogins, [])
+    assert.deepEqual(w.backups, [])
+  }
 })

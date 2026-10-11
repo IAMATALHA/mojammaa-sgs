@@ -331,6 +331,7 @@ const en = {
     confirmPhoneOk: 'Yes, continue',
     successTitle: 'Account activated',
     successPhoneBody: 'Remember: to sign in, use {{phone}} and your password.',
+    successEmailBody: 'To sign in, use your email {{email}} and the password you just chose.',
     existingAccount: 'An account already exists with this number or email. Sign in with that account’s password, then open Settings → Add a child.',
     successEmailOnlyBody: 'This number cannot be used to sign in (it may already belong to another account). To sign in, use your email {{email}} and your password.',
     linkedTitle: 'Child added',
@@ -338,7 +339,7 @@ const en = {
     linkErrorTitle: 'Child not added',
     linkErrorSignedIn: 'You are signed in, but this child could not be added to your account. Try again from Settings → Add a child, or contact the school.',
     unavailable: 'Activation is not possible right now. Check your internet connection, then try again.',
-    createdNoSession: 'Your account is created, but sign-in did not open. Sign in with your number or email and the password you just chose: the code is no longer needed.',
+    createdNoSession: 'Your account is created, but sign-in did not open. Return to sign-in: the code is no longer needed.',
   },
 
   phoneField: {

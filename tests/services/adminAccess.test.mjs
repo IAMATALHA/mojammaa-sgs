@@ -26,6 +26,21 @@ test('numéro WhatsApp : indicatif sans « + », numéros marocains complétés'
   assert.equal(access.whatsAppUrl('+212612345678', 'Code : ABC & co'), 'https://wa.me/212612345678?text=Code%20%3A%20ABC%20%26%20co')
 })
 
+test('WhatsApp normalise les mêmes numéros que la connexion, y compris les chiffres arabes', () => {
+  for (const phone of ['612345678', '٠٦١٢٣٤٥٦٧٨', '+212 (0)6 12 34 56 78']) {
+    assert.equal(access.whatsAppPhone(phone), '212612345678')
+  }
+  assert.equal(access.whatsAppPhone('+33 (0)6 12 34 56 78'), '33612345678')
+  assert.equal(access.whatsAppPhone('+39 06 12345678'), '390612345678', 'le zéro italien fait partie du numéro')
+})
+
+test('WhatsApp refuse une destination invalide au lieu de fabriquer un lien personnel', () => {
+  for (const phone of ['', 'inconnu', '06123', '+212612345678?text=autre', '0612345678 / 0623456789']) {
+    assert.equal(access.whatsAppPhone(phone), '')
+    assert.throws(() => access.whatsAppUrl(phone, 'invitation fictive'), /Invalid WhatsApp phone/)
+  }
+})
+
 // Format validé par Youssef le 10 oct. 2026 : arabe d'abord, puis français,
 // brefs, code seul sur sa ligne ; « l'établissement », jamais « l'école ».
 const arabicFirst = message => {
@@ -34,8 +49,7 @@ const arabicFirst = message => {
   assert.doesNotMatch(message, /école|المدرسة/i)
 }
 
-// Choix de Youssef (11 oct. 2026) : le lien d'activation d'abord, seul sur sa
-// ligne (le code y est déjà) ; le code en secours tout à la fin, seul sur sa ligne.
+// Invitations professeurs : lien d'abord, code en secours tout à la fin.
 const linkFirst = (message, url, code) => {
   const lines = message.split('\n')
   assert.equal(lines[3], url, 'the activation link is alone on its line, right after the arabic opening')
@@ -79,15 +93,18 @@ test('lien de réinitialisation : arabe puis français, connexion par téléphon
   assert.match(contactOnly, /valable 30 minutes\)/)
 })
 
-test('activation parent : lien d’abord, arabe puis français, code en secours à la fin', () => {
+test('activation parent : message court, un lien, blocs AR puis FR et accès Android/iPhone', () => {
   const message = access.parentCodeMessage({ studentId: 'M1', studentName: 'Yasmine Alaoui', classe: '2APIC-1', code: 'MNP-QRST-UVW' })
   arabicFirst(message)
-  linkFirst(message, 'https://mojammaa.com/parents/activer#MNP-QRST-UVW', 'MNP-QRST-UVW')
-  assert.match(message, /هذا رابط تفعيل حساب ولي أمر Yasmine Alaoui \(2APIC-1\):/)
-  assert.match(message, /اضغطوا على الرابط: الرمز مكتوب فيه\./)
-  assert.match(message, /lien d’activation du compte parent de Yasmine Alaoui \(2APIC-1\)\./)
-  assert.match(message, /Touchez-le : le code y est déjà\./)
-  assert.doesNotMatch(message, /Activer un compte parent/)
+  assert.equal(message.split('\n')[3], 'https://mojammaa.com/parents/activer#MNP-QRST-UVW')
+  assert.equal((message.match(/https:\/\//g) || []).length, 1, 'one activation link, no competing install link')
+  assert.equal((message.match(/MNP-QRST-UVW/g) || []).length, 1, 'code only appears in the activation link')
+  assert.match(message, /تفعيل حساب ولي أمر Yasmine Alaoui \(2APIC-1\):/)
+  const frenchStart = message.indexOf('Bonjour')
+  assert.match(message.slice(0, frenchStart), /أندرويد.*آيفون.*Safari/)
+  assert.match(message.slice(frenchStart), /Android.*iPhone.*Safari/)
+  assert.doesNotMatch(message.slice(frenchStart), /\p{Script=Arabic}/u, 'no return to Arabic after the French block')
+  assert.ok(message.length < 500, 'keep the standard invitation concise')
 })
 
 test('état d’accès d’un professeur : compte et invitation distincts, même règle que le site', () => {
