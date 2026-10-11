@@ -15,11 +15,12 @@ import { useTranslation } from 'react-i18next'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { AuthStackParamList } from '../../navigation/types'
-import { Globe, Lock, Mail, Smartphone } from 'lucide-react-native'
+import { Globe, Mail, Smartphone } from 'lucide-react-native'
 import { auth, functions } from '../../config/firebase'
 import { useTheme } from '../../contexts/ThemeContext'
 import LanguagePicker from '../../components/LanguagePicker'
 import PhoneNumberField from '../../components/PhoneNumberField'
+import PasswordField from '../../components/PasswordField'
 import { signInParentWithPhone } from '../../services/parentAuthService'
 import { classifyParentLoginError, isEmailIdentifier, normalizeLoginPhone } from '../../utils/parentIdentity'
 import {
@@ -43,6 +44,7 @@ export default function LoginScreen() {
   // Mode e-mail (un numéro tapé ici reste accepté, par compatibilité).
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [langOpen, setLangOpen] = useState(false)
@@ -310,21 +312,16 @@ export default function LoginScreen() {
               </View>
             )}
 
-            {/* Password input with icon */}
-            <View style={[styles.inputWrap, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                accessibilityLabel={t('login.password')}
-                placeholder={t('login.password')}
-                placeholderTextColor={theme.textMuted}
-                secureTextEntry
-                style={[styles.input, { color: theme.text, fontFamily: theme.fonts.regular }]}
-              />
-              <View style={styles.inputIcon}>
-                <Lock size={18} color={theme.textMuted} strokeWidth={1.75} />
-              </View>
-            </View>
+            {/* Mot de passe : l'œil permet de vérifier ce qu'on a tapé. */}
+            <PasswordField
+              value={password}
+              onChangeText={setPassword}
+              visible={showPassword}
+              onToggleVisible={() => setShowPassword(shown => !shown)}
+              kind="current"
+              placeholder={t('login.password')}
+              shape="pill"
+            />
 
             {/* Submit button — rouge de marque */}
             <Pressable

@@ -10,6 +10,8 @@ import { useWorkspace } from '../contexts/driver-workspace-context'
 import { useTheme } from '../contexts/ThemeContext'
 import { navigationRef } from './navigationRef'
 import { usePushTapNavigation } from '../hooks/usePushTapNavigation'
+import { useActivationLink } from '../hooks/use-activation-link'
+import AddChildSheet from '../components/add-child-sheet'
 import AuthStack    from './AuthStack'
 import StudentStack from './StudentStack'
 import TeacherStack from './TeacherStack'
@@ -89,7 +91,7 @@ function DriverAccessScreen({ readError }: { readError: boolean }) {
 }
 
 export default function NavigationRoot() {
-  const { user, isLoading, role, profile, profileError } = useAuth()
+  const { user, isLoading, role, profile, profileError, logout } = useAuth()
   const {
     activeWorkspace,
     canUseDriverWorkspace,
@@ -117,6 +119,10 @@ export default function NavigationRoot() {
     },
   )
 
+  // Lien d'activation touché dans WhatsApp : écran d'activation si déconnecté,
+  // « Ajouter un enfant » prérempli si un compte est déjà ouvert.
+  const activationLink = useActivationLink({ signedIn: !!user, ready: navReady && !isLoading, logout })
+
   if (isLoading) return <Splash />
 
   if (user && role === 'driver' && driverProfileLoading) return <Splash />
@@ -137,6 +143,7 @@ export default function NavigationRoot() {
   }
 
   return (
+    <>
     <NavigationContainer ref={navigationRef} onReady={() => setNavReady(true)}>
       {!user ? (
         <AuthStack />
@@ -152,6 +159,15 @@ export default function NavigationRoot() {
         <StudentStack />
       )}
     </NavigationContainer>
+    {user ? (
+      <AddChildSheet
+        visible={activationLink.childCode !== null}
+        initialCode={activationLink.childCode ?? ''}
+        onClose={activationLink.dismissChild}
+        isStaff={role !== 'student'}
+      />
+    ) : null}
+    </>
   )
 }
 

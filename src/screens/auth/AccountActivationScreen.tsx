@@ -1,15 +1,17 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   ActivityIndicator, Alert, I18nManager, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
+import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { ArrowLeft, Eye, EyeOff, GraduationCap, KeyRound, Mail, Smartphone } from 'lucide-react-native'
+import { ArrowLeft, GraduationCap, KeyRound, Mail, Smartphone } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { AuthStackParamList } from '../../navigation/types'
 import { useTheme } from '../../contexts/ThemeContext'
 import PhoneNumberField from '../../components/PhoneNumberField'
+import PasswordField from '../../components/PasswordField'
 import {
   TeacherAccessFailure, activateTeacher, formatInvitationCode, previewActivationCode, signInAndLinkTeacher,
   teacherAccessReason, type TeacherAccessReason,
@@ -49,14 +51,17 @@ const ERROR_KEY: Record<ErrorKey, string> = {
  * habituelle puis rattachement, mot de passe inchangé ; code parent : écran
  * d'activation parent, code prérempli.
  *
- * Aucun lien vers l'application n'est configuré : un lien d'invitation ouvre
- * le site (mojammaa.com/activer), et ici le code se saisit à la main.
+ * À partir du build 1.0.18 (Android), le lien d'invitation
+ * (mojammaa.com/activer#CODE) ouvre cet écran avec le code : la vérification
+ * part aussitôt. Sur les versions antérieures, le lien ouvre le site et le
+ * code se saisit ici à la main.
  */
 export default function AccountActivationScreen() {
   const theme = useTheme()
   const { t } = useTranslation()
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>()
+  const route = useRoute<RouteProp<AuthStackParamList, 'AccountActivation'>>()
   const [step, setStep] = useState<Step>('code')
   const [addsTeacherRole, setAddsTeacherRole] = useState(false)
   const [code, setCode] = useState('')
@@ -76,14 +81,14 @@ export default function AccountActivationScreen() {
     if (reason === 'invalid-phone') setShowPhoneErrors(true)
   }
 
-  const checkCode = async () => {
+  const checkCode = async (typed: string = code) => {
     setError(null)
-    if (normalizeInvitationCode(code).length !== INVITATION_CODE_LENGTH) { fail('invalid-code'); return }
+    if (normalizeInvitationCode(typed).length !== INVITATION_CODE_LENGTH) { fail('invalid-code'); return }
     setWorking(true)
     try {
-      const preview = await previewActivationCode(code)
+      const preview = await previewActivationCode(typed)
       if (preview.kind === 'parent') {
-        navigation.replace('ParentActivation', { code: formatInvitationCode(code) })
+        navigation.replace('ParentActivation', { code: formatInvitationCode(typed) })
         return
       }
       setAddsTeacherRole(preview.addsTeacherRole)
@@ -97,6 +102,18 @@ export default function AccountActivationScreen() {
       setWorking(false)
     }
   }
+
+  // Lien d'activation ouvert dans l'application : le code est déjà là, on
+  // passe directement à l'étape qu'il décide (un lien sans code entier laisse
+  // la saisie à la main).
+  const linkCode = route.params?.code
+  const linkAt = route.params?.linkAt
+  useEffect(() => {
+    if (!linkAt || !linkCode) return
+    setCode(linkCode); setStep('code'); setPassword(''); setConfirm('')
+    void checkCode(linkCode)
+    // Un appui sur un lien = une vérification : `checkCode` reste hors dépendances.
+  }, [linkCode, linkAt])
 
   const validPhone = (): string | null => {
     const validity = phoneFieldValidity(phone)
@@ -162,32 +179,18 @@ export default function AccountActivationScreen() {
 
   const inputStyle = [styles.input, { color: theme.text, borderColor: theme.borderStrong, backgroundColor: theme.card, fontFamily: theme.fonts.regular }]
   const label = (text: string) => <Text style={[styles.label, { color: theme.textSoft, fontFamily: theme.fonts.semibold }]}>{text}</Text>
+  // Un seul réglage d'affichage pour le mot de passe et sa confirmation.
   const passwordField = (value: string, onChange: (next: string) => void, text: string, isNew: boolean) => (
-    <View style={styles.field}>
-      {label(text)}
-      <View>
-        <TextInput
-          value={value}
-          onChangeText={next => { onChange(next); if (error) setError(null) }}
-          secureTextEntry={!showPassword}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete={isNew ? 'new-password' : 'current-password'}
-          textContentType={isNew ? 'newPassword' : 'password'}
-          accessibilityLabel={text}
-          style={[inputStyle, styles.passwordInput]}
-        />
-        <Pressable
-          onPress={() => setShowPassword(shown => !shown)}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={t(showPassword ? 'teacherActivation.hidePassword' : 'teacherActivation.showPassword')}
-          style={styles.eye}
-        >
-          {showPassword ? <EyeOff size={20} color={theme.textMuted} /> : <Eye size={20} color={theme.textMuted} />}
-        </Pressable>
-      </View>
-    </View>
+    <PasswordField
+      value={value}
+      onChangeText={next => { onChange(next); if (error) setError(null) }}
+      visible={showPassword}
+      onToggleVisible={() => setShowPassword(shown => !shown)}
+      kind={isNew ? 'new' : 'current'}
+      label={text}
+      style={styles.field}
+      inputStyle={{ borderColor: theme.borderStrong }}
+    />
   )
   const button = (text: string, onPress: () => void) => (
     <Pressable
@@ -236,6 +239,7 @@ export default function AccountActivationScreen() {
             style={[inputStyle, styles.codeInput, { fontFamily: theme.fonts.bold }]}
           />
           <Text style={[styles.help, { color: theme.textMuted }]}>{t('teacherActivation.codeHelp')}</Text>
+          <Text style={[styles.help, { color: theme.textMuted }]}>{t('common.pasteCodeHelp')}</Text>
         </View>
         {errorBox}
         {button(t('teacherActivation.continue'), () => { void checkCode() })}
@@ -347,8 +351,6 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, marginBottom: 6, marginStart: 4 },
   input: { height: 52, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, fontSize: 16 },
   codeInput: { fontSize: 20, letterSpacing: 2.5, textAlign: 'center' },
-  passwordInput: { paddingEnd: 52 },
-  eye: { position: 'absolute', end: 6, top: 6, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   help: { fontSize: 12.5, lineHeight: 18, marginTop: 6, marginStart: 4 },
   helpTight: { marginTop: -6, marginBottom: 12 },
   note: { borderRadius: 14, padding: 14, marginBottom: 16 },

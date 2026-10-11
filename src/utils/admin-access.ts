@@ -9,8 +9,11 @@
  * texte, quel que soit l'outil de l'établissement. Les boutons PRÉPARENT un
  * message (WhatsApp, partage) : rien n'est envoyé automatiquement.
  *
- * Format validé par Youssef (10 oct. 2026) : arabe d'abord, puis français,
- * brefs ; le code seul sur sa ligne (en gras dans WhatsApp). On dit
+ * Format validé par Youssef (10 et 11 oct. 2026) : arabe d'abord, puis
+ * français, brefs, sans emoji. Le lien d'activation vient en premier, seul sur
+ * sa ligne : il ouvre le site avec le code déjà rempli, rien à recopier. Le
+ * code reste à la fin, seul sur sa ligne (en gras dans WhatsApp), pour
+ * l'application (« Activer mon compte », « Ajouter un enfant »). On dit
  * « l'établissement » / « المؤسسة », jamais « l'école » / « المدرسة ».
  */
 export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.youssefatalha.mojammaasgs'
@@ -47,8 +50,15 @@ export interface CreatedTeacherInvitation {
 
 const GREETING_AR = 'السلام عليكم ورحمة الله،'
 
-/** Le code seul sur sa ligne, en gras dans WhatsApp : lisible et facile à recopier. */
-const codeLine = (code: string) => `*${code}*`
+/**
+ * Fin de message : installation de l'application, puis le code en secours,
+ * seul sur sa ligne et en gras dans WhatsApp. Le message entier collé dans
+ * l'application redonne ce code (invitationCodeFromText).
+ */
+const installAndCode = (code: string) => [
+  `تثبيت التطبيق / Installer Mojammaa Connect (Android)\n${PLAY_STORE_URL}`,
+  `الرمز، إن طلبه التطبيق / Code, si l’application le demande\n*${code}*`,
+]
 
 /** Date limite d'une invitation, chacune dans la langue de son paragraphe. */
 export interface InvitationUntil {
@@ -56,22 +66,20 @@ export interface InvitationUntil {
   fr: string
 }
 
-/** Invitation professeur : arabe puis français (identique au site). */
+/** Invitation professeur : lien d'abord, arabe puis français (identique au site). */
 export function teacherInvitationMessage(prenom: string, invitation: Pick<CreatedTeacherInvitation, 'code' | 'url' | 'mode'>, until: InvitationUntil): string {
   const activation = invitation.mode === 'activation'
   return [
-    `${GREETING_AR}\nهذا رمز تفعيل حساب الأستاذ(ة) ${prenom}، صالح لمرة واحدة إلى غاية ${until.ar}:`,
-    codeLine(invitation.code),
-    (activation
-      ? 'في التطبيق اضغطوا «أول مرة؟ تفعيل حسابي»، أدخلوا الرمز ورقم هاتفكم، ثم اختاروا كلمة المرور.'
-      : 'في التطبيق اضغطوا «أول مرة؟ تفعيل حسابي»، أدخلوا الرمز ثم سجّلوا الدخول ببياناتكم المعتادة. كلمة المرور لا تتغير.')
-      + ' الرمز شخصي، لا تشاركوه.',
-    `Bonjour ${prenom}, voici ci-dessus votre code d’activation du compte professeur (usage unique, valable jusqu’au ${until.fr}).\n`
-      + (activation
-        ? 'Dans l’application, touchez « Première connexion ? Activer mon compte », saisissez ce code et votre numéro, puis choisissez votre mot de passe.'
-        : 'Dans l’application, touchez « Première connexion ? Activer mon compte », saisissez ce code, puis connectez-vous avec vos identifiants habituels. Votre mot de passe ne change pas.')
-      + ' Code personnel, ne le partagez pas.',
-    `Sans application : ${invitation.url}`,
+    `${GREETING_AR}\nهذا رابط تفعيل حساب الأستاذ(ة) ${prenom}:`,
+    invitation.url,
+    'اضغطوا على الرابط: الرمز مكتوب فيه. '
+      + (activation ? 'أدخلوا رقم هاتفكم واختاروا كلمة المرور، ثم ثبّتوا التطبيق.' : 'سجّلوا الدخول كالمعتاد؛ كلمة المرور لا تتغير.')
+      + `\nرابط شخصي، صالح إلى ${until.ar}.`,
+    `Bonjour ${prenom}, voici ci-dessus le lien d’activation de votre compte professeur.\n`
+      + 'Touchez-le : le code y est déjà. '
+      + (activation ? 'Saisissez votre numéro, choisissez un mot de passe, puis installez l’application.' : 'Connectez-vous comme d’habitude, sans changer votre mot de passe.')
+      + `\nLien personnel, valable jusqu’au ${until.fr}.`,
+    ...installAndCode(invitation.code),
   ].join('\n\n')
 }
 
@@ -104,21 +112,17 @@ export interface ParentCode {
   code: string
 }
 
-/**
- * Code d'activation parent. Le bouton de l'app s'appelle « Première
- * connexion ? Activer mon compte » depuis le 9 oct. 2026 (activation
- * professeurs) : même libellé ici et sur le site.
- */
+/** Activation parent : lien d'abord, arabe puis français (identique au site). */
 export function parentCodeMessage(item: ParentCode): string {
   const who = `${item.studentName}${item.classe ? ` (${item.classe})` : ''}`
   return [
-    `${GREETING_AR}\nهذا رمز تفعيل حساب ولي أمر التلميذ(ة) ${who}:`,
-    codeLine(item.code),
-    'ثبّتوا تطبيق Mojammaa Connect، ثم اضغطوا «أول مرة؟ تفعيل حسابي» وأدخلوا الرمز ورقم هاتفكم وكلمة مرور من اختياركم. الرمز شخصي، لا تشاركوه.',
-    `Bonjour, voici ci-dessus le code d’activation du compte parent de ${who}.\n`
-      + 'Installez Mojammaa Connect, touchez « Première connexion ? Activer mon compte », puis saisissez ce code, votre numéro et un mot de passe. Code personnel, ne le partagez pas.',
-    // Sur iPhone ou ordinateur, le lien du site arrive avec le code déjà rempli.
-    `Android : ${PLAY_STORE_URL}\niPhone / ordinateur : ${parentActivationUrl(item.code)}`,
+    `${GREETING_AR}\nهذا رابط تفعيل حساب ولي أمر ${who}:`,
+    // Le site s'ouvre sur tous les appareils, avec le code déjà rempli.
+    parentActivationUrl(item.code),
+    'اضغطوا على الرابط: الرمز مكتوب فيه. أدخلوا رقم هاتفكم واختاروا كلمة المرور، ثم ثبّتوا التطبيق. الرابط شخصي.',
+    `Bonjour, voici ci-dessus le lien d’activation du compte parent de ${who}.\n`
+      + 'Touchez-le : le code y est déjà. Saisissez votre numéro, choisissez un mot de passe, puis installez l’application. Lien personnel.',
+    ...installAndCode(item.code),
   ].join('\n\n')
 }
 

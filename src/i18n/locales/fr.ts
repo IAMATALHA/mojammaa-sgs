@@ -42,6 +42,9 @@ const fr = {
     attachment: 'Pièce jointe',
     prevMonth: 'Mois précédent',
     nextMonth: 'Mois suivant',
+    showPassword: 'Afficher le mot de passe',
+    hidePassword: 'Masquer le mot de passe',
+    pasteCodeHelp: 'Collez votre code ou le message WhatsApp complet.',
   },
 
   greeting: {
@@ -242,6 +245,12 @@ const fr = {
     warning: 'Avertissement',
     cancelled: 'Annulé',
   },
+  activationLink: {
+    signedInTitle: 'Un compte est déjà ouvert',
+    signedInBody: 'Ce lien sert à activer un compte. Pour l’utiliser sur ce téléphone, déconnectez-vous : l’activation s’ouvrira avec le code déjà rempli.',
+    stay: 'Rester connecté',
+  },
+
   teacherActivation: {
     title: 'Activer mon compte',
     back: 'Retour',
@@ -258,8 +267,6 @@ const fr = {
     phoneHelp: 'Le numéro communiqué à l’établissement. Il deviendra votre identifiant de connexion.',
     newPassword: 'Nouveau mot de passe',
     confirmPassword: 'Confirmez le mot de passe',
-    showPassword: 'Afficher le mot de passe',
-    hidePassword: 'Masquer le mot de passe',
     passwordRule: '8 caractères au minimum. Gardez-le pour vous : l’établissement ne vous le demandera jamais.',
     identityNote: 'Pas besoin d’adresse e-mail : votre nom et vos classes sont déjà enregistrés par l’établissement.',
     activate: 'Activer mon compte',
@@ -308,12 +315,13 @@ const fr = {
     firstName: 'Prénom',
     lastName: 'Nom',
     email: 'E-mail (facultatif)',
+    addEmail: 'Ajouter un e-mail (facultatif)',
     phone: 'Numéro de téléphone',
     phoneHelper: 'Il vous servira à vous connecter. Touchez le drapeau pour choisir le pays.',
     password: 'Mot de passe (8 caractères minimum)',
     submit: 'Activer mon compte',
     haveAccount: 'J’ai déjà un compte',
-    required: 'Remplissez le code, le prénom, le nom et un mot de passe d’au moins 8 caractères.',
+    nameRequired: 'Indiquez votre prénom et votre nom.',
     phoneRequired: 'Indiquez votre numéro de téléphone, ou un e-mail.',
     invalidPhone: 'Numéro invalide. Au Maroc : 06 12 34 56 78 ; ailleurs, commencez par l’indicatif du pays (+33, +32, +49…).',
     invalidDetails: 'Vérifiez les informations saisies (e-mail, numéro de téléphone).',
@@ -323,13 +331,14 @@ const fr = {
     confirmPhoneOk: 'Oui, continuer',
     successTitle: 'Compte activé',
     successPhoneBody: 'Retenez-le : pour vous connecter, utilisez le {{phone}} et votre mot de passe.',
-    linkError: 'Ce compte existe déjà, mais le code n’a pas pu être ajouté.',
+    existingAccount: 'Un compte existe déjà avec ce numéro ou cet e-mail. Connectez-vous avec le mot de passe de ce compte, puis ouvrez Réglages → Ajouter un enfant.',
     successEmailOnlyBody: 'Ce numéro ne peut pas servir à la connexion (il est peut-être déjà utilisé par un autre compte). Pour vous connecter, utilisez votre e-mail {{email}} et votre mot de passe.',
     linkedTitle: 'Enfant ajouté',
     linkedBody: 'Ce code a été ajouté à votre compte existant.',
     linkErrorTitle: 'Enfant non ajouté',
     linkErrorSignedIn: 'Votre compte est ouvert, mais cet enfant n’a pas pu y être ajouté. Réessayez depuis Réglages → Ajouter un enfant, ou contactez l’établissement.',
-    error: 'Activation impossible. Vérifiez le code.',
+    unavailable: 'Activation impossible pour le moment. Vérifiez votre connexion internet, puis réessayez.',
+    createdNoSession: 'Votre compte est créé, mais la connexion ne s’est pas ouverte. Connectez-vous avec votre numéro ou votre e-mail et le mot de passe que vous venez de choisir : le code n’est plus nécessaire.',
   },
 
   phoneField: {

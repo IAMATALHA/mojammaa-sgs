@@ -34,20 +34,35 @@ const arabicFirst = message => {
   assert.doesNotMatch(message, /école|المدرسة/i)
 }
 
-test('invitation professeur : arabe puis français, code seul sur sa ligne, dates dans chaque langue', () => {
+// Choix de Youssef (11 oct. 2026) : le lien d'activation d'abord, seul sur sa
+// ligne (le code y est déjà) ; le code en secours tout à la fin, seul sur sa ligne.
+const linkFirst = (message, url, code) => {
+  const lines = message.split('\n')
+  assert.equal(lines[3], url, 'the activation link is alone on its line, right after the arabic opening')
+  assert.ok(message.indexOf(url) < message.indexOf('play.google.com'), 'activation link before the install link')
+  assert.match(message, /^https:\/\/play\.google\.com\/store\/apps\/details\?id=com\.youssefatalha\.mojammaasgs$/m)
+  assert.match(message, /Installer Mojammaa Connect \(Android\)/)
+  assert.match(message, /Code, si l’application le demande/)
+  assert.equal(lines.at(-1), `*${code}*`, 'the code is alone on the last line')
+  assert.doesNotMatch(message, /collez ce message entier|الصقوا هذه الرسالة/)
+}
+
+test('invitation professeur : lien d’abord, arabe puis français, code en secours à la fin, dates dans chaque langue', () => {
   const message = access.teacherInvitationMessage('Karima', { code: 'ABC-DEFG-HJK', url: 'https://mojammaa.com/activer#ABC-DEFG-HJK', mode: 'activation' }, { ar: '16 أكتوبر', fr: '16 octobre' })
   arabicFirst(message)
-  assert.match(message, /^\*ABC-DEFG-HJK\*$/m, 'the code is alone on its line')
-  assert.match(message, /حساب الأستاذ\(ة\) Karima، صالح لمرة واحدة إلى غاية 16 أكتوبر:/)
-  assert.match(message, /^Bonjour Karima, .*valable jusqu’au 16 octobre\)/m)
-  assert.match(message, /«أول مرة؟ تفعيل حسابي»، أدخلوا الرمز ورقم هاتفكم، ثم اختاروا كلمة المرور/)
-  assert.match(message, /« Première connexion \? Activer mon compte », saisissez ce code et votre numéro, puis choisissez votre mot de passe/)
-  assert.match(message, /^Sans application : https:\/\/mojammaa\.com\/activer#ABC-DEFG-HJK$/m)
+  linkFirst(message, 'https://mojammaa.com/activer#ABC-DEFG-HJK', 'ABC-DEFG-HJK')
+  assert.match(message, /هذا رابط تفعيل حساب الأستاذ\(ة\) Karima:/)
+  assert.match(message, /صالح إلى 16 أكتوبر/)
+  assert.match(message, /^Bonjour Karima, voici ci-dessus le lien d’activation/m)
+  assert.match(message, /valable jusqu’au 16 octobre/)
+  assert.match(message, /اختاروا كلمة المرور/)
+  assert.match(message, /choisissez un mot de passe/)
   const link = access.teacherInvitationMessage('Omar', { code: 'XYZ-WXYZ-UVW', url: 'u', mode: 'link' }, { ar: 'غداً', fr: 'demain' })
   arabicFirst(link)
+  linkFirst(link, 'u', 'XYZ-WXYZ-UVW')
   assert.match(link, /كلمة المرور لا تتغير/)
-  assert.match(link, /Votre mot de passe ne change pas/)
-  assert.doesNotMatch(link, /choisissez votre mot de passe|اختاروا كلمة المرور/)
+  assert.match(link, /sans changer votre mot de passe/)
+  assert.doesNotMatch(link, /choisissez un mot de passe|اختاروا كلمة المرور/)
 })
 
 test('lien de réinitialisation : arabe puis français, connexion par téléphone seulement si c’est l’identifiant', () => {
@@ -64,17 +79,15 @@ test('lien de réinitialisation : arabe puis français, connexion par téléphon
   assert.match(contactOnly, /valable 30 minutes\)/)
 })
 
-test('code parent : arabe puis français, code seul sur sa ligne, liens Android et iPhone', () => {
+test('activation parent : lien d’abord, arabe puis français, code en secours à la fin', () => {
   const message = access.parentCodeMessage({ studentId: 'M1', studentName: 'Yasmine Alaoui', classe: '2APIC-1', code: 'MNP-QRST-UVW' })
   arabicFirst(message)
-  assert.match(message, /هذا رمز تفعيل حساب ولي أمر التلميذ\(ة\) Yasmine Alaoui \(2APIC-1\):/)
-  assert.match(message, /^\*MNP-QRST-UVW\*$/m, 'the code is alone on its line')
-  assert.match(message, /«أول مرة؟ تفعيل حسابي»/)
-  assert.match(message, /compte parent de Yasmine Alaoui \(2APIC-1\)\./)
-  assert.match(message, /touchez « Première connexion \? Activer mon compte »/)
+  linkFirst(message, 'https://mojammaa.com/parents/activer#MNP-QRST-UVW', 'MNP-QRST-UVW')
+  assert.match(message, /هذا رابط تفعيل حساب ولي أمر Yasmine Alaoui \(2APIC-1\):/)
+  assert.match(message, /اضغطوا على الرابط: الرمز مكتوب فيه\./)
+  assert.match(message, /lien d’activation du compte parent de Yasmine Alaoui \(2APIC-1\)\./)
+  assert.match(message, /Touchez-le : le code y est déjà\./)
   assert.doesNotMatch(message, /Activer un compte parent/)
-  assert.match(message, /^Android : https:\/\/play\.google\.com\/store\/apps\/details\?id=com\.youssefatalha\.mojammaasgs$/m)
-  assert.match(message, /^iPhone \/ ordinateur : https:\/\/mojammaa\.com\/parents\/activer#MNP-QRST-UVW$/m)
 })
 
 test('état d’accès d’un professeur : compte et invitation distincts, même règle que le site', () => {

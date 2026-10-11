@@ -42,6 +42,9 @@ const en = {
     attachment: 'Attachment',
     prevMonth: 'Previous month',
     nextMonth: 'Next month',
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
+    pasteCodeHelp: 'Paste your code or the whole WhatsApp message.',
   },
 
   greeting: {
@@ -242,6 +245,12 @@ const en = {
     warning: 'Warning',
     cancelled: 'Cancelled',
   },
+  activationLink: {
+    signedInTitle: 'An account is already open',
+    signedInBody: 'This link activates an account. To use it on this phone, log out: the activation screen will open with the code already filled in.',
+    stay: 'Stay signed in',
+  },
+
   teacherActivation: {
     title: 'Activate my account',
     back: 'Back',
@@ -258,8 +267,6 @@ const en = {
     phoneHelp: 'The number you gave the school. It becomes your sign-in identifier.',
     newPassword: 'New password',
     confirmPassword: 'Confirm password',
-    showPassword: 'Show password',
-    hidePassword: 'Hide password',
     passwordRule: 'At least 8 characters. Keep it to yourself: the school will never ask for it.',
     identityNote: 'No email needed: the school has already recorded your name and classes.',
     activate: 'Activate my account',
@@ -308,12 +315,13 @@ const en = {
     firstName: 'First name',
     lastName: 'Last name',
     email: 'Email (optional)',
+    addEmail: 'Add an email (optional)',
     phone: 'Phone number',
     phoneHelper: 'You will use it to sign in. Tap the flag to choose the country.',
     password: 'Password (at least 8 characters)',
     submit: 'Activate my account',
     haveAccount: 'I already have an account',
-    required: 'Fill in the code, first name, last name and a password of at least 8 characters.',
+    nameRequired: 'Enter your first name and last name.',
     phoneRequired: 'Enter your phone number, or an email.',
     invalidPhone: 'Invalid number. In Morocco: 06 12 34 56 78; elsewhere, start with the country code (+33, +32, +49…).',
     invalidDetails: 'Check the details you entered (email, phone number).',
@@ -323,13 +331,14 @@ const en = {
     confirmPhoneOk: 'Yes, continue',
     successTitle: 'Account activated',
     successPhoneBody: 'Remember: to sign in, use {{phone}} and your password.',
-    linkError: 'This account already exists, but the code could not be linked.',
+    existingAccount: 'An account already exists with this number or email. Sign in with that account’s password, then open Settings → Add a child.',
     successEmailOnlyBody: 'This number cannot be used to sign in (it may already belong to another account). To sign in, use your email {{email}} and your password.',
     linkedTitle: 'Child added',
     linkedBody: 'This code has been added to your existing account.',
     linkErrorTitle: 'Child not added',
     linkErrorSignedIn: 'You are signed in, but this child could not be added to your account. Try again from Settings → Add a child, or contact the school.',
-    error: 'Activation failed. Check the code.',
+    unavailable: 'Activation is not possible right now. Check your internet connection, then try again.',
+    createdNoSession: 'Your account is created, but sign-in did not open. Sign in with your number or email and the password you just chose: the code is no longer needed.',
   },
 
   phoneField: {

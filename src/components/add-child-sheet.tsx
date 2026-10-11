@@ -4,7 +4,7 @@
  * apparaît ensuite dans « Espace parent » (lien eleves.parentUid, aucun
  * second compte).
  */
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native'
@@ -21,6 +21,8 @@ interface Props {
   onClose: () => void
   /** Prof, chauffeur ou direction : l'enfant se consulte depuis « Espace parent ». */
   isStaff: boolean
+  /** Code d'un lien d'activation ouvert dans l'application : prérempli, jamais envoyé d'office. */
+  initialCode?: string
 }
 
 function errorKey(error: unknown): string {
@@ -35,12 +37,16 @@ function errorKey(error: unknown): string {
   }
 }
 
-export default function AddChildSheet({ visible, onClose, isStaff }: Props) {
+export default function AddChildSheet({ visible, onClose, isStaff, initialCode }: Props) {
   const theme = useTheme()
   const { t } = useTranslation()
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
+
+  useEffect(() => {
+    if (visible && initialCode) { setCode(initialCode); setError('') }
+  }, [visible, initialCode])
 
   const close = () => { setCode(''); setError(''); onClose() }
 
@@ -109,6 +115,7 @@ export default function AddChildSheet({ visible, onClose, isStaff }: Props) {
             fontFamily: theme.fonts.semibold,
           }]}
         />
+        <Text style={[styles.help, { color: theme.textMuted, fontFamily: theme.fonts.medium }]}>{t('common.pasteCodeHelp')}</Text>
         {!!error && (
           <Text accessibilityLiveRegion="polite" style={[styles.error, { color: theme.danger, fontFamily: theme.fonts.medium }]}>
             {error}
@@ -143,6 +150,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, lineHeight: 19, marginTop: 10 },
   label: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 16, marginBottom: 6 },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, letterSpacing: 1.5 },
+  help: { fontSize: 12, lineHeight: 17, marginTop: 6 },
   error: { fontSize: 12.5, lineHeight: 18, marginTop: 8 },
   submitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 13, marginTop: 16 },
 })
