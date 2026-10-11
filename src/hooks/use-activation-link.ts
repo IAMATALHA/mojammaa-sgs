@@ -65,14 +65,18 @@ export function useActivationLink({ signedIn, ready, logout }: Options) {
     return () => intents.cancel()
   }, [intents])
 
+  // Session fermée : plus de feuille, plus de question en cours.
   useEffect(() => {
-    if (!signedIn) setChildOpen(false)
+    if (signedIn) return
+    setChildOpen(false)
+    asking.current = false
   }, [signedIn])
 
   useEffect(() => {
-    if (!pending || !ready || !navigationRef.isReady()) return
+    if (!pending || !ready) return
     if (!signedIn) {
-      asking.current = false
+      // Seul ce cas navigue : la pile de connexion doit être montée.
+      if (!navigationRef.isReady()) return
       navigationRef.reset(authRoutesForLink(navigationRef.getRootState()?.routes, pending))
       setPending(null)
       return
