@@ -1,3 +1,5 @@
+const { hasRight } = require('./staffRights')
+
 async function cancelComportement(db, uid, input, now = new Date()) {
   const fail = code => { throw Object.assign(new Error(code), { code }) }
   if (!uid) fail('unauthenticated')
@@ -7,7 +9,9 @@ async function cancelComportement(db, uid, input, now = new Date()) {
     const [user, record] = await Promise.all([tx.get(db.doc(`users/${uid}`)), tx.get(ref)])
     if (!record.exists) fail('not-found')
     const child = await tx.get(db.doc(`eleves/${record.get('eleveId')}`))
-    if (user.get('role') !== 'admin' && (user.get('role') !== 'professeur' || record.get('teacherId') !== uid
+    // Admin ou personnel chargé des mérites et avertissements : toute entrée.
+    // Professeur : la sienne, pour un élève de ses classes.
+    if (!hasRight(user.data(), 'comportements.saisir') && (user.get('role') !== 'professeur' || record.get('teacherId') !== uid
       || ![...(user.get('classes') || []), user.get('classe')].includes(child.get('classe')))) fail('permission-denied')
     if (record.get('cancelledAt')) return { cancelled: true, replayed: true }
     tx.update(ref, { cancelledAt: now, cancelledBy: uid, cancelReason: input.reason.trim() })

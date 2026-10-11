@@ -42,6 +42,7 @@ const drill = require('./statsDrilldown')
 const coefficientSettings = require('./coefficientSettings')
 const { updateStudentLatinNames } = require('./studentLatinNames')
 const { requireStudentFileAccess, restrictStudentFileGrades } = require('./studentFileAccess')
+const { staffUidsWithRight } = require('./staffRights')
 const { buildSlotDocs } = require('./emploiDuTempsSync')
 const {
   TransportTransitionError,
@@ -94,6 +95,9 @@ async function resolveRecipientUids(data) {
   } else if (data.toType === 'administration') {
     const admins = await db.collection('users').where('role', '==', 'admin').get()
     admins.forEach(d => uids.add(d.id))
+    // Boîte commune : aussi le personnel administratif qui la tient
+    // (case `messages.boite`, même condition que la lecture dans les règles).
+    ;(await staffUidsWithRight(db, 'messages.boite')).forEach(uid => uids.add(uid))
   } else if (data.toType === 'all') {
     const snap = await db.collection('users').get()
     snap.forEach((d) => uids.add(d.id))
@@ -1919,8 +1923,11 @@ exports.getStatsStudentFile = onCall(async (request) => {
   // Comportement (mérites + avertissements) — informatif, borné à la période.
   // Requête par eleveId seul (index simple) puis filtre date en mémoire : un
   // élève a peu de comportements, pas besoin d'index composite.
-  const behaviorSnap = await db.collection('comportements').where('eleveId', '==', eleveId).get()
-  const behavior = behaviorSnap.docs
+  // Personnel administratif sans la case « mérites et avertissements » : rien.
+  const behaviorDocs = access.sees.behavior
+    ? (await db.collection('comportements').where('eleveId', '==', eleveId).get()).docs
+    : []
+  const behavior = behaviorDocs
     .map((d) => d.data())
     .filter((row) => {
       const date = statsFilterText(row.date)
@@ -1969,6 +1976,12 @@ exports.getStatsStudentFile = onCall(async (request) => {
       : null,
     behavior,
     applied: scope.applied,
+    // Domaines que les cases de l'appelant n'ouvrent pas : l'écran les retire
+    // au lieu d'afficher « 0 absence » ou « aucune note ». Absent pour un
+    // admin ou un professeur.
+    ...(Object.values(access.sees).every(Boolean)
+      ? {}
+      : { hidden: Object.keys(access.sees).filter((key) => !access.sees[key]) }),
   }
 })
 

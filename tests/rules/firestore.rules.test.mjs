@@ -1808,6 +1808,386 @@ for (const [role, db] of [['parent', asUser('parent1')], ['professeur', asUser('
 await deny('admin mobile ne peut pas se déclarer superadmin',
   updateDoc(doc(asUser('admin1'), 'config/superadmins'), { uids: arrayUnion('admin1') }))
 
+// ── Personnel administratif (rôle `staff`) : socle ────────────────────────
+// Un compte staff n'a AUCUN droit par défaut. Ses droits (`droits`) et son
+// poste (`poste`) sont écrits par le serveur ou un superadmin : ni le compte
+// lui-même ni un admin ne les modifient depuis une application. Tant qu'aucune
+// collection n'est ouverte au personnel, une case cochée ne donne rien.
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore()
+  await setDoc(doc(db, 'users/staff1'), {
+    uid: 'staff1', role: 'staff', poste: 'surveillant_general', droits: ['absences.voir'], prenom: 'Sta', nom: 'Ff',
+  })
+  await setDoc(doc(db, 'users/staff0'), { uid: 'staff0', role: 'staff', poste: 'secretaire', droits: [] })
+})
+await deny('staff ne s’ajoute pas un droit',
+  updateDoc(doc(asUser('staff1'), 'users/staff1'), { droits: arrayUnion('notes.voir') }))
+await deny('staff sans droit ne s’en donne pas',
+  updateDoc(doc(asUser('staff0'), 'users/staff0'), { droits: ['comptes.gerer'] }))
+await deny('staff ne change pas son poste',
+  updateDoc(doc(asUser('staff1'), 'users/staff1'), { poste: 'secretaire' }))
+await deny('staff ne se déclare pas admin',
+  updateDoc(doc(asUser('staff1'), 'users/staff1'), { role: 'admin' }))
+await deny('professeur ne se donne pas de droits',
+  updateDoc(doc(asUser('prof1'), 'users/prof1'), { droits: ['eleves.voir'] }))
+await deny('parent ne se donne pas de poste',
+  updateDoc(doc(asUser('parent1'), 'users/parent1'), { poste: 'secretaire' }))
+await deny('admin ne donne pas de droits à un compte staff depuis une application',
+  updateDoc(doc(asUser('admin1'), 'users/staff0'), { droits: ['eleves.voir'] }))
+await deny('admin ne change pas le poste d’un compte staff depuis une application',
+  updateDoc(doc(asUser('admin1'), 'users/staff0'), { poste: 'surveillant_general' }))
+await deny('admin ne se donne pas de droits à lui-même',
+  updateDoc(doc(asUser('admin1'), 'users/admin1'), { droits: ['comptes.gerer'] }))
+await allow('superadmin attribue des droits et un poste',
+  updateDoc(doc(asUser('super1'), 'users/staff0'), { poste: 'secretaire', droits: ['eleves.voir'] }))
+await allow('staff modifie son propre nom (Mon profil intact)',
+  updateDoc(doc(asUser('staff1'), 'users/staff1'), { prenom: 'Stéphane' }))
+await allow('admin modifie le nom d’un compte staff (gestion des profils intacte)',
+  updateDoc(doc(asUser('admin1'), 'users/staff1'), { nom: 'Fff' }))
+await allow('staff lit sa propre fiche', getDoc(doc(asUser('staff1'), 'users/staff1')))
+await deny('staff ne lit pas la fiche d’un autre compte', getDoc(doc(asUser('staff1'), 'users/admin1')))
+
+// ── Personnel administratif : ce que chaque case ouvre ────────────────────
+// Deux postes de départ (mojammaa-admin/functions/src/staffRights.ts) :
+// surveillant général et relations parents. Chaque case ouvre exactement sa
+// porte ; sans case, ou avec un champ `droits` mal formé ou posé sur un autre
+// rôle, rien ne s'ouvre. Documents propres à cette section (préfixe st-).
+const SG_RIGHTS = [
+  'eleves.voir', 'absences.voir', 'absences.saisir', 'comportements.voir', 'comportements.saisir',
+  'sortie', 'priere', 'suivis', 'notes.voir', 'edt.voir', 'messages.boite', 'messages.envoyer',
+]
+const RP_RIGHTS = ['eleves.voir', 'absences.voir', 'notes.voir', 'edt.voir', 'codes.parents', 'codes.professeurs']
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore()
+  const seed = (path, data) => setDoc(doc(db, path), data)
+  const at = new Date('2026-10-12T09:00:00.000Z')
+  await Promise.all([
+    seed('users/staffSG', { uid: 'staffSG', role: 'staff', droits: SG_RIGHTS, prenom: 'Sur', nom: 'Veillant' }),
+    seed('users/staffSG2', { uid: 'staffSG2', role: 'staff', droits: SG_RIGHTS }),
+    seed('users/staffRP', { uid: 'staffRP', role: 'staff', droits: RP_RIGHTS }),
+    seed('users/staffNone', { uid: 'staffNone', role: 'staff', droits: [] }),
+    seed('users/staffNoField', { uid: 'staffNoField', role: 'staff' }),
+    // Texte au lieu d'une liste : ne doit jamais valoir par ressemblance.
+    seed('users/staffBad', { uid: 'staffBad', role: 'staff', droits: 'eleves.voir absences.voir notes.voir' }),
+    seed('users/staffScribe', { uid: 'staffScribe', role: 'staff', droits: ['eleves.voir', 'eleves.modifier', 'calendrier.modifier'] }),
+    seed('users/profDroits', { uid: 'profDroits', role: 'professeur', classes: ['9Z'], matiere: 'Maths', droits: SG_RIGHTS }),
+    seed('users/parentDroits', { uid: 'parentDroits', role: 'parent', droits: SG_RIGHTS }),
+    seed('eleves/st-e1', { classe: '5S', parentUid: 'parent2', nom: 'St', prenom: 'Un' }),
+    seed('absences/st-a1', { eleveId: 'st-e1', classe: '5S', date: '2026-10-12', seance: 'S1', statut: 'absent' }),
+    seed('comportements/st-c1', { eleveId: 'st-e1', classe: '5S', kind: 'merite', teacherId: 'prof2' }),
+    seed('absenceRequests/st-r1', { parentUid: 'parent2', eleveId: 'st-e1', classe: '5S', date: '2026-10-13', status: 'pending', reason: 'maladie' }),
+    seed('absenceRequests/st-r2', { parentUid: 'parent2', eleveId: 'st-e1', classe: '5S', date: '2026-10-14', status: 'pending', reason: 'voyage' }),
+    seed('suivis/st-s1', { eleveId: 'st-e1', classe: '5S', type: 'entretien-eleve', note: 'N', statut: 'ouvert', createdBy: 'admin1' }),
+    seed('notes/st-n1', { eleveId: 'st-e1', classe: '5S', matiere: 'Maths', note: 14 }),
+    seed('bulletins/st-b1', { eleveId: 'st-e1', classe: '5S', semestre: 'S1' }),
+    seed('classStats/st-cs1', { classe: '5S', semestre: 'S1' }),
+    seed('schedules/prof2', { slots: [] }),
+    seed('stats/summary', { totalEleves: 1 }),
+    seed('pickupRequests/2026-10-12_st-e1', {
+      parentUid: 'parent2', eleveId: 'st-e1', serviceDate: '2026-10-12', status: 'waiting', arrivedAt: at, updatedAt: at,
+    }),
+    seed('prayerClassSessions/st-p1', { serviceDate: '2026-10-12', classe: '5S', status: 'going', startedAt: at, startedByUid: 'prof2', updatedAt: at }),
+    seed('evenements/st-ev1', { titre: 'Réunion', type: 'reunion', dateDebut: '2026-10-20', dateFin: '2026-10-20', createdBy: 'admin1' }),
+  ])
+})
+const sg = asUser('staffSG')
+const rp = asUser('staffRP')
+const scribe = asUser('staffScribe')
+const absence = (id, extra = {}) => ({ eleveId: 'st-e1', classe: '5S', date: '2026-10-12', seance: id, statut: 'absent', ...extra })
+
+// Surveillant général : vie scolaire, en lecture et en saisie.
+for (const name of ['eleves', 'absences', 'comportements', 'absenceRequests', 'suivis', 'pickupRequests', 'prayerClassSessions', 'notes', 'bulletins']) {
+  await allow(`surveillant général lit « ${name} »`, getDocs(collection(sg, name)))
+}
+await allow('surveillant général lit la fiche d’un élève', getDoc(doc(sg, 'eleves/st-e1')))
+await allow('surveillant général lit les moyennes d’une classe', getDoc(doc(sg, 'classStats/st-cs1')))
+await allow('surveillant général lit l’emploi du temps d’un professeur', getDoc(doc(sg, 'schedules/prof2')))
+await allow('surveillant général saisit une absence', setDoc(doc(sg, 'absences/st-a-sg'), absence('S2', { professorId: 'staffSG' })))
+await allow('surveillant général corrige une absence', updateDoc(doc(sg, 'absences/st-a1'), { statut: 'retard' }))
+await allow('surveillant général saisit 25 absences d’un coup (aucune lecture par élève)', (() => {
+  const batch = writeBatch(sg)
+  for (let i = 0; i < 25; i++) batch.set(doc(sg, `absences/st-lot-${i}`), absence(`L${i}`))
+  return batch.commit()
+})())
+await allow('surveillant général donne un avertissement',
+  setDoc(doc(sg, 'comportements/st-c-sg'), { eleveId: 'st-e1', classe: '5S', kind: 'avertissement', teacherId: 'staffSG', reason: 'retard' }))
+await allow('surveillant général traite une déclaration d’absence',
+  updateDoc(doc(sg, 'absenceRequests/st-r1'), { status: 'approved', decidedBy: 'staffSG', decidedAt: serverTimestamp() }))
+await deny('surveillant général ne signe pas une décision au nom d’un autre',
+  updateDoc(doc(sg, 'absenceRequests/st-r2'), { status: 'approved', decidedBy: 'admin1', decidedAt: serverTimestamp() }))
+await allow('surveillant général ouvre une action de suivi à son nom',
+  setDoc(doc(sg, 'suivis/st-s-sg'), { eleveId: 'st-e1', classe: '5S', type: 'convocation', note: 'N', statut: 'ouvert', createdBy: 'staffSG' }))
+await deny('surveillant général n’ouvre pas une action au nom d’un autre',
+  setDoc(doc(sg, 'suivis/st-s-forge'), { eleveId: 'st-e1', classe: '5S', type: 'convocation', note: 'N', statut: 'ouvert', createdBy: 'admin1' }))
+await allow('un autre surveillant clôt l’action de son collègue',
+  updateDoc(doc(asUser('staffSG2'), 'suivis/st-s-sg'), { statut: 'clos' }))
+await deny('un surveillant ne s’attribue pas l’action d’un autre',
+  updateDoc(doc(asUser('staffSG2'), 'suivis/st-s-sg'), { createdBy: 'staffSG2' }))
+await allow('surveillant général ouvre le créneau de sortie',
+  setDoc(doc(sg, 'pickupSessions/2026-10-13'), {
+    serviceDate: '2026-10-13', isOpen: true, openedByUid: 'staffSG',
+    opensAt: serverTimestamp(), closesAt: new Date(Date.now() + 60 * 60_000),
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  }))
+await deny('surveillant général n’ouvre pas un créneau au nom d’un autre',
+  setDoc(doc(sg, 'pickupSessions/2026-10-14'), {
+    serviceDate: '2026-10-14', isOpen: true, openedByUid: 'admin1',
+    opensAt: serverTimestamp(), closesAt: new Date(Date.now() + 60 * 60_000),
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  }))
+await allow('surveillant général appelle un élève à la sortie',
+  updateDoc(doc(sg, 'pickupRequests/2026-10-12_st-e1'), {
+    status: 'called', calledAt: serverTimestamp(), managedByUid: 'staffSG', updatedAt: serverTimestamp(),
+  }))
+await deny('surveillant général ne saute pas une étape de la sortie',
+  updateDoc(doc(sg, 'pickupRequests/2026-10-12_st-e1'), {
+    status: 'completed', completedAt: serverTimestamp(), managedByUid: 'staffSG', updatedAt: serverTimestamp(),
+  }))
+
+// Ce que le poste n'ouvre pas : modification des élèves, notes, calendrier,
+// pilotage de l'école, comptes, transport — et aucune suppression.
+await deny('surveillant général n’inscrit pas un élève', setDoc(doc(sg, 'eleves/st-e-sg'), { classe: '5S', nom: 'X', prenom: 'Y' }))
+await deny('surveillant général ne modifie pas un élève', updateDoc(doc(sg, 'eleves/st-e1'), { nom: 'Autre' }))
+await deny('surveillant général ne saisit pas une note', setDoc(doc(sg, 'notes/st-n-sg'), { eleveId: 'st-e1', classe: '5S', matiere: 'Maths', note: 20 }))
+await deny('surveillant général ne modifie pas une note', updateDoc(doc(sg, 'notes/st-n1'), { note: 20 }))
+await deny('surveillant général ne modifie pas un mérite déjà donné', updateDoc(doc(sg, 'comportements/st-c1'), { kind: 'avertissement' }))
+await deny('surveillant général n’ajoute pas un événement au calendrier',
+  setDoc(doc(sg, 'evenements/st-ev-sg'), { titre: 'X', type: 'autre', dateDebut: '2026-10-21', dateFin: '2026-10-21', createdBy: 'staffSG' }))
+await deny('surveillant général ne modifie pas l’emploi du temps d’un professeur', setDoc(doc(sg, 'schedules/prof2'), { slots: [1] }))
+for (const path of ['eleves/st-e1', 'absences/st-a1', 'notes/st-n1', 'comportements/st-c1', 'suivis/st-s1', 'absenceRequests/st-r2', 'pickupRequests/2026-10-12_st-e1', 'bulletins/st-b1']) {
+  await deny(`surveillant général ne supprime pas ${path}`, deleteDoc(doc(sg, path)))
+}
+for (const name of ['users', 'messages', 'directoryAdmin', 'devoirs', 'homeworkSubmissions', 'transportTrips', 'driverProfiles', 'timetableConfigs', 'auditLog', 'config']) {
+  await deny(`surveillant général ne lit pas « ${name} »`, getDocs(collection(sg, name)))
+}
+await deny('surveillant général ne lit pas le bilan de l’école', getDoc(doc(sg, 'stats/summary')))
+await deny('surveillant général ne modifie pas les coefficients', setDoc(doc(sg, 'settings/coefficients'), { x: 1 }))
+await deny('surveillant général ne crée pas de profil chauffeur', setDoc(doc(sg, 'driverProfiles/staffSG'), { uid: 'staffSG', active: true }))
+
+// Relations parents : lire pour renseigner et imprimer, sans rien saisir.
+for (const name of ['eleves', 'absences', 'absenceRequests', 'notes', 'bulletins']) {
+  await allow(`relations parents lit « ${name} »`, getDocs(collection(rp, name)))
+}
+await allow('relations parents lit l’emploi du temps d’un professeur', getDoc(doc(rp, 'schedules/prof2')))
+for (const name of ['comportements', 'suivis', 'pickupRequests', 'prayerClassSessions', 'users', 'messages']) {
+  await deny(`relations parents ne lit pas « ${name} »`, getDocs(collection(rp, name)))
+}
+await deny('relations parents ne saisit pas une absence', setDoc(doc(rp, 'absences/st-a-rp'), absence('S3')))
+await deny('relations parents ne corrige pas une absence', updateDoc(doc(rp, 'absences/st-a1'), { statut: 'present' }))
+await deny('relations parents ne traite pas une déclaration d’absence',
+  updateDoc(doc(rp, 'absenceRequests/st-r2'), { status: 'approved', decidedBy: 'staffRP', decidedAt: serverTimestamp() }))
+await deny('relations parents ne donne pas d’avertissement',
+  setDoc(doc(rp, 'comportements/st-c-rp'), { eleveId: 'st-e1', classe: '5S', kind: 'avertissement', teacherId: 'staffRP' }))
+await deny('relations parents n’ouvre pas le créneau de sortie',
+  setDoc(doc(rp, 'pickupSessions/2026-10-15'), {
+    serviceDate: '2026-10-15', isOpen: true, openedByUid: 'staffRP',
+    opensAt: serverTimestamp(), closesAt: new Date(Date.now() + 60 * 60_000),
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  }))
+
+// Sans case, rien. Un champ `droits` mal formé, ou posé sur un autre rôle, ne vaut rien.
+for (const uid of ['staffNone', 'staffNoField', 'staffBad', 'parentDroits']) {
+  for (const name of ['eleves', 'absences', 'notes', 'comportements', 'suivis', 'pickupRequests']) {
+    await deny(`${uid} ne lit pas « ${name} »`, getDocs(collection(asUser(uid), name)))
+  }
+  await deny(`${uid} ne saisit pas une absence`, setDoc(doc(asUser(uid), `absences/st-a-${uid}`), absence('S4')))
+}
+await deny('professeur avec un champ droits ne lit pas tous les élèves', getDocs(collection(asUser('profDroits'), 'eleves')))
+await deny('professeur avec un champ droits ne lit pas toutes les notes', getDocs(collection(asUser('profDroits'), 'notes')))
+await deny('professeur avec un champ droits ne saisit pas une absence hors de ses classes',
+  setDoc(doc(asUser('profDroits'), 'absences/st-a-prof'), absence('S5')))
+await deny('professeur avec un champ droits n’ouvre pas le créneau de sortie',
+  setDoc(doc(asUser('profDroits'), 'pickupSessions/2026-10-16'), {
+    serviceDate: '2026-10-16', isOpen: true, openedByUid: 'profDroits',
+    opensAt: serverTimestamp(), closesAt: new Date(Date.now() + 60 * 60_000),
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  }))
+
+// Élèves en modification, calendrier : cases d'un poste créé par l'établissement.
+await allow('inscrire un élève (eleves.modifier), sans lien parent',
+  setDoc(doc(scribe, 'eleves/st-e-new'), { classe: '5S', nom: 'Nouveau', prenom: 'Élève' }))
+await allow('modifier la fiche d’un élève (eleves.modifier)', updateDoc(doc(scribe, 'eleves/st-e1'), { parentTel: '0600000000' }))
+await deny('eleves.modifier ne rattache pas un élève à un compte', updateDoc(doc(scribe, 'eleves/st-e1'), { parentUid: 'staffScribe' }))
+await deny('eleves.modifier ne détache pas un élève de son parent', updateDoc(doc(scribe, 'eleves/st-e1'), { parentUid: deleteField() }))
+await deny('eleves.modifier n’inscrit pas un élève déjà rattaché à un compte',
+  setDoc(doc(scribe, 'eleves/st-e-lie'), { classe: '5S', nom: 'X', prenom: 'Y', parentUid: 'staffScribe' }))
+await deny('eleves.modifier ne supprime pas un élève', deleteDoc(doc(scribe, 'eleves/st-e-new')))
+await allow('ajouter un événement (calendrier.modifier)',
+  setDoc(doc(scribe, 'evenements/st-ev-new'), { titre: 'Fête', type: 'autre', dateDebut: '2026-11-18', dateFin: '2026-11-18', createdBy: 'staffScribe' }))
+await allow('modifier un événement de l’administration (calendrier.modifier)', updateDoc(doc(scribe, 'evenements/st-ev1'), { titre: 'Réunion parents' }))
+await allow('retirer un événement (calendrier.modifier)', deleteDoc(doc(scribe, 'evenements/st-ev1')))
+await deny('ce poste-là ne lit pas les absences', getDocs(collection(scribe, 'absences')))
+await deny('ce poste-là ne lit pas les notes', getDocs(collection(scribe, 'notes')))
+
+// ── Personnel administratif : messagerie ──────────────────────────────────
+// `messages.boite` : lire la boîte commune de l'administration, y répondre à
+// un destinataire. `messages.envoyer` : écrire à un parent ou à une classe.
+// Jamais de diffusion générale, de pièce jointe, ni de signature empruntée.
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore()
+  const seed = (path, data) => setDoc(doc(db, path), data)
+  const base = { type: 'direct', subject: 'S', body: 'B', readBy: [], status: 'sent' }
+  await Promise.all([
+    seed('users/staffBox', { uid: 'staffBox', role: 'staff', droits: ['messages.boite'] }),
+    seed('users/staffSend', { uid: 'staffSend', role: 'staff', droits: ['messages.envoyer'] }),
+    seed('messages/st-box1', { ...base, fromId: 'parent2', fromRole: 'parent', eleveId: 'st-e1', toType: 'administration', toIds: [] }),
+    seed('messages/st-box2', { ...base, fromId: 'parent2', fromRole: 'parent', eleveId: 'st-e1', toType: 'administration', toIds: [] }),
+    seed('messages/st-prive', { ...base, fromId: 'parent2', fromRole: 'parent', eleveId: 'st-e1', toType: 'user', toIds: ['prof2'] }),
+    seed('messages/st-parents', { ...base, type: 'announcement', fromId: 'admin1', fromRole: 'admin', toType: 'parents', toIds: [] }),
+    seed('messages/st-pour-sg', { ...base, fromId: 'admin1', fromRole: 'admin', toType: 'user', toIds: ['staffSG'] }),
+  ])
+})
+const boite = (db) => getDocs(query(collection(db, 'messages'), where('toType', '==', 'administration')))
+const staffMessage = (uid, extra = {}) => ({
+  type: 'direct', subject: 'Information', body: 'Bonjour', fromId: uid, fromRole: 'staff', fromNom: 'Vie scolaire',
+  toType: 'user', toIds: ['parent2'], readBy: [], deletedBy: [], status: 'sent', createdAt: serverTimestamp(), ...extra,
+})
+const manyParents = Array.from({ length: 40 }, (_, i) => `st-parent-${i}`)
+
+await allow('surveillant général lit la boîte commune de l’administration', boite(sg))
+await allow('surveillant général ouvre un message de la boîte', getDoc(doc(sg, 'messages/st-box1')))
+await allow('surveillant général marque lu un message de la boîte', updateDoc(doc(sg, 'messages/st-box1'), { readBy: arrayUnion('staffSG') }))
+await deny('surveillant général ne fabrique pas la lecture d’un autre', updateDoc(doc(sg, 'messages/st-box2'), { readBy: arrayUnion('admin1') }))
+await deny('surveillant général ne modifie pas le texte d’un message reçu', updateDoc(doc(sg, 'messages/st-box2'), { body: 'Autre texte' }))
+await deny('surveillant général ne supprime pas un message', deleteDoc(doc(sg, 'messages/st-box2')))
+await allow('surveillant général lit les messages qui lui sont adressés',
+  getDocs(query(collection(sg, 'messages'), where('toIds', 'array-contains', 'staffSG'))))
+await allow('surveillant général relit ses propres envois',
+  getDocs(query(collection(sg, 'messages'), where('fromId', '==', 'staffSG'))))
+await deny('surveillant général ne lit pas un message privé entre un parent et un professeur', getDoc(doc(sg, 'messages/st-prive')))
+await deny('surveillant général ne lit pas les diffusions aux parents',
+  getDocs(query(collection(sg, 'messages'), where('toType', '==', 'parents'))))
+await deny('surveillant général ne surveille pas les envois des professeurs',
+  getDocs(query(collection(sg, 'messages'), where('fromRole', '==', 'professeur'))))
+
+await allow('surveillant général répond à un parent', setDoc(doc(sg, 'messages/st-sg-rep'), staffMessage('staffSG')))
+await allow('surveillant général écrit aux 40 parents d’une classe, texte long (marge d’évaluation des règles)',
+  setDoc(doc(sg, 'messages/st-sg-classe'), staffMessage('staffSG', {
+    type: 'announcement', category: 'admin', classe: '5S', toLabel: 'Parents de 5S', toIds: manyParents,
+    subject: 'S'.repeat(300), body: 'B'.repeat(10000), subjectAr: 'ع'.repeat(300), bodyAr: 'ع'.repeat(10000),
+  })))
+await deny('surveillant général ne signe pas comme l’administration', setDoc(doc(sg, 'messages/st-sg-admin'), staffMessage('staffSG', { fromRole: 'admin' })))
+await deny('surveillant général ne signe pas comme un professeur', setDoc(doc(sg, 'messages/st-sg-prof'), staffMessage('staffSG', { fromRole: 'professeur' })))
+await deny('surveillant général n’écrit pas au nom d’un autre compte', setDoc(doc(sg, 'messages/st-sg-autre'), staffMessage('admin1')))
+for (const toType of ['parents', 'all', 'teachers', 'administration']) {
+  await deny(`surveillant général n’envoie pas de diffusion « ${toType} »`,
+    setDoc(doc(sg, `messages/st-sg-${toType}`), staffMessage('staffSG', { toType, toIds: [] })))
+}
+await deny('surveillant général ne joint pas de fichier',
+  setDoc(doc(sg, 'messages/st-sg-pj'), staffMessage('staffSG', { attachments: [poster('affiche.png', 'staffSG')] })))
+await deny('surveillant général ne fabrique pas une alerte d’absence', setDoc(doc(sg, 'messages/st-sg-alerte'), staffMessage('staffSG', { type: 'attendance' })))
+await deny('surveillant général ne mélange pas l’ancien format (toId)', setDoc(doc(sg, 'messages/st-sg-legacy'), staffMessage('staffSG', { toId: 'all' })))
+
+const box = asUser('staffBox')
+await allow('boîte seule : lit la boîte commune', boite(box))
+await allow('boîte seule : répond à un destinataire', setDoc(doc(box, 'messages/st-box-rep'), staffMessage('staffBox')))
+await deny('boîte seule : n’écrit pas à plusieurs destinataires',
+  setDoc(doc(box, 'messages/st-box-deux'), staffMessage('staffBox', { toIds: ['parent1', 'parent2'] })))
+await deny('boîte seule : n’écrit pas à une classe',
+  setDoc(doc(box, 'messages/st-box-classe'), staffMessage('staffBox', { classe: '5S', toIds: manyParents })))
+
+const send = asUser('staffSend')
+await allow('envoi seul : écrit à 12 parents', setDoc(doc(send, 'messages/st-send-12'), staffMessage('staffSend', { toIds: manyParents.slice(0, 12) })))
+await deny('envoi seul : ne lit pas la boîte commune', boite(send))
+await deny('envoi seul : n’ouvre pas un message de la boîte', getDoc(doc(send, 'messages/st-box1')))
+await deny('envoi seul : ne marque pas lu un message de la boîte', updateDoc(doc(send, 'messages/st-box2'), { readBy: arrayUnion('staffSend') }))
+
+for (const uid of ['staffRP', 'staffNone', 'staffBad']) {
+  await deny(`${uid} ne lit pas la boîte commune`, boite(asUser(uid)))
+  await deny(`${uid} n’écrit à aucun parent`, setDoc(doc(asUser(uid), `messages/st-${uid}`), staffMessage(uid)))
+  await deny(`${uid} ne marque pas lu un message de la boîte`, updateDoc(doc(asUser(uid), 'messages/st-box2'), { readBy: arrayUnion(uid) }))
+}
+await deny('professeur avec un champ droits ne lit pas la boîte commune', boite(asUser('profDroits')))
+await deny('parent avec un champ droits ne lit pas la boîte commune', boite(asUser('parentDroits')))
+await allow('admin lit toujours la boîte commune', boite(asUser('admin1')))
+// Document EXACT écrit par la page Messages du site (saveToFirestore) : une
+// trentaine de champs. La règle de création est proche de la limite Firestore
+// de 1 000 expressions par requête : chaque rôle doit y tenir avec ce vrai
+// document, pas seulement avec un document de test réduit.
+const webMessage = (uid, role, extra = {}) => ({
+  fromId: uid, fromNom: 'Prénom Nom', fromRole: role, expediteur: 'Prénom Nom',
+  toNom: 'Parent de Élève', destinataireId: 'parent2', destinataireType: 'eleve', destinataireLabel: 'Parent de Élève', eleveId: '',
+  type: 'direct', toType: 'user', toIds: ['parent2'], toLabel: 'Parent de Élève',
+  category: 'admin', readBy: [], deletedBy: [], status: 'sent',
+  subject: 'Objet', objet: 'Objet', body: 'Texte du message', message: 'Texte du message',
+  priority: 'normal', priorite: 'normal', canal: 'interne', lu: false, read: false, date: new Date(),
+  academicYear: '2026-2027', semestre: 'S1', monthKey: '2026-10', createdAt: serverTimestamp(), ...extra,
+})
+const webClassMessage = (uid, role, toIds, classe = '5S') => webMessage(uid, role, {
+  type: 'announcement', toIds, toLabel: `Classe ${classe}`, classe, destinataireId: `classe:${classe}`, destinataireType: 'classe',
+  toNom: `Classe ${classe}`, destinataireLabel: `Classe ${classe}`,
+})
+await allow('site : le surveillant général répond à un parent (document complet du site)',
+  setDoc(doc(sg, 'messages/st-web-sg-direct'), webMessage('staffSG', 'staff')))
+await allow('site : le surveillant général écrit aux 40 parents d’une classe (document complet du site)',
+  setDoc(doc(sg, 'messages/st-web-sg-classe'), webClassMessage('staffSG', 'staff', manyParents)))
+await allow('site : la boîte seule répond à un parent (document complet du site)',
+  setDoc(doc(box, 'messages/st-web-box-direct'), webMessage('staffBox', 'staff')))
+await allow('site : l’admin répond à un parent (document complet du site)',
+  setDoc(doc(asUser('admin1'), 'messages/st-web-admin-direct'), webMessage('admin1', 'admin')))
+await allow('site : l’admin écrit aux 40 parents d’une classe (document complet du site)',
+  setDoc(doc(asUser('admin1'), 'messages/st-web-admin-classe'), webClassMessage('admin1', 'admin', manyParents)))
+await allow('site : un professeur répond à un parent (document complet du site)',
+  setDoc(doc(asUser('prof1'), 'messages/st-web-prof-direct'), webMessage('prof1', 'professeur', { category: 'general' })))
+await allow('site : un professeur écrit aux 40 parents de sa classe (document complet du site)',
+  setDoc(doc(asUser('prof1'), 'messages/st-web-prof-classe'), webClassMessage('prof1', 'professeur', manyParents, '1A')))
+
+// Requête exacte de la page Messages du site : diffusions générales + boîte commune.
+const inboxQuery = (db, types) => getDocs(query(collection(db, 'messages'), where('toType', 'in', types)))
+await allow('surveillant général : requête « toutes diffusions + boîte commune » de la page Messages', inboxQuery(sg, ['all', 'administration']))
+await allow('envoi seul : requête « diffusions générales » seule', inboxQuery(send, ['all']))
+await deny('envoi seul : la même requête avec la boîte commune est refusée', inboxQuery(send, ['all', 'administration']))
+await deny('surveillant général : pas les diffusions réservées aux professeurs ou aux parents', inboxQuery(sg, ['all', 'teachers', 'parents', 'administration']))
+await allow('admin envoie toujours une diffusion aux parents',
+  setDoc(doc(asUser('admin1'), 'messages/st-admin-diffusion'), {
+    type: 'announcement', subject: 'S', body: 'B', fromId: 'admin1', fromRole: 'admin', fromNom: 'Administration',
+    toType: 'parents', toIds: [], readBy: [], status: 'sent', createdAt: serverTimestamp(),
+  }))
+
+// ── Personnel administratif : classes des enseignants ─────────────────────
+// `enseignants.modifier` : lire les fiches des professeurs, modifier leurs
+// classes — rien d'autre sur ces fiches, et aucun autre compte.
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore()
+  await Promise.all([
+    setDoc(doc(db, 'users/staffAffect'), { uid: 'staffAffect', role: 'staff', droits: ['edt.voir', 'enseignants.modifier'] }),
+    setDoc(doc(db, 'users/st-prof'), { uid: 'st-prof', role: 'professeur', nom: 'Prof', prenom: 'St', classes: ['5S'], classe: '5S', matiere: 'Maths', cycle: 'college' }),
+  ])
+})
+const affect = asUser('staffAffect')
+const teachers = (db) => getDocs(query(collection(db, 'users'), where('role', '==', 'professeur')))
+await allow('classes des enseignants : lit la liste des professeurs', teachers(affect))
+await allow('classes des enseignants : lit la fiche d’un professeur', getDoc(doc(affect, 'users/st-prof')))
+await allow('classes des enseignants : lit l’emploi du temps d’un professeur (case impliquée)', getDoc(doc(affect, 'schedules/prof2')))
+await allow('classes des enseignants : modifie les classes d’un professeur',
+  updateDoc(doc(affect, 'users/st-prof'), { classes: ['5S', '6T'], classe: deleteField() }))
+for (const [what, change] of [
+  ['le rôle', { role: 'admin' }], ['la matière', { matiere: 'PC' }], ['le niveau', { cycle: 'primaire' }],
+  ['le nom', { nom: 'Autre' }], ['des droits', { droits: ['comptes.gerer'] }], ['un poste', { poste: 'surveillant_general' }],
+  ['le numéro de connexion', { authPhoneE164: '+212600000000', parentLoginEnabled: true }],
+  ['les classes et le rôle ensemble', { classes: ['6T'], role: 'admin' }],
+]) {
+  await deny(`classes des enseignants : ne modifie pas ${what} d’un professeur`, updateDoc(doc(affect, 'users/st-prof'), change))
+}
+for (const uid of ['admin1', 'parent1', 'staffSG', 'staffAffect']) {
+  await deny(`classes des enseignants : ne donne pas de classes à ${uid} (pas un professeur)`,
+    updateDoc(doc(affect, `users/${uid}`), { classes: ['5S'] }))
+}
+for (const uid of ['admin1', 'parent1', 'staffSG']) {
+  await deny(`classes des enseignants : ne lit pas la fiche de ${uid}`, getDoc(doc(affect, `users/${uid}`)))
+}
+await deny('classes des enseignants : ne lit pas tous les comptes', getDocs(collection(affect, 'users')))
+await deny('classes des enseignants : ne lit pas les comptes parents', getDocs(query(collection(affect, 'users'), where('role', '==', 'parent'))))
+await deny('classes des enseignants : ne crée pas de compte', setDoc(doc(affect, 'users/st-nouveau'), { role: 'professeur', classes: ['5S'] }))
+await deny('classes des enseignants : ne supprime pas un professeur', deleteDoc(doc(affect, 'users/st-prof')))
+await deny('classes des enseignants : cette case seule n’ouvre pas les élèves', getDocs(collection(affect, 'eleves')))
+// Sans la case, ou avec un champ `droits` sur un autre rôle : rien de tout cela.
+for (const uid of ['staffSG', 'staffNone', 'profDroits', 'parentDroits']) {
+  await deny(`${uid} ne lit pas la liste des professeurs`, teachers(asUser(uid)))
+  await deny(`${uid} ne modifie pas les classes d’un professeur`, updateDoc(doc(asUser(uid), 'users/st-prof'), { classes: ['1A'] }))
+}
+await allow('admin lit et modifie toujours la fiche d’un professeur', updateDoc(doc(asUser('admin1'), 'users/st-prof'), { classes: ['5S'], matiere: 'Maths' }))
+
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)
 if (failed.length) {

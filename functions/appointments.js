@@ -1,5 +1,6 @@
 const { createHash } = require('node:crypto')
 const { moroccoParts } = require('./lib/moroccoTime')
+const { hasRight } = require('./staffRights')
 const fail = (code, message = code) => { throw Object.assign(new Error(message), { code }) }
 const hash = value => createHash('sha256').update(value).digest('hex')
 const idOk = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,257}$/.test(value)
@@ -39,7 +40,8 @@ async function listAppointments(db, uid, input = {}) {
   const user = await db.doc(`users/${uid}`).get()
   if (!user.exists) fail('permission-denied')
   const mode = input.mode
-  if (!['parent', 'admin', 'teacher'].includes(mode) || (mode === 'admin' && user.get('role') !== 'admin')
+  // Vue de l'administration : admin, ou personnel qui porte la case « rendez-vous ».
+  if (!['parent', 'admin', 'teacher'].includes(mode) || (mode === 'admin' && !hasRight(user.data(), 'rendezvous'))
     || (mode === 'teacher' && user.get('role') !== 'professeur')) fail('permission-denied')
   let query = db.collection('appointments').where('open', '==', input.history !== true)
   if (mode === 'parent') query = query.where('parentUid', '==', uid)
@@ -79,7 +81,7 @@ async function appointmentCommand(db, uid, input, now = new Date()) {
   return db.runTransaction(async tx => {
     const [user, previous, replay] = await tx.getAll(db.doc(`users/${uid}`), ref, operation)
     if (!user.exists) fail('permission-denied')
-    const old = previous.data(), admin = user.get('role') === 'admin'
+    const old = previous.data(), admin = hasRight(user.data(), 'rendezvous')
     const eleveId = action === 'request' ? input.eleveId : old?.eleveId
     if (!idOk(eleveId)) fail('invalid-argument')
     const child = await tx.get(db.doc(`eleves/${eleveId}`))

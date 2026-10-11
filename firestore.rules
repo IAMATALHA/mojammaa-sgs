@@ -33,6 +33,20 @@ service cloud.firestore {
     function isParent()   { return myRole() == 'parent'; }
     function myClasses()  { return myDoc().classes != null ? myDoc().classes : []; }
 
+    // ── Personnel administratif (rôle `staff`) ───────────────
+    // Aucun droit par défaut. Chaque droit est une case de `users/{uid}.droits`
+    // (liste des clés : mojammaa-admin/functions/src/staffRights.ts), que seul
+    // le serveur écrit (cf. match /users). `can(x)` : l'admin a tous les droits,
+    // un compte staff seulement ceux qu'il porte, personne d'autre aucun — un
+    // champ `droits` sur la fiche d'un professeur ou d'un parent ne vaut rien.
+    // Une règle qui n'appelle pas `can` reste fermée au personnel : c'est le
+    // comportement par défaut voulu. Aucune suppression de donnée d'élève ne
+    // s'ouvre ainsi.
+    function isStaff()    { return myRole() == 'staff'; }
+    function can(droit) {
+      return isAdmin() || (isStaff() && droit in myDoc().get('droits', []));
+    }
+
     // ── Super-admin ──────────────────────────────────────────
     // Liste blanche dans config/superadmins (modifiable UNIQUEMENT via
     // scripts/setSuperadmin.js — admin SDK). Aucun client ne peut s'y ajouter.
@@ -222,7 +236,20 @@ service cloud.firestore {
         || m.get('toId', '') == 'all'
         || (m.get('toId', '') == 'parents' && hasGuardianAccess())
         || (m.get('toId', '') == 'teachers' && isTeacher())
+        || (m.get('toType', '') == 'administration' && can('messages.boite'))
         || isAdmin();
+    }
+    // Message écrit par un compte du personnel administratif : il doit porter
+    // la case « écrire aux parents », ou tenir la boîte commune et répondre à
+    // un seul destinataire. Tout autre rôle n'est pas concerné ici. Une seule
+    // lecture de la fiche (let) : cette règle est proche de la limite de
+    // 1 000 expressions, on n'y répète pas les contrôles de rôle.
+    function staffMayWriteMessage(data) {
+      let me = myDoc();
+      let droits = me.get('droits', []);
+      return me.role != 'staff'
+        || 'messages.envoyer' in droits
+        || ('messages.boite' in droits && data.get('toIds', []).size() <= 1);
     }
     function parentMessageToAdministration() {
       let data = request.resource.data;
@@ -403,30 +430,48 @@ service cloud.firestore {
 
     // ── Prière : suivi de classe uniquement ─────────────────
     function isPrayerStaffForClass(classe) {
-      return isAdmin() || teacherTeaches(classe);
+      return can('priere') || teacherTeaches(classe);
     }
     // ── users ────────────────────────────────────────────────
     match /users/{uid} {
       allow read:           if isSignedIn() && (uid == myUid() || isAdmin());
+      // Personnel qui attribue leurs classes aux enseignants (`enseignants.modifier`) :
+      // les fiches des PROFESSEURS seulement. Statement dédié, prouvable par
+      // sa requête where('role','==','professeur') ; aucun autre compte (admin,
+      // parent, personnel) ne lui est lisible.
+      allow read:           if can('enseignants.modifier') && resource.data.role == 'professeur';
       // Créer/supprimer un compte : SUPERADMIN uniquement.
       allow create, delete: if isSuperAdmin();
       // authPhoneE164 / parentLoginEnabled : capacité « connexion parent par
       // téléphone », posée par redeemParentInvitation (mojammaa-admin) et lue
       // par parentPhoneLogin. Écrite côté serveur uniquement (ou superadmin).
+      // poste / droits : ce que peut faire un compte du personnel administratif
+      // (rôle `staff`, aucun droit par défaut). Même protection que `role` :
+      // écrits côté serveur uniquement (ou superadmin), pour que chaque
+      // changement soit contrôlé et journalisé. Sans cela, n'importe quel compte
+      // pouvait poser ces champs sur sa propre fiche.
       allow update: if isSuperAdmin()
         // Admin : gère les profils (nom, classes, matière…) mais PAS le rôle,
         // ni la localisation de connexion (dérivée serveur, cf. Cloud Function
         // recordLoginLocation — jamais éditable, sinon perd toute valeur de preuve).
         || (isAdmin() &&
             !request.resource.data.diff(resource.data).affectedKeys()
-               .hasAny(['role', 'lastLoginLocation', 'authPhoneE164', 'parentLoginEnabled']))
+               .hasAny(['role', 'poste', 'droits', 'lastLoginLocation', 'authPhoneE164',
+                        'parentLoginEnabled']))
         // Soi-même : son profil SAUF champs sensibles (anti auto-élévation) et
         // SAUF lastLoginLocation (sinon on pourrait se falsifier sa propre
         // localisation — seule la Cloud Function, via l'Admin SDK, l'écrit).
         || (isSignedIn() && uid == myUid() &&
             !request.resource.data.diff(resource.data).affectedKeys()
-               .hasAny(['role', 'classes', 'classe', 'matiere', 'cycle', 'uid', 'lastLoginLocation',
-                        'authPhoneE164', 'parentLoginEnabled']));
+               .hasAny(['role', 'poste', 'droits', 'classes', 'classe', 'matiere', 'cycle', 'uid',
+                        'lastLoginLocation', 'authPhoneE164', 'parentLoginEnabled']))
+        // Personnel (`enseignants.modifier`) : les classes d'un PROFESSEUR, et
+        // rien d'autre — liste fermée de champs, pas une liste d'interdits. Ni
+        // son rôle, ni sa matière, ni ses identifiants, ni un autre type de
+        // compte (dont le sien : un compte staff n'est pas professeur).
+        || (isStaff() && can('enseignants.modifier')
+            && resource.data.role == 'professeur'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['classes', 'classe']));
     }
 
     // Document calculé côté serveur depuis `eleves.parentUid`. Un client ne
@@ -438,10 +483,14 @@ service cloud.firestore {
 
     // ── eleves ───────────────────────────────────────────────
     match /eleves/{eleveId} {
-      allow read: if isAdmin()
+      allow read: if can('eleves.voir')
                   || (isSignedIn() && resource.data.parentUid == myUid())
                   || teacherTeaches(resource.data.classe);
-      allow create: if isAdmin() || teacherTeaches(request.resource.data.classe);
+      // Personnel (`eleves.modifier`) : comme un professeur, jamais le lien
+      // parent — il ne se pose que par invitation, côté serveur.
+      allow create: if isAdmin()
+        || (can('eleves.modifier') && request.resource.data.get('parentUid', '') == '')
+        || teacherTeaches(request.resource.data.classe);
       // Durci 2026-07-11 : l'ancienne règle ne validait que la NOUVELLE classe —
       // un prof pouvait cibler N'IMPORTE QUEL élève par ID (écriture aveugle,
       // pas besoin du droit de lecture) et le "capturer" en posant sa classe.
@@ -449,6 +498,7 @@ service cloud.firestore {
       // `parentUid` intouchable (sinon rattachement de l'enfant d'autrui à un
       // parent complice → fuite de toutes ses données).
       allow update: if isAdmin()
+        || (can('eleves.modifier') && untouched(['parentUid']))
         || (teacherTeaches(resource.data.classe)
             && teacherTeaches(request.resource.data.classe)
             && untouched(['parentUid']));
@@ -472,7 +522,7 @@ service cloud.firestore {
       // client : TeacherNotesScreen interroge `where matiere == profile.matiere`,
       // donc reste autorisé. Un prof sans `matiere` (ancien compte) ne lit/écrit
       // aucune note — il ne peut de toute façon pas en saisir (règle write).
-      allow read: if isAdmin()
+      allow read: if can('notes.voir')
                   || (teacherTeaches(resource.data.classe)
                       && resource.data.matiere == myDoc().matiere)
                   || isGuardianOf(resource.data.eleveId);
@@ -510,18 +560,18 @@ service cloud.firestore {
       // live (2026-06-10) : absences.eleveId == ID du doc eleves (codeMassar)
       // pour 100% des docs — TeacherAttendanceScreen écrit eleveId = eleve.id.
       // La requête parent (where eleveId in [enfants]) reste donc autorisée.
-      allow read: if isAdmin()
+      allow read: if can('absences.voir')
                   || teacherTeaches(resource.data.classe)
                   || isGuardianOf(resource.data.eleveId);
       // Durci 2026-07-11 — même logique que `notes` : cohérence élève/classe au
       // create, classe existante validée + eleveId/classe immuables à l'update.
       // (L'écran d'appel réécrit le doc à l'identique via set+merge, docId
       // déterministe → update autorisé, champs gelés inchangés.)
-      allow create: if isAdmin() || (
+      allow create: if can('absences.saisir') || (
         teacherTeaches(request.resource.data.classe)
         && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe)
       );
-      allow update: if isAdmin() || (
+      allow update: if can('absences.saisir') || (
         teacherTeaches(resource.data.classe)
         && untouched(['eleveId', 'classe'])
       );
@@ -536,12 +586,12 @@ service cloud.firestore {
       // Lecture d'un identifiant neuf pour la transaction de création unique.
       allow get: if isTeacher()
         && !exists(/databases/$(database)/documents/comportements/$(recordId));
-      allow read: if isAdmin()
+      allow read: if can('comportements.voir')
                   || teacherTeaches(resource.data.classe)
                   || isGuardianOf(resource.data.eleveId);
       allow create: if !request.resource.data.keys().hasAny(['cancelledAt', 'cancelledBy', 'cancelReason'])
         && request.resource.data.kind in ['merite', 'avertissement']
-        && (isAdmin()
+        && (can('comportements.saisir')
           || (teacherTeaches(request.resource.data.classe)
               && request.resource.data.teacherId == myUid()
               && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe)));
@@ -568,7 +618,7 @@ service cloud.firestore {
     // (notesService.getClassStats), pas une requête — aucun problème de
     // prouvabilité, contrairement aux collections listées.
     match /classStats/{statId} {
-      allow read:  if isAdmin()
+      allow read:  if can('notes.voir')
                    || guardianHasClass(resource.data.classe)
                    || teacherTeaches(resource.data.classe);
       allow write: if false;
@@ -583,14 +633,14 @@ service cloud.firestore {
           request.resource.data.eleveId
         )
         && request.resource.data.status == 'pending';
-      allow read: if isAdmin()
+      allow read: if can('absences.voir')
         || ownsGuardianRecord(resource.data.parentUid, resource.data.eleveId)
         || teacherTeaches(resource.data.classe);
       // Décision : prof de la classe / admin — champs de décision uniquement.
       // Durci 2026-07-11 : statut contraint aux valeurs réelles du client
       // ('approved'/'declined' — cf. decideAbsenceRequest ; PAS 'rejected'),
       // et décision signée (decidedBy == décideur réel).
-      allow update: if (isAdmin() || teacherTeaches(resource.data.classe))
+      allow update: if (can('absences.saisir') || teacherTeaches(resource.data.classe))
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['status', 'decidedBy', 'decidedAt'])
         && request.resource.data.status in ['approved', 'declined']
@@ -603,7 +653,7 @@ service cloud.firestore {
 
     // ── bulletins ────────────────────────────────────────────
     match /bulletins/{bulletinId} {
-      allow read: if isAdmin()
+      allow read: if can('notes.voir')
                   || teacherTeaches(resource.data.classe)
                   || isGuardianOf(resource.data.eleveId);
       allow create, update: if isAdmin();
@@ -777,6 +827,12 @@ service cloud.firestore {
       // visent les parents : un collègue ne les lit pas (27/09/2026). Ne
       // concerne QUE les profs — les parents reçoivent ces messages via toIds.
       allow read: if isSignedIn() && adminAnnonceToMyClass();
+      // Boîte commune de l'administration (messages des familles, demandes de
+      // rendez-vous) : aussi le personnel qui porte `messages.boite`. Statement
+      // dédié, prouvable par sa requête where('toType','==','administration').
+      // Ses propres envois et les messages qui lui sont adressés passent par
+      // les statements voisins (fromId, toIds) ; rien d'autre ne lui est ouvert.
+      allow read: if can('messages.boite') && resource.data.toType == 'administration';
       allow read: if isSignedIn() && (
         resource.data.fromId == myUid()
         || (resource.data.toIds is list && myUid() in resource.data.toIds)
@@ -792,6 +848,10 @@ service cloud.firestore {
             && hasGuardianAccess())
         || (resource.data.toId == 'teachers' && isTeacher())
         || (resource.data.toId == 'admin'    && isAdmin())
+        // Boîte commune tenue par le personnel : aussi dans ce statement, pour
+        // que sa requête where('toType','in',['all','administration']) soit
+        // prouvée par un seul statement, comme celle des autres rôles.
+        || (resource.data.toType == 'administration' && can('messages.boite'))
         || isAdmin()
       );
       // Création : seulement en SON nom (anti-usurpation) ; les diffusions
@@ -830,9 +890,20 @@ service cloud.firestore {
         && (request.resource.data.toType == 'user'
             || (request.resource.data.toType == 'administration' && createsAsGuardian())
             || (isAdmin() && !createsAsGuardian()))
-        && ((isTeacher() || isAdmin()) && !createsAsGuardian()
-            || (request.resource.data.toIds is list
-                && request.resource.data.toIds.size() <= 10))
+        // Personnel administratif : écrire aux parents est une case
+        // (`messages.envoyer` : un parent ou une classe, jamais une diffusion
+        // générale ni une pièce jointe). Qui tient la boîte commune
+        // (`messages.boite`) peut seulement répondre, à un destinataire. Il
+        // signe `fromRole: 'staff'` (son rôle réel) : les familles répondent
+        // alors par la boîte commune, lue à plusieurs, et non à une personne.
+        && (createsAsGuardian() || staffMayWriteMessage(request.resource.data))
+        // Borne des destinataires : testée d'abord, sans lire le rôle — la
+        // plupart des envois (réponse, message à un parent) s'arrêtent là, ce
+        // qui ménage la limite Firestore de 1 000 expressions par requête.
+        // Au-delà de 10 : professeur, admin, ou personnel qui porte la case.
+        && ((request.resource.data.get('toIds', null) is list
+                && request.resource.data.toIds.size() <= 10)
+            || ((isTeacher() || can('messages.envoyer')) && !createsAsGuardian()))
         && (!isTeacher() || createsAsGuardian()
             || request.resource.data.get('toIds', []).size() <= 1
             // classe non vide OBLIGATOIRE en multi-destinataires ('' absent
@@ -914,18 +985,22 @@ service cloud.firestore {
     // back-office web n'est monté nulle part (vérifié 2026-07-25), la
     // collection n'a donc aucun lecteur vivant.
     match /suivis/{suiviId} {
-      allow read:   if isAdmin();
+      allow read:   if can('suivis');
       allow read:   if isTeacher() && resource.data.createdBy == myUid();
       allow read:   if isTeacher() && teacherTeaches(resource.data.classe);
-      allow create: if (isAdmin() || isTeacher())
+      allow create: if (can('suivis') || isTeacher())
         && request.resource.data.createdBy == myUid();
-      allow update: if isAdmin() || (isTeacher() && resource.data.createdBy == myUid());
+      // Personnel (`suivis`) : le journal est tenu à plusieurs — chacun peut
+      // compléter ou clore une action, sans en changer l'auteur ni la supprimer.
+      allow update: if isAdmin()
+        || (isStaff() && can('suivis') && untouched(['createdBy']))
+        || (isTeacher() && resource.data.createdBy == myUid());
       allow delete: if isAdmin();
     }
 
     // ── schedules (EDT prof) ─────────────────────────────────
     match /schedules/{teacherUid} {
-      allow read:  if isSignedIn() && (teacherUid == myUid() || isAdmin());
+      allow read:  if isSignedIn() && (teacherUid == myUid() || can('edt.voir'));
       allow write: if isAdmin();
     }
 
@@ -975,9 +1050,9 @@ service cloud.firestore {
     // peut modifier/supprimer QUE les siens ; l'admin gère tout.
     match /evenements/{eventId} {
       allow read:   if true;
-      allow create: if isAdmin()
+      allow create: if can('calendrier.modifier')
                     || (isTeacher() && request.resource.data.createdBy == myUid());
-      allow update, delete: if isAdmin()
+      allow update, delete: if can('calendrier.modifier')
                     || (isTeacher() && resource.data.get('createdBy', '') == myUid());
     }
     match /joursScolaires/{dateId}{ allow read: if isSignedIn(); allow write: if isAdmin(); }
@@ -1012,7 +1087,7 @@ service cloud.firestore {
     match /pickupSessions/{serviceDate} {
       allow read: if isSignedIn();
 
-      allow create: if isAdmin()
+      allow create: if can('sortie')
         && request.resource.data.keys().hasAll([
           'serviceDate', 'isOpen', 'openedByUid', 'opensAt', 'closesAt',
           'createdAt', 'updatedAt'
@@ -1031,7 +1106,7 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
 
-      allow update: if isAdmin()
+      allow update: if can('sortie')
         && untouched(['serviceDate', 'createdAt'])
         && request.resource.data.serviceDate == serviceDate
         && request.resource.data.updatedAt == request.time
@@ -1071,7 +1146,7 @@ service cloud.firestore {
 
     // ── Smart Pickup : sortie scolaire ──────────────────────
     match /pickupRequests/{requestId} {
-      allow read: if isAdmin()
+      allow read: if can('sortie')
         || ownsGuardianRecord(resource.data.parentUid, resource.data.eleveId);
 
       // Une demande déterministe par élève/jour. Le lien parent-enfant est
@@ -1119,8 +1194,9 @@ service cloud.firestore {
           && request.resource.data.get('vehicleDescription', '').size() <= 80
           && request.resource.data.arrivedAt == request.time
           && request.resource.data.updatedAt == request.time)
-        // Admin : machine d'état stricte waiting → called → ready → completed.
-        || (isAdmin()
+        // Admin, ou personnel chargé de la sortie : machine d'état stricte
+        // waiting → called → ready → completed.
+        || (can('sortie')
           && untouched(['parentUid', 'eleveId', 'serviceDate', 'arrivedAt'])
           && resource.data.parentUid == eleveParentUid(resource.data.eleveId)
           && request.resource.data.managedByUid == myUid()

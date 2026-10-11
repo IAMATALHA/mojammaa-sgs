@@ -1,4 +1,5 @@
 const { createHash } = require('node:crypto')
+const { STAFF_ROLE } = require('./staffRights')
 
 const REASONS = {
   lessonNotCopied: ["Leçon non copiée", "الدرس غير مكتوب", "Lesson not copied"],
@@ -106,7 +107,9 @@ async function reconcileSchoolAlert(db, { kind, sourceRef, before = null, period
       ...period(new Date()),
       type: kind, category: kind,
       fromId: teacherId || 'system-school',
-      fromRole: teacherData.role === 'admin' ? 'admin' : 'professeur',
+      // Saisie par le personnel administratif (surveillant général…) : l'alerte
+      // vient de l'administration, pas d'un professeur.
+      fromRole: ['admin', STAFF_ROLE].includes(teacherData.role) ? 'admin' : 'professeur',
       fromNom: `${teacherData.prenom || ''} ${teacherData.nom || ''}`.trim() || 'Mojammaa Al Maarifa',
       toType: 'user', toIds: parentUid ? [parentUid] : [],
       priority: kind === 'attendance' || status === 'avertissement' ? 'urgent' : 'normal',

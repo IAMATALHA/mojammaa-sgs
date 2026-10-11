@@ -3,6 +3,7 @@ const { appointmentCommand, listAppointments, slotTime } = require('../../functi
 const { cancelComportement } = require('../../functions/behaviorCancellation')
 const { reconcileSchoolAlert } = require('../../functions/schoolAlerts')
 const { getDashboardActions } = require('../../functions/dashboardActions')
+const { staffUidsWithRight } = require('../../functions/staffRights')
 
 module.exports = async function thirdLotCases(db, test) {
   const now = new Date('2026-09-07T10:00:00Z'), date = '2026-09-08'
@@ -13,6 +14,11 @@ module.exports = async function thirdLotCases(db, test) {
   await Promise.all([
     seed('users/p3', { role: 'parent' }), seed('users/p4', { role: 'parent' }), seed('users/a3', { role: 'admin', prenom: 'Admin' }),
     seed('users/t3', { role: 'professeur', classes: ['LOT3'], prenom: 'Teacher' }), seed('users/t4', { role: 'professeur', classes: ['ELSEWHERE'] }),
+    // Personnel administratif : s3 porte la case « mérites et avertissements », s4 ne fait que les voir.
+    seed('users/s3', { role: 'staff', droits: ['comportements.voir', 'comportements.saisir'], prenom: 'Sur', nom: 'Veillant' }),
+    seed('users/s4', { role: 'staff', droits: ['comportements.voir'] }),
+    seed('users/t5', { role: 'professeur', classes: ['ELSEWHERE'], droits: ['comportements.saisir', 'messages.boite', 'rendezvous'] }),
+    seed('users/s5', { role: 'staff', droits: ['messages.boite', 'rendezvous'] }),
     seed('eleves/k3', { parentUid: 'p3', classe: 'LOT3', prenom: 'Fixture', nom: 'One', active: true }),
     seed('eleves/k4', { parentUid: 'p4', classe: 'LOT3', prenom: 'Fixture', nom: 'Two', active: true }),
     seed('eleves/k5', { parentUid: 'p3', classe: 'LOT3', prenom: 'Fixture', nom: 'Three', active: true }),
@@ -162,6 +168,34 @@ module.exports = async function thirdLotCases(db, test) {
     await reconcileSchoolAlert(db, { kind: 'behavior', sourceRef: early, period })
     await reconcileSchoolAlert(db, { kind: 'behavior', sourceRef: early, period })
     assert.equal((await db.collection('messages').where('automation.source', '==', early.path).get()).size, 0)
+  })
+  await test('Staff cancel any entry only with the behaviour right; their alerts come from the administration', async () => {
+    const entry = doc('comportements/lot3_staff')
+    await entry.set({ eleveId: 'k4', classe: 'LOT3', kind: 'avertissement', reason: 'lateToClass', date: '2026-09-07', teacherId: 's3' })
+    const alertId = await reconcileSchoolAlert(db, { kind: 'behavior', sourceRef: entry, period })
+    const alert = (await doc(`messages/${alertId}`).get()).data()
+    assert.equal(alert.fromRole, 'admin')
+    assert.equal(alert.fromId, 's3')
+    assert.equal(alert.fromNom, 'Sur Veillant')
+    assert.deepEqual(alert.toIds, ['p4'])
+    // Voir ne suffit pas ; un champ `droits` sur la fiche d'un professeur ne vaut rien.
+    await assert.rejects(cancelComportement(db, 's4', { id: entry.id, reason: 'Correction' }, now), { code: 'permission-denied' })
+    await assert.rejects(cancelComportement(db, 't5', { id: entry.id, reason: 'Correction' }, now), { code: 'permission-denied' })
+    // Une entrée d'un professeur, annulée par le personnel qui porte la case.
+    const other = doc('comportements/lot3_staff_other')
+    await other.set({ eleveId: 'k4', classe: 'LOT3', kind: 'merite', reason: 'participation', date: '2026-09-07', teacherId: 't3' })
+    assert.deepEqual(await cancelComportement(db, 's3', { id: other.id, reason: 'Entry mistake' }, now), { cancelled: true, replayed: false })
+    assert.equal((await other.get()).get('cancelledBy'), 's3')
+  })
+  await test('Shared inbox notifications and the administration view of appointments follow the staff boxes', async () => {
+    // Seul le personnel qui porte la case ; jamais un professeur dont la fiche porterait un champ `droits`.
+    assert.deepEqual(await staffUidsWithRight(db, 'messages.boite'), ['s5'])
+    assert.deepEqual((await staffUidsWithRight(db, 'comportements.saisir')).sort(), ['s3'])
+    assert.deepEqual(await staffUidsWithRight(db, 'sortie'), [])
+    assert.ok(Array.isArray((await listAppointments(db, 's5', { mode: 'admin' })).rows))
+    await assert.rejects(listAppointments(db, 's3', { mode: 'admin' }), { code: 'permission-denied' })
+    await assert.rejects(listAppointments(db, 't5', { mode: 'admin' }), { code: 'permission-denied' })
+    await assert.rejects(listAppointments(db, 'p3', { mode: 'admin' }), { code: 'permission-denied' })
   })
   await test('Action center refuses forged administrator or teacher modes', async () => {
     await assert.rejects(getDashboardActions(db, null, { mode: 'parent' }, now), { code: 'unauthenticated' })
