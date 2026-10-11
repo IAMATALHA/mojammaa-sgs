@@ -159,10 +159,12 @@ export default function NavigationRoot() {
         <StudentStack />
       )}
     </NavigationContainer>
-    {user ? (
+    {user && activationLink.child ? (
+      // `key` : une feuille neuve à chaque lien, même sans code.
       <AddChildSheet
-        visible={activationLink.childCode !== null}
-        initialCode={activationLink.childCode ?? ''}
+        key={activationLink.child.at}
+        visible={activationLink.childOpen}
+        initialCode={activationLink.child.code}
         onClose={activationLink.dismissChild}
         isStaff={role !== 'student'}
       />

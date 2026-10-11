@@ -4,7 +4,7 @@
  * apparaît ensuite dans « Espace parent » (lien eleves.parentUid, aucun
  * second compte).
  */
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import {
   ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native'
@@ -21,7 +21,11 @@ interface Props {
   onClose: () => void
   /** Prof, chauffeur ou direction : l'enfant se consulte depuis « Espace parent ». */
   isStaff: boolean
-  /** Code d'un lien d'activation ouvert dans l'application : prérempli, jamais envoyé d'office. */
+  /**
+   * Code d'un lien d'activation ouvert dans l'application : prérempli, jamais
+   * envoyé d'office. Lu au montage : l'appelant remonte la feuille (`key`) à
+   * chaque nouveau lien, même sans code.
+   */
   initialCode?: string
 }
 
@@ -40,13 +44,9 @@ function errorKey(error: unknown): string {
 export default function AddChildSheet({ visible, onClose, isStaff, initialCode }: Props) {
   const theme = useTheme()
   const { t } = useTranslation()
-  const [code, setCode] = useState('')
+  const [code, setCode] = useState(initialCode ?? '')
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
-
-  useEffect(() => {
-    if (visible && initialCode) { setCode(initialCode); setError('') }
-  }, [visible, initialCode])
 
   const close = () => { setCode(''); setError(''); onClose() }
 

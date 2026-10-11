@@ -20,12 +20,12 @@ export type AuthStackParamList = {
   Login: undefined
   /**
    * « Première connexion ? Activer mon compte » : le code décide du parcours.
-   * `code` + `linkAt` : lien d'activation ouvert dans l'application
-   * (use-activation-link), `linkAt` distinguant deux appuis sur le même lien.
+   * `code` : porté par un lien d'activation ouvert dans l'application
+   * (use-activation-link) ; la vérification part alors à l'ouverture.
    */
-  AccountActivation: { code?: string; linkAt?: number } | undefined
+  AccountActivation: { code?: string } | undefined
   /** `code` : code parent saisi sur AccountActivation, ou porté par un lien d'activation. */
-  ParentActivation: { code?: string; linkAt?: number } | undefined
+  ParentActivation: { code?: string } | undefined
 }
 
 // ── Partagé ────────────────────────────────────────────────────────────────

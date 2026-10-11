@@ -8,25 +8,21 @@
  * téléphone de la direction, qui prépare les liens, se rattacherait l'élève en
  * touchant le sien). Connecté, lien professeur : on propose de se déconnecter,
  * puis l'activation s'ouvre avec le code.
+ *
+ * Chaque lien reçu est une intention : rien n'est filtré ici. C'est l'activité
+ * Android qui retire le lien d'un lancement rejoué (tâche rouverte depuis les
+ * applications récentes, processus relancé) et qui garde celui touché avant
+ * que React soit prêt — voir plugins/with-launch-link-intent.js.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Linking } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTranslation } from 'react-i18next'
 import { navigationRef } from '../navigation/navigationRef'
-import { parseActivationLink, type ActivationLink } from '../utils/activation-link'
+import { authRoutesForLink, parseActivationLink, type ActivationLink } from '../utils/activation-link'
+import { createLatestOnly } from '../utils/latest-only'
 
-const LAUNCH_LINK_KEY = '@mojammaa/activationLink/launch'
-
-/** Empreinte courte : le code d'activation n'est pas conservé en clair. */
-function fingerprint(text: string): string {
-  let hash = 5381
-  for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0
-  return String(hash)
-}
-
-/** `replayed` : lien de lancement déjà traité à un démarrage précédent. */
-type PendingLink = ActivationLink & { replayed: boolean }
+/** `at` : rang de l'intention, pour repartir d'une feuille neuve à chaque lien. */
+export type ChildLink = { code: string; at: number }
 
 interface Options {
   signedIn: boolean
@@ -37,60 +33,54 @@ interface Options {
 
 export function useActivationLink({ signedIn, ready, logout }: Options) {
   const { t } = useTranslation()
-  const [pending, setPending] = useState<PendingLink | null>(null)
-  // Code à proposer dans « Ajouter un enfant » (`null` : feuille fermée).
-  const [childCode, setChildCode] = useState<string | null>(null)
+  const [pending, setPending] = useState<ActivationLink | null>(null)
+  // Lien parent proposé dans « Ajouter un enfant », et feuille ouverte ou non.
+  const [child, setChild] = useState<ChildLink | null>(null)
+  const [childOpen, setChildOpen] = useState(false)
+  const intents = useRef(createLatestOnly()).current
+  const intentCount = useRef(0)
   const asking = useRef(false)
 
-  // Application déjà ouverte : chaque appui sur un lien est une intention.
+  // Application déjà ouverte : chaque appui sur un lien est une intention, et
+  // elle périme la lecture du lien de lancement si celle-ci n'a pas fini.
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({ url }) => {
       const link = parseActivationLink(url)
-      if (link) setPending({ ...link, replayed: false })
+      if (!link) return
+      intents.cancel()
+      setPending(link)
     })
     return () => subscription.remove()
-  }, [])
+  }, [intents])
 
-  // Démarrage à froid. Sur Android, l'intent de lancement reste attaché à la
-  // tâche : rouverte depuis les applications récentes après l'arrêt du
-  // processus, l'app REÇOIT de nouveau le même lien (même piège que les
-  // notifications, cf. usePushTapNavigation). On note donc le lien traité.
+  // Démarrage par un lien.
   useEffect(() => {
-    let cancelled = false
-    const readLaunchLink = async () => {
-      const url = await Linking.getInitialURL()
-      const link = parseActivationLink(url)
-      if (!url || !link) return
-      const mark = fingerprint(url)
-      const previous = await AsyncStorage.getItem(LAUNCH_LINK_KEY).catch(() => null)
-      AsyncStorage.setItem(LAUNCH_LINK_KEY, mark).catch(() => {})
-      if (!cancelled) setPending({ ...link, replayed: previous === mark })
-    }
-    readLaunchLink().catch(() => {})
-    return () => { cancelled = true }
-  }, [])
+    const latest = intents.begin()
+    Linking.getInitialURL()
+      .then(url => {
+        const link = parseActivationLink(url)
+        if (link && latest()) setPending(link)
+      })
+      .catch(() => {})
+    return () => intents.cancel()
+  }, [intents])
 
   useEffect(() => {
-    if (!signedIn) setChildCode(null)
+    if (!signedIn) setChildOpen(false)
   }, [signedIn])
 
   useEffect(() => {
     if (!pending || !ready || !navigationRef.isReady()) return
     if (!signedIn) {
-      // Déconnecté, un lien rejoué reste utile : c'est aussi le parent qui
-      // retouche son lien après avoir fermé l'application sans finir.
       asking.current = false
-      navigationRef.navigate(
-        pending.kind === 'parent' ? 'ParentActivation' : 'AccountActivation',
-        { code: pending.code, linkAt: Date.now() },
-      )
+      navigationRef.reset(authRoutesForLink(navigationRef.getRootState()?.routes, pending))
       setPending(null)
       return
     }
-    // Connecté : un vieux lien rejoué n'est pas une intention.
-    if (pending.replayed) { setPending(null); return }
     if (pending.kind === 'parent') {
-      setChildCode(pending.code)
+      intentCount.current += 1
+      setChild({ code: pending.code, at: intentCount.current })
+      setChildOpen(true)
       setPending(null)
       return
     }
@@ -108,7 +98,7 @@ export function useActivationLink({ signedIn, ready, logout }: Options) {
     )
   }, [pending, ready, signedIn, logout, t])
 
-  const dismissChild = useCallback(() => setChildCode(null), [])
+  const dismissChild = useCallback(() => setChildOpen(false), [])
 
-  return { childCode, dismissChild }
+  return { child, childOpen, dismissChild }
 }

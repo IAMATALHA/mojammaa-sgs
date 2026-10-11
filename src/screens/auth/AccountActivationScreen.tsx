@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator, Alert, I18nManager, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native'
@@ -20,6 +20,7 @@ import { INVITATION_CODE_LENGTH, invitationCodeFromText, normalizeInvitationCode
 import { formatLoginPhone } from '../../utils/parentIdentity'
 import { emptyPhoneFieldValue, phoneFieldValidity, type PhoneFieldValue } from '../../utils/phoneCountries'
 import { rememberLoginMode } from '../../utils/loginPreferences'
+import { createLatestOnly } from '../../utils/latest-only'
 
 type Step = 'code' | 'activate' | 'link' | 'activated-no-session'
 type ErrorKey = TeacherAccessReason | 'mismatch' | 'required'
@@ -54,7 +55,8 @@ const ERROR_KEY: Record<ErrorKey, string> = {
  * À partir du build 1.0.18 (Android), le lien d'invitation
  * (mojammaa.com/activer#CODE) ouvre cet écran avec le code : la vérification
  * part aussitôt. Sur les versions antérieures, le lien ouvre le site et le
- * code se saisit ici à la main.
+ * code se saisit ici à la main. Chaque lien ouvre un écran NEUF
+ * (authRoutesForLink) : rien ne reste du lien précédent.
  */
 export default function AccountActivationScreen() {
   const theme = useTheme()
@@ -64,7 +66,9 @@ export default function AccountActivationScreen() {
   const route = useRoute<RouteProp<AuthStackParamList, 'AccountActivation'>>()
   const [step, setStep] = useState<Step>('code')
   const [addsTeacherRole, setAddsTeacherRole] = useState(false)
-  const [code, setCode] = useState('')
+  // Code porté par le lien d'activation qui a ouvert cet écran, s'il y en a un.
+  const linkCode = route.params?.code ?? ''
+  const [code, setCode] = useState(linkCode)
   const [phone, setPhone] = useState<PhoneFieldValue>(() => emptyPhoneFieldValue())
   const [showPhoneErrors, setShowPhoneErrors] = useState(false)
   const [password, setPassword] = useState('')
@@ -75,6 +79,11 @@ export default function AccountActivationScreen() {
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<ErrorKey | null>(null)
   const [activatedPhone, setActivatedPhone] = useState('')
+  // Seule la dernière vérification compte : une réponse tardive (code modifié
+  // entre-temps, écran quitté) ne change ni l'étape ni l'écran.
+  const checks = useRef(createLatestOnly()).current
+  const alive = useRef(true)
+  useEffect(() => () => { alive.current = false; checks.cancel() }, [checks])
 
   const fail = (reason: ErrorKey) => {
     setError(reason)
@@ -82,11 +91,13 @@ export default function AccountActivationScreen() {
   }
 
   const checkCode = async (typed: string = code) => {
+    const latest = checks.begin()
     setError(null)
-    if (normalizeInvitationCode(typed).length !== INVITATION_CODE_LENGTH) { fail('invalid-code'); return }
+    if (normalizeInvitationCode(typed).length !== INVITATION_CODE_LENGTH) { setWorking(false); fail('invalid-code'); return }
     setWorking(true)
     try {
       const preview = await previewActivationCode(typed)
+      if (!latest()) return
       if (preview.kind === 'parent') {
         navigation.replace('ParentActivation', { code: formatInvitationCode(typed) })
         return
@@ -97,23 +108,26 @@ export default function AccountActivationScreen() {
       setWithEmail(preview.mode === 'link' && !preview.addsTeacherRole)
       setStep(preview.mode === 'activation' ? 'activate' : 'link')
     } catch (failure) {
-      fail(teacherAccessReason(failure))
+      if (latest()) fail(teacherAccessReason(failure))
     } finally {
-      setWorking(false)
+      if (latest()) setWorking(false)
     }
+  }
+
+  // Code modifié pendant une vérification : sa réponse ne vaut plus rien.
+  const editCode = (next: string) => {
+    checks.cancel()
+    setWorking(false)
+    setCode(formatInvitationCode(invitationCodeFromText(next) ?? next))
+    if (error) setError(null)
   }
 
   // Lien d'activation ouvert dans l'application : le code est déjà là, on
   // passe directement à l'étape qu'il décide (un lien sans code entier laisse
-  // la saisie à la main).
-  const linkCode = route.params?.code
-  const linkAt = route.params?.linkAt
+  // la saisie à la main). Une seule fois, à l'ouverture de l'écran.
   useEffect(() => {
-    if (!linkAt || !linkCode) return
-    setCode(linkCode); setStep('code'); setPassword(''); setConfirm('')
-    void checkCode(linkCode)
-    // Un appui sur un lien = une vérification : `checkCode` reste hors dépendances.
-  }, [linkCode, linkAt])
+    if (linkCode) void checkCode(linkCode)
+  }, [])
 
   const validPhone = (): string | null => {
     const validity = phoneFieldValidity(phone)
@@ -142,7 +156,10 @@ export default function AccountActivationScreen() {
       setStep('activated-no-session')
     } catch (failure) {
       const reason = failure instanceof TeacherAccessFailure ? failure.reason : 'generic'
-      if (reason === 'parent-invitation') { navigation.replace('ParentActivation', { code: formatInvitationCode(code) }); return }
+      if (reason === 'parent-invitation') {
+        if (alive.current) navigation.replace('ParentActivation', { code: formatInvitationCode(code) })
+        return
+      }
       if (reason === 'account-active') {
         // Compte utilisé entre-temps : connexion habituelle, mot de passe inchangé.
         setPassword(''); setConfirm(''); setWithEmail(true); setStep('link')
@@ -213,7 +230,7 @@ export default function AccountActivationScreen() {
       <GraduationCap size={18} color={theme.primary} />
       <Text style={[styles.badgeText, { color: theme.text, fontFamily: theme.fonts.semibold }]}>{t('teacherActivation.badge')}</Text>
       <Text style={[styles.badgeCode, { color: theme.text, borderColor: theme.primaryBorder, backgroundColor: theme.card }]}>{formatInvitationCode(code)}</Text>
-      <Pressable onPress={() => { setStep('code'); setError(null); setPassword(''); setConfirm('') }} hitSlop={8} accessibilityRole="button" style={styles.badgeChange}>
+      <Pressable onPress={() => { setStep('code'); setError(null); setPassword(''); setConfirm('') }} disabled={working} hitSlop={8} accessibilityRole="button" style={styles.badgeChange}>
         <Text style={[styles.link, { color: theme.primary, fontFamily: theme.fonts.semibold }]}>{t('teacherActivation.changeCode')}</Text>
       </Pressable>
     </View>
@@ -227,7 +244,7 @@ export default function AccountActivationScreen() {
           {label(t('teacherActivation.code'))}
           <TextInput
             value={code}
-            onChangeText={next => { setCode(formatInvitationCode(invitationCodeFromText(next) ?? next)); if (error) setError(null) }}
+            onChangeText={editCode}
             autoCapitalize="characters"
             autoCorrect={false}
             autoComplete="off"
@@ -315,7 +332,7 @@ export default function AccountActivationScreen() {
           <Text style={[styles.noteText, { color: theme.textSoft }]}>{t('teacherActivation.doneNoSession')}</Text>
           <Text style={[styles.donePhone, { color: theme.text, fontFamily: theme.fonts.bold }]}>{formatLoginPhone(activatedPhone)}</Text>
         </View>
-        {button(t('teacherActivation.goLogin'), () => navigation.goBack())}
+        {button(t('teacherActivation.goLogin'), () => navigation.popToTop())}
       </>
     )
   }

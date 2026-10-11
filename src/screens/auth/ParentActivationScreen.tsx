@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
@@ -44,7 +44,8 @@ export default function ParentActivationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>()
   const route = useRoute<RouteProp<AuthStackParamList, 'ParentActivation'>>()
   // Code déjà saisi sur « Activer mon compte » (reconnu comme code parent), ou
-  // porté par le lien d'activation qui a ouvert l'application.
+  // porté par le lien d'activation qui a ouvert cet écran. Chaque lien ouvre un
+  // écran neuf (authRoutesForLink) : rien ne reste du lien précédent.
   const [code, setCode] = useState(() => route.params?.code ?? '')
   const [prenom, setPrenom] = useState('')
   const [nom, setNom] = useState('')
@@ -57,13 +58,6 @@ export default function ParentActivationScreen() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<{ key: string; field?: Field } | null>(null)
-
-  // Lien touché alors que cet écran est déjà ouvert : son code remplace la saisie.
-  const linkCode = route.params?.code
-  const linkAt = route.params?.linkAt
-  useEffect(() => {
-    if (linkAt && linkCode) { setCode(linkCode); setError(null) }
-  }, [linkCode, linkAt])
 
   const fail = (key: string, field?: Field) => setError({ key, field })
   const clearError = () => { if (error) setError(null) }
@@ -111,7 +105,7 @@ export default function ParentActivationScreen() {
         Alert.alert(
           t('parentActivation.successTitle'),
           t('parentActivation.createdNoSession'),
-          [{ text: t('teacherActivation.goLogin'), onPress: () => navigation.goBack() }],
+          [{ text: t('teacherActivation.goLogin'), onPress: () => navigation.popToTop() }],
         )
         return
       }
@@ -276,7 +270,7 @@ export default function ParentActivationScreen() {
         <Pressable onPress={submit} disabled={loading} accessibilityRole="button" accessibilityState={{ disabled: loading, busy: loading }} style={[styles.button, { backgroundColor: theme.primary, opacity: loading ? 0.7 : 1 }]}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t('parentActivation.submit')}</Text>}
         </Pressable>
-        <Pressable onPress={() => navigation.goBack()} style={styles.back}>
+        <Pressable onPress={() => navigation.popToTop()} style={styles.back}>
           <Text style={[styles.backText, { color: theme.textSoft }]}>{t('parentActivation.haveAccount')}</Text>
         </Pressable>
       </ScrollView>

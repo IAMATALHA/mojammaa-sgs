@@ -42,6 +42,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/with-launch-link-intent",
       "expo-localization",
       "expo-font",
       [
