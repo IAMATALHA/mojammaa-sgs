@@ -11,11 +11,14 @@
  *
  * Format validé par Youssef (10 et 11 oct. 2026) : arabe d'abord, puis
  * français, brefs, sans emoji. Le lien d'activation vient en premier, seul sur
- * sa ligne : il ouvre le site avec le code déjà rempli, rien à recopier. Le
- * code reste à la fin, seul sur sa ligne (en gras dans WhatsApp), pour
- * l'application (« Activer mon compte », « Ajouter un enfant »). On dit
+ * sa ligne, avec le code déjà rempli, rien à recopier. Pour les parents :
+ * un seul lien, deux blocs AR puis FR, Android via l'app et iPhone via Safari.
+ * L'installation est proposée sur le site après activation. Le code séparé
+ * en fin de message est conservé pour les invitations professeurs. On dit
  * « l'établissement » / « المؤسسة », jamais « l'école » / « المدرسة ».
  */
+import { normalizeLoginPhone } from './parentIdentity'
+
 export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.youssefatalha.mojammaasgs'
 
 /** Activation parent sur le site : le code voyage après « # », jamais envoyé au serveur. */
@@ -23,18 +26,15 @@ export function parentActivationUrl(code: string): string {
   return `https://mojammaa.com/parents/activer#${code}`
 }
 
-/** Numéro pour wa.me : indicatif sans « + » (même règle que le site). */
+/** Numéro pour wa.me : même normalisation que la connexion, sans « + ». */
 export function whatsAppPhone(phone: string): string {
-  const clean = phone.replace(/[\s\-.()]/g, '')
-  if (clean.startsWith('+')) return clean.slice(1)
-  if (clean.startsWith('00')) return clean.slice(2)
-  if (clean.startsWith('212')) return clean
-  if (clean.startsWith('0')) return `212${clean.slice(1)}`
-  return clean
+  return normalizeLoginPhone(phone)?.slice(1) ?? ''
 }
 
 export function whatsAppUrl(phone: string, text: string): string {
-  return `https://wa.me/${whatsAppPhone(phone)}?text=${encodeURIComponent(text)}`
+  const recipient = whatsAppPhone(phone)
+  if (!recipient) throw new Error('Invalid WhatsApp phone')
+  return `https://wa.me/${recipient}?text=${encodeURIComponent(text)}`
 }
 
 export interface CreatedTeacherInvitation {
@@ -112,17 +112,16 @@ export interface ParentCode {
   code: string
 }
 
-/** Activation parent : lien d'abord, arabe puis français (identique au site). */
+/** Activation parent : un lien, bloc arabe puis bloc français (identique au site). */
 export function parentCodeMessage(item: ParentCode): string {
   const who = `${item.studentName}${item.classe ? ` (${item.classe})` : ''}`
   return [
-    `${GREETING_AR}\nهذا رابط تفعيل حساب ولي أمر ${who}:`,
+    `${GREETING_AR}\nتفعيل حساب ولي أمر ${who}:`,
     // Le site s'ouvre sur tous les appareils, avec le code déjà rempli.
     parentActivationUrl(item.code),
-    'اضغطوا على الرابط: الرمز مكتوب فيه. أدخلوا رقم هاتفكم واختاروا كلمة المرور، ثم ثبّتوا التطبيق. الرابط شخصي.',
-    `Bonjour, voici ci-dessus le lien d’activation du compte parent de ${who}.\n`
-      + 'Touchez-le : le code y est déjà. Saisissez votre numéro, choisissez un mot de passe, puis installez l’application. Lien personnel.',
-    ...installAndCode(item.code),
+    'افتحوا الرابط وأكملوا البيانات. أندرويد: ثبّتوا التطبيق بعد التفعيل. آيفون: تابعوا على الموقع عبر Safari. الرابط شخصي.',
+    'Bonjour, activez votre compte parent via le lien ci-dessus.\n'
+      + 'Android : installez l’application après activation. iPhone : continuez sur le site avec Safari. Lien personnel.',
   ].join('\n\n')
 }
 

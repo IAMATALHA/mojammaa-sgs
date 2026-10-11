@@ -4,7 +4,7 @@
  * apparaît ensuite dans « Espace parent » (lien eleves.parentUid, aucun
  * second compte).
  */
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native'
@@ -47,8 +47,18 @@ export default function AddChildSheet({ visible, onClose, isStaff, initialCode }
   const [code, setCode] = useState(initialCode ?? '')
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
+  const mounted = useRef(false)
 
-  const close = () => { setCode(''); setError(''); onClose() }
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
+  const close = () => {
+    // Un autre lien peut avoir remplacé la feuille pendant l'alerte native.
+    if (!mounted.current) return
+    setCode(''); setError(''); onClose()
+  }
 
   const submit = async () => {
     if (normalizeInvitationCode(code).length !== INVITATION_CODE_LENGTH) {
@@ -58,6 +68,9 @@ export default function AddChildSheet({ visible, onClose, isStaff, initialCode }
     setSending(true); setError('')
     try {
       const child = await linkChildWithCode(code)
+      // La requête peut réussir après un nouveau lien ou une déconnexion.
+      // Son résultat concerne l'ancienne feuille, jamais celle qui la remplace.
+      if (!mounted.current) return
       const name = child.studentName || t('addChild.childFallback')
       // Alerte affichée feuille encore ouverte : sur iOS, une alerte lancée
       // pendant la fermeture d'un Modal peut ne jamais apparaître.
@@ -70,9 +83,9 @@ export default function AddChildSheet({ visible, onClose, isStaff, initialCode }
         { cancelable: false },
       )
     } catch (e) {
-      setError(t(errorKey(e)))
+      if (mounted.current) setError(t(errorKey(e)))
     } finally {
-      setSending(false)
+      if (mounted.current) setSending(false)
     }
   }
 

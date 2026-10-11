@@ -9,6 +9,8 @@
  * lié » à un compte qui n'existe plus, et aucun nouveau code ne peut être créé.
  */
 
+const { isDeepStrictEqual } = require('node:util')
+
 /** Chiffres seuls, numéro marocain ramené à 212… : 06 12 34 56 78 = +212 6 12 34 56 78. */
 function phoneDigits(value) {
   const digits = String(value || '').replace(/\D/g, '')
@@ -27,9 +29,10 @@ const samePhone = (a, b) => phoneDigits(a) !== '' && phoneDigits(a) === phoneDig
  * @param {boolean} input.profileExists        Le profil `users/{parentUid}` existe encore.
  * @param {object|null} input.login            Identifiant Auth restant : { email, phoneNumber, customClaims }.
  * @param {number} input.otherLinkedCount      Autres élèves encore liés au même compte.
+ * @param {boolean} [input.isSuperAdmin]        Compte protégé par `config/superadmins`.
  * @param {object} [input.options]             { clearContact, keepContact, keepLogin }.
  */
-function planOrphanUnlink({ student, profileExists, login = null, otherLinkedCount = 0, options = {} }) {
+function planOrphanUnlink({ student, profileExists, login = null, otherLinkedCount = 0, isSuperAdmin = false, options = {} }) {
   if (!student) return { ok: false, refusal: 'Élève introuvable.' }
   if (!student.parentUid) return { ok: false, refusal: 'Cet élève n’est lié à aucun compte parent : rien à faire.' }
   if (profileExists) {
@@ -63,6 +66,7 @@ function planOrphanUnlink({ student, profileExists, login = null, otherLinkedCou
   let loginKeptReason = ''
   if (!login) loginKeptReason = 'aucun identifiant de connexion ne reste'
   else if (options.keepLogin) loginKeptReason = 'demandé (--keep-login)'
+  else if (isSuperAdmin) loginKeptReason = 'ce compte figure dans config/superadmins : à traiter à la main'
   else if (otherLinkedCount > 0) loginKeptReason = `${otherLinkedCount} autre(s) élève(s) encore lié(s) à ce compte`
   else if (Object.keys(login.customClaims || {}).length > 0) loginKeptReason = 'ce compte porte des droits particuliers (claims) : à traiter à la main'
   else deleteLogin = true
@@ -119,6 +123,15 @@ async function listOrphans({ db, auth, out }) {
 }
 
 const KNOWN_FLAGS = ['--commit', '--clear-contact', '--keep-contact', '--keep-login']
+const validDocumentId = value => typeof value === 'string' && value.length > 0
+  && !/[/\\\u0000-\u001f]/.test(value) && value !== '.' && value !== '..'
+
+async function isProtectedLogin(db, uid) {
+  const config = await db.doc('config/superadmins').get()
+  const uids = config.get('uids')
+  // Une configuration mal formée ne doit pas autoriser une suppression Auth.
+  return (config.exists && !Array.isArray(uids)) || (Array.isArray(uids) && uids.includes(uid))
+}
 
 /**
  * Déroulé complet, dépendances injectées (base, Auth, sortie, copie locale)
@@ -126,10 +139,19 @@ const KNOWN_FLAGS = ['--commit', '--clear-contact', '--keep-contact', '--keep-lo
  */
 async function runUnlinkOrphanParent({ db, auth, FieldValue, args, out = console, saveBackup }) {
   const flags = new Set(args.filter(arg => arg.startsWith('--')))
-  const [studentId] = args.filter(arg => !arg.startsWith('--'))
+  const studentIds = args.filter(arg => !arg.startsWith('--'))
+  const [studentId] = studentIds
   const unknown = [...flags].filter(flag => !KNOWN_FLAGS.includes(flag))
   if (unknown.length) {
     out.error(`❌ Option inconnue : ${unknown.join(', ')}`)
+    return 1
+  }
+  if (studentIds.length > 1 || (studentId !== undefined && !validDocumentId(studentId))) {
+    out.error('❌ Fournir l’identifiant d’UN élève, sans chemin de document.')
+    return 1
+  }
+  if (flags.has('--clear-contact') && flags.has('--keep-contact')) {
+    out.error('❌ Choisir --clear-contact ou --keep-contact, pas les deux.')
     return 1
   }
   const commit = flags.has('--commit')
@@ -153,12 +175,17 @@ async function runUnlinkOrphanParent({ db, auth, FieldValue, args, out = console
   const snap = await studentRef.get()
   const student = snap.exists ? snap.data() : null
   const parentUid = student?.parentUid || ''
+  if (parentUid && !validDocumentId(parentUid)) {
+    out.error('❌ Le lien parent de cette fiche est invalide : correction manuelle nécessaire.')
+    return 1
+  }
   const profileExists = parentUid ? (await db.doc(`users/${parentUid}`).get()).exists : false
   const login = parentUid ? await loginFor(auth, parentUid) : null
   const others = parentUid
     ? (await db.collection('eleves').where('parentUid', '==', parentUid).select('classe').get()).docs.filter(doc => doc.id !== studentId)
     : []
-  const plan = planOrphanUnlink({ student, profileExists, login, otherLinkedCount: others.length, options })
+  const isSuperAdmin = login ? await isProtectedLogin(db, parentUid) : false
+  const plan = planOrphanUnlink({ student, profileExists, login, otherLinkedCount: others.length, isSuperAdmin, options })
 
   if (student) {
     out.log(`👤 Élève : ${studentId} — ${studentName(student)} · ${student.classe || '?'}`)
@@ -204,6 +231,9 @@ async function runUnlinkOrphanParent({ db, auth, FieldValue, args, out = console
       if (!fresh.exists || fresh.get('parentUid') !== parentUid) {
         throw new Error('La fiche a changé depuis la lecture : relancer sans --commit.')
       }
+      if (plan.clearFields.some(field => !isDeepStrictEqual(fresh.get(field), student[field]))) {
+        throw new Error('Les champs à retirer ont changé depuis la lecture : relancer sans --commit.')
+      }
       if (profile.exists) throw new Error('Le compte parent existe de nouveau.')
       tx.update(studentRef, {
         ...Object.fromEntries(plan.clearFields.map(field => [field, FieldValue.delete()])),
@@ -219,13 +249,32 @@ async function runUnlinkOrphanParent({ db, auth, FieldValue, args, out = console
   let loginLeft = false
   if (plan.deleteLogin) {
     try {
-      await auth.deleteUser(parentUid)
-      out.log('✅ Identifiant de connexion supprimé.')
+      // Auth ne partage pas la transaction Firestore : relire ses protections
+      // après le détachement, juste avant toute suppression irréversible.
+      const [profile, remaining, freshLogin, protectedLogin] = await Promise.all([
+        db.doc(`users/${parentUid}`).get(),
+        db.collection('eleves').where('parentUid', '==', parentUid).select('classe').get(),
+        loginFor(auth, parentUid),
+        isProtectedLogin(db, parentUid),
+      ])
+      if (profile.exists || remaining.size > 0 || protectedLogin || (freshLogin && !isDeepStrictEqual(freshLogin, login))) {
+        loginLeft = true
+        out.error('⚠️  Identifiant conservé : le compte ou ses rattachements ont changé depuis la lecture. Vérifier avant toute suppression manuelle.')
+      } else if (freshLogin) {
+        await auth.deleteUser(parentUid)
+        out.log('✅ Identifiant de connexion supprimé.')
+      } else {
+        out.log('✅ Identifiant de connexion déjà supprimé.')
+      }
     } catch (error) {
-      // La fiche ne porte plus l'identifiant du compte : le donner ici pour finir à la main.
-      loginLeft = true
-      out.error(`⚠️  Identifiant de connexion NON supprimé (${error.message}).`)
-      out.error(`    À supprimer dans la console Firebase → Authentication : ${parentUid}`)
+      if (error.code === 'auth/user-not-found') {
+        out.log('✅ Identifiant de connexion déjà supprimé.')
+      } else {
+        // La fiche ne porte plus l'identifiant du compte : le donner ici pour finir à la main.
+        loginLeft = true
+        out.error(`⚠️  Identifiant de connexion NON supprimé (${error.message}).`)
+        out.error(`    À supprimer dans la console Firebase → Authentication : ${parentUid}`)
+      }
     }
   }
 

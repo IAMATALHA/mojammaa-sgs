@@ -205,6 +205,28 @@ test('WhatsApp failure is visible and does not mark a parent code as prepared', 
   assert.doesNotMatch(h.text(), /adminCodes.prepared/)
 })
 
+test('parent WhatsApp invitations use a complete international number and reject malformed contacts', async () => {
+  for (const [phone, expected] of [['612345678', '212612345678'], ['٠٦١٢٣٤٥٦٧٨', '212612345678'], ['inconnu', null]]) {
+    const opened = []
+    const h = setup(parentScreen, {
+      students: [student('legacy-document', { parentTel: phone })],
+      service: { createParentInvitations: async () => [codeFor('legacy-document')] },
+      native: { Linking: { openURL: async url => { opened.push(url) } } },
+    })
+    await selectClass(h); await h.press('adminCodes.generate:1'); await h.press('adminCodes.whatsapp')
+    if (expected) {
+      assert.equal(opened.length, 1)
+      assert.equal(new URL(opened[0]).pathname, `/${expected}`)
+      assert.match(h.text(), /adminCodes.prepared/)
+    } else {
+      assert.deepEqual(opened, [], 'never open an unvalidated contact URL with a personal invitation')
+      assert.match(h.text(), /common.shareError/)
+      assert.doesNotMatch(h.text(), /adminCodes.prepared/)
+      assert.ok(h.button('adminCodes.share'), 'manual recipient selection is still available')
+    }
+  }
+})
+
 const teacher = { uid: 'synthetic-teacher', role: 'professeur', prenom: 'Prof', nom: 'Fictif', telephone: '0600000000' }
 const row = (status = 'revoked') => ({ uid: teacher.uid,
   account: { exists: true, disabled: false, everSignedIn: true, loginPhone: '+212611111111', hasRealEmail: true },

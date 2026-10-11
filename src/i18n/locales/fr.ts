@@ -331,6 +331,7 @@ const fr = {
     confirmPhoneOk: 'Oui, continuer',
     successTitle: 'Compte activé',
     successPhoneBody: 'Retenez-le : pour vous connecter, utilisez le {{phone}} et votre mot de passe.',
+    successEmailBody: 'Pour vous connecter, utilisez votre e-mail {{email}} et le mot de passe que vous venez de choisir.',
     existingAccount: 'Un compte existe déjà avec ce numéro ou cet e-mail. Connectez-vous avec le mot de passe de ce compte, puis ouvrez Réglages → Ajouter un enfant.',
     successEmailOnlyBody: 'Ce numéro ne peut pas servir à la connexion (il est peut-être déjà utilisé par un autre compte). Pour vous connecter, utilisez votre e-mail {{email}} et votre mot de passe.',
     linkedTitle: 'Enfant ajouté',
@@ -338,7 +339,7 @@ const fr = {
     linkErrorTitle: 'Enfant non ajouté',
     linkErrorSignedIn: 'Votre compte est ouvert, mais cet enfant n’a pas pu y être ajouté. Réessayez depuis Réglages → Ajouter un enfant, ou contactez l’établissement.',
     unavailable: 'Activation impossible pour le moment. Vérifiez votre connexion internet, puis réessayez.',
-    createdNoSession: 'Votre compte est créé, mais la connexion ne s’est pas ouverte. Connectez-vous avec votre numéro ou votre e-mail et le mot de passe que vous venez de choisir : le code n’est plus nécessaire.',
+    createdNoSession: 'Votre compte est créé, mais la connexion ne s’est pas ouverte. Revenez à la connexion : le code n’est plus nécessaire.',
   },
 
   phoneField: {

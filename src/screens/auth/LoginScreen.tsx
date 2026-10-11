@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import {
   View, Text, TextInput, Image, StyleSheet, useWindowDimensions,
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
 import { useTranslation } from 'react-i18next'
-import { useNavigation } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { AuthStackParamList } from '../../navigation/types'
 import { Globe, Mail, Smartphone } from 'lucide-react-native'
@@ -49,11 +49,15 @@ export default function LoginScreen() {
   const [error, setError] = useState('')
   const [langOpen, setLangOpen] = useState(false)
   const [segmentWidth, setSegmentWidth] = useState(0)
+  const preferenceRevision = useRef(0)
 
-  useEffect(() => {
+  // L'écran reste monté sous l'activation : relire au retour les préférences
+  // de connexion enregistrées pour le compte qui vient d'être créé.
+  useFocusEffect(useCallback(() => {
     let cancelled = false
+    const revision = preferenceRevision.current
     AsyncStorage.multiGet([LOGIN_MODE_KEY, LOGIN_COUNTRY_KEY]).then(entries => {
-      if (cancelled) return
+      if (cancelled || revision !== preferenceRevision.current) return
       const saved = Object.fromEntries(entries)
       const savedMode = saved[LOGIN_MODE_KEY]
       if (savedMode === 'phone' || savedMode === 'email') setMode(savedMode)
@@ -63,9 +67,10 @@ export default function LoginScreen() {
       }
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, []))
 
   const switchMode = (next: LoginMode) => {
+    preferenceRevision.current += 1
     if (next === mode) return
     setMode(next)
     setError('')
@@ -286,7 +291,7 @@ export default function LoginScreen() {
             {mode === 'phone' ? (
               <PhoneNumberField
                 value={phone}
-                onChange={next => { setPhone(next); if (error) setError('') }}
+                onChange={next => { preferenceRevision.current += 1; setPhone(next); if (error) setError('') }}
                 shape="pill"
                 showValidationError={showPhoneErrors}
                 returnKeyType="next"
@@ -295,7 +300,7 @@ export default function LoginScreen() {
               <View style={[styles.inputWrap, { marginBottom: 12, backgroundColor: theme.card, borderColor: theme.border }]}>
                 <TextInput
                   value={identifier}
-                  onChangeText={setIdentifier}
+                  onChangeText={next => { preferenceRevision.current += 1; setIdentifier(next) }}
                   accessibilityLabel={t('login.email')}
                   placeholder={t('login.email')}
                   placeholderTextColor={theme.textMuted}
