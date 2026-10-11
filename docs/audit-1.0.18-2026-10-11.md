@@ -118,3 +118,19 @@ Scénarios sur émulateur : démarrage à froid par un lien ; processus arrêté
 
 Reste non vérifié : les parcours **compte ouvert** sur appareil (feuille « Ajouter un enfant », question de déconnexion) ne sont couverts que par le montage React ; l'ouverture depuis WhatsApp sur un vrai téléphone ; F3 sur appareil (course réseau, couverte par le montage seulement).
 
+**Seconde vérification — 11 octobre 2026 (Claude), commit `7aa54d2`.**
+
+Demandée par Youssef avant le build 51. Relecture complète du diff depuis `v1.0.18-50`, puis deux couches de test que la première passe n'avait pas :
+
+| Contrôle | Résultat |
+|---|---|
+| Vrai conteneur de navigation (`@react-navigation/core` du projet), navigateur en pile, vrai hook, même structure que `NavigationRoot` | 6/6 : démarrage par un lien ; deux liens de suite (premier écran démonté, second monté, route `Login` conservée) ; compte ouvert + lien parent ; compte ouvert + lien professeur + « Se déconnecter » (la pile change ET l'activation s'ouvre dans le même rendu) ; « Rester connecté » ; déconnexion feuille ouverte |
+| Vrai `NavigationRoot.tsx`, frontières simulées | Feuille préremplie, remontée à chaque lien, retirée à la déconnexion ; pile de connexion refaite avec le code après déconnexion |
+| `npx expo-doctor` avec le plugin | 18/18 |
+| `expo export` Android puis iOS | Deux bundles Hermes |
+| `git diff --check` | Aucun problème |
+
+Un défaut trouvé et corrigé pendant cette relecture : la question « Un compte est déjà ouvert » pouvait rester marquée « en cours » après une déconnexion (lien parent reçu pendant la question), et ne plus jamais s'afficher. Aucun autre défaut trouvé.
+
+Ce que cette seconde passe ne change pas : les parcours compte ouvert n'ont toujours pas tourné sur un appareil, et le correctif ci-dessus n'est pas dans l'APK de test `4e60b94a` (il est couvert par les tests seulement).
+
