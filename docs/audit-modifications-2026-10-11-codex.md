@@ -97,3 +97,10 @@ Ordre de publication prévu : le site d'abord (il envoie le nouveau champ, que l
 
 Image d'aperçu des liens : non intégrée, en attente de la décision de Youssef.
 
+**Publication — 11 octobre 2026, sur demande de Youssef (« use this and déploie »).**
+
+- Site : `dpl_FUhqs1d9h8Mf9XxjmrBG3jSE9mY4`, commits `6bf9fe3` (A1, A2) et `e44ce39` (image d'aperçu). Retour arrière : `vercel promote dpl_G9daZ52jG3TG4w7XRoNTWRm67gpg --yes`.
+- Fonction `unlinkStudentParent` mise à jour après le site, dans l'ordre prévu.
+- Contrôles en ligne : `index.html` et 162 fichiers identiques au build local ; le fichier servi de la page des codes contient `expectedParentUid` ; l'image est servie en `image/jpeg`, identique au fichier ; une requête avec l'agent WhatsApp sur un lien d'activation lit la nouvelle image ; la fonction refuse un appel sans connexion.
+- Non vérifié : le rendu réel de l'aperçu dans WhatsApp (à voir sur un nouveau message), et A1/A2 sur la vraie base.
+

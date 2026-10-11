@@ -8,7 +8,7 @@ Tout ce qui a été changé ce jour-là dans l'application (`mojammaa-sgs`) et s
 |---|---|
 | Application, Google Play production | **1.0.17 (49)**, inchangée |
 | Application, piste de test interne | **1.0.18 (51)**, recette des liens réussie sur le téléphone de Youssef (tests A à J) |
-| Site mojammaa.com | En ligne, déploiement `dpl_G9daZ52jG3TG4w7XRoNTWRm67gpg` |
+| Site mojammaa.com | En ligne, déploiement `dpl_FUhqs1d9h8Mf9XxjmrBG3jSE9mY4` (voir section 11) |
 | Fonctions serveur | `deleteUserAccount` et `unlinkStudentParent` en ligne (europe-west1) |
 | Anciennes versions de l'application (1.0.17, 1.0.16) | Rien reçu : les nouveaux écrans n'y sont pas encore envoyés |
 | Dépôts Git | Les deux branches `feat/parent-phone-login` sont poussées |
@@ -165,10 +165,12 @@ Chaque publication du site a été contrôlée sur mojammaa.com : `index.html` e
 
 ## 11. Second audit de Codex (soir)
 
-Rapport et suivi : `docs/audit-modifications-2026-10-11-codex.md`. Deux défauts confirmés sur la partie site, corrigés dans `mojammaa-admin` (commit `6bf9fe3`), **pas encore republiés** :
+Rapport et suivi : `docs/audit-modifications-2026-10-11-codex.md`. Deux défauts confirmés sur la partie site, corrigés dans `mojammaa-admin` (commit `6bf9fe3`) et publiés le soir même :
 
 - **A1** : si le parent lié à un élève changeait pendant que la fenêtre « Détacher » restait ouverte, c'était le nouveau parent qui était détaché. Le serveur vérifie maintenant que le compte détaché est bien celui annoncé.
 - **A2** : l'étiquette « lié à un compte supprimé » pouvait manquer quand la liste des comptes venait du cache du navigateur.
 
-Codex a aussi proposé une image d'aperçu pour les liens partagés dans WhatsApp (`output/link-preview/og-mojammaa-connect-v1.jpg`), non intégrée.
+Codex a aussi proposé une image d'aperçu pour les liens partagés dans WhatsApp (logo sur fond crème). Youssef l'a retenue : elle est en ligne à `https://mojammaa.com/og-mojammaa-connect-v1.jpg` (commit `e44ce39`). Le titre de l'aperçu, « École privée à Tétouan », n'a pas été changé.
+
+Publication du soir : site `dpl_FUhqs1d9h8Mf9XxjmrBG3jSE9mY4` (retour arrière : `vercel promote dpl_G9daZ52jG3TG4w7XRoNTWRm67gpg --yes`), puis fonction `unlinkStudentParent` mise à jour.
 
