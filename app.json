@@ -21,6 +21,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFBEB"
       },
+      "backgroundColor": "#FFFBEB",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.youssefatalha.mojammaasgs",
