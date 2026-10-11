@@ -162,3 +162,13 @@ Chaque publication du site a été contrôlée sur mojammaa.com : `index.html` e
 - Écran de lancement (logo, écran clair, logo animé) et changement de langue un peu lent : options présentées, pas de décision.
 - Utiliser un élève de test dédié pour les essais, au lieu d'un vrai élève.
 - Page Paramètres du site : affiche encore « 6 caractères ».
+
+## 11. Second audit de Codex (soir)
+
+Rapport et suivi : `docs/audit-modifications-2026-10-11-codex.md`. Deux défauts confirmés sur la partie site, corrigés dans `mojammaa-admin` (commit `6bf9fe3`), **pas encore republiés** :
+
+- **A1** : si le parent lié à un élève changeait pendant que la fenêtre « Détacher » restait ouverte, c'était le nouveau parent qui était détaché. Le serveur vérifie maintenant que le compte détaché est bien celui annoncé.
+- **A2** : l'étiquette « lié à un compte supprimé » pouvait manquer quand la liste des comptes venait du cache du navigateur.
+
+Codex a aussi proposé une image d'aperçu pour les liens partagés dans WhatsApp (`output/link-preview/og-mojammaa-connect-v1.jpg`), non intégrée.
+
