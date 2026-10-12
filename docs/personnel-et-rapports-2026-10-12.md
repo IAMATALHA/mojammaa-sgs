@@ -1,6 +1,6 @@
 # Personnel administratif, Rapports et corrections — 11 et 12 octobre 2026
 
-**Tout est commité sur `feat/parent-phone-login` dans les deux dépôts. Rien n'est poussé.** Déployés à ce jour : les règles Firestore et les fonctions (12 octobre, voir `personnel-mise-en-ligne-2026-10-12.md`). Pas encore déployés : le site et l'application. Les familles, les professeurs et la direction voient donc toujours l'ancienne interface.
+**Code commité sur `feat/parent-phone-login` dans les deux dépôts.** Déployés le 12 octobre : règles Firestore, fonctions, site (`b37475f`, Vercel `dpl_9o9SZnhHFbesfmFssrDvt3ffaSoe`) et OTA Android 1.0.18 (`98647c4a-7ccb-41de-b3b2-8dec03cca2ff`). Les droits prévus sont accordés à Kawtar ; Habiba est déjà superadmin. La recette sur téléphone et les comptes du personnel restent à faire. Suivi : `personnel-mise-en-ligne-2026-10-12.md`.
 
 ## Ce qui change
 
@@ -11,7 +11,7 @@ Un compte du personnel n'a aucun droit par défaut. On lui donne un **poste** (t
 | Personne | Compte | Ce qu'elle peut faire |
 |---|---|---|
 | Mme Habiba | admin, superadmin | Tout ; décide avec Youssef qui peut gérer les droits |
-| Kawtar | admin | Tout, comme Mme Habiba ; gère les comptes du personnel une fois le droit accordé |
+| Kawtar | admin | Accès admin, gestion du personnel et codes professeurs ; deux droits explicites accordés le 12 octobre |
 | Rachid, Khalid | staff, « Surveillant général » | Élèves, présences (appel), notes en lecture, mérites, sortie, prière, suivi, messages de l'administration, emploi du temps, codes parents |
 | Rachid, en plus | | Codes professeurs, classes des enseignants |
 | Fatima | staff, « Relations parents » | Codes parents et professeurs, élèves, présences et notes en lecture, emploi du temps |
@@ -68,7 +68,7 @@ Le restyle de la page d'accueil du 11 octobre, refusé par Youssef. Conservé su
 | `mojammaa-sgs` : tests, émulateur, export Android et iOS | 277 tests, 16 groupes, export réussi |
 | `mojammaa-admin` : tests du site | 163 tests |
 | Fonctions du back-office sur émulateur | 60 tests |
-| Navigateur, vraies règles (avant fusion) | 14 scénarios |
+| Navigateur, vraies règles sur émulateurs (dépôt fusionné) | 14/14 scénarios, relancés après publication |
 | Rapport PDF mis en pages par le navigateur | français et arabe, 2 pages |
 
 Non vérifié : aucun essai sur un téléphone ; aucun essai avec les données réelles pour les pages du personnel ; la fenêtre d'impression n'est pas cliquée par les tests.
