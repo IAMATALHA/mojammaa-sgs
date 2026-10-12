@@ -1,6 +1,6 @@
 # Personnel administratif, Rapports et corrections — 11 et 12 octobre 2026
 
-**Tout est commité sur `feat/parent-phone-login` dans les deux dépôts. Rien n'est poussé, rien n'est déployé.** Les familles, les professeurs et la direction utilisent toujours la version précédente.
+**Tout est commité sur `feat/parent-phone-login` dans les deux dépôts. Rien n'est poussé.** Déployés à ce jour : les règles Firestore et les fonctions (12 octobre, voir `personnel-mise-en-ligne-2026-10-12.md`). Pas encore déployés : le site et l'application. Les familles, les professeurs et la direction voient donc toujours l'ancienne interface.
 
 ## Ce qui change
 
