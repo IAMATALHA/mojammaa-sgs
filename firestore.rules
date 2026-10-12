@@ -1390,8 +1390,8 @@ service cloud.firestore {
       // Un client Firestore ne peut donc jamais contourner cette preuve.
       allow create: if false;
 
-      allow update: if teacherTeaches(resource.data.classe)
-        && resource.data.startedByUid == myUid()
+      allow update: if ((teacherTeaches(resource.data.classe)
+        && resource.data.startedByUid == myUid()) || (isStaff() && can('priere')))
         && untouched([
           'serviceDate', 'classe',
           'startedAt', 'startedByUid'

@@ -37,6 +37,7 @@ import {
 import { recordLoginDevice } from '../services/loginAudit'
 
 function rawToLogic(raw: RoleRaw | string | undefined): RoleLogic {
+  if (raw === 'staff') return 'staff'
   if (raw === 'admin') return 'admin'
   if (raw === 'professeur' || raw === 'teacher') return 'teacher'
   if (raw === 'chauffeur' || raw === 'driver') return 'driver'

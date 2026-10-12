@@ -21,6 +21,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import ScreenLayout from '../../components/ScreenLayout'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
+import { hasRight } from '../../utils/staff-rights'
 import { useAuth } from '../../contexts/AuthContext'
 import { useCurrentTeacherScheduleSlot } from '../../hooks/useCurrentTeacherScheduleSlot'
 import type { TeacherRoute, TeacherStackParamList } from '../../navigation/types'
@@ -40,8 +41,9 @@ const STATUS_ORDER: PrayerClassStatus[] = ['going', 'praying', 'returned']
 export default function TeacherPrayerScreen() {
   const theme = useTheme()
   const { t, i18n } = useTranslation()
-  const { user } = useAuth()
-  const { currentSlot, loading: scheduleLoading } = useCurrentTeacherScheduleSlot()
+  const { user, profile } = useAuth()
+  const staffPrayer = profile?.role === 'staff' && hasRight(profile, 'priere')
+  const { currentSlot, loading: scheduleLoading } = useCurrentTeacherScheduleSlot(!staffPrayer)
   const isAr = i18n.language === 'ar'
   const route = useRoute<TeacherRoute<'TeacherPrayer'>>()
   const navigation = useNavigation<NativeStackNavigationProp<TeacherStackParamList>>()
@@ -82,8 +84,8 @@ export default function TeacherPrayerScreen() {
 
   const ownsActiveSession = !!session
     && session.status !== 'returned'
-    && session.startedByUid === user?.uid
-  const isCurrentCourse = currentSlot?.classe === classe
+    && (staffPrayer || session.startedByUid === user?.uid)
+  const isCurrentCourse = staffPrayer || currentSlot?.classe === classe
   const nextStatus: PrayerClassStatus | null = !session
     ? (!scheduleLoading && isCurrentCourse ? 'going' : null)
     : ownsActiveSession && session.status === 'going'

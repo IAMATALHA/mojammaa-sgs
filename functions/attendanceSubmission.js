@@ -1,3 +1,4 @@
+const { hasRight } = require('./staffRights')
 const { createHash } = require('node:crypto')
 const { FieldValue } = require('firebase-admin/firestore')
 const { attendanceVersion, lessonKey, sessionCode } = require('./lib/attendanceProtocol')
@@ -7,7 +8,7 @@ const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'frida
 
 function validateLesson(uid, input, user, schedule, now) {
   if (!uid) fail('unauthenticated')
-  if (user?.role !== 'professeur') fail('permission-denied')
+  if (user?.role !== 'professeur' && !hasRight(user, 'absences.saisir')) fail('permission-denied')
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date || '') || typeof input.lessonKey !== 'string') fail('invalid-argument')
   const date = new Date(`${input.date}T12:00:00Z`)
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== input.date) fail('invalid-argument')
@@ -17,7 +18,7 @@ function validateLesson(uid, input, user, schedule, now) {
   const matches = (schedule?.weeklySlots || []).filter(slot => lessonKey(slot) === input.lessonKey)
   const slot = matches.length === 1 ? matches[0] : null
   const classes = Array.isArray(user.classes) ? user.classes : []
-  if (!slot || ![...classes, user.classe].includes(slot.classe)
+  if (!slot || (!hasRight(user, 'absences.saisir') && ![...classes, user.classe].includes(slot.classe))
     || slot.day !== dayNames[date.getUTCDay()] || !sessionCode(slot)) fail('permission-denied', 'attendance-scope-changed')
   if (input.date === today && `${values.hour}:${values.minute}` < slot.startTime) fail('failed-precondition', 'attendance-not-started')
   return { slot, seance: sessionCode(slot) }
@@ -30,9 +31,19 @@ function assertLessonDayOpen(calendar) {
   if (calendar.exists && calendar.get('annuleCours') === true) fail('failed-precondition', 'attendance-day-cancelled')
 }
 
+function scheduleUid(uid, input) {
+  const target = input?.teacherUid ?? uid
+  if (typeof target !== 'string' || !target || target.length > 128 || target.includes('/')) fail('invalid-argument')
+  return target
+}
+function checkScheduleAccess(uid, input, user) {
+  if (scheduleUid(uid, input) !== uid && !hasRight(user, 'absences.saisir')) fail('permission-denied')
+}
+
 async function loadAttendance(db, uid, input, now = new Date()) {
   if (!uid) fail('unauthenticated')
-  const [user, schedule] = await Promise.all([db.doc(`users/${uid}`).get(), db.doc(`schedules/${uid}`).get()])
+  const [user, schedule] = await Promise.all([db.doc(`users/${uid}`).get(), db.doc(`schedules/${scheduleUid(uid, input)}`).get()])
+  checkScheduleAccess(uid, input, user.data())
   const { slot, seance } = validateLesson(uid, input, user.data(), schedule.data(), now)
   assertLessonDayOpen(await db.doc(`joursScolaires/${input.date}`).get())
   const [children, records] = await Promise.all([
@@ -55,13 +66,14 @@ async function submitAttendance(db, uid, input, now = new Date()) {
       || !['present', 'absent', 'retard'].includes(r.status) || typeof r.baseVersion !== 'string')
     || new Set(input.rows.map(r => r.id)).size !== input.rows.length) fail('invalid-argument')
   const operationRef = db.collection('attendanceOperations').doc(`${uid}_${input.operationId}`)
-  const fingerprint = createHash('sha256').update(JSON.stringify({ date: input.date, lessonKey: input.lessonKey, rows: input.rows })).digest('hex')
+  const fingerprint = createHash('sha256').update(JSON.stringify({ date: input.date, lessonKey: input.lessonKey, teacherUid: input.teacherUid, rows: input.rows })).digest('hex')
   return db.runTransaction(async tx => {
     const [user, schedule, previous] = await Promise.all([
-      tx.get(db.doc(`users/${uid}`)), tx.get(db.doc(`schedules/${uid}`)), tx.get(operationRef),
+      tx.get(db.doc(`users/${uid}`)), tx.get(db.doc(`schedules/${scheduleUid(uid, input)}`)), tx.get(operationRef),
     ])
     // Authorization is rechecked even when replaying a completed operation.
-    if (user.get('role') !== 'professeur') fail('permission-denied')
+    if (user.get('role') !== 'professeur' && !hasRight(user.data(), 'absences.saisir')) fail('permission-denied')
+    checkScheduleAccess(uid, input, user.data())
     if (previous.exists) {
       if (previous.get('fingerprint') !== fingerprint) fail('already-exists', 'operation-payload-changed')
       return { saved: true, replayed: true, versions: previous.get('versions') }

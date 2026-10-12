@@ -14,7 +14,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import * as Notifications from 'expo-notifications'
 import { navigationRef } from '../navigation/navigationRef'
 
-type MessageRole = 'admin' | 'teacher' | 'student'
+type MessageRole = 'staff' | 'admin' | 'teacher' | 'student'
 type PushIntent =
   | { kind: 'message'; messageId: string; workspace?: 'parent' }
   | { kind: 'pickup'; workspace: 'parent' }
@@ -27,7 +27,9 @@ interface PushWorkspaceOptions {
 function navigateToMessages(role: MessageRole, messageId?: string) {
   if (!navigationRef.isReady()) return false
   const params = messageId ? { messageId } : undefined
-  if (role === 'admin') {
+  if (role === 'staff') {
+    navigationRef.navigate('StaffMessages', params)
+  } else if (role === 'admin') {
     navigationRef.navigate('AdminTabs', { screen: 'AdminMessages', params })
   } else if (role === 'teacher') {
     navigationRef.navigate('TeacherTabs', { screen: 'TeacherMessages', params })

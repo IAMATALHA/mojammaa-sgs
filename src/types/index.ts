@@ -12,8 +12,8 @@
  * src/contexts/AuthContext.tsx.
  */
 
-export type RoleRaw   = 'parent' | 'student' | 'professeur' | 'admin' | 'chauffeur' | 'driver'
-export type RoleLogic = 'student' | 'teacher' | 'admin' | 'driver'
+export type RoleRaw   = 'parent' | 'student' | 'professeur' | 'admin' | 'chauffeur' | 'driver' | 'staff'
+export type RoleLogic = 'student' | 'teacher' | 'admin' | 'driver' | 'staff'
 
 export interface UserProfile {
   uid:     string
@@ -25,6 +25,8 @@ export interface UserProfile {
   telephone?: string
   authPhoneE164?: string            // mobile de connexion, écrit par le serveur uniquement
   parentLoginEnabled?: boolean      // idem : autorise la connexion par téléphone
+  droits?: import('../utils/staff-rights').StaffRight[]
+  poste?: { id: string; nom: string; nomAr?: string }
   role:    RoleRaw
   classe?:  string                // legacy : classe unique (1 prof = 1 classe)
   classes?: string[]              // nouveau : tableau de classes attribuées

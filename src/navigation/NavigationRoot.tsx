@@ -16,6 +16,8 @@ import AuthStack    from './AuthStack'
 import StudentStack from './StudentStack'
 import TeacherStack from './TeacherStack'
 import AdminStack   from './AdminStack'
+import StaffStack from './StaffStack'
+import { hasRight } from '../utils/staff-rights'
 import DriverStack  from './driver-stack'
 
 function Splash() {
@@ -109,7 +111,7 @@ export default function NavigationRoot() {
     user && activeWorkspace === 'parent'
       ? 'student'
       : user && role !== 'driver' && activeWorkspace === 'primary'
-        ? role
+        ? role === 'staff' && !hasRight(profile || undefined, 'messages.boite') ? null : role
         : null,
     navReady && !!user && (activeWorkspace === 'parent'
       || (role !== 'driver' && activeWorkspace === 'primary')),
@@ -151,6 +153,8 @@ export default function NavigationRoot() {
         <DriverStack />
       ) : activeWorkspace === 'parent' ? (
         <StudentStack />
+      ) : role === 'staff' ? (
+        <StaffStack key={`${profile?.uid}:${JSON.stringify(profile?.droits || [])}`} />
       ) : role === 'admin' ? (
         <AdminStack />
       ) : role === 'teacher' ? (

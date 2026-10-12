@@ -295,6 +295,7 @@ export function subscribeMessages(
   const toTypes = ['all']
   if (role === 'professeur') toTypes.push('teachers')
   else if (role === 'parent') toTypes.push('parents')
+  else if (role === 'staff') toTypes.push('administration')
   else if (role === 'admin') toTypes.push('teachers', 'parents', 'administration')
   unsubs.push(listen(
     query(
@@ -665,4 +666,15 @@ async function getRecipientsListDirect(): Promise<RecipientsList> {
   teachers.sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
 
   return { parents, teachers, classes: [...classSet].sort() }
+}
+
+/** Staff sends one message to a class; a retry reuses the same document. */
+export async function sendStaffClassMessage(input: { classe: string; subject: string; body: string; sender: { uid: string; nom: string; prenom: string } }, attempt: PersonalizedSendAttempt): Promise<void> {
+  const toIds = await getParentUidsForClasses([input.classe])
+  if (!toIds.length) throw new Error('messages/no-recipients')
+  await sendPersonalizedOnce({
+    fromId: input.sender.uid, fromNom: `${input.sender.prenom} ${input.sender.nom}`, fromRole: 'staff',
+    type: 'announcement', category: 'admin', priority: 'normal', subject: input.subject, body: input.body,
+    classe: input.classe, toType: 'user', toIds, toLabel: input.classe, readBy: [], status: 'sent',
+  }, attempt)
 }

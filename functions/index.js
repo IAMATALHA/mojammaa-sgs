@@ -2281,3 +2281,11 @@ exports.sendBrandedPasswordReset = onCall(
 // La garde `lastLoginLocation` de firestore.rules est VOLONTAIREMENT conservée :
 // retirer une clé de la liste des champs non modifiables par le client n'a
 // aucun bénéfice et rouvrirait l'écriture d'un champ arbitraire.
+
+// Staff mobile reads: rights are reloaded on every request.
+for (const method of ['getStaffClasses', 'getStaffAttendanceLessons']) {
+  exports[method] = onCall(async request => {
+    try { return await require('./staffMobile')[method](db, request.auth?.uid, request.data) }
+    catch (error) { throw new HttpsError(error.code || 'internal', 'Impossible de charger cet espace.') }
+  })
+}

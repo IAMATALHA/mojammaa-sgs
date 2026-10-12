@@ -1,3 +1,4 @@
+const { hasRight } = require('./staffRights')
 const { lessonKey, sessionCode } = require('./lib/attendanceProtocol')
 const { moroccoParts } = require('./lib/moroccoTime')
 const fail = code => { throw Object.assign(new Error(code), { code }) }
@@ -7,8 +8,8 @@ const currentClasses = user => [...new Set([...(user.classes || []), user.classe
 async function getDashboardActions(db, uid, input, now = new Date()) {
   if (!uid) fail('unauthenticated')
   const user = (await db.doc(`users/${uid}`).get()).data(), mode = input?.mode
-  if (!user || !['parent', 'teacher', 'admin'].includes(mode)
-    || (mode === 'teacher' && user.role !== 'professeur') || (mode === 'admin' && user.role !== 'admin')) fail('permission-denied')
+  if (!user || !['parent', 'teacher', 'admin', 'staff'].includes(mode)
+    || (mode === 'staff' && user.role !== 'staff') || (mode === 'teacher' && user.role !== 'professeur') || (mode === 'admin' && user.role !== 'admin')) fail('permission-denied')
   const parts = moroccoParts(now)
   const today = `${parts.year}-${parts.month}-${parts.day}`, clock = `${parts.hour}:${parts.minute}`
   const yearStart = `${Number(parts.month) >= 9 ? parts.year : Number(parts.year) - 1}-09-01`
@@ -64,10 +65,15 @@ async function getDashboardActions(db, uid, input, now = new Date()) {
     }
     if (reviews) actions.push({ kind: 'reviews', count: reviews })
   }
+  if (mode === 'staff' && hasRight(user, 'absences.saisir')) {
+    const pending = await db.collection('absenceRequests').where('status', '==', 'pending').count().get()
+    if (pending.data().count) actions.push({ kind: 'declarations', count: pending.data().count })
+  }
   if (mode === 'admin') {
     const issues = await db.collection('messages').where('push.status', 'in', ['no_recipient', 'no_device', 'failed', 'partial_failure', 'blocked', 'retrying']).count().get()
     if (issues.data().count) actions.push({ kind: 'delivery', count: issues.data().count })
   }
+  if (mode === 'staff' && !hasRight(user, 'rendezvous')) return { actions, checkedAt: now.getTime(), nextAppointment: null }
   let appointments = db.collection('appointments').where('open', '==', true)
   if (mode === 'parent') appointments = appointments.where('parentUid', '==', uid)
   if (mode === 'teacher') appointments = appointments.where('teacherId', '==', uid).where('teacherVisible', '==', true)
@@ -78,7 +84,7 @@ async function getDashboardActions(db, uid, input, now = new Date()) {
     const allowed = new Set(kids.filter(child => child.exists && child.get('active') !== false && currentClasses(user).includes(child.get('classe'))).map(child => child.id))
     meetings = meetings.filter(doc => allowed.has(doc.get('eleveId')))
   }
-  const needed = meetings.filter(doc => mode === 'admin' ? doc.get('status') === 'requested'
+  const needed = meetings.filter(doc => (mode === 'admin' || mode === 'staff') ? doc.get('status') === 'requested'
     || (doc.get('status') === 'proposed' && doc.get('startAt') <= now.getTime())
     || (doc.get('status') === 'confirmed' && doc.get('endAt') <= now.getTime()) : doc.get('status') === 'proposed')
   if (needed.length) actions.unshift({ kind: 'appointments', count: needed.length })

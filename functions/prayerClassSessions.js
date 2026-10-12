@@ -1,3 +1,4 @@
+const { hasRight } = require('./staffRights')
 'use strict'
 
 const { FieldValue } = require('firebase-admin/firestore')
@@ -117,7 +118,8 @@ function findCurrentClassSlot(weeklySlots, classe, clock) {
 }
 
 function teacherProfileHasClass(profile, classe) {
-  if (!profile || profile.role !== 'professeur') return false
+  const staffPrayer = profile?.role === 'staff' && hasRight(profile, 'priere')
+    if (!profile || (profile.role !== 'professeur' && !staffPrayer)) return false
   const classes = Array.isArray(profile.classes)
     ? profile.classes.filter((value) => typeof value === 'string').map((value) => value.trim())
     : []
@@ -154,11 +156,17 @@ async function startPrayerClassSession(db, { uid, classe: requestedClasse, now =
     const sessionSnap = await transaction.get(sessionRef)
     const profile = userSnap.exists ? userSnap.data() : null
 
-    if (!profile || profile.role !== 'professeur') {
+    const staffPrayer = profile?.role === 'staff' && hasRight(profile, 'priere')
+    if (!profile || (profile.role !== 'professeur' && !staffPrayer)) {
       throw new PrayerClassSessionError('permission-denied', 'Teacher access required.')
     }
-    if (!teacherProfileHasClass(profile, classe)) {
+    if (!staffPrayer && !teacherProfileHasClass(profile, classe)) {
       throw new PrayerClassSessionError('permission-denied', 'Class access denied.')
+    }
+
+    if (staffPrayer) {
+      const roster = await transaction.get(db.collection('eleves').where('classe', '==', classe))
+      if (!roster.docs.some(doc => doc.get('active') !== false)) throw new PrayerClassSessionError('permission-denied', 'Class access denied.')
     }
 
     if (sessionSnap.exists) {
@@ -186,7 +194,7 @@ async function startPrayerClassSession(db, { uid, classe: requestedClasse, now =
     // idempotent même si la minute de fin du cours vient de passer.
     const schedule = scheduleSnap.exists ? scheduleSnap.data() : null
     const currentSlot = findCurrentClassSlot(schedule?.weeklySlots, classe, clock)
-    if (!currentSlot) {
+    if (!staffPrayer && !currentSlot) {
       throw new PrayerClassSessionError(
         'failed-precondition',
         'The teacher does not currently have this class.',

@@ -10,14 +10,14 @@ interface CurrentTeacherScheduleSlot {
 }
 
 /** Créneau réellement en cours dans l'emploi du temps du professeur connecté. */
-export function useCurrentTeacherScheduleSlot(): CurrentTeacherScheduleSlot {
+export function useCurrentTeacherScheduleSlot(enabled = true): CurrentTeacherScheduleSlot {
   const { user } = useAuth()
   const [slots, setSlots] = useState<WeeklySlot[]>([])
   const [loading, setLoading] = useState(true)
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
-    if (!user?.uid) {
+    if (!user?.uid || !enabled) {
       setSlots([])
       setLoading(false)
       return undefined
@@ -35,7 +35,7 @@ export function useCurrentTeacherScheduleSlot(): CurrentTeacherScheduleSlot {
         setLoading(false)
       },
     )
-  }, [user?.uid])
+  }, [user?.uid, enabled])
 
   useEffect(() => {
     const id = setInterval(() => setTick(value => value + 1), 60_000)
