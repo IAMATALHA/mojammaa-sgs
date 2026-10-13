@@ -18,16 +18,18 @@ const {
 } = require('../../functions/loginAudit.js')
 
 // ── IP : position dans x-forwarded-for ────────────────────────────────────
-// Google documente « clientIp, proxy1Ip, proxy2Ip » → la tête est le client.
+// Cas réel (339 connexions sur 339 le 2026-10-13) : une seule entrée.
 assert.equal(clientIpFrom({ headers: { 'x-forwarded-for': '102.98.15.57' } }), '102.98.15.57')
+// Un appelant qui envoie son propre en-tête : Google ajoute la vraie adresse
+// à la FIN. Les entrées inventées qui la précèdent ne sont jamais retenues.
 assert.equal(
-  clientIpFrom({ headers: { 'x-forwarded-for': '102.98.15.57, 35.191.8.2, 130.211.0.9' } }),
+  clientIpFrom({ headers: { 'x-forwarded-for': '8.8.8.8, 1.1.1.1, 102.98.15.57' } }),
   '102.98.15.57',
 )
 
 // En-tête répété : Node peut livrer un tableau, la chaîne doit rester ordonnée.
 assert.equal(
-  clientIpFrom({ headers: { 'x-forwarded-for': ['102.98.15.57', '35.191.8.2'] } }),
+  clientIpFrom({ headers: { 'x-forwarded-for': ['8.8.8.8', '102.98.15.57'] } }),
   '102.98.15.57',
 )
 
@@ -42,6 +44,9 @@ assert.equal(clientIpFrom({ headers: { 'x-forwarded-for': v6 } }), v6)
 // ── Chaîne : bornée, car partiellement fournie par le client ──────────────
 const flood = Array.from({ length: 40 }, (_, i) => `10.0.0.${i}`).join(', ')
 assert.equal(forwardedChain({ headers: { 'x-forwarded-for': flood } }).length, 8)
+// La borne garde la FIN : quarante entrées inventées ne chassent pas la vraie.
+assert.equal(clientIpFrom({ headers: { 'x-forwarded-for': `${flood}, 102.98.15.57` } }), '102.98.15.57')
+assert.equal(forwardedChain({ headers: { 'x-forwarded-for': `${flood}, 102.98.15.57` } }).at(-1), '102.98.15.57')
 assert.deepEqual(forwardedChain({ headers: {} }), [])
 // Une entrée surdimensionnée ne peut pas gonfler le document d'audit.
 assert.equal(

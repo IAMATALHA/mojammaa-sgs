@@ -10,8 +10,8 @@
  * (`okhttp/…` côté Android).
  *
  * Ce que ça garantit, et ce que ça ne garantit pas :
- *   - l'IP est LUE PAR LE SERVEUR dans `x-forwarded-for` (posé par le load
- *     balancer Google, non falsifiable par le client) → fiable ;
+ *   - l'IP est LUE PAR LE SERVEUR dans `x-forwarded-for` : la DERNIÈRE
+ *     entrée, celle que Google ajoute lui-même (cf. clientIpFrom) → fiable ;
  *   - l'appareil est DÉCLARÉ par le client → un client modifié peut mentir ou
  *     ne jamais appeler la fonction. C'est un journal d'usage, pas une preuve
  *     opposable. Une connexion absente du journal n'est donc pas une preuve
@@ -45,36 +45,42 @@ function boundedText(value, max = 60) {
   return trimmed.slice(0, max)
 }
 
-/** Chaîne `x-forwarded-for` découpée et nettoyée, dans l'ordre reçu. */
+/**
+ * Chaîne `x-forwarded-for` découpée et nettoyée, dans l'ordre reçu. Bornée
+ * par la FIN : ce sont les dernières entrées qui viennent de Google, un
+ * client qui en envoie des dizaines ne peut pas en chasser la vraie.
+ */
 function forwardedChain(rawRequest) {
   const header = rawRequest && rawRequest.headers && rawRequest.headers['x-forwarded-for']
   return (Array.isArray(header) ? header.join(',') : header || '')
     .split(',')
     .map((p) => p.trim())
     .filter(Boolean)
-    .slice(0, 8) // borne : la chaîne vient en partie du client
+    .slice(-8) // borne : la chaîne vient en partie du client
     .map((p) => p.slice(0, 45)) // 45 = longueur max d'une IPv6 textuelle
 }
 
 /**
- * IP réelle de l'appelant.
+ * IP réelle de l'appelant : la DERNIÈRE entrée de la chaîne.
  *
- * Google documente pour les Cloud Functions : « X-Forwarded-For: clientIp,
- * proxy1Ip, proxy2Ip — le premier IP de cette liste est généralement celui du
- * client » → on prend la PREMIÈRE entrée.
+ * Chaque relais ajoute à la fin l'adresse de celui qui s'est connecté à lui.
+ * La dernière entrée est donc l'adresse qui a réellement joint Google ; tout
+ * ce qui la précède a été envoyé par l'appelant lui-même et peut être
+ * inventé. L'ancienne version prenait la PREMIÈRE entrée : un client qui
+ * envoyait son propre en-tête choisissait l'adresse journalisée.
  *
- * Nuance importante, et c'est pourquoi `ipChain` est stocké à côté : la
- * position de tête est celle qu'un client peut forger s'il envoie son propre
- * en-tête et que l'infra se contente d'ajouter à la suite. Garder la chaîne
- * entière permet (a) de vérifier empiriquement le format réel après
- * déploiement — se connecter depuis une IP connue et comparer — et (b) de
- * détecter après coup une entrée forgée (chaîne anormalement longue). Sans la
- * chaîne, une valeur fausse serait indétectable.
+ * Mesuré le 2026-10-13 sur les 339 connexions du journal : toutes portent UNE
+ * seule entrée, publique (Google n'ajoute aucun relais à lui après le
+ * client). Pour ces connexions, première et dernière entrée sont la même :
+ * le journal existant reste juste.
+ *
+ * `ipChain` reste stocké à côté dès qu'il y a plus d'une entrée : une chaîne
+ * longue signale un en-tête envoyé par l'appelant.
  */
 function clientIpFrom(rawRequest) {
   if (!rawRequest) return null
   const chain = forwardedChain(rawRequest)
-  if (chain.length) return chain[0]
+  if (chain.length) return chain[chain.length - 1]
   return boundedText(rawRequest.ip, 45)
 }
 
@@ -138,8 +144,8 @@ function buildLoginEntry({ uid, email, role, ip, ipChain, device, now = Date.now
     actorEmail: email || null,
     actorRole: role || null,
     ip: ip || null,
-    // Chaîne brute : sert à vérifier le format réel et à repérer une entrée
-    // forgée (cf. clientIpFrom). Redondant avec `ip` par construction.
+    // Chaîne brute, seulement s'il y a plus d'une entrée : sert à repérer un
+    // en-tête envoyé par l'appelant (cf. clientIpFrom).
     ipChain: Array.isArray(ipChain) && ipChain.length > 1 ? ipChain : null,
     device,
     at: FieldValue.serverTimestamp(),
