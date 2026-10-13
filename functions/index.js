@@ -2138,6 +2138,12 @@ const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
 const SENDER = 'Mojammaa Al Maarifa <contact@mojammaa.com>'
 const RESET_PAGE_URL = 'https://mojammaa.com/reset-password'
 const RESET_COOLDOWN_MS = 60 * 1000
+// Plafond par email (durci 2026-10-13) : le délai d'une minute seul laissait
+// 60 envois par heure vers une même personne. 5 par heure suffit à un parent
+// qui ne trouve pas le message et recommence ; il faut alors 24 adresses
+// connues, et non plus 2, pour atteindre le plafond global ci-dessous.
+const RESET_EMAIL_WINDOW_MS = 60 * 60 * 1000
+const RESET_EMAIL_MAX = 5
 // Plafond global glissant (durci 2026-07-12) : borne le nombre TOTAL d'envois
 // tous emails confondus, pour qu'un attaquant ne puisse pas contourner le
 // cooldown par-email en faisant tourner des adresses différentes et vider le
@@ -2191,24 +2197,41 @@ exports.sendBrandedPasswordReset = onCall(
       throw new HttpsError('invalid-argument', 'Email invalide.')
     }
     const emailHash = emailFingerprint(email)
+    const auth = getAuth()
+
+    // 0) Compte inconnu : même réponse, AUCUNE écriture (audit 2026-10-13).
+    //    Réserver le créneau d'abord créait un document par adresse inventée,
+    //    sans connexion requise. Il existe désormais au plus un créneau par
+    //    compte réel.
+    try {
+      await auth.getUserByEmail(email)
+    } catch (err) {
+      if (err && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email')) {
+        logger.info('Password reset ignored (unknown email)', { emailHash })
+        return { ok: true }
+      }
+      logger.error('getUserByEmail failed', { emailHash, code: err && err.code ? String(err.code) : 'unknown' })
+      throw new HttpsError('internal', "Erreur lors de la génération du lien.")
+    }
 
     // Anti-spam TRANSACTIONNEL (durci 2026-07-12). L'ancien schéma
     // get → (send) → set laissait passer des requêtes PARALLÈLES (toutes
     // lisaient "pas de cooldown" avant que la première n'écrive) et ne bornait
     // rien globalement (attaquant cyclant les emails → quota Resend vidé).
     //
-    // 1) Cooldown PAR EMAIL réservé atomiquement AVANT tout envoi : deux appels
+    // 1) Limites PAR EMAIL réservées atomiquement AVANT tout envoi : deux appels
     //    concurrents pour le même email ⇒ un seul gagne la transaction
-    //    (anti email-bomb d'une victime). Fail-closed : si la suite échoue, ce
-    //    compte est juste bloqué 1 min.
-    const claimedEmail = await claimEmailSlot(db, email, RESET_COOLDOWN_MS)
+    //    (anti email-bomb d'une victime). Fail-closed : si la suite échoue,
+    //    l'essai est quand même compté.
+    const claimedEmail = await claimEmailSlot(db, email, {
+      cooldownMs: RESET_COOLDOWN_MS, windowMs: RESET_EMAIL_WINDOW_MS, maxInWindow: RESET_EMAIL_MAX,
+    })
     if (!claimedEmail) {
       // Ne révèle rien : même réponse que le cas "succès" côté client.
-      logger.info('Password reset throttled (per-email cooldown)', { emailHash })
+      logger.info('Password reset throttled (per-email limit)', { emailHash })
       return { ok: true }
     }
 
-    const auth = getAuth()
     let link
     try {
       link = await auth.generatePasswordResetLink(email)
