@@ -21,6 +21,7 @@ const logger = require('firebase-functions/logger')
 const { createHash } = require('node:crypto')
 const { reconcileSchoolAlert } = require('./schoolAlerts')
 const { moroccoDate, moroccoParts } = require('./lib/moroccoTime')
+const { createTtlCache } = require('./lib/ttlCache')
 const { createMessageDelivery } = require('./messageDelivery')
 const { registerPushDevice, releasePushDevice, getPushTargets } = require('./pushDevices')
 const attendanceSubmission = require('./attendanceSubmission')
@@ -1179,6 +1180,8 @@ async function submissionsForDevoirs(devoirIds) {
   return snaps.flatMap((snap) => snap.docs.map((row) => ({ id: row.id, ...row.data() })))
 }
 
+const statsRead = createTtlCache({ ttlMs: 60 * 1000 })
+
 /**
  * Resolution du perimetre — SOURCE UNIQUE pour le hero et pour tous les
  * drill-downs. Toute la garantie « le total du detail est le chiffre de la
@@ -1195,14 +1198,18 @@ async function resolveScope(filters) {
   const matiere = statsFilterText(filters.matiere)
   const range = statsDateRange(periodName, requestedYear)
 
+  // Lectures partagées une minute (statsRead) : chaque filtre et chaque détail
+  // repartent d'ici, donc sans cela un admin qui explore relisait toute l'année
+  // à chaque appui. Les lignes sont reconstruites à chaque appel (toRows) :
+  // aucune requête ne modifie ce que voit une autre.
   const [elevesSnap, usersSnap, notesSnap, absencesSnap, devoirsSnap, coefDoc, classesSnap] = await Promise.all([
-    db.collection('eleves').get(),
-    db.collection('users').get(),
-    db.collection('notes').where('academicYear', '==', range.academicYear).get(),
-    db.collection('absences').where('date', '>=', range.from).where('date', '<=', range.to).get(),
-    db.collection('devoirs').where('academicYear', '==', range.academicYear).get(),
-    db.collection('settings').doc('coefficients').get(),
-    db.collection('schoolClasses').get(),
+    statsRead('eleves', () => db.collection('eleves').get()),
+    statsRead('users', () => db.collection('users').get()),
+    statsRead(`notes|${range.academicYear}`, () => db.collection('notes').where('academicYear', '==', range.academicYear).get()),
+    statsRead(`absences|${range.from}|${range.to}`, () => db.collection('absences').where('date', '>=', range.from).where('date', '<=', range.to).get()),
+    statsRead(`devoirs|${range.academicYear}`, () => db.collection('devoirs').where('academicYear', '==', range.academicYear).get()),
+    statsRead('coefficients', () => db.collection('settings').doc('coefficients').get()),
+    statsRead('schoolClasses', () => db.collection('schoolClasses').get()),
   ])
   const toRows = (snap) => snap.docs.map((row) => ({ id: row.id, ...row.data() }))
   const allStudentRows = toRows(elevesSnap)
