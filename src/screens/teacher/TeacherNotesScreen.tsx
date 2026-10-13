@@ -280,7 +280,7 @@ export default function TeacherNotesScreen() {
     try {
       // 1. Les élèves de la classe du prof
       const elevesSnap = await getDocs(
-        query(collection(db, 'eleves'), where('classe', '==', classe))
+        query(collection(db, 'teacherStudents'), where('classe', '==', classe))
       )
       const list: EleveLite[] = elevesSnap.docs
         .map(d => ({ id: d.id, data: toDoc<EleveDoc>(d) }))
@@ -394,7 +394,7 @@ export default function TeacherNotesScreen() {
       }
 
       // Charge les élèves de la classe pour le matching
-      const elevesSnap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', classe)))
+      const elevesSnap = await getDocs(query(collection(db, 'teacherStudents'), where('classe', '==', classe)))
       const elevesData = elevesSnap.docs
         .map(d => ({ id: d.id, data: toDoc<EleveDoc>(d) }))
         .filter(({ data }) => isActiveEleve(data))

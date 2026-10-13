@@ -2188,6 +2188,43 @@ for (const uid of ['staffSG', 'staffNone', 'profDroits', 'parentDroits']) {
 }
 await allow('admin lit et modifie toujours la fiche d’un professeur', updateDoc(doc(asUser('admin1'), 'users/st-prof'), { classes: ['5S'], matiere: 'Maths' }))
 
+// ── teacherStudents : copie des élèves pour les professeurs ───────────────
+// Écrite par le serveur seul, sans les contacts des responsables. Les
+// professeurs y lisent leurs classes ; les fiches complètes (`eleves`) leur
+// restent ouvertes le temps de la transition, cf. firestore.rules.
+console.log('\n── 18. teacherStudents : copie des élèves pour les professeurs ──')
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore()
+  await Promise.all([
+    setDoc(doc(db, 'teacherStudents/e1'), { classe: '1A', parentUid: 'parent1', nom: 'A', prenom: 'A' }),
+    setDoc(doc(db, 'teacherStudents/e2'), { classe: '2B', parentUid: 'parent2', nom: 'B', prenom: 'B' }),
+  ])
+})
+const classCopy = (db, classe) => getDocs(query(collection(db, 'teacherStudents'), where('classe', '==', classe)))
+await allow('prof lit la copie de SA classe', classCopy(asUser('prof1'), '1A'))
+await allow('prof lit la copie de ses classes (requête in)',
+  getDocs(query(collection(asUser('prof1'), 'teacherStudents'), where('classe', 'in', ['1A']))))
+await allow('prof lit un élève de SA classe dans la copie', getDoc(doc(asUser('prof1'), 'teacherStudents/e1')))
+await deny('prof lit la copie d’une autre classe', classCopy(asUser('prof1'), '2B'))
+await deny('prof lit un élève d’une autre classe par son identifiant', getDoc(doc(asUser('prof1'), 'teacherStudents/e2')))
+await deny('prof lit toute la copie sans filtre de classe', getDocs(collection(asUser('prof1'), 'teacherStudents')))
+await allow('admin lit toute la copie', getDocs(collection(asUser('admin1'), 'teacherStudents')))
+await allow('personnel avec la case « élèves » lit la copie', classCopy(rp, '1A'))
+for (const uid of ['staffNone', 'staffAffect', 'profDroits']) {
+  await deny(`${uid} ne lit pas la copie`, classCopy(asUser(uid), '1A'))
+}
+await deny('parent ne lit pas la copie, même pour SON enfant', getDoc(doc(asUser('parent1'), 'teacherStudents/e1')))
+await deny('visiteur non connecté ne lit pas la copie', getDoc(doc(asGuest(), 'teacherStudents/e1')))
+for (const uid of ['prof1', 'admin1', 'staffScribe', 'parent1']) {
+  await deny(`${uid} n’écrit pas dans la copie (serveur seul)`,
+    setDoc(doc(asUser(uid), 'teacherStudents/e1'), { classe: '1A', nom: 'X' }))
+  await deny(`${uid} ne supprime rien de la copie`, deleteDoc(doc(asUser(uid), 'teacherStudents/e1')))
+}
+await allow('TRANSITION : une version installée lit encore `eleves` de SA classe',
+  getDocs(query(collection(asUser('prof1'), 'eleves'), where('classe', '==', '1A'))))
+await deny('prof ne lit pas `eleves` d’une autre classe',
+  getDocs(query(collection(asUser('prof1'), 'eleves'), where('classe', '==', '2B'))))
+
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)
 if (failed.length) {

@@ -34,7 +34,7 @@ export default function TeacherClasseElevesScreen() {
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const snap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', classe)))
+      const snap = await getDocs(query(collection(db, 'teacherStudents'), where('classe', '==', classe)))
       const list = snap.docs
         .map(d => ({ id: d.id, data: toDoc<EleveDoc>(d) }))
         .filter(({ data }) => isActiveEleve(data))

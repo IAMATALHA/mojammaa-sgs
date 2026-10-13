@@ -67,7 +67,7 @@ export default function TeacherClassesScreen() {
       // classe et bloquait le rendu initial.
       const rows: ClasseRow[] = await Promise.all(
         classeNames.map(async c => {
-          const elevesSnap = await getDocs(query(collection(db, 'eleves'), where('classe', '==', c)))
+          const elevesSnap = await getDocs(query(collection(db, 'teacherStudents'), where('classe', '==', c)))
           return {
             name:         c,
             studentCount: elevesSnap.docs.filter(d => d.data().active !== false).length,

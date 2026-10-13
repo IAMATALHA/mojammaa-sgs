@@ -35,6 +35,7 @@ export interface EleveDoc {
 }
 
 const COL = 'eleves'
+const TEACHER_COL = 'teacherStudents'
 
 /** Les documents historiques sans champ `active` restent actifs. */
 export function isActiveEleve(
@@ -48,14 +49,15 @@ export function isActiveEleve(
  * Le nombre de classes n'est pas borné — cf. `chunkedQuery`.
  */
 export async function listEleves(filter?: { classes?: string[] }): Promise<EleveDoc[]> {
-  if (!filter?.classes || filter.classes.length === 0) {
+  if (filter?.classes?.length === 0) return []
+  if (!filter?.classes) {
     const snap = await getDocs(collection(db, COL))
     return toDocs<EleveDoc>(snap).filter(isActiveEleve)
   }
 
   const rows = await getDocsChunked<EleveDoc>(
     filter.classes,
-    chunk => query(collection(db, COL), where('classe', 'in', chunk)),
+    chunk => query(collection(db, TEACHER_COL), where('classe', 'in', chunk)),
   )
 
   // Dédup métier par codeMassar (un élève inscrit dans deux classes du filtre
@@ -85,7 +87,7 @@ export function subscribeEleves(
 ): Unsubscribe {
   return subscribeChunked<EleveDoc>(
     classes,
-    chunk => query(collection(db, COL), where('classe', 'in', chunk)),
+    chunk => query(collection(db, TEACHER_COL), where('classe', 'in', chunk)),
     rows => onChange(rows.filter(isActiveEleve)),
     onError,
   )

@@ -1,0 +1,82 @@
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -491,31 +491,20 @@
+     }
+ 
+     match /eleves/{eleveId} {
+-      // TRANSITION (2026-10-13) : les versions installées lisent encore `eleves`
+-      // par classe côté professeur, et le site laisse un professeur modifier un
+-      // élève. Ces trois accès `teacherTeaches` ne se retirent qu'une fois
+-      // teacherStudents rempli, puis l'application (1.0.16, 1.0.17, 1.0.18) et
+-      // le site mis à jour : artifacts/teacher-students-phase-b.patch.
++      // Les fiches complètes portent les contacts des responsables : enseigner
++      // une classe n'y donne aucun accès (les professeurs lisent
++      // teacherStudents). Un responsable lit toujours SON enfant.
+       allow read: if can('eleves.voir')
+-                  || (isSignedIn() && resource.data.parentUid == myUid())
+-                  || teacherTeaches(resource.data.classe);
+-      // Personnel (`eleves.modifier`) : comme un professeur, jamais le lien
+-      // parent — il ne se pose que par invitation, côté serveur.
++                  || (isSignedIn() && resource.data.parentUid == myUid());
++      // Personnel (`eleves.modifier`) : jamais le lien parent — il ne se pose
++      // que par invitation, côté serveur.
+       allow create: if isAdmin()
+-        || (can('eleves.modifier') && request.resource.data.get('parentUid', '') == '')
+-        || teacherTeaches(request.resource.data.classe);
+-      // Durci 2026-07-11 : l'ancienne règle ne validait que la NOUVELLE classe —
+-      // un prof pouvait cibler N'IMPORTE QUEL élève par ID (écriture aveugle,
+-      // pas besoin du droit de lecture) et le "capturer" en posant sa classe.
+-      // Désormais : ancienne ET nouvelle classe dans son périmètre, et
+-      // `parentUid` intouchable (sinon rattachement de l'enfant d'autrui à un
+-      // parent complice → fuite de toutes ses données).
++        || (can('eleves.modifier') && request.resource.data.get('parentUid', '') == '');
++      // L'identité d'un élève est administrative : un professeur n'en modifie
++      // aucun champ.
+       allow update: if isAdmin()
+-        || (can('eleves.modifier') && untouched(['parentUid']))
+-        || (teacherTeaches(resource.data.classe)
+-            && teacherTeaches(request.resource.data.classe)
+-            && untouched(['parentUid']));
+-      allow delete: if isSuperAdmin();
++        || (can('eleves.modifier') && untouched(['parentUid']));
++      allow delete: if isAdmin() && isSuperAdmin();
+     }
+ 
+     // ── notes ────────────────────────────────────────────────
+--- a/tests/rules/firestore.rules.test.mjs
++++ b/tests/rules/firestore.rules.test.mjs
+@@ -346,7 +346,7 @@
+   }))
+ 
+ console.log('\n── 3. Eleves : ancienne classe validée + parentUid gelé ──')
+-await allow('prof modifie un élève de SA classe',
++await deny('prof ne modifie plus un élève, même dans SA classe',
+   updateDoc(doc(asUser('prof1'), 'eleves/e1'), { nom: 'MisAJour' }))
+ await deny('prof capture un élève d\'une autre classe (classe → la sienne)',
+   updateDoc(doc(asUser('prof1'), 'eleves/e2'), { classe: '1A' }))
+@@ -2191,7 +2191,7 @@
+ // ── teacherStudents : copie des élèves pour les professeurs ───────────────
+ // Écrite par le serveur seul, sans les contacts des responsables. Les
+ // professeurs y lisent leurs classes ; les fiches complètes (`eleves`) leur
+-// restent ouvertes le temps de la transition, cf. firestore.rules.
++// sont fermées, en lecture comme en écriture.
+ console.log('\n── 18. teacherStudents : copie des élèves pour les professeurs ──')
+ await testEnv.withSecurityRulesDisabled(async (ctx) => {
+   const db = ctx.firestore()
+@@ -2220,10 +2220,13 @@
+     setDoc(doc(asUser(uid), 'teacherStudents/e1'), { classe: '1A', nom: 'X' }))
+   await deny(`${uid} ne supprime rien de la copie`, deleteDoc(doc(asUser(uid), 'teacherStudents/e1')))
+ }
+-await allow('TRANSITION : une version installée lit encore `eleves` de SA classe',
++await deny('prof ne lit plus `eleves` de SA classe',
+   getDocs(query(collection(asUser('prof1'), 'eleves'), where('classe', '==', '1A'))))
+-await deny('prof ne lit pas `eleves` d’une autre classe',
+-  getDocs(query(collection(asUser('prof1'), 'eleves'), where('classe', '==', '2B'))))
++await deny('prof ne lit plus la fiche complète d’un élève de SA classe', getDoc(doc(asUser('prof1'), 'eleves/e1')))
++await deny('prof n’inscrit plus d’élève dans SA classe',
++  setDoc(doc(asUser('prof1'), 'eleves/e-nouveau'), { classe: '1A', nom: 'N', prenom: 'N' }))
++await allow('parent lit toujours la fiche de SON enfant', getDoc(doc(asUser('parent1'), 'eleves/e1')))
++await allow('personnel avec la case « élèves » lit toujours les fiches complètes', getDoc(doc(rp, 'eleves/e1')))
+ 
+ // ── Bilan ─────────────────────────────────────────────────────────────────
+ console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)

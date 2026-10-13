@@ -375,7 +375,7 @@ async function getParentUidsForClasses(classes: string[]): Promise<string[]> {
   const parentUids = new Set<string>()
   for (let i = 0; i < classes.length; i += 10) {
     const chunk = classes.slice(i, i + 10)
-    const snap = await getDocs(query(collection(db, 'eleves'), where('classe', 'in', chunk)))
+    const snap = await getDocs(query(collection(db, 'teacherStudents'), where('classe', 'in', chunk)))
     snap.forEach(d => {
       const data = toDoc<EleveDoc>(d)
       if (!isActiveEleve(data)) return

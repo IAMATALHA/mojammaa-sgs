@@ -482,7 +482,20 @@ service cloud.firestore {
     }
 
     // ── eleves ───────────────────────────────────────────────
+    // Copie des élèves pour les professeurs, tenue par le serveur seul
+    // (mojammaa-admin : onTeacherStudentWritten) : identité et classe, sans les
+    // contacts des responsables. Aucun client n'y écrit.
+    match /teacherStudents/{eleveId} {
+      allow read: if can('eleves.voir') || teacherTeaches(resource.data.classe);
+      allow write: if false;
+    }
+
     match /eleves/{eleveId} {
+      // TRANSITION (2026-10-13) : les versions installées lisent encore `eleves`
+      // par classe côté professeur, et le site laisse un professeur modifier un
+      // élève. Ces trois accès `teacherTeaches` ne se retirent qu'une fois
+      // teacherStudents rempli, puis l'application (1.0.16, 1.0.17, 1.0.18) et
+      // le site mis à jour : artifacts/teacher-students-phase-b.patch.
       allow read: if can('eleves.voir')
                   || (isSignedIn() && resource.data.parentUid == myUid())
                   || teacherTeaches(resource.data.classe);

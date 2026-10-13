@@ -57,7 +57,7 @@ export function useTeacherDayCompletion(
           collection(db, 'absences'),
           where('classe', 'in', chunk),
           where('date', '==', date),
-        )), getDocs(query(collection(db, 'eleves'), where('classe', 'in', chunk)))])
+        )), getDocs(query(collection(db, 'teacherStudents'), where('classe', 'in', chunk)))])
         const marked = new Map<string, Set<string>>()
         snap.forEach(d => {
           const data = toDoc<AbsenceDoc>(d)

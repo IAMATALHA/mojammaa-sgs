@@ -68,7 +68,7 @@ export default function TeacherClasseFolderScreen() {
       // Devoirs : les SIENS seulement (règle devoirs = teacherId), classe
       // filtrée côté client. allSettled : un refus ne masque pas l'effectif.
       const [elevesRes, devoirsRes] = await Promise.allSettled([
-        getDocs(query(collection(db, 'eleves'),  where('classe',   '==', classe))),
+        getDocs(query(collection(db, 'teacherStudents'),  where('classe',   '==', classe))),
         profile?.uid ? getDocs(query(
           collection(db, 'devoirs'),
           where('teacherId', '==', profile.uid),
