@@ -5,6 +5,7 @@
 import React, { useState } from 'react'
 import { View, ActivityIndicator, Text, StyleSheet, Pressable } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { useWorkspace } from '../contexts/driver-workspace-context'
 import { useTheme } from '../contexts/ThemeContext'
@@ -22,10 +23,11 @@ import DriverStack  from './driver-stack'
 
 function Splash() {
   const theme = useTheme()
+  const { t } = useTranslation()
   return (
     <View style={[styles.splash, { backgroundColor: theme.bg }]}>
       <ActivityIndicator size="large" color={theme.primary} />
-      <Text style={[styles.splashText, { color: theme.textSoft }]}>Chargement…</Text>
+      <Text style={[styles.splashText, { color: theme.textSoft }]}>{t('common.loading')}</Text>
     </View>
   )
 }
@@ -35,6 +37,7 @@ function Splash() {
 // l'UI parent). On propose de réessayer la lecture, ou de se déconnecter.
 function ProfileErrorScreen() {
   const theme = useTheme()
+  const { t } = useTranslation()
   const { refresh, logout } = useAuth()
   const [retrying, setRetrying] = useState(false)
 
@@ -45,9 +48,9 @@ function ProfileErrorScreen() {
 
   return (
     <View style={[styles.splash, { backgroundColor: theme.bg, paddingHorizontal: 32 }]}>
-      <Text style={[styles.errorTitle, { color: theme.text }]}>Connexion au profil impossible</Text>
+      <Text style={[styles.errorTitle, { color: theme.text }]}>{t('common.profileErrorTitle')}</Text>
       <Text style={[styles.errorBody, { color: theme.textSoft }]}>
-        Vérifiez votre connexion internet puis réessayez.
+        {t('common.profileErrorBody')}
       </Text>
       <Pressable
         onPress={onRetry}
@@ -57,10 +60,10 @@ function ProfileErrorScreen() {
       >
         {retrying
           ? <ActivityIndicator color="#FFFFFF" />
-          : <Text style={styles.retryText}>Réessayer</Text>}
+          : <Text style={styles.retryText}>{t('common.retry')}</Text>}
       </Pressable>
       <Pressable onPress={logout} accessibilityRole="button" style={styles.logoutLink}>
-        <Text style={[styles.logoutText, { color: theme.textSoft }]}>Se déconnecter</Text>
+        <Text style={[styles.logoutText, { color: theme.textSoft }]}>{t('common.logout')}</Text>
       </Pressable>
     </View>
   )
@@ -68,25 +71,26 @@ function ProfileErrorScreen() {
 
 function DriverAccessScreen({ readError }: { readError: boolean }) {
   const theme = useTheme()
+  const { t } = useTranslation()
   const { logout } = useAuth()
   const { retryDriverProfile } = useWorkspace()
   return (
     <View style={[styles.splash, { backgroundColor: theme.bg, paddingHorizontal: 32 }]}>
-      <Text style={[styles.errorTitle, { color: theme.text }]}>Espace chauffeur indisponible</Text>
+      <Text style={[styles.errorTitle, { color: theme.text }]}>{t('common.driverUnavailableTitle')}</Text>
       <Text style={[styles.errorBody, { color: theme.textSoft }]}>
         {readError
-          ? 'Impossible de vérifier votre autorisation chauffeur. Vérifiez la connexion puis réessayez.'
-          : 'Ce compte doit être activé comme chauffeur par l’administration.'}
+          ? t('common.driverUnavailableReadError')
+          : t('common.driverUnavailableNotActivated')}
       </Text>
       <Pressable
         onPress={retryDriverProfile}
         accessibilityRole="button"
         style={[styles.retryBtn, { backgroundColor: theme.primary }]}
       >
-        <Text style={styles.retryText}>Réessayer</Text>
+        <Text style={styles.retryText}>{t('common.retry')}</Text>
       </Pressable>
       <Pressable onPress={logout} accessibilityRole="button" style={styles.logoutLink}>
-        <Text style={[styles.logoutText, { color: theme.textSoft }]}>Se déconnecter</Text>
+        <Text style={[styles.logoutText, { color: theme.textSoft }]}>{t('common.logout')}</Text>
       </Pressable>
     </View>
   )

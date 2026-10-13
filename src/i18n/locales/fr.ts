@@ -16,6 +16,11 @@ const fr = {
     retry: 'Réessayer',
     crashTitle: 'Un problème est survenu',
     crashBody: 'L’écran n’a pas pu s’afficher. Touchez « Réessayer ». Si le problème continue, fermez l’application puis rouvrez-la.',
+    profileErrorTitle: 'Connexion au profil impossible',
+    profileErrorBody: 'Vérifiez votre connexion internet puis réessayez.',
+    driverUnavailableTitle: 'Espace chauffeur indisponible',
+    driverUnavailableReadError: 'Impossible de vérifier votre autorisation chauffeur. Vérifiez la connexion puis réessayez.',
+    driverUnavailableNotActivated: 'Ce compte doit être activé comme chauffeur par l’administration.',
     shareError:'Impossible d’ouvrir le partage. Réessayez ou choisissez un autre moyen.',
     cancel: 'Annuler',
     confirm: 'Confirmer',
@@ -383,6 +388,9 @@ const fr = {
 
   parent: {
     myChildren: 'Mes enfants',
+    competenceAcquired: 'Acquis',
+    competenceInProgress: 'En cours',
+    competenceNotAcquired: 'Non acquis',
     childCount: '{{count}} enfant',
     childCount_plural: '{{count}} enfants',
     noChildren: 'Aucun enfant associé',

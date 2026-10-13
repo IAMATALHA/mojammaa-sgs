@@ -9,6 +9,7 @@ import {
   XCircle,
   type LucideIcon,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import type { ChildCompetenceReportReal } from '../../hooks/useParentNotes'
 import type { CompetenceValue } from '../../services/notesService'
@@ -30,6 +31,13 @@ function toneFor(value: CompetenceValue, theme: Theme): ChipTone {
   return { bg: theme.dangerSurface, fg: theme.danger, Icon: XCircle }
 }
 
+// Les valeurs enregistrées sont en français : seul l'affichage est traduit.
+const COMPETENCE_LABEL: Record<CompetenceValue, string> = {
+  'Acquis': 'parent.competenceAcquired',
+  'En cours': 'parent.competenceInProgress',
+  'Non acquis': 'parent.competenceNotAcquired',
+}
+
 function trendIcon(trend: ChildCompetenceReportReal['subjects'][number]['trend']): LucideIcon {
   if (trend === 'up') return ArrowUp
   if (trend === 'down') return ArrowDown
@@ -44,6 +52,7 @@ function trendColor(trend: ChildCompetenceReportReal['subjects'][number]['trend'
 
 function CompetenceChip({ value }: { value: CompetenceValue | null }) {
   const theme = useTheme()
+  const { t } = useTranslation()
   if (!value) {
     return (
       <View style={[styles.emptyChip, { backgroundColor: theme.surfaceAlt }]}>
@@ -57,13 +66,14 @@ function CompetenceChip({ value }: { value: CompetenceValue | null }) {
   return (
     <View style={[styles.chip, { backgroundColor: tone.bg }]}>
       <Icon size={12} color={tone.fg} strokeWidth={2.4} />
-      <Text numberOfLines={1} style={[styles.chipText, { color: tone.fg }]}>{value}</Text>
+      <Text numberOfLines={1} style={[styles.chipText, { color: tone.fg }]}>{t(COMPETENCE_LABEL[value], { defaultValue: value })}</Text>
     </View>
   )
 }
 
 export default function CompetenceReportCard({ report }: Props) {
   const theme = useTheme()
+  const { t } = useTranslation()
   const total = report.summary.acquis + report.summary.encours + report.summary.nonAcquis
 
   return (
@@ -72,7 +82,7 @@ export default function CompetenceReportCard({ report }: Props) {
         <View style={styles.header}>
           <View>
             <Text style={[styles.kicker, { color: theme.textSoft }]}>{report.title}</Text>
-            <Text style={[styles.title, { color: theme.text }]}>Préscolaire</Text>
+            <Text style={[styles.title, { color: theme.text }]}>{t('admin.statsCycle_prescolaire')}</Text>
           </View>
           <View style={[styles.countPill, { backgroundColor: theme.primarySurface }]}>
             <Text style={[styles.countText, { color: theme.primary }]}>{total}</Text>
@@ -80,9 +90,9 @@ export default function CompetenceReportCard({ report }: Props) {
         </View>
 
         <View style={styles.summaryRow}>
-          <SummaryChip label="Acquis" value={report.summary.acquis} color={theme.success} bg={theme.successSurface} />
-          <SummaryChip label="En cours" value={report.summary.encours} color={theme.warning} bg={theme.warningSurface} />
-          <SummaryChip label="Non acquis" value={report.summary.nonAcquis} color={theme.danger} bg={theme.dangerSurface} />
+          <SummaryChip label={t('parent.competenceAcquired')} value={report.summary.acquis} color={theme.success} bg={theme.successSurface} />
+          <SummaryChip label={t('parent.competenceInProgress')} value={report.summary.encours} color={theme.warning} bg={theme.warningSurface} />
+          <SummaryChip label={t('parent.competenceNotAcquired')} value={report.summary.nonAcquis} color={theme.danger} bg={theme.dangerSurface} />
         </View>
 
         <View style={[styles.list, { borderTopColor: theme.border }]}>

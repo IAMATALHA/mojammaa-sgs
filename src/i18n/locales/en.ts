@@ -16,6 +16,11 @@ const en = {
     retry: 'Try again',
     crashTitle: 'Something went wrong',
     crashBody: 'This screen could not be displayed. Tap “Try again”. If the problem continues, close the app and open it again.',
+    profileErrorTitle: 'Unable to load your profile',
+    profileErrorBody: 'Check your internet connection and try again.',
+    driverUnavailableTitle: 'Driver space unavailable',
+    driverUnavailableReadError: 'Unable to verify your driver authorisation. Check your connection and try again.',
+    driverUnavailableNotActivated: 'This account must be activated as a driver by the administration.',
     shareError:'Unable to open sharing. Try again or choose another method.',
     cancel: 'Cancel',
     confirm: 'Confirm',
@@ -383,6 +388,9 @@ const en = {
 
   parent: {
     myChildren: 'My children',
+    competenceAcquired: 'Acquired',
+    competenceInProgress: 'In progress',
+    competenceNotAcquired: 'Not acquired',
     childCount: '{{count}} child',
     childCount_plural: '{{count}} children',
     noChildren: 'No children linked',

@@ -16,6 +16,11 @@ const ar = {
     retry: 'إعادة المحاولة',
     crashTitle: 'حدث خطأ',
     crashBody: 'تعذّر عرض الشاشة. اضغطوا على «إعادة المحاولة». إذا استمرت المشكلة، أغلقوا التطبيق ثم افتحوه من جديد.',
+    profileErrorTitle: 'تعذّر الوصول إلى الملف الشخصي',
+    profileErrorBody: 'تحققوا من اتصالكم بالإنترنت ثم حاولوا مجدداً.',
+    driverUnavailableTitle: 'فضاء السائق غير متاح',
+    driverUnavailableReadError: 'تعذّر التحقق من ترخيص السائق. تحققوا من الاتصال ثم حاولوا مجدداً.',
+    driverUnavailableNotActivated: 'يجب أن تفعّل الإدارة هذا الحساب كحساب سائق.',
     shareError:'تعذّر فتح المشاركة. حاولوا مجدداً أو اختاروا وسيلة أخرى.',
     cancel: 'إلغاء',
     confirm: 'تأكيد',
@@ -383,6 +388,9 @@ const ar = {
 
   parent: {
     myChildren: 'أبنائي',
+    competenceAcquired: 'مكتسب',
+    competenceInProgress: 'في طور الاكتساب',
+    competenceNotAcquired: 'غير مكتسب',
     childCount: '{{count}} طفل',
     childCount_plural: '{{count}} أطفال',
     noChildren: 'لا يوجد أطفال مرتبطون',
