@@ -17,6 +17,7 @@ import {
   subscribeMessages, markAsRead, deleteMessage, sendMessage,
   type MessageDoc,
 } from '../../services/messagesService'
+import { parentMessageReplyTarget } from '../../utils/parentMessageReply'
 import { confirmMessageDelete } from '../../utils/messageDeletePrompt'
 import { formatTimestamp, initialsOf } from '../../utils/format'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
@@ -141,8 +142,10 @@ export default function ParentMessagesScreen() {
     })
   }
 
+  const replyTarget = parentMessageReplyTarget(detail, t('parentCompose.school'))
+
   const handleReply = async () => {
-    if (!profile || !detail || detail.fromRole !== 'admin' || detail.type !== 'direct' || !guardianEleveId || !replyText.trim()) return
+    if (!profile || !detail || !replyTarget || !guardianEleveId || !replyText.trim()) return
     setReplying(true)
     try {
       const fromNom = `${profile.prenom} ${profile.nom}`.trim()
@@ -154,9 +157,7 @@ export default function ParentMessagesScreen() {
         fromNom,
         fromRole: 'parent',
         eleveId: detail.eleveId || guardianEleveId,
-        toType: 'user',
-        toIds: [detail.fromId],
-        toLabel: detail.fromNom || '',
+        ...replyTarget,
         priority: 'normal',
         category: 'admin',
       })
@@ -280,7 +281,7 @@ export default function ParentMessagesScreen() {
             </ScrollView>
 
             {/* Reply bar */}
-            {detail.fromId && detail.fromRole === 'admin' && detail.type === 'direct' && (
+            {replyTarget && (
               <View style={[styles.replyBar, { borderTopColor: theme.border }]}>
                 <TextInput value={replyText} onChangeText={setReplyText}
                   accessibilityLabel={t('teacher.writeMessage')}
