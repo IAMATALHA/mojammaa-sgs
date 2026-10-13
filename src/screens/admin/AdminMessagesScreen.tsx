@@ -16,10 +16,11 @@ import {
 import * as ImagePicker from 'expo-image-picker'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ScreenLayout from '../../components/ScreenLayout'
+import LoadMoreButton from '../../components/load-more-button'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import {
-  subscribeMessages, subscribeSentMessages, subscribeTeacherMessages, markAsRead, deleteMessage,
+  subscribeMessages, subscribeSentMessages, subscribeTeacherMessages, markAsRead, deleteMessage, INBOX_PAGE,
   sendMessage, subscribeDeliveryIssues, broadcast, broadcastToParents, broadcastPersonalized, newPersonalizedSendAttempt, getRecipientsList,
   type MessageDoc, type MessageToType,
 } from '../../services/messagesService'
@@ -78,24 +79,29 @@ export default function AdminMessagesScreen() {
   const [replyText, setReplyText] = useState('')
   const [replying, setReplying] = useState(false)
 
+  // « Voir plus » agrandit la page : la liste reste affichée pendant la relecture.
+  const [page, setPage] = useState(INBOX_PAGE)
+  const [moreInbox, setMoreInbox] = useState(false)
+  const [moreSent, setMoreSent] = useState(false)
   useEffect(() => {
     if (!profile?.uid) return
-    setLoading(true)
+    if (page === INBOX_PAGE) setLoading(true)
     setLoadError(false)
     const u1 = subscribeMessages(
       profile.uid, profile.role || 'admin',
-      list => { setInboxMsgs(list); setLoadError(false); setLoading(false) },
+      (list, hasMore) => { setInboxMsgs(list); setMoreInbox(hasMore); setLoadError(false); setLoading(false) },
       () => { setLoadError(true); setLoading(false) },
+      page,
     )
     // L'échec de la requête « envoyés » ne doit pas alarmer toute la messagerie
     // (seul l'inbox pilote la bannière).
-    const u2 = subscribeSentMessages(profile.uid, list => setSentMsgs(list))
+    const u2 = subscribeSentMessages(profile.uid, (list, hasMore) => { setSentMsgs(list); setMoreSent(hasMore) }, undefined, page)
     // Supervision : tous les messages envoyés par un prof, peu importe le
     // destinataire — l'admin ne doit pas rater un souci côté prof↔parent.
     const u3 = subscribeTeacherMessages(list => setSupervisionMsgs(list))
     const u4 = subscribeDeliveryIssues(list => { setDeliveryIssues(list); setIssuesError(false) }, () => setIssuesError(true))
     return () => { u1(); u2(); u3(); u4() }
-  }, [profile?.uid])
+  }, [profile?.uid, page])
 
 
   // Arrivée via tap sur une notification push : basculer sur l'inbox et
@@ -114,6 +120,7 @@ export default function AdminMessagesScreen() {
   }, [route.params?.messageId, inboxMsgs])
 
   const displayed = tab === 'inbox' ? inboxMsgs : tab === 'sent' ? sentMsgs : tab === 'issues' ? deliveryIssues : supervisionMsgs
+  const more = tab === 'inbox' ? moreInbox : tab === 'sent' && moreSent
   const liveDetail = displayed.find(m => m.id === detail?.id) || detail
   const unreadCount = useMemo(
     () => inboxMsgs.filter(m => !(m.readBy || []).includes(profile?.uid || '')).length,
@@ -273,7 +280,8 @@ export default function AdminMessagesScreen() {
           <Text style={{ color: theme.textSoft, fontSize: 14, marginTop: 12 }}>{t('teacher.noMessages')}</Text>
         </View>
       ) : (
-        <FlatList data={displayed} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 80 }} />
+        <FlatList data={displayed} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 80 }}
+          ListFooterComponent={more ? <LoadMoreButton onPress={() => setPage(value => value + INBOX_PAGE)} /> : null} />
       )}
 
       <TouchableOpacity onPress={() => setShowCompose(true)} accessibilityRole="button" accessibilityLabel={t('teacher.newMessage')} style={[styles.fab, { backgroundColor: theme.accent }]} activeOpacity={0.85}>

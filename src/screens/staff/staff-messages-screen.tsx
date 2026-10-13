@@ -6,7 +6,8 @@ import ScreenLayout from '../../components/ScreenLayout'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTheme } from '../../contexts/ThemeContext'
 import { hasRight } from '../../utils/staff-rights'
-import { subscribeMessages, subscribeSentMessages, markAsRead, sendStaffClassMessage, newPersonalizedSendAttempt, type MessageDoc } from '../../services/messagesService'
+import { subscribeMessages, subscribeSentMessages, markAsRead, sendStaffClassMessage, newPersonalizedSendAttempt, INBOX_PAGE, type MessageDoc } from '../../services/messagesService'
+import LoadMoreButton from '../../components/load-more-button'
 import { StaffButton } from './staff-ui'
 import { staffCopy } from './staff-copy'
 import { useStaffClasses } from './staff-operations-screen'
@@ -41,16 +42,20 @@ export default function StaffMessagesScreen() {
   const route = useRoute<RouteProp<StaffStackParamList, 'StaffMessages'>>()
   const inbox = hasRight(profile || undefined, 'messages.boite'), send = hasRight(profile || undefined, 'messages.envoyer')
   const [rows, setRows] = useState<MessageDoc[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(false), [retry, setRetry] = useState(0), [compose, setCompose] = useState(false)
+  const [page, setPage] = useState(INBOX_PAGE), [more, setMore] = useState(false)
   useEffect(() => {
     if (!profile) return
-    setRows([]); setLoading(true); setError(false)
-    const receive = (values: MessageDoc[]) => { setRows(values); setLoading(false) }, failed = () => { setLoading(false); setError(true) }
-    return inbox ? subscribeMessages(profile.uid, 'staff', receive, failed) : subscribeSentMessages(profile.uid, receive, failed)
-  }, [profile?.uid, inbox, retry])
+    // « Voir plus » agrandit la page : la liste reste affichée pendant la relecture.
+    if (page === INBOX_PAGE) { setRows([]); setLoading(true) }
+    setError(false)
+    const receive = (values: MessageDoc[], hasMore: boolean) => { setRows(values); setMore(hasMore); setLoading(false) }, failed = () => { setLoading(false); setError(true) }
+    return inbox ? subscribeMessages(profile.uid, 'staff', receive, failed, page) : subscribeSentMessages(profile.uid, receive, failed, page)
+  }, [profile?.uid, inbox, retry, page])
   useEffect(() => { if (route.params?.messageId && profile && rows.some(row => row.id === route.params?.messageId)) void markAsRead(route.params.messageId, profile.uid).catch(() => setError(true)) }, [route.params?.messageId, rows, profile?.uid])
   return <ScreenLayout title={inbox ? copy.inbox : copy.outbox}><FlatList contentContainerStyle={{ padding: 20 }} data={compose ? [] : rows} keyExtractor={(row, index) => row.id || String(index)}
     ListHeaderComponent={<>{send && <StaffButton title={compose ? copy.messages : copy.send} onPress={() => setCompose(value => !value)} />}{compose ? <Compose /> : <>{loading && <ActivityIndicator />}{error && <Text style={{ color: theme.danger }}>{copy.error}</Text>}<StaffButton title={copy.retry} onPress={() => setRetry(n => n + 1)} /></>}</>}
     ListEmptyComponent={!compose && !loading && !error ? <Text style={{ color: theme.text }}>{copy.empty}</Text> : null}
+    ListFooterComponent={!compose && more ? <LoadMoreButton onPress={() => setPage(value => value + INBOX_PAGE)} /> : null}
     renderItem={({ item }) => <View style={{ paddingVertical: 16, borderBottomWidth: 1, borderColor: theme.border }}>
       <Text style={{ color: theme.text, fontFamily: theme.fonts.bold }}>{i18n.language.startsWith('ar') ? item.subjectAr || item.subject : item.subject}</Text>
       <Text style={{ color: theme.textSoft }}>{item.fromNom}</Text><Text selectable style={{ color: theme.text }}>{i18n.language.startsWith('ar') ? item.bodyAr || item.body : item.body}</Text>

@@ -2259,6 +2259,24 @@ for (const [what, change] of [
 await allow('admin modifie toujours un champ ordinaire d’une autre fiche',
   updateDoc(doc(asUser('admin1'), 'users/parent1'), { email: 'contact@example.com' }))
 
+// ── Boîte de réception bornée (2026-10-13) ────────────────────────────────
+// L'application ne lit plus que les messages les plus récents de chaque
+// requête : le tri et la limite ne doivent ni ouvrir ni fermer un accès.
+console.log('\n── 20. Messages : mêmes droits avec tri et limite ──')
+const thisYear = where('academicYear', '==', '2026-2027')
+const latest = (db, filter) => getDocs(query(collection(db, 'messages'), filter, thisYear, orderBy('createdAt', 'desc'), limit(100)))
+await allow('parent lit ses derniers messages directs', latest(asUser('parent1'), where('toIds', 'array-contains', 'parent1')))
+await allow('parent lit les dernières diffusions', latest(asUser('parent1'), where('toType', 'in', ['all', 'parents'])))
+await allow('parent lit ses derniers messages à l’ancien format', latest(asUser('parent1'), where('toId', 'in', ['parent1', 'all', 'parents'])))
+await allow('parent lit ses derniers envois', latest(asUser('parent1'), where('fromId', '==', 'parent1')))
+await allow('professeur lit les dernières diffusions', latest(asUser('prof1'), where('toType', 'in', ['all', 'teachers'])))
+await allow('admin lit les dernières diffusions et la boîte commune',
+  latest(asUser('admin1'), where('toType', 'in', ['all', 'teachers', 'parents', 'administration'])))
+await allow('personnel de la boîte commune lit ses derniers messages', latest(box, where('toType', 'in', ['all', 'administration'])))
+await deny('parent ne lit pas les messages directs d’un autre compte', latest(asUser('parent1'), where('toIds', 'array-contains', 'parent2')))
+await deny('parent ne lit pas la boîte commune', latest(asUser('parent1'), where('toType', 'in', ['all', 'administration'])))
+await deny('professeur ne lit pas les envois d’un collègue', latest(asUser('prof1'), where('fromId', '==', 'prof2')))
+
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)
 if (failed.length) {

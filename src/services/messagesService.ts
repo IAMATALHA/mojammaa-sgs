@@ -26,9 +26,9 @@
 
 import {
   collection, query, where, addDoc, onSnapshot, updateDoc, doc, setDoc,
-  serverTimestamp, getDocs, getDocsFromServer, documentId, arrayUnion, limit,
-  type Unsubscribe, type Query, type DocumentData, type Timestamp,
-  type QueryDocumentSnapshot, type QuerySnapshot,
+  serverTimestamp, getDocs, getDocsFromServer, documentId, arrayUnion, limit, orderBy,
+  type Unsubscribe, type DocumentData, type Timestamp, type FirestoreError,
+  type QueryConstraint, type QueryDocumentSnapshot, type QuerySnapshot,
 } from 'firebase/firestore'
 import { auth, db } from '../config/firebase'
 import { toDoc } from './firestore'
@@ -239,14 +239,51 @@ export async function markAsRead(messageId: string, uid: string): Promise<void> 
 
 // ── Subscribe ────────────────────────────────────────────────────────────
 
+/**
+ * Nombre de messages chargés par requête de boîte. La boîte de l'année
+ * entière était relue à chaque ouverture de l'application ; seuls les plus
+ * récents le sont désormais, « Voir plus » en demande davantage.
+ * Écran, pastille et accueil gardent tous CETTE borne par défaut : des
+ * requêtes identiques partagent une seule lecture.
+ */
+export const INBOX_PAGE = 100
+
+/**
+ * Écoute les `max` messages les plus récents d'une requête. Si l'index exigé
+ * par le tri n'est pas encore en ligne (failed-precondition), on retombe sur
+ * l'ancienne requête sans borne : la boîte reste lisible, jamais vide.
+ */
+function listenLatest(
+  filters: QueryConstraint[],
+  max: number,
+  onNext: (snap: QuerySnapshot<DocumentData>, bounded: boolean) => void,
+  onError: (err: FirestoreError) => void,
+): Unsubscribe {
+  let stopped = false
+  let stop: Unsubscribe = () => {}
+  const start = (bounded: boolean): Unsubscribe => onSnapshot(
+    query(collection(db, COL), ...filters, ...(bounded ? [orderBy('createdAt', 'desc'), limit(max)] : [])),
+    snap => onNext(snap, bounded),
+    err => {
+      if (bounded && err.code === 'failed-precondition' && !stopped) { stop = start(false); return }
+      onError(err)
+    },
+  )
+  stop = start(true)
+  return () => { stopped = true; stop() }
+}
+
+/** `more` : au moins une requête a rendu `max` messages, il en reste peut-être. */
 export function subscribeMessages(
   uid: string,
   role: string,
-  onChange: (messages: MessageDoc[]) => void,
+  onChange: (messages: MessageDoc[], more: boolean) => void,
   onError?: (err: Error) => void,
+  max: number = INBOX_PAGE,
 ): Unsubscribe {
   const period = currentAcademicPeriod()
   const buckets = new Map<number, Map<string, MessageDoc>>()
+  const full = new Set<number>()
   const unsubs: Unsubscribe[] = []
   let nextBucketId = 0
 
@@ -258,7 +295,7 @@ export function subscribeMessages(
     const arr = [...merged.values()]
       .filter(message => !(message.deletedBy || []).includes(uid))
       .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
-    onChange(arr)
+    onChange(arr, full.size > 0)
   }
 
   const handleErr = (label: string) => (err: any) => {
@@ -267,27 +304,25 @@ export function subscribeMessages(
     onError?.(err)
   }
 
-  const listen = (q: Query<DocumentData>, label: string) => {
+  const listen = (filters: QueryConstraint[], label: string) => {
     const bucketId = nextBucketId++
     buckets.set(bucketId, new Map())
-    return onSnapshot(q, snap => {
+    return listenLatest(filters, max, (snap, bounded) => {
       const next = new Map<string, MessageDoc>()
       snap.docs.forEach(d => next.set(d.id, readMessage(d)))
       buckets.set(bucketId, next)
+      if (bounded && snap.size >= max) full.add(bucketId)
+      else full.delete(bucketId)
       apply()
     }, handleErr(label))
   }
 
   // Filtre par ANNÉE scolaire uniquement — pas par monthKey : un filtre au
   // mois ferait disparaître tout l'historique (même non lu) chaque 1er du
-  // mois. L'année borne déjà le volume ; la pagination viendra si besoin.
+  // mois. Dans l'année, chaque requête rend ses `max` messages les plus récents.
   // 1. Direct messages (new format: toIds array)
   unsubs.push(listen(
-    query(
-      collection(db, COL),
-      where('toIds', 'array-contains', uid),
-      where('academicYear', '==', period.academicYear),
-    ),
+    [where('toIds', 'array-contains', uid), where('academicYear', '==', period.academicYear)],
     'direct(toIds)',
   ))
 
@@ -298,11 +333,7 @@ export function subscribeMessages(
   else if (role === 'staff') toTypes.push('administration')
   else if (role === 'admin') toTypes.push('teachers', 'parents', 'administration')
   unsubs.push(listen(
-    query(
-      collection(db, COL),
-      where('toType', 'in', toTypes),
-      where('academicYear', '==', period.academicYear),
-    ),
+    [where('toType', 'in', toTypes), where('academicYear', '==', period.academicYear)],
     'broadcasts(toType)',
   ))
 
@@ -312,11 +343,7 @@ export function subscribeMessages(
   else if (role === 'parent') oldToIds.push('parents')
   else if (role === 'admin') oldToIds.push('admin', 'teachers')
   unsubs.push(listen(
-    query(
-      collection(db, COL),
-      where('toId', 'in', oldToIds),
-      where('academicYear', '==', period.academicYear),
-    ),
+    [where('toId', 'in', oldToIds), where('academicYear', '==', period.academicYear)],
     'legacy(toId)',
   ))
 
@@ -326,23 +353,21 @@ export function subscribeMessages(
 // Sent messages by a user
 export function subscribeSentMessages(
   uid: string,
-  onChange: (messages: MessageDoc[]) => void,
+  onChange: (messages: MessageDoc[], more: boolean) => void,
   onError?: (err: Error) => void,
+  max: number = INBOX_PAGE,
 ): Unsubscribe {
   const period = currentAcademicPeriod()
-  // NB : pas de `orderBy` ici — `where(fromId) + orderBy(createdAt)` exigerait un
-  // index composite (fromId, createdAt) non déclaré → la requête échouait. On
-  // trie côté client (comme subscribeMessages), donc aucun index requis.
-  return onSnapshot(
-    query(
-      collection(db, COL),
-      where('fromId', '==', uid),
-      where('academicYear', '==', period.academicYear),
-    ),
-    snap => onChange(
+  // Même borne et même repli que la boîte de réception (listenLatest) ; le tri
+  // côté client reste, il sert aussi quand le repli sans borne est actif.
+  return listenLatest(
+    [where('fromId', '==', uid), where('academicYear', '==', period.academicYear)],
+    max,
+    (snap, bounded) => onChange(
       readMessages(snap)
         .filter(message => !(message.deletedBy || []).includes(uid))
         .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)),
+      bounded && snap.size >= max,
     ),
     err => onError?.(err),
   )

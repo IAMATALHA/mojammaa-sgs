@@ -12,10 +12,11 @@ import type { TeacherTabsParamList, TeacherTabRoute } from '../../navigation/typ
 import { X, Send, Inbox, PenSquare, AlertCircle, Users, CalendarDays, Check, Lock, Search } from 'lucide-react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ScreenLayout from '../../components/ScreenLayout'
+import LoadMoreButton from '../../components/load-more-button'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import {
-  subscribeMessages, subscribeSentMessages, markAsRead, deleteMessage,
+  subscribeMessages, subscribeSentMessages, markAsRead, deleteMessage, INBOX_PAGE,
   broadcastToParents, broadcastPersonalized, newPersonalizedSendAttempt,
   type MessageDoc,
 } from '../../services/messagesService'
@@ -50,20 +51,25 @@ export default function TeacherMessagesScreen() {
   const [detail, setDetail] = useState<MessageDoc | null>(null)
   const [showCompose, setShowCompose] = useState(false)
 
+  // « Voir plus » agrandit la page : la liste reste affichée pendant la relecture.
+  const [page, setPage] = useState(INBOX_PAGE)
+  const [moreInbox, setMoreInbox] = useState(false)
+  const [moreSent, setMoreSent] = useState(false)
   useEffect(() => {
     if (!profile?.uid) return
-    setLoading(true)
+    if (page === INBOX_PAGE) setLoading(true)
     setLoadError(false)
     const u1 = subscribeMessages(
       profile.uid, profile.role || 'professeur',
-      list => { setInboxMsgs(list); setLoadError(false); setLoading(false) },
+      (list, hasMore) => { setInboxMsgs(list); setMoreInbox(hasMore); setLoadError(false); setLoading(false) },
       () => { setLoadError(true); setLoading(false) },
+      page,
     )
     // L'échec de la requête « envoyés » ne doit pas alarmer toute la messagerie
     // (seul l'inbox pilote la bannière).
-    const u2 = subscribeSentMessages(profile.uid, list => setSentMsgs(list))
+    const u2 = subscribeSentMessages(profile.uid, (list, hasMore) => { setSentMsgs(list); setMoreSent(hasMore) }, undefined, page)
     return () => { u1(); u2() }
-  }, [profile?.uid])
+  }, [profile?.uid, page])
 
 
   // Arrivée via tap sur une notification push : basculer sur l'inbox et
@@ -82,6 +88,7 @@ export default function TeacherMessagesScreen() {
   }, [route.params?.messageId, inboxMsgs])
 
   const displayed = tab === 'inbox' ? inboxMsgs : sentMsgs
+  const more = tab === 'inbox' ? moreInbox : moreSent
   const unreadCount = useMemo(
     () => inboxMsgs.filter(m => !(m.readBy || []).includes(profile?.uid || '')).length,
     [inboxMsgs, profile?.uid],
@@ -200,7 +207,8 @@ export default function TeacherMessagesScreen() {
           <Text style={{ color: theme.textSoft, fontSize: 14, marginTop: 12 }}>{t('teacher.noMessages')}</Text>
         </View>
       ) : (
-        <FlatList data={displayed} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 80 }} />
+        <FlatList data={displayed} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 80 }}
+          ListFooterComponent={more ? <LoadMoreButton onPress={() => setPage(value => value + INBOX_PAGE)} /> : null} />
       )}
 
       <TouchableOpacity onPress={() => setShowCompose(true)} accessibilityRole="button" accessibilityLabel={t('teacher.newMessage')} style={[styles.fab, { backgroundColor: theme.accent }]} activeOpacity={0.85}>

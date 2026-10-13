@@ -6,17 +6,24 @@ export function loadMessagesService(firestore, auth, db, period = () => ({
   academicYear: '2026-2027', semestre: 'S1', monthKey: '2026-10',
 })) {
   const path = process.env.MESSAGES_SERVICE_SOURCE || new URL('../../src/services/messagesService.ts', import.meta.url)
-  const output = ts.transpileModule(readFileSync(path, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText
-  const module = { exports: {} }
-  new Function('require', 'module', 'exports', output)(name => {
+  const run = (source, resolve) => {
+    const output = ts.transpileModule(readFileSync(source, 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText
+    const module = { exports: {} }
+    new Function('require', 'module', 'exports', output)(resolve, module, module.exports)
+    return module.exports
+  }
+  // Real reading helpers (no dependency of their own): the inbox goes through them.
+  const pure = file => run(new URL(`../../src/${file}`, import.meta.url), () => ({}))
+  return run(path, name => {
     if (name === 'firebase/firestore') return firestore
     if (name === '../config/firebase') return { auth, db }
     if (name === '../utils/academicPeriod') return { currentAcademicPeriod: period }
+    if (name === './firestore') return pure('services/firestore.ts')
+    if (name === '../utils/attachments') return pure('utils/attachments.ts')
     return {}
-  }, module, module.exports)
-  return module.exports
+  })
 }
 
 export const personalizedParams = (overrides = {}) => ({

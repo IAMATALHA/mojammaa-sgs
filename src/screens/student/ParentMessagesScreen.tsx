@@ -10,11 +10,12 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 import type { StudentTabsParamList, StudentTabRoute } from '../../navigation/types'
 import { X, Search, Inbox, Send, PenSquare } from 'lucide-react-native'
 import ScreenLayout from '../../components/ScreenLayout'
+import LoadMoreButton from '../../components/load-more-button'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { subscribeChildrenOfParent } from '../../services/elevesService'
 import {
-  subscribeMessages, markAsRead, deleteMessage, sendMessage,
+  subscribeMessages, markAsRead, deleteMessage, sendMessage, INBOX_PAGE,
   type MessageDoc,
 } from '../../services/messagesService'
 import { parentMessageReplyTarget } from '../../utils/parentMessageReply'
@@ -61,17 +62,21 @@ export default function ParentMessagesScreen() {
     )
   }, [profile?.uid])
 
+  // « Voir plus » agrandit la page : la liste reste affichée pendant la relecture.
+  const [page, setPage] = useState(INBOX_PAGE)
+  const [more, setMore] = useState(false)
   useEffect(() => {
     if (!profile?.uid) return
-    setLoading(true)
+    if (page === INBOX_PAGE) setLoading(true)
     setLoadError(false)
     const unsub = subscribeMessages(
       profile.uid, 'parent',
-      list => { setMessages(list); setLoadError(false); setLoading(false) },
+      (list, hasMore) => { setMessages(list); setMore(hasMore); setLoadError(false); setLoading(false) },
       () => { setLoadError(true); setLoading(false) },
+      page,
     )
     return unsub
-  }, [profile?.uid])
+  }, [profile?.uid, page])
 
   // Arrivée via tap sur une notification push : ouvrir le message ciblé
   // dès qu'il est présent dans la liste, puis consommer le param.
@@ -238,7 +243,8 @@ export default function ParentMessagesScreen() {
           <Text style={{ color: theme.textSoft, fontSize: 14, marginTop: 12 }}>{t('parent.noMessage')}</Text>
         </View>
       ) : (
-        <FlatList data={filtered} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 80 }} />
+        <FlatList data={filtered} keyExtractor={item => item.id || ''} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 80 }}
+          ListFooterComponent={more ? <LoadMoreButton onPress={() => setPage(value => value + INBOX_PAGE)} /> : null} />
       )}
 
       {/* ── Compose : contacter l’administration ── */}
