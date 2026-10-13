@@ -1,6 +1,6 @@
 --- a/firestore.rules
 +++ b/firestore.rules
-@@ -491,31 +491,20 @@
+@@ -499,31 +499,20 @@
      }
  
      match /eleves/{eleveId} {
@@ -78,5 +78,5 @@
 +await allow('parent lit toujours la fiche de SON enfant', getDoc(doc(asUser('parent1'), 'eleves/e1')))
 +await allow('personnel avec la case « élèves » lit toujours les fiches complètes', getDoc(doc(rp, 'eleves/e1')))
  
- // ── Bilan ─────────────────────────────────────────────────────────────────
- console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)
+ // ── users : sa propre fiche, liste fermée de champs (2026-10-13) ──────────
+ // Chaque écriture réelle des applications reste acceptée ; tout autre champ

@@ -458,13 +458,21 @@ service cloud.firestore {
             !request.resource.data.diff(resource.data).affectedKeys()
                .hasAny(['role', 'poste', 'droits', 'lastLoginLocation', 'authPhoneE164',
                         'parentLoginEnabled']))
-        // Soi-même : son profil SAUF champs sensibles (anti auto-élévation) et
-        // SAUF lastLoginLocation (sinon on pourrait se falsifier sa propre
-        // localisation — seule la Cloud Function, via l'Admin SDK, l'écrit).
+        // Soi-même : liste FERMÉE de champs (durci 2026-10-13). L'ancienne liste
+        // d'interdits ouvrait d'office tout champ ajouté plus tard à la fiche
+        // (statut, invitation, enfants…) tant qu'on ne pensait pas à l'interdire.
+        // Un champ reste maintenant fermé tant qu'il n'est pas listé ici :
+        //  - contact : nom, prenom, telephone (jamais une preuve côté serveur) ;
+        //  - écrits par les applications : dernière connexion, langue des
+        //    notifications, ancien jeton push (versions d'avant le 12/09/2026),
+        //    mot de passe provisoire changé (site).
+        // Rôle, droits, classes, matière et identifiants de connexion n'y sont
+        // pas : seul le serveur (ou l'administration, ci-dessus) les écrit.
         || (isSignedIn() && uid == myUid() &&
-            !request.resource.data.diff(resource.data).affectedKeys()
-               .hasAny(['role', 'poste', 'droits', 'classes', 'classe', 'matiere', 'cycle', 'uid',
-                        'lastLoginLocation', 'authPhoneE164', 'parentLoginEnabled']))
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'nom', 'prenom', 'telephone', 'lastLoginAt', 'lastLoginPlatform',
+              'notificationLanguage', 'notificationLanguageUpdatedAt',
+              'expoPushToken', 'expoPushTokenUpdatedAt', 'mustChangePassword']))
         // Personnel (`enseignants.modifier`) : les classes d'un PROFESSEUR, et
         // rien d'autre — liste fermée de champs, pas une liste d'interdits. Ni
         // son rôle, ni sa matière, ni ses identifiants, ni un autre type de

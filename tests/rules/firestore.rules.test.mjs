@@ -2225,6 +2225,40 @@ await allow('TRANSITION : une version installée lit encore `eleves` de SA class
 await deny('prof ne lit pas `eleves` d’une autre classe',
   getDocs(query(collection(asUser('prof1'), 'eleves'), where('classe', '==', '2B'))))
 
+// ── users : sa propre fiche, liste fermée de champs (2026-10-13) ──────────
+// Chaque écriture réelle des applications reste acceptée ; tout autre champ
+// est refusé, y compris un champ inconnu ou mêlé à un champ permis.
+console.log('\n── 19. users : champs que chacun modifie sur sa propre fiche ──')
+const own = uid => doc(asUser(uid), `users/${uid}`)
+for (const [what, change] of [
+  ['la dernière connexion (application)', { lastLoginAt: serverTimestamp(), lastLoginPlatform: 'android' }],
+  ['la langue des notifications (application)', { notificationLanguage: 'ar', notificationLanguageUpdatedAt: serverTimestamp() }],
+  ['le jeton push (versions d’avant le 12/09/2026)', { expoPushToken: 'ExponentPushToken[x]', expoPushTokenUpdatedAt: serverTimestamp(), notificationLanguage: 'fr' }],
+  ['le retrait du jeton push à la déconnexion (anciennes versions)', { expoPushToken: null, expoPushTokenUpdatedAt: serverTimestamp() }],
+  ['le mot de passe provisoire changé (site)', { mustChangePassword: false }],
+  ['son nom et son téléphone de contact', { nom: 'Rent', prenom: 'Pascal', telephone: '0600000001' }],
+]) {
+  await allow(`parent écrit ${what}`, setDoc(own('parent1'), change, { merge: true }))
+}
+await allow('professeur écrit sa dernière connexion',
+  setDoc(own('prof1'), { lastLoginAt: serverTimestamp(), lastLoginPlatform: 'ios' }, { merge: true }))
+for (const [what, change] of [
+  ['un statut', { status: 'active' }], ['un état désactivé', { disabled: false }],
+  ['des enfants', { children: ['e2'] }], ['une invitation', { invitationId: 'inv-1' }],
+  ['un e-mail', { email: 'autre@example.com' }], ['un champ inconnu', { nouveauChamp: true }],
+  ['un champ permis mêlé à un champ fermé', { lastLoginPlatform: 'android', status: 'active' }],
+  ['son rôle', { role: 'admin' }], ['son identifiant', { uid: 'admin1' }],
+]) {
+  await deny(`parent ne s’écrit pas ${what}`, setDoc(own('parent1'), change, { merge: true }))
+}
+for (const [what, change] of [
+  ['ses classes', { classes: ['1A', '2B'] }], ['sa matière', { matiere: 'PC' }], ['son cycle', { cycle: 'college' }],
+]) {
+  await deny(`professeur ne change pas ${what}`, updateDoc(own('prof1'), change))
+}
+await allow('admin modifie toujours un champ ordinaire d’une autre fiche',
+  updateDoc(doc(asUser('admin1'), 'users/parent1'), { email: 'contact@example.com' }))
+
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)
 if (failed.length) {
