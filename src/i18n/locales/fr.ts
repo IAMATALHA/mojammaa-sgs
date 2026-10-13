@@ -14,7 +14,9 @@ const fr = {
   },
   common: {
     retry: 'Réessayer',
-    shareError: 'Impossible d’ouvrir le partage. Réessayez ou choisissez un autre moyen.',
+    crashTitle: 'Un problème est survenu',
+    crashBody: 'L’écran n’a pas pu s’afficher. Touchez « Réessayer ». Si le problème continue, fermez l’application puis rouvrez-la.',
+    shareError:'Impossible d’ouvrir le partage. Réessayez ou choisissez un autre moyen.',
     cancel: 'Annuler',
     confirm: 'Confirmer',
     save: 'Enregistrer',

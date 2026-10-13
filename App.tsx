@@ -30,6 +30,7 @@ import { ThemeProvider } from './src/contexts/ThemeContext'
 import NavigationRoot from './src/navigation/NavigationRoot'
 import { initI18n } from './src/i18n'
 import AnimatedSplash from './src/components/AnimatedSplash'
+import AppErrorBoundary from './src/components/app-error-boundary'
 
 export default function App() {
   const [i18nReady, setI18nReady] = useState(false)
@@ -69,14 +70,16 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         {ready && (
-          <AuthProvider>
-            <WorkspaceProvider>
-              <ThemeProvider>
-                <StatusBar style="auto" />
-                <NavigationRoot />
-              </ThemeProvider>
-            </WorkspaceProvider>
-          </AuthProvider>
+          <AppErrorBoundary>
+            <AuthProvider>
+              <WorkspaceProvider>
+                <ThemeProvider>
+                  <StatusBar style="auto" />
+                  <NavigationRoot />
+                </ThemeProvider>
+              </WorkspaceProvider>
+            </AuthProvider>
+          </AppErrorBoundary>
         )}
         <AnimatePresence>
           {showSplash && <AnimatedSplash key="splash" />}

@@ -14,7 +14,9 @@ const en = {
   },
   common: {
     retry: 'Try again',
-    shareError: 'Unable to open sharing. Try again or choose another method.',
+    crashTitle: 'Something went wrong',
+    crashBody: 'This screen could not be displayed. Tap “Try again”. If the problem continues, close the app and open it again.',
+    shareError:'Unable to open sharing. Try again or choose another method.',
     cancel: 'Cancel',
     confirm: 'Confirm',
     save: 'Save',
