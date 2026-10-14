@@ -1,19 +1,20 @@
 /**
  * ParentRessourcesScreen — supports de cours des classes des enfants.
- * Ouvrir une pièce jointe marque la ressource comme vue (viewedBy,
- * append-only — le prof voit son compteur de vues monter).
+ * Ouvrir une pièce jointe ou un lien marque la ressource comme vue (viewedBy,
+ * append-only — le prof voit son compteur de vues monter). Recherche et filtre
+ * par type (cours, résumé, exercices…).
  */
 
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, Linking,
+  View, Text, ScrollView, Pressable, StyleSheet, Linking, TextInput,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { StudentHomeStackParamList } from '../../navigation/types'
-import { FolderOpen, Paperclip, Eye, ChevronLeft } from 'lucide-react-native'
+import { FolderOpen, Paperclip, Eye, ChevronLeft, Link2, Search } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useTheme, type Theme } from '../../contexts/ThemeContext'
 import { Card, EmptyState, SectionHeader } from '../../components/dashboard'
@@ -26,6 +27,7 @@ import ScreenBackground from '../../components/ScreenBackground'
 import MessagesErrorBanner from '../../components/MessagesErrorBanner'
 import { formatTimestamp } from '../../utils/format'
 import { dirStyle } from '../../utils/arabicText'
+import { RESSOURCE_TYPES, foldSearch, normalizeLink, type RessourceType } from '../../utils/ressourceLinks'
 
 export default function ParentRessourcesScreen() {
   const theme = useTheme()
@@ -36,6 +38,8 @@ export default function ParentRessourcesScreen() {
   const [ressources, setRessources] = useState<RessourceDoc[]>([])
   const [error, setError] = useState<string | null>(null)
   const [selectedClasse, setSelectedClasse] = useState<string>('all')
+  const [selectedType, setSelectedType] = useState<RessourceType | 'all'>('all')
+  const [query, setQuery] = useState('')
 
   const classes = useMemo(
     () => [...new Set(parent.children.map(c => c.classe).filter(Boolean))],
@@ -51,12 +55,23 @@ export default function ParentRessourcesScreen() {
     )
   }, [classes.join('|')])
 
-  const filtered = useMemo(
-    () => selectedClasse === 'all'
-      ? ressources
-      : ressources.filter(r => r.classeId === selectedClasse),
-    [ressources, selectedClasse],
+  // Seuls les types présents sont proposés en filtre.
+  const types = useMemo(
+    () => RESSOURCE_TYPES.filter(tp => ressources.some(r => r.type === tp)),
+    [ressources],
   )
+
+  const filtered = useMemo(() => {
+    const words = foldSearch(query).split(/\s+/).filter(Boolean)
+    return ressources.filter(r => {
+      if (selectedClasse !== 'all' && r.classeId !== selectedClasse) return false
+      if (selectedType !== 'all' && r.type !== selectedType) return false
+      if (!words.length) return true
+      const haystack = foldSearch([r.titre, r.description, r.chapitre, r.matiere, r.teacherNom,
+        ...r.attachments.map(a => a.name), ...(r.links ?? []).map(l => `${l.label} ${l.host ?? ''}`)].filter(Boolean).join(' '))
+      return words.every(word => haystack.includes(word))
+    })
+  }, [ressources, selectedClasse, selectedType, query])
 
   const openAttachment = (item: RessourceDoc, url: string) => {
     // Vue comptée à l'OUVERTURE d'une PJ (pas au simple scroll de la liste).
@@ -66,6 +81,14 @@ export default function ParentRessourcesScreen() {
     // Sécurité : n'ouvrir que des URL https (les pièces jointes sont écrites par
     // des profs/admins, mais on refuse tout schéma autre — cf. audit 23/06/2026).
     if (/^https:\/\//i.test(url)) Linking.openURL(url).catch(() => {})
+  }
+
+  const openLink = (item: RessourceDoc, url: string) => {
+    if (item.id && profile?.uid && !(item.viewedBy || []).includes(profile.uid)) {
+      markRessourceViewed(item.id, profile.uid).catch(() => {})
+    }
+    // Liens : sites acceptés uniquement (déjà filtrés à la lecture, revérifié ici).
+    if (normalizeLink(url)) Linking.openURL(url).catch(() => {})
   }
 
   return (
@@ -127,20 +150,52 @@ export default function ParentRessourcesScreen() {
           </ScrollView>
         ) : null}
 
+        {ressources.length > 0 ? (
+          <View style={[styles.search, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Search size={16} color={theme.textMuted} strokeWidth={2} />
+            <TextInput
+              value={query} onChangeText={setQuery}
+              placeholder={t('resources.searchPlaceholder')} placeholderTextColor={theme.textMuted}
+              accessibilityLabel={t('resources.searchPlaceholder')}
+              style={[{ flex: 1, marginStart: 8, color: theme.text, fontFamily: theme.fonts.regular, fontSize: 14, paddingVertical: 10 }, dirStyle(query)]} />
+          </View>
+        ) : null}
+
+        {types.length > 1 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ flexGrow: 0, flexShrink: 0 }}
+            contentContainerStyle={styles.chips}
+          >
+            <Chip label={t('resources.all')} active={selectedType === 'all'}
+              onPress={() => setSelectedType('all')} theme={theme} />
+            {types.map(tp => (
+              <Chip key={tp} label={t(`resources.types.${tp}`)} active={selectedType === tp}
+                onPress={() => setSelectedType(tp)} theme={theme} />
+            ))}
+          </ScrollView>
+        ) : null}
+
         <View style={styles.section}>
           <SectionHeader title={t('resources.title')} subtitle={t('parent.recentFirst')} />
           {filtered.length === 0 ? (
             <Card>
               <EmptyState
-                icon={FolderOpen}
-                title={t('resources.empty')}
-                message={t('resources.parentEmptyMsg')}
+                icon={ressources.length ? Search : FolderOpen}
+                title={ressources.length ? t('resources.noMatch') : t('resources.empty')}
+                message={ressources.length ? undefined : t('resources.parentEmptyMsg')}
               />
             </Card>
           ) : (
             filtered.map(r => (
               <Card key={r.id} padding={14} style={{ marginBottom: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {r.type ? (
+                    <View style={[styles.subjectTag, { backgroundColor: theme.surface }]}>
+                      <Text style={{ color: theme.textSoft, fontSize: 10.5, fontFamily: theme.fonts.bold }}>{t(`resources.types.${r.type}`)}</Text>
+                    </View>
+                  ) : null}
                   {r.matiere ? (
                     <View style={[styles.subjectTag, { backgroundColor: theme.primarySurface }]}>
                       <Text style={{ color: theme.primary, fontSize: 10.5, fontFamily: theme.fonts.bold }}>{r.matiere}</Text>
@@ -156,6 +211,11 @@ export default function ParentRessourcesScreen() {
                 <Text style={[{ color: theme.text, fontFamily: theme.fonts.bold, fontSize: 15, marginTop: 8 }, dirStyle(r.titre)]}>
                   {r.titre}
                 </Text>
+                {r.chapitre ? (
+                  <Text style={[{ color: theme.textMuted, fontFamily: theme.fonts.semibold, fontSize: 12, marginTop: 2 }, dirStyle(r.chapitre)]}>
+                    {r.chapitre}
+                  </Text>
+                ) : null}
                 {r.description ? (
                   <Text style={[{ color: theme.textSoft, fontFamily: theme.fonts.regular, fontSize: 12.5, lineHeight: 18, marginTop: 4 }, dirStyle(r.description)]}>
                     {r.description}
@@ -174,6 +234,26 @@ export default function ParentRessourcesScreen() {
                     <Text numberOfLines={1} style={{ flex: 1, color: theme.text, fontFamily: theme.fonts.semibold, fontSize: 12.5, marginStart: 8 }}>
                       {a.name}
                     </Text>
+                  </Pressable>
+                ))}
+                {(r.links ?? []).map(link => (
+                  <Pressable key={link.url}
+                    onPress={() => openLink(r, link.url)}
+                    android_ripple={{ color: theme.border }}
+                    accessibilityRole="link"
+                    accessibilityLabel={`${link.label} · ${link.host ?? ''}`}
+                    style={({ pressed }) => [
+                      styles.attachRow,
+                      { backgroundColor: theme.surface, borderColor: theme.border },
+                      pressed && { opacity: 0.85 },
+                    ]}>
+                    <Link2 size={14} color={theme.primary} strokeWidth={2.2} />
+                    <Text numberOfLines={1} style={[{ flex: 1, color: theme.text, fontFamily: theme.fonts.semibold, fontSize: 12.5, marginStart: 8 }, dirStyle(link.label)]}>
+                      {link.label}
+                    </Text>
+                    {link.host && link.host !== link.label ? (
+                      <Text style={{ color: theme.textMuted, fontFamily: theme.fonts.regular, fontSize: 11, marginStart: 6 }}>{link.host}</Text>
+                    ) : null}
                   </Pressable>
                 ))}
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10 }}>
@@ -237,6 +317,10 @@ const styles = StyleSheet.create({
   chips:  { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4, gap: 8 },
   chip:   { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, marginEnd: 6 },
   section: { paddingHorizontal: 20, marginTop: 12 },
+  search: {
+    flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginTop: 8,
+    paddingHorizontal: 12, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth,
+  },
   subjectTag: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, marginEnd: 6 },
   attachRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9, marginTop: 8 },
 })

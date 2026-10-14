@@ -1288,6 +1288,23 @@ const en = {
     emptyMsg: 'Tap + to share a document or an image with the class.',
     parentEmptyMsg: 'Materials shared by teachers will appear here.',
     viewsCount: '{{count}} view(s)',
+    typeLabel: 'Type',
+    types: {
+      cours: 'Lesson', resume: 'Summary', exercices: 'Exercises', correction: 'Answer key',
+      video: 'Video', evaluation: 'Past test', autre: 'Other',
+    },
+    chapterLabel: 'Chapter (optional)',
+    chapterPlaceholder: 'e.g. Geometry',
+    linksLabel: 'Links',
+    linkUrlPlaceholder: 'Address (YouTube, Google Drive…)',
+    linkLabelPlaceholder: 'Display name (optional)',
+    addLink: 'Add link',
+    linkRejected: 'This link is not accepted. Accepted sites, over https: {{hosts}}.',
+    linksAllowed: 'Accepted sites: {{hosts}}',
+    contentRequired: 'Add at least one file or link.',
+    searchPlaceholder: 'Title, chapter, subject…',
+    all: 'All',
+    noMatch: 'No resource matches your search.',
   },
 
   actions: {

@@ -1,8 +1,9 @@
 /**
  * TeacherRessourcesScreen — bibliothèque de supports d'une classe.
- * Liste (titre, matière, PJ, compteur de vues) + création via bottom sheet
- * (titre, description, pièces jointes image/PDF — upload eager comme les
- * devoirs, vers ressources/{teacherUid}/).
+ * Liste (type, titre, matière, chapitre, PJ, liens, compteur de vues) +
+ * création via bottom sheet (type, titre, chapitre, description, pièces
+ * jointes image/PDF — upload eager comme les devoirs, vers
+ * ressources/{teacherUid}/ — et liens vers les sites acceptés).
  */
 import React, { useEffect, useMemo, useState } from 'react'
 import {
@@ -15,7 +16,7 @@ import type { TeacherRoute } from '../../navigation/types'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
-import { Eye, FolderOpen, Paperclip, Plus, Trash2 } from 'lucide-react-native'
+import { Eye, FolderOpen, Link2, Paperclip, Plus, Trash2 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import ScreenLayout from '../../components/ScreenLayout'
 import BottomSheet from '../../components/BottomSheet'
@@ -29,6 +30,10 @@ import {
 import { uploadAttachment, type Attachment } from '../../services/StorageService'
 import { formatTimestamp } from '../../utils/format'
 import { dirStyle } from '../../utils/arabicText'
+import {
+  RESSOURCE_LIMITS, RESSOURCE_LINK_HOSTS, RESSOURCE_TYPES, normalizeLink,
+  type RessourceLink, type RessourceType,
+} from '../../utils/ressourceLinks'
 import type { UserProfile } from '../../types'
 
 export default function TeacherRessourcesScreen() {
@@ -70,6 +75,11 @@ export default function TeacherRessourcesScreen() {
     >
       <View style={[styles.card, { backgroundColor: theme.white, borderColor: theme.border }]}>
         <View style={styles.cardHeader}>
+          {item.type ? (
+            <View style={[styles.subjectTag, { backgroundColor: theme.surface }]}>
+              <Text style={{ color: theme.textSoft, fontSize: 10.5, fontWeight: '800' }}>{t(`resources.types.${item.type}`)}</Text>
+            </View>
+          ) : null}
           {item.matiere ? (
             <View style={[styles.subjectTag, { backgroundColor: theme.primarySurface }]}>
               <Text style={{ color: theme.primary, fontSize: 10.5, fontWeight: '800' }}>{item.matiere}</Text>
@@ -87,6 +97,9 @@ export default function TeacherRessourcesScreen() {
         <Text style={[{ color: theme.text, fontFamily: theme.fonts.bold, fontSize: 15, marginTop: 6 }, dirStyle(item.titre)]}>
           {item.titre}
         </Text>
+        {item.chapitre ? (
+          <Text style={[{ color: theme.textMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }, dirStyle(item.chapitre)]}>{item.chapitre}</Text>
+        ) : null}
         {item.description ? (
           <Text numberOfLines={2} style={[{ color: theme.textSoft, fontSize: 12.5, lineHeight: 18, marginTop: 4 }, dirStyle(item.description)]}>
             {item.description}
@@ -100,6 +113,17 @@ export default function TeacherRessourcesScreen() {
             <Text numberOfLines={1} style={{ flex: 1, color: theme.text, fontSize: 12.5, fontWeight: '600', marginStart: 8 }}>
               {a.name}
             </Text>
+          </TouchableOpacity>
+        ))}
+        {(item.links ?? []).map(link => (
+          <TouchableOpacity key={link.url} activeOpacity={0.8}
+            onPress={() => { if (normalizeLink(link.url)) Linking.openURL(link.url).catch(() => {}) }}
+            style={[styles.attachRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Link2 size={14} color={theme.primary} strokeWidth={2.2} />
+            <Text numberOfLines={1} style={[{ flex: 1, color: theme.text, fontSize: 12.5, fontWeight: '600', marginStart: 8 }, dirStyle(link.label)]}>
+              {link.label}
+            </Text>
+            <Text style={{ color: theme.textMuted, fontSize: 11, marginStart: 6 }}>{link.host}</Text>
           </TouchableOpacity>
         ))}
         <View style={styles.metaRow}>
@@ -166,13 +190,32 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
 }) {
   const theme = useTheme()
   const { t } = useTranslation()
+  const [type, setType] = useState<RessourceType>('cours')
   const [titre, setTitre] = useState('')
+  const [chapitre, setChapitre] = useState('')
   const [description, setDescription] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [links, setLinks] = useState<RessourceLink[]>([])
+  const [linkUrl, setLinkUrl] = useState('')
+  const [linkLabel, setLinkLabel] = useState('')
+  const [linkError, setLinkError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const hosts = RESSOURCE_LINK_HOSTS.join(', ')
 
-  const reset = () => { setTitre(''); setDescription(''); setAttachments([]) }
+  const reset = () => {
+    setType('cours'); setTitre(''); setChapitre(''); setDescription(''); setAttachments([])
+    setLinks([]); setLinkUrl(''); setLinkLabel(''); setLinkError('')
+  }
+
+  const addLink = () => {
+    const link = normalizeLink(linkUrl)
+    if (!link) { setLinkError(t('resources.linkRejected', { hosts })); return }
+    if (links.length < RESSOURCE_LIMITS.links && !links.some(l => l.url === link.url)) {
+      setLinks(prev => [...prev, { ...link, label: linkLabel.trim().slice(0, RESSOURCE_LIMITS.linkLabel) || link.host }])
+    }
+    setLinkUrl(''); setLinkLabel(''); setLinkError('')
+  }
 
   const pickImage = async () => {
     if (!profile) return
@@ -219,7 +262,14 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
   }
 
   const submit = async () => {
-    if (!profile || !titre.trim() || attachments.length === 0) return
+    if (!profile || !titre.trim()) return
+    // Lien tapé mais pas encore ajouté : gardé s'il est accepté, signalé sinon.
+    const pending = linkUrl.trim() ? normalizeLink(linkUrl) : null
+    if (linkUrl.trim() && !pending) { setLinkError(t('resources.linkRejected', { hosts })); return }
+    const allLinks = pending && !links.some(l => l.url === pending.url)
+      ? [...links, { ...pending, label: linkLabel.trim() || pending.host }]
+      : links
+    if (attachments.length === 0 && allLinks.length === 0) { Alert.alert(t('resources.contentRequired')); return }
     setSaving(true)
     try {
       await createRessource({
@@ -227,7 +277,11 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
         description: description.trim() || undefined,
         matiere:     profile.matiere || undefined,
         classeId:    classe,
+        type,
+        chapitre:    chapitre.trim() || undefined,
         attachments,
+        // Libellé vide quand c'est le domaine : l'affichage le remet.
+        links:       allLinks.map(l => ({ url: l.url, label: l.label === l.host ? '' : l.label })),
         teacherId:   profile.uid,
         teacherNom:  `${profile.prenom} ${profile.nom}`.trim(),
       })
@@ -241,7 +295,7 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
     }
   }
 
-  const canSubmit = !!titre.trim() && attachments.length > 0 && !uploading && !saving
+  const canSubmit = !!titre.trim() && (attachments.length > 0 || links.length > 0 || !!linkUrl.trim()) && !uploading && !saving
 
   return (
     <BottomSheet visible={visible} onClose={() => { reset(); onClose() }}>
@@ -250,12 +304,33 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
           {t('resources.newResource')} · {classe}
         </Text>
 
+        <Text style={[styles.label, { color: theme.textSoft }]}>{t('resources.typeLabel')}</Text>
+        <View style={styles.typeRow}>
+          {RESSOURCE_TYPES.map(tp => {
+            const on = type === tp
+            return (
+              <TouchableOpacity key={tp} onPress={() => setType(tp)} activeOpacity={0.85}
+                accessibilityRole="button" accessibilityState={{ selected: on }}
+                style={[styles.typeChip, { borderColor: on ? theme.primary : theme.border, backgroundColor: on ? theme.primarySurface : theme.white }]}>
+                <Text style={{ color: on ? theme.primary : theme.textSoft, fontSize: 12.5, fontWeight: on ? '800' : '600' }}>{t(`resources.types.${tp}`)}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+
         <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.titleLabel')}</Text>
         <TextInput
           value={titre} onChangeText={setTitre} maxLength={100}
           accessibilityLabel={t('teacher.titleLabel')}
           placeholder={t('resources.titlePlaceholder')} placeholderTextColor={theme.textMuted}
           style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(titre)]} />
+
+        <Text style={[styles.label, { color: theme.textSoft }]}>{t('resources.chapterLabel')}</Text>
+        <TextInput
+          value={chapitre} onChangeText={setChapitre} maxLength={RESSOURCE_LIMITS.chapitre}
+          accessibilityLabel={t('resources.chapterLabel')}
+          placeholder={t('resources.chapterPlaceholder')} placeholderTextColor={theme.textMuted}
+          style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(chapitre)]} />
 
         <Text style={[styles.label, { color: theme.textSoft }]}>{t('teacher.descriptionLabel')}</Text>
         <TextInput
@@ -303,6 +378,47 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
           </View>
         ))}
 
+        <Text style={[styles.label, { color: theme.textSoft }]}>{t('resources.linksLabel')}</Text>
+        {links.length < RESSOURCE_LIMITS.links ? (
+          <>
+            <TextInput
+              value={linkUrl} onChangeText={value => { setLinkUrl(value); setLinkError('') }}
+              autoCapitalize="none" autoCorrect={false} keyboardType="url"
+              accessibilityLabel={t('resources.linkUrlPlaceholder')}
+              placeholder={t('resources.linkUrlPlaceholder')} placeholderTextColor={theme.textMuted}
+              style={[styles.input, { backgroundColor: theme.surface, borderColor: linkError ? theme.danger : theme.border, color: theme.text, textAlign: 'left', writingDirection: 'ltr' }]} />
+            <View style={[styles.attachBtnRow, { marginTop: 8 }]}>
+              <TextInput
+                value={linkLabel} onChangeText={setLinkLabel} maxLength={RESSOURCE_LIMITS.linkLabel}
+                accessibilityLabel={t('resources.linkLabelPlaceholder')}
+                placeholder={t('resources.linkLabelPlaceholder')} placeholderTextColor={theme.textMuted}
+                style={[styles.input, { flex: 1, backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, dirStyle(linkLabel)]} />
+              <TouchableOpacity onPress={addLink} disabled={!linkUrl.trim()} activeOpacity={0.85}
+                style={[styles.attachBtn, { flex: 0, paddingHorizontal: 14, borderColor: theme.border, backgroundColor: theme.white, opacity: linkUrl.trim() ? 1 : 0.5 }]}>
+                <Link2 size={16} color={theme.primary} strokeWidth={2.2} />
+                <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700' }}>{t('resources.addLink')}</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
+        <Text style={{ color: linkError ? theme.danger : theme.textMuted, fontSize: 11.5, marginTop: 6, lineHeight: 16 }}>
+          {linkError || t('resources.linksAllowed', { hosts })}
+        </Text>
+        {links.map((link, i) => (
+          <View key={link.url} style={[styles.attachItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={[styles.attachThumb, { alignItems: 'center', justifyContent: 'center', backgroundColor: theme.primarySurface }]}>
+              <Link2 size={18} color={theme.primary} strokeWidth={2.2} />
+            </View>
+            <View style={{ flex: 1, marginStart: 10 }}>
+              <Text numberOfLines={1} style={[{ color: theme.text, fontSize: 12.5, fontWeight: '700' }, dirStyle(link.label)]}>{link.label}</Text>
+              <Text numberOfLines={1} style={{ color: theme.textMuted, fontSize: 11 }}>{link.url}</Text>
+            </View>
+            <TouchableOpacity onPress={() => setLinks(prev => prev.filter((_, idx) => idx !== i))} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('common.delete')}>
+              <Ionicons name="close-circle" size={20} color={theme.danger} />
+            </TouchableOpacity>
+          </View>
+        ))}
+
         <TouchableOpacity onPress={submit} disabled={!canSubmit} activeOpacity={0.85}
           style={[styles.submitBtn, { backgroundColor: canSubmit ? theme.primary : theme.surfaceAlt }]}>
           {saving
@@ -336,5 +452,7 @@ const styles = StyleSheet.create({
   attachBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: 12, borderWidth: 1 },
   attachItem:  { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, padding: 8, marginTop: 8 },
   attachThumb: { width: 36, height: 36, borderRadius: 8 },
+  typeRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  typeChip:    { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
   submitBtn:   { alignItems: 'center', justifyContent: 'center', borderRadius: 14, paddingVertical: 13, marginTop: 16 },
 })

@@ -4,11 +4,16 @@
  * Format des docs (créé par TeacherRessourcesScreen) :
  *   {
  *     titre, description?, matiere, classeId,
+ *     type?, chapitre?,                   // depuis le 14/10/2026 (app et site)
  *     attachments: Attachment[],          // PDF / images (Storage ressources/{uid}/)
+ *     links?: { url, label }[],           // sites acceptés seulement (utils/ressourceLinks)
  *     teacherId, teacherNom,
  *     viewedBy: string[],                 // append-only (même règle que messages.readBy)
- *     createdAt
+ *     createdAt, updatedAt?
  *   }
+ *
+ * Le site (mojammaa-admin services/ressources.ts) écrit le même format et
+ * peut publier une ressource dans plusieurs classes (un document par classe).
  *
  * Contenu pédagogique non nominatif → lisible par tout connecté (même
  * périmètre que `devoirs`). Le compteur de vues = viewedBy.length.
@@ -23,6 +28,7 @@ import { subscribeChunked } from './chunkedQuery'
 import type { Attachment } from './StorageService'
 import { currentAcademicPeriod } from '../utils/academicPeriod'
 import { safeAttachments } from '../utils/attachments'
+import { isRessourceType, safeLinks, type RessourceLink, type RessourceType } from '../utils/ressourceLinks'
 
 export interface RessourceDoc {
   id?:          string
@@ -30,11 +36,16 @@ export interface RessourceDoc {
   description?: string
   matiere?:     string
   classeId:     string
+  type?:        RessourceType
+  chapitre?:    string
   attachments:  Attachment[]
+  /** À l'écriture : { url, label } ; à la lecture, le domaine est ajouté. */
+  links?:       (Pick<RessourceLink, 'url' | 'label'> & { host?: string })[]
   teacherId:    string
   teacherNom:   string
   viewedBy?:    string[]
   createdAt?:   Timestamp
+  updatedAt?:   Timestamp
   academicYear?: string
   semestre?:     string
   monthKey?:     string
@@ -77,7 +88,14 @@ export function subscribeRessourcesForClasses(
       // Tri après fusion des chunks : chaque listener ne voit que ses classes.
       // Pièces jointes assainies à la lecture (même risque que les messages,
       // audit 2026-09-28, F5/F7).
-      rows.map(row => ({ ...row, attachments: safeAttachments(row.attachments) })).sort(
+      // Liens : uniquement les sites acceptés ; type inconnu ou absent : « autre ».
+      rows.map(row => ({
+        ...row,
+        attachments: safeAttachments(row.attachments),
+        links: safeLinks(row.links),
+        type: isRessourceType(row.type) ? row.type : 'autre' as const,
+        chapitre: typeof row.chapitre === 'string' ? row.chapitre.trim() : '',
+      })).sort(
         (a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0),
       ),
     ),

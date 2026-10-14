@@ -1288,6 +1288,23 @@ const fr = {
     emptyMsg: 'Touchez + pour partager un document ou une image avec la classe.',
     parentEmptyMsg: 'Les supports partagés par les professeurs apparaîtront ici.',
     viewsCount: '{{count}} vue(s)',
+    typeLabel: 'Type',
+    types: {
+      cours: 'Cours', resume: 'Résumé', exercices: 'Exercices', correction: 'Correction',
+      video: 'Vidéo', evaluation: 'Ancien devoir', autre: 'Autre',
+    },
+    chapterLabel: 'Chapitre (facultatif)',
+    chapterPlaceholder: 'ex. Géométrie',
+    linksLabel: 'Liens',
+    linkUrlPlaceholder: 'Adresse (YouTube, Google Drive…)',
+    linkLabelPlaceholder: 'Nom affiché (facultatif)',
+    addLink: 'Ajouter le lien',
+    linkRejected: 'Ce lien n’est pas accepté. Sites acceptés, en https : {{hosts}}.',
+    linksAllowed: 'Sites acceptés : {{hosts}}',
+    contentRequired: 'Ajoutez au moins un fichier ou un lien.',
+    searchPlaceholder: 'Titre, chapitre, matière…',
+    all: 'Tout',
+    noMatch: 'Aucune ressource ne correspond à votre recherche.',
   },
 
   actions: {

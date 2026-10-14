@@ -1300,6 +1300,23 @@ const ar = {
     emptyMsg: 'اضغط + لمشاركة مستند أو صورة مع القسم.',
     parentEmptyMsg: 'ستظهر هنا الدعامات التي يشاركها الأساتذة.',
     viewsCount: '{{count}} مشاهدة',
+    typeLabel: 'النوع',
+    types: {
+      cours: 'درس', resume: 'ملخص', exercices: 'تمارين', correction: 'تصحيح',
+      video: 'فيديو', evaluation: 'فرض سابق', autre: 'أخرى',
+    },
+    chapterLabel: 'الفصل (اختياري)',
+    chapterPlaceholder: 'مثال: الهندسة',
+    linksLabel: 'الروابط',
+    linkUrlPlaceholder: 'العنوان (YouTube، Google Drive…)',
+    linkLabelPlaceholder: 'الاسم المعروض (اختياري)',
+    addLink: 'إضافة الرابط',
+    linkRejected: 'هذا الرابط غير مقبول. المواقع المقبولة، عبر https: {{hosts}}.',
+    linksAllowed: 'المواقع المقبولة: {{hosts}}',
+    contentRequired: 'أضف ملفًا أو رابطًا واحدًا على الأقل.',
+    searchPlaceholder: 'العنوان، الفصل، المادة…',
+    all: 'الكل',
+    noMatch: 'لا يوجد مورد يطابق بحثك.',
   },
 
   actions: {
