@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import type { Attachment } from './StorageService'
-import { toDoc, toDocs } from './firestore'
+import { toDocs } from './firestore'
 import { commitInChunks } from '../utils/firestoreBatch'
 import type { EleveDoc } from './elevesService'
 import { safeAttachments } from '../utils/attachments'
@@ -71,16 +71,31 @@ function normalizeSubmission(data: HomeworkSubmission): HomeworkSubmission {
   }
 }
 
+// Requête bornée au parent, à l'enfant et au devoir plutôt qu'écoute du
+// document : avant le premier rendu, le document n'existe pas et la règle
+// de lecture (parentUid/eleveId du document) refuse puis TERMINE l'écoute.
+// La requête renvoie zéro résultat, puis le rendu dès sa création
+// (seconde revue 2026-10-15, R01). Égalités seules : pas d'index composite.
 export function subscribeHomeworkSubmission(
   homeworkId: string,
   eleveId: string,
+  parentUid: string,
   onChange: (submission: HomeworkSubmission | null) => void,
   onError?: (error: Error) => void,
 ): Unsubscribe {
-  const ref = doc(db, 'homeworkSubmissions', homeworkSubmissionId(homeworkId, eleveId))
+  const id = homeworkSubmissionId(homeworkId, eleveId)
+  const q = query(
+    collection(db, 'homeworkSubmissions'),
+    where('parentUid', '==', parentUid),
+    where('eleveId', '==', eleveId),
+    where('homeworkId', '==', homeworkId),
+  )
   return onSnapshot(
-    ref,
-    snap => onChange(snap.exists() ? normalizeSubmission(toDoc<HomeworkSubmission>(snap)) : null),
+    q,
+    snap => {
+      const match = toDocs<HomeworkSubmission>(snap).find(submission => submission.id === id)
+      onChange(match ? normalizeSubmission(match) : null)
+    },
     err => onError?.(err),
   )
 }

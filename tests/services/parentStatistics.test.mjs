@@ -44,7 +44,7 @@ function setup() {
     react,
     '../services/notesService': {
       subscribeNotesForEleve(id, period, success, failure) { subscriptions.push({ id, period, success, failure }); return () => {} },
-      getClassStats(classe) { return new Promise(resolve => aggregates.push({ classe, resolve })) },
+      subscribeClassStats(classe, year, semestre, success) { aggregates.push({ classe, resolve: success }); return () => {} },
     },
     '../services/coefficientsService': { subscribeCoefficients(success, failure) { coefficients = { success, failure }; return () => {} }, makeCoefOf: () => subject => subject === 'Maths' ? 3 : 1 },
     '../utils/academicPeriod': { currentAcademicPeriod: () => ({ academicYear: '2025-2026', semestre: 'S1', monthKey: '2025-10' }) },
@@ -99,6 +99,20 @@ test('class comparison uses the same weights and incomplete aggregates stay hidd
   h.render('synthetic-B', '4AEP-B'); h.subscriptions[1].success(notes)
   h.aggregates[1].resolve({ bareme: 10, subjectAvgs: { Maths: 6 }, studentAvgs: [] }); await Promise.resolve()
   assert.equal(h.render('synthetic-B', '4AEP-B').report.hasClassComparison, false)
+})
+test('class average and rank follow the live aggregate after a new grade (review 2, R07)', () => {
+  const h = setup(); h.render(); h.coefficients().success({})
+  const maths = grade => [{ matiere: 'Maths', note: grade, bareme: 20, cycle: 'college', semestre: 'S1' }]
+  h.subscriptions[0].success(maths(10))
+  h.aggregates[0].resolve({ bareme: 20, subjectAvgs: { Maths: 14 }, studentAvgs: [18, 10] })
+  assert.equal(h.render().report.rank, '2 / 2')
+  h.subscriptions[0].success(maths(19))
+  h.aggregates[0].resolve({ bareme: 20, subjectAvgs: { Maths: 19.5 }, studentAvgs: [20, 19] })
+  const report = h.render().report
+  assert.equal(report.generalAvg, 19)
+  assert.equal(report.classGeneralAvg, 19.5)
+  assert.equal(report.rank, '2 / 2')
+  assert.equal(h.aggregates.length, 1, 'one listener, not one read per render')
 })
 test('parent home and navigation contain no deferred modules', () => {
   for (const file of ['screens/student/ParentDashboardScreen.tsx', 'navigation/StudentStack.tsx']) {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   subscribeNotesForEleve,
-  getClassStats,
+  subscribeClassStats,
   type NoteDoc,
   type ClassStatsDoc,
   type CompetenceValue,
@@ -126,14 +126,15 @@ export function useParentNotes(
   const prevSemestre = ''
 
   // Moyenne/rang de classe : agrégat serveur ANONYME (classStats) — plus
-  // jamais les notes brutes des autres élèves (confidentialité).
+  // jamais les notes brutes des autres élèves (confidentialité). Suivi en
+  // direct comme les notes : son recalcul différé met à jour moyenne et rang.
   useEffect(() => {
     if (scope !== 'semester' || !classe) return
     let active = true
-    getClassStats(classe, period.academicYear, period.semestre)
-      .then(value => { if (active) setStatsSnapshot({ key: statsKey, value }) })
-      .catch(() => { if (active) setStatsSnapshot({ key: statsKey, value: null }) })
-    return () => { active = false }
+    const unsub = subscribeClassStats(classe, period.academicYear, period.semestre,
+      value => { if (active) setStatsSnapshot({ key: statsKey, value }) },
+      () => { if (active) setStatsSnapshot({ key: statsKey, value: null }) })
+    return () => { active = false; unsub() }
   }, [statsKey])
 
   const report: ChildReportReal | null = useMemo(() => {

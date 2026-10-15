@@ -47,7 +47,7 @@ export default function DevoirDetailScreen() {
   const { t } = useTranslation()
   const { role, profile } = useAuth()
   const navigation = useNavigation()
-  const route = useRoute<RouteProp<{ params: DevoirDetailParams }, 'params'>>()
+  const route = useRoute<RouteProp<Record<'StudentDevoirView' | 'TeacherDevoirView' | 'AdminDevoirView', DevoirDetailParams>>>()
   const [live, setLive] = useState<Devoir | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState(false)
@@ -63,7 +63,12 @@ export default function DevoirDetailScreen() {
     }, () => { setLoaded(true); setLoadError(true) })
   }, [route.params.devoir.id])
   const devoir = { ...route.params.devoir, ...live }
-  const canManage = !!live && !live.cancelledAt && (role === 'admin' || (role === 'teacher' && live.teacherId === profile?.uid))
+  // L'espace se lit sur la route, pas sur le rôle : un professeur, admin,
+  // membre du personnel ou chauffeur ouvre StudentDevoirView depuis son
+  // espace parent sans changer de rôle Auth (seconde revue 2026-10-15, R04).
+  // Les règles vérifient séparément le droit d'envoyer pour cet enfant.
+  const parentSpace = route.name === 'StudentDevoirView'
+  const canManage = !parentSpace && !!live && !live.cancelledAt && (role === 'admin' || (role === 'teacher' && live.teacherId === profile?.uid))
   const remove = () => Alert.alert(t('homeworkManagement.remove'), t('homeworkManagement.confirmRemove'), [
     { text: t('common.cancel'), style: 'cancel' },
     { text: t('homeworkManagement.remove'), style: 'destructive', onPress: async () => {
@@ -191,13 +196,13 @@ export default function DevoirDetailScreen() {
           </View>
         )}
 
-        {role === 'student' && devoir.eleveId && !live.cancelledAt ? (
+        {parentSpace && devoir.eleveId && !live.cancelledAt ? (
           <HomeworkParentSubmission homework={devoir} />
         ) : null}
-        {role === 'teacher' ? (
+        {!parentSpace && role === 'teacher' ? (
           <HomeworkTeacherTracking homework={devoir} readOnly={!!live.cancelledAt || live.teacherId !== profile?.uid} />
         ) : null}
-        {role === 'admin' ? (
+        {!parentSpace && role === 'admin' ? (
           <HomeworkTeacherTracking homework={devoir} readOnly />
         ) : null}
         </>}

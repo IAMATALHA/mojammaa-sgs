@@ -1,5 +1,5 @@
 import {
-  collection, query, where, onSnapshot, doc, getDoc,
+  collection, query, where, onSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
@@ -142,15 +142,12 @@ function classStatsId(academicYear: string, classe: string, semestre: string): s
   return `${academicYear}__${classe}__${semestre}`.replace(/\//g, '_')
 }
 
-export async function getClassStats(
+function parseClassStats(
+  data: Record<string, unknown>,
   classe: string,
   academicYear: string,
   semestre: string,
-): Promise<ClassStatsDoc | null> {
-  const id = classStatsId(academicYear, classe, semestre)
-  const snap = await getDoc(doc(db, 'classStats', id))
-  if (!snap.exists()) return null
-  const data = snap.data() as Record<string, unknown>
+): ClassStatsDoc {
   return {
     academicYear: asString(data.academicYear) || academicYear,
     classe:      asString(data.classe) || classe,
@@ -163,4 +160,36 @@ export async function getClassStats(
     notesCount:  asNumber(data.notesCount) ?? 0,
     bareme:      asBareme(data.bareme),
   }
+}
+
+/**
+ * Agrégat suivi en temps réel : il est recalculé côté serveur avec jusqu'à
+ * ~2 min de retard après une note, et une lecture ponctuelle laissait la
+ * moyenne de classe et le rang figés (seconde revue 2026-10-15, R07).
+ * Requête par égalités plutôt qu'écoute du document : l'agrégat peut ne pas
+ * exister (classe sans notes) et la règle de lecture, fondée sur
+ * resource.data.classe, terminait alors l'écoute. Un document par classe.
+ */
+export function subscribeClassStats(
+  classe: string,
+  academicYear: string,
+  semestre: string,
+  onChange: (stats: ClassStatsDoc | null) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  const id = classStatsId(academicYear, classe, semestre)
+  const q = query(
+    collection(db, 'classStats'),
+    where('classe', '==', classe),
+    where('academicYear', '==', academicYear),
+    where('semestre', '==', semestre),
+  )
+  return onSnapshot(
+    q,
+    snap => {
+      const match = snap.docs.find(d => d.id === id)
+      onChange(match ? parseClassStats(match.data(), classe, academicYear, semestre) : null)
+    },
+    err => onError?.(err),
+  )
 }

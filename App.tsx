@@ -46,7 +46,7 @@ export default function App() {
     return () => clearTimeout(t)
   }, [])
 
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -63,7 +63,14 @@ export default function App() {
     Cairo_700Bold,
   })
 
-  const ready = fontsLoaded && i18nReady
+  // Une police introuvable ne doit pas bloquer l'app derrière l'animation :
+  // useFonts renvoie alors son erreur et l'app démarre avec les polices
+  // système (Expo SDK 54, useFonts). Seconde revue 2026-10-15, R05.
+  useEffect(() => {
+    if (fontError) console.warn('[app] polices non chargées, polices système utilisées', fontError)
+  }, [fontError])
+
+  const ready = (fontsLoaded || !!fontError) && i18nReady
   const showSplash = !ready || !minElapsed
 
   return (

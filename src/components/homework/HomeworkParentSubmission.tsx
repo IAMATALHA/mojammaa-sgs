@@ -69,8 +69,13 @@ export default function HomeworkParentSubmission({ homework }: Props) {
     && homework.teacherId
   )
 
+  // Incrémenté pour relancer l'écoute après une erreur (bouton « Réessayer »
+  // ou envoi réussi) : Firestore ne reprend pas une écoute terminée.
+  const [listenKey, setListenKey] = useState(0)
+  const parentUid = profile?.uid
+
   useEffect(() => {
-    if (!homework.id || !homework.eleveId) {
+    if (!homework.id || !homework.eleveId || !parentUid) {
       setLoading(false)
       return
     }
@@ -78,6 +83,7 @@ export default function HomeworkParentSubmission({ homework }: Props) {
     return subscribeHomeworkSubmission(
       homework.id,
       homework.eleveId,
+      parentUid,
       value => {
         setSubmission(value)
         setAttachments(value?.attachments || [])
@@ -90,7 +96,7 @@ export default function HomeworkParentSubmission({ homework }: Props) {
         setLoading(false)
       },
     )
-  }, [homework.id, homework.eleveId])
+  }, [homework.id, homework.eleveId, parentUid, listenKey])
 
   const status = submission?.status || 'pending'
   const canSend = status !== 'graded' && status !== 'excused'
@@ -192,6 +198,7 @@ export default function HomeworkParentSubmission({ homework }: Props) {
         comment,
         submission?.status,
       )
+      if (error) setListenKey(key => key + 1)
       Alert.alert(t('homeworkTracking.sentTitle'), t('homeworkTracking.sentMessage'))
     } catch (err: any) {
       Alert.alert(t('common.error'), err?.message || t('homeworkTracking.submitFailed'))
@@ -243,7 +250,13 @@ export default function HomeworkParentSubmission({ homework }: Props) {
 
       <HomeworkRemarkView remark={safeRemark(submission?.teacherComment, submission?.teacherTags)} showTitle />
 
-      {error ? <Text style={{ color: theme.danger, fontSize: 12, marginTop: 10 }}>{t('homeworkTracking.loadError')}</Text> : null}
+      {error ? (
+        <Pressable onPress={() => setListenKey(key => key + 1)} accessibilityRole="button" style={{ marginTop: 10 }}>
+          <Text style={{ color: theme.danger, fontSize: 12 }}>
+            {t('homeworkTracking.loadError')} <Text style={{ fontWeight: '800', textDecorationLine: 'underline' }}>{t('common.retry')}</Text>
+          </Text>
+        </Pressable>
+      ) : null}
 
       {attachments.length > 0 ? (
         <View style={{ marginTop: 14, gap: 8 }}>

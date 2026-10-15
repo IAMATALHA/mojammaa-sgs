@@ -81,9 +81,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Relance de l'écoute du profil pour l'utilisateur courant (refresh après
   // une erreur terminale du listener — audit 2026-10-15, A08).
   const resubscribeProfileRef = useRef<(() => void) | null>(null)
+  // Génération de session : incrémentée à chaque changement d'état auth. Une
+  // lecture ponctuelle lancée sous une génération antérieure est ignorée à
+  // son retour (seconde revue 2026-10-15, R06).
+  const sessionGenRef = useRef(0)
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, fbUser => {
+      sessionGenRef.current++
       // Tout changement d'état auth invalide le listener de profil précédent.
       if (profileUnsubRef.current) { profileUnsubRef.current(); profileUnsubRef.current = null }
       resubscribeProfileRef.current = null
@@ -207,19 +212,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // écriture locale immédiate. Si l'écoute s'est arrêtée sur une erreur
   // (bouton « Réessayer »), elle est recréée : sans cela, rôle et droits
   // n'étaient plus suivis du reste de la session (audit 2026-10-15, A08).
+  // Le résultat n'est appliqué que si la session n'a pas changé pendant
+  // l'attente : sinon la réponse tardive de A écrasait le profil de B.
   const refresh = useCallback(async () => {
     if (!user) return
+    const uid = user.uid
+    const gen = sessionGenRef.current
+    const current = () => sessionGenRef.current === gen && auth.currentUser?.uid === uid
     resubscribeProfileRef.current?.()
     try {
-      const snap = await getDoc(doc(db, 'users', user.uid))
+      const snap = await getDoc(doc(db, 'users', uid))
+      if (!current()) return
       if (snap.exists()) {
-        setProfile({ uid: user.uid, ...snap.data() } as UserProfile)
+        setProfile({ uid, ...snap.data() } as UserProfile)
         setProfileError(false)
       } else {
         setProfile(null)
       }
     } catch {
-      setProfileError(true)
+      if (current()) setProfileError(true)
     }
   }, [user])
 
