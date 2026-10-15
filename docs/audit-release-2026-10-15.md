@@ -54,3 +54,10 @@ Service Expo Updates contrôlé après publication (GET en lecture seule) : les 
 - premier envoi d'un devoir par un parent, sans fermer l'écran ;
 - un devoir ouvert depuis l'espace parent d'un compte professeur ;
 - les notes d'un enfant pendant qu'un professeur saisit (rang et moyenne de classe qui suivent).
+
+## Site (remarque du professeur) — même jour, le soir
+
+- **Fonction** `admin:reviewHomeworkSubmissions` (mojammaa-admin, codebase `admin`) déployée par nom. Elle accepte une remarque facultative, pour un seul élève, avec la liste fermée et les bornes. Premier essai bloqué par l'API Runtime Config (dépréciée, en panne). Corrigé par `"disallowLegacyRuntimeConfig": true` dans les deux `firebase.json` (mojammaa-admin `09f9393`, ici `d435ff6`).
+- **Site** mojammaa-admin `09f9393` (code de la remarque : `9efe8e7`) : `dpl_G29wx65T4omD6N8fSjj2bETNdCXd`, promu sur mojammaa.com. Contrôle : `index-D6XfVaCK.js` servi, 186 `/assets/*` et `index.html` identiques octet pour octet au build local.
+- **Retour arrière** site : `vercel promote https://mojammaa-admin-rm30hz2nr-youssefatalha-7142s-projects.vercel.app --yes`. C'est le déploiement du 14/10 au soir, `51cf2fe`, qui servait `index-BSJZz1g4.js`.
+- Piège : Vercel CLI 64 écrit un JSON sur stdout. Le premier script a passé ce JSON à `vercel promote`, qui a échoué sans dégât. La bascule a été relancée à la main.
