@@ -27,3 +27,30 @@ Service Expo Updates contrôlé après publication (GET en lecture seule) : les 
 
 - Essai sur téléphone (remarque du professeur, retards côté parent, appui sur une ancienne notification).
 - Site : la remarque n'y est ni affichée ni saisie. Le professeur y garde l'appel direct, désormais limité à J-7…aujourd'hui et refusé un jour « cours annulés ».
+
+## Seconde revue (R01, R03–R07) — mise en ligne du 15/10 au soir
+
+Commits `42de58d` (règles), `f21009c` (app), `e03006f` (docs). Branche `feat/ressources-liens`, non poussée. Détail : section « Correctifs de la seconde revue » de [audit-complet-2026-10-15.md](audit-complet-2026-10-15.md).
+
+1. **Règles Firestore**, 15/10 17:44 UTC, lancées par Youssef : ruleset `ef74bc5c` (R03). Storage inchangé (`67da5e64`). `npm run verify:rules` en phase. Avant : `600486a7` (`df7332c`). Le premier essai a échoué sur une erreur réseau passagère, le second a réussi.
+2. **Aucune fonction** à déployer.
+3. **OTA** (branche / canal / environnement `production`), source `e03006f` (code app identique à `f21009c`), même méthode que plus haut :
+
+| Runtime | Plateforme | Groupe |
+|---|---|---|
+| 1.0.18 | android | `f5dd2531-c37b-40bf-8839-d80a61ced5e0` |
+| 1.0.17 | android | `78966612-de1f-4450-9e20-ba1662a8b3f8` |
+| 1.0.17 | ios | `b3093faf-47ca-4f4d-ba16-f656dc7298c3` |
+| 1.0.16 | android | `8c4e9555-0964-44f3-9598-e1dbe391ca66` |
+| 1.0.16 | ios | `c10d39bf-e38a-47f1-8b4d-5ceb22c172af` |
+
+Service Expo Updates contrôlé après publication (GET en lecture seule) : les 5 combinaisons servent ces groupes. Le bundle Android est le même sur les trois runtimes (`e894ab9b…`), le bundle iOS le même sur 1.0.17 et 1.0.16 (`5b0cbed7…`). 1.0.18 iOS : aucune mise à jour (aucun build iOS).
+
+**Retour arrière :**
+- App : `eas update:republish --group <groupe>` avec les groupes de `5b36f8d` (tableau plus haut).
+- Règles : redéployer `firestore.rules` de `df7332c`. Le retour est sans risque pour l'app : les requêtes de R01/R07 sont autorisées par les deux versions des règles.
+
+**Recette téléphone à faire :**
+- premier envoi d'un devoir par un parent, sans fermer l'écran ;
+- un devoir ouvert depuis l'espace parent d'un compte professeur ;
+- les notes d'un enfant pendant qu'un professeur saisit (rang et moyenne de classe qui suivent).
