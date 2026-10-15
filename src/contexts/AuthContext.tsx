@@ -78,11 +78,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Le token push n'est enregistré qu'au PREMIER chargement réussi du profil,
   // pas à chaque mise à jour temps réel → évite le spam d'enregistrement.
   const pushRegisteredRef = useRef(false)
+  // Relance de l'écoute du profil pour l'utilisateur courant (refresh après
+  // une erreur terminale du listener — audit 2026-10-15, A08).
+  const resubscribeProfileRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, fbUser => {
       // Tout changement d'état auth invalide le listener de profil précédent.
       if (profileUnsubRef.current) { profileUnsubRef.current(); profileUnsubRef.current = null }
+      resubscribeProfileRef.current = null
 
       if (!fbUser) {
         pushRegisteredRef.current = false
@@ -112,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }).catch(() => {})
 
-      profileUnsubRef.current = onSnapshot(
+      const listen = () => { profileUnsubRef.current = onSnapshot(
         doc(db, 'users', fbUser.uid),
         snap => {
           if (!snap.exists()) {
@@ -164,7 +168,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(fbUser)
           if (first) { first = false; setIsLoading(false) }
         },
-      )
+      ) }
+      listen()
+      resubscribeProfileRef.current = () => {
+        if (!profileUnsubRef.current && auth.currentUser?.uid === fbUser.uid) listen()
+      }
     })
 
     return () => {
@@ -196,9 +204,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Relecture manuelle ponctuelle (one-shot). Le profil est déjà suivi en
   // temps réel, mais refresh() reste utile pour forcer une relecture après une
-  // écriture locale immédiate.
+  // écriture locale immédiate. Si l'écoute s'est arrêtée sur une erreur
+  // (bouton « Réessayer »), elle est recréée : sans cela, rôle et droits
+  // n'étaient plus suivis du reste de la session (audit 2026-10-15, A08).
   const refresh = useCallback(async () => {
     if (!user) return
+    resubscribeProfileRef.current?.()
     try {
       const snap = await getDoc(doc(db, 'users', user.uid))
       if (snap.exists()) {

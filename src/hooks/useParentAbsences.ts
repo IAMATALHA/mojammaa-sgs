@@ -24,7 +24,7 @@ function toEntry(a: AbsenceDoc): AbsenceEntry {
     id:        a.id || `${a.eleveId}_${a.date}_${a.seance}`,
     childId:   a.eleveId,
     date:      a.date,
-    type:      'absence',
+    type:      a.statut === 'retard' ? 'retard' : 'absence',
     duration:  SEANCE_TO_DURATION[a.seance] || a.seance,
     reason:    a.raison || '—',
     justified: !!a.justified,
@@ -80,7 +80,7 @@ export function useParentAbsences(): ParentAbsencesData {
   // l'ordre de l'index (eleveId, puis id) — illisible pour un parent.
   const entries = useMemo(
     () => absences
-      .filter(a => a.statut === 'absent')
+      .filter(a => a.statut === 'absent' || a.statut === 'retard')
       .map(toEntry)
       .sort((a, b) => b.date.localeCompare(a.date)),
     [absences],

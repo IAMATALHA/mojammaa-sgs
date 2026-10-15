@@ -17,7 +17,7 @@ import { subscribeEleves, groupByClasse, type EleveDoc } from '../services/eleve
 import {
   subscribeSchedule, type ScheduleDoc, type WeeklySlot, type WeekDay,
 } from '../services/scheduleService'
-import { computeTeacherPresenceRate } from '../services/absencesService'
+import { subscribeTeacherPresenceRate } from '../services/absencesService'
 import { toDoc } from '../services/firestore'
 import { db } from '../config/firebase'
 import type { UserProfile } from '../types'
@@ -27,7 +27,7 @@ import { currentAcademicPeriod, currentAndNextAcademicYears, localISODate } from
 export interface TeacherKpis {
   classes:    number
   students:   number
-  attendance: number   // % — placeholder à 0 tant que pas de data
+  attendance: number | null   // % du jour ; null = lecture impossible (jamais un faux 100 %)
   pending:    number   // placeholder à 0
 }
 
@@ -101,7 +101,7 @@ export function useTeacherData(): TeacherData {
   const { profile } = useAuth()
   const [eleves,           setEleves]          = useState<EleveDoc[]>([])
   const [schedule,         setSchedule]        = useState<ScheduleDoc | null>(null)
-  const [presence,         setPresence]        = useState<number>(100)
+  const [presence,         setPresence]        = useState<number | null>(100)
   const [pendingCount,     setPendingCount]    = useState<number>(0)
   const [loading,          setLoading]         = useState(true)
   const [error,            setError]           = useState<string | null>(null)
@@ -152,20 +152,18 @@ export function useTeacherData(): TeacherData {
     return () => clearInterval(id)
   }, [])
 
-  // Taux de présence : recalculé quand les classes ou l'effectif changent, pas
-  // à chaque tick d'horloge. L'effectif vient de la souscription `eleves`
-  // ci-dessus — le service ne relit donc plus les élèves pour les compter.
+  // Taux de présence du jour, en temps réel : un appel enregistré pendant que
+  // l'accueil reste monté le met à jour (audit 2026-10-15, A03). Le jour suit
+  // le tick d'horloge (passage de minuit). Une erreur de lecture donne
+  // « inconnu », plus un 100 % trompeur.
+  const today = localISODate()
   useEffect(() => {
     if (classes.length === 0 || eleves.length === 0) {
       setPresence(100)
       return
     }
-    let cancelled = false
-    computeTeacherPresenceRate(classes, eleves.length)
-      .then(rate => { if (!cancelled) setPresence(rate) })
-      .catch(() => { if (!cancelled) setPresence(100) })
-    return () => { cancelled = true }
-  }, [classes.join('|'), eleves.length])
+    return subscribeTeacherPresenceRate(classes, eleves.length, today, setPresence, () => setPresence(null))
+  }, [classes.join('|'), eleves.length, today])
 
   // Count pending devoirs (dateLimite >= today)
   useEffect(() => {

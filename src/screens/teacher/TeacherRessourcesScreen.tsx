@@ -266,8 +266,9 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
     // Lien tapé mais pas encore ajouté : gardé s'il est accepté, signalé sinon.
     const pending = linkUrl.trim() ? normalizeLink(linkUrl) : null
     if (linkUrl.trim() && !pending) { setLinkError(t('resources.linkRejected', { hosts })); return }
-    const allLinks = pending && !links.some(l => l.url === pending.url)
-      ? [...links, { ...pending, label: linkLabel.trim() || pending.host }]
+    // Mêmes bornes que addLink (C10) : libellé ≤ 80 caractères, 5 liens au plus.
+    const allLinks = pending && !links.some(l => l.url === pending.url) && links.length < RESSOURCE_LIMITS.links
+      ? [...links, { ...pending, label: linkLabel.trim().slice(0, RESSOURCE_LIMITS.linkLabel) || pending.host }]
       : links
     if (attachments.length === 0 && allLinks.length === 0) { Alert.alert(t('resources.contentRequired')); return }
     setSaving(true)

@@ -71,7 +71,9 @@ export function foldSearch(value: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
-    .replace(/[ً-ٰٟـ]/g, '')
+    // Harakat (U+064B–U+065F), alif suscrit, tatwil — PAS U+0660–U+0669 :
+    // les chiffres arabes ٠–٩ doivent rester cherchables (audit C11).
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
     .replace(/[أإآٱ]/g, 'ا')
     .replace(/ة/g, 'ه')
     .replace(/ى/g, 'ي')

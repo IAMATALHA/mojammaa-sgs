@@ -71,7 +71,7 @@ export default function ParentAbsencesScreen() {
 
   const stats = useMemo(() => {
     const justified   = filtered.filter(a => a.justified && a.type === 'absence').length
-    const unjustified = filtered.filter(a => !a.justified).length
+    const unjustified = filtered.filter(a => !a.justified && a.type === 'absence').length
     const retards     = filtered.filter(a => a.type === 'retard').length
     return { justified, unjustified, retards }
   }, [filtered])

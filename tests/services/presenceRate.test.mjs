@@ -41,12 +41,13 @@ const { chunkForIn, IN_QUERY_LIMIT } = load('../../src/services/chunkedQuery.ts'
 // Enregistre les contraintes `where` de la dernière requête construite, afin de
 // vérifier sur quelle FENÊTRE chaque souscription porte.
 let lastWhere = []
+let allQueries = []
 const absencesModule = load('../../src/services/absencesService.ts', id => {
   if (id === 'firebase/firestore') {
     return {
       ...firestoreStub,
       where: (field, op, value) => ({ field, op, value }),
-      query: (_col, ...constraints) => { lastWhere = constraints; return {} },
+      query: (_col, ...constraints) => { lastWhere = constraints; allQueries.push(constraints); return {} },
     }
   }
   if (id === '../config/firebase') return { db: {} }
@@ -78,12 +79,17 @@ subscribeAbsencesForEleves(['e1'], { academicYear: '2025-2026', monthKey: '2026-
 let fields = lastWhere.map(c => `${c.field}${c.op}`)
 assert.ok(fields.includes('monthKey=='), 'tableau de bord : borné au mois')
 
+allQueries = []
 subscribeAbsenceHistoryForEleves(['e1'], { academicYear: '2025-2026' }, () => {})
-fields = lastWhere.map(c => `${c.field}${c.op}`)
-assert.ok(fields.includes('academicYear=='), 'historique : sur toute l\'année')
-assert.ok(!fields.includes('monthKey=='), 'historique : plus vidé chaque 1er du mois')
-assert.ok(
-  lastWhere.some(c => c.field === 'statut' && c.value === 'absent'),
+for (const constraints of allQueries) {
+  fields = constraints.map(c => `${c.field}${c.op}`)
+  assert.ok(fields.includes('academicYear=='), 'historique : sur toute l\'année')
+  assert.ok(!fields.includes('monthKey=='), 'historique : plus vidé chaque 1er du mois')
+}
+// Absences ET retards (audit 2026-10-15, A02), jamais les présences.
+assert.deepEqual(
+  allQueries.map(constraints => constraints.find(c => c.field === 'statut' && c.op === '==')?.value).sort(),
+  ['absent', 'retard'],
   'historique : présences exclues, sinon le volume annuel est intenable',
 )
 

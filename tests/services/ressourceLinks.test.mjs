@@ -65,4 +65,6 @@ test('types et recherche', () => {
   assert.ok(!isRessourceType('inconnu'))
   assert.equal(foldSearch('Théorème'), 'theoreme')
   assert.equal(foldSearch('الإحْصَاء'), foldSearch('الاحصاء'))
+  // C11 : les chiffres arabes restent cherchables.
+  assert.equal(foldSearch('تمرين ٣'), 'تمرين ٣')
 })

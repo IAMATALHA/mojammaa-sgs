@@ -13,7 +13,7 @@ import {
   collection, query, where, type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
-import { getDocsChunked, subscribeChunked } from './chunkedQuery'
+import { subscribeChunked } from './chunkedQuery'
 import { localISODate } from '../utils/academicPeriod'
 
 export interface AbsenceDoc {
@@ -36,37 +36,32 @@ export interface AbsenceDoc {
 const COL = 'absences'
 
 /**
- * Date du jour en heure LOCALE. Les appels sont ÉCRITS avec `localISODate()`
- * (TeacherAttendanceScreen) : lire avec `toISOString()` (UTC) interrogeait la
- * veille entre minuit et 1h du matin au Maroc (UTC+1).
+ * Taux de présence des classes d'un prof pour une date. Absents = docs
+ * `statut='absent'`, comptés une seule fois par élève même s'il manque
+ * plusieurs séances. `totalEleves` est FOURNI par l'appelant (le tableau de
+ * bord souscrit déjà aux élèves de ses classes) plutôt que relu ici. La date
+ * est en heure LOCALE (`localISODate()`), comme à l'écriture des appels.
+ * Retourne un % arrondi 0..100 ; sans élève, 100 par convention.
  */
-function todayISO(): string {
-  return localISODate()
+function presenceRateFromAbsences(absences: AbsenceDoc[], totalEleves: number): number {
+  if (totalEleves <= 0) return 100
+  const totalAbsents = new Set(absences.map(a => a.eleveId).filter(Boolean)).size
+  return Math.round((Math.max(0, totalEleves - totalAbsents) / totalEleves) * 100)
 }
 
 /**
- * Calcule le taux de présence pour les classes d'un prof, sur la date
- * passée (ou aujourd'hui par défaut). Absents = docs `statut='absent'`,
- * comptés une seule fois par élève même s'il manque plusieurs séances.
- *
- * `totalEleves` est FOURNI par l'appelant plutôt que relu ici. Le tableau de
- * bord professeur souscrit déjà aux élèves de ses classes (`subscribeEleves`) :
- * les relire pour les compter doublait les documents chargés à chaque ouverture
- * — de l'ordre de 350 documents inutiles pour un professeur à douze classes, à
- * 600 élèves. L'appelant tient de toute façon le compte filtré par
- * `isActiveEleve`, donc le chiffre est identique.
- *
- * Retourne un % arrondi 0..100. Si aucune classe ou aucun élève,
- * renvoie 100 (rien à signaler → présence parfaite par convention).
+ * Même taux, en temps réel (audit 2026-10-15, A03) : l'accueil du professeur
+ * reste monté pendant l'appel, la lecture ponctuelle y restait figée. L'écoute
+ * ne porte que sur les absents du jour, quelques documents par classe.
  */
-export async function computeTeacherPresenceRate(
+export function subscribeTeacherPresenceRate(
   classes: string[],
   totalEleves: number,
-  date = todayISO(),
-): Promise<number> {
-  if (classes.length === 0 || totalEleves <= 0) return 100
-
-  const absencesDuJour = await getDocsChunked<AbsenceDoc>(
+  date: string,
+  onRate: (rate: number) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  return subscribeChunked<AbsenceDoc>(
     classes,
     chunk => query(
       collection(db, COL),
@@ -74,14 +69,9 @@ export async function computeTeacherPresenceRate(
       where('date',   '==', date),
       where('statut', '==', 'absent'),
     ),
+    rows => onRate(presenceRateFromAbsences(rows, totalEleves)),
+    onError,
   )
-  // Compte unique par eleveId (un élève peut être absent à plusieurs séances le même jour)
-  const totalAbsents = new Set(
-    absencesDuJour.map(a => a.eleveId).filter(Boolean),
-  ).size
-
-  const rate = Math.max(0, totalEleves - totalAbsents) / totalEleves
-  return Math.round(rate * 100)
 }
 
 /**
@@ -129,8 +119,11 @@ export function subscribeAbsencesForEleves(
  * dans cet écran. On passe de ~1 000 documents par enfant et par an à quelques
  * dizaines.
  *
- * NB : les retards ne sont pas remontés — l'écran les filtrait déjà côté
- * client (`useParentAbsences`), le comportement visible est inchangé.
+ * Retards aussi (audit 2026-10-15, A02) : l'écran parent affiche un compteur
+ * « Retards » qui restait à zéro. Deux écoutes (absent, retard) plutôt qu'un
+ * `statut in [...]` : combiné au `eleveId in` (30 valeurs), il dépasserait la
+ * limite de 30 disjonctions de Firestore. Même index (eleveId, academicYear,
+ * statut) pour les deux.
  */
 export function subscribeAbsenceHistoryForEleves(
   eleveIds: string[],
@@ -138,17 +131,24 @@ export function subscribeAbsenceHistoryForEleves(
   onChange: (list: AbsenceDoc[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  return subscribeChunked<AbsenceDoc>(
+  const lists: Record<'absent' | 'retard', AbsenceDoc[] | null> = { absent: null, retard: null }
+  const listen = (statut: 'absent' | 'retard') => subscribeChunked<AbsenceDoc>(
     eleveIds,
     chunk => query(
       collection(db, COL),
       where('eleveId', 'in', chunk),
       where('academicYear', '==', period.academicYear),
-      where('statut', '==', 'absent'),
+      where('statut', '==', statut),
     ),
-    onChange,
+    list => {
+      lists[statut] = list
+      // Publié quand les deux écoutes ont répondu : pas de compteur qui saute.
+      if (lists.absent && lists.retard) onChange([...lists.absent, ...lists.retard])
+    },
     onError,
   )
+  const unsubs = [listen('absent'), listen('retard')]
+  return () => unsubs.forEach(unsub => unsub())
 }
 
 /**

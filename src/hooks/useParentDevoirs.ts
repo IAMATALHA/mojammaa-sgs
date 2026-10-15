@@ -55,7 +55,6 @@ export function useParentDevoirs(eleves: EleveDoc[]) {
     if (classes.length === 0) { setDevoirs([]); setLoading(false); return }
     setError(null)
 
-    const today = localISODate()
     const unsubs: Unsubscribe[] = []
 
     // One bucket per query chunk, each rebuilt from scratch on every snapshot so
@@ -100,7 +99,9 @@ export function useParentDevoirs(eleves: EleveDoc[]) {
               teacherId: asString(data.teacherId),
               teacherNom: asString(data.teacherNom),
               dateLimite,
-              isPast: dateLimite < today,
+              // Recalculé à chaque rendu (devoirsByChild) : figé ici, il
+              // restait faux après minuit (audit 2026-10-15, A04).
+              isPast: dateLimite < localISODate(),
               attachments: safeAttachments(data.attachments),
             })
           })
@@ -126,9 +127,10 @@ export function useParentDevoirs(eleves: EleveDoc[]) {
     )
   }, [profile?.uid, eleves.map(eleve => eleve.codeMassar || eleve.id || '').join('|')])
 
+  const today = localISODate()
   const devoirsByChild = useMemo(() => {
     const byId = new Map(submissions.map(row => [row.id, row]))
-    return devoirs.flatMap(d =>
+    return devoirs.map(d => ({ ...d, isPast: d.dateLimite < today })).flatMap(d =>
       eleves
         .filter(eleve => eleve.classe === d.classeId)
         .map(eleve => {
@@ -144,7 +146,7 @@ export function useParentDevoirs(eleves: EleveDoc[]) {
           }
         }),
     )
-  }, [devoirs, eleves, submissions, profile?.uid])
+  }, [devoirs, eleves, submissions, profile?.uid, today])
 
   return { loading, error, devoirs: devoirsByChild }
 }

@@ -101,7 +101,9 @@ export default function TeacherDashboardScreen() {
   const totalCount = teacher.todaySlots.length
   const progressPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0
   const teacherAccent = theme.info
-  const attendanceTone = teacher.kpis.attendance >= 90
+  const attendanceTone = teacher.kpis.attendance === null
+    ? theme.textMuted
+    : teacher.kpis.attendance >= 90
     ? theme.success
     : teacher.kpis.attendance >= 75
       ? theme.warning
@@ -396,7 +398,7 @@ export default function TeacherDashboardScreen() {
               />
               <HeroMetric
                 icon={<Percent size={14} color={attendanceTone} strokeWidth={2.3} />}
-                value={`${teacher.kpis.attendance}%`}
+                value={teacher.kpis.attendance === null ? '—' : `${teacher.kpis.attendance}%`}
                 label={t('teacher.kpiAttendance')}
                 onPress={() => goTo('TeacherStats')}
                 color={attendanceTone}
