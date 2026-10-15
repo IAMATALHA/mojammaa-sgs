@@ -732,6 +732,26 @@ const fr = {
       not_done: 'Non fait',
       excused: 'Excusé',
     },
+    remark: {
+      add: 'Remarque',
+      edit: 'Modifier la remarque',
+      title: 'Remarque du professeur',
+      quick: 'Remarques rapides',
+      placeholder: 'Remarque pour la famille (facultatif)…',
+      save: 'Enregistrer',
+      cancel: 'Annuler',
+      chooseStatusFirst: 'Choisissez d’abord un statut (Rendu, Non rendu, Non fait ou Excusé).',
+      saveFailed: 'Impossible d’enregistrer la remarque.',
+      tags: {
+        bon_travail: 'Bon travail',
+        cahier_soigne: 'Cahier bien tenu',
+        exercices_partiels: 'Exercices en partie faits',
+        cahier_incomplet: 'Cahier incomplet',
+        corrections_manquantes: 'Corrections non recopiées',
+        cahier_oublie: 'Cahier oublié',
+        a_refaire: 'À refaire',
+      },
+    },
   },
 
   admin: {

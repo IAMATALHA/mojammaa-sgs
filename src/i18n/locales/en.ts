@@ -732,6 +732,26 @@ const en = {
       not_done: 'Not done',
       excused: 'Excused',
     },
+    remark: {
+      add: 'Remark',
+      edit: 'Edit remark',
+      title: 'Teacher’s remark',
+      quick: 'Quick remarks',
+      placeholder: 'Remark for the family (optional)…',
+      save: 'Save',
+      cancel: 'Cancel',
+      chooseStatusFirst: 'Choose a status first (Submitted, Missing, Not done or Excused).',
+      saveFailed: 'Could not save the remark.',
+      tags: {
+        bon_travail: 'Good work',
+        cahier_soigne: 'Neat notebook',
+        exercices_partiels: 'Exercises partly done',
+        cahier_incomplet: 'Notebook incomplete',
+        corrections_manquantes: 'Corrections not copied',
+        cahier_oublie: 'Notebook forgotten',
+        a_refaire: 'To redo',
+      },
+    },
   },
 
   admin: {

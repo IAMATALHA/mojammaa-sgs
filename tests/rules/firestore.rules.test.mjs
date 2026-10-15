@@ -793,6 +793,31 @@ await allow('prof propriétaire valide la preuve tardive',
     reviewedByUid: 'prof1',
     updatedAt: serverTimestamp(),
   }))
+// Remarque du professeur (15/10/2026) : remarques rapides + texte, avec la décision.
+const review = extra => ({ status: 'graded', reviewedAt: serverTimestamp(), reviewedByUid: 'prof1', updatedAt: serverTimestamp(), ...extra })
+await allow('prof propriétaire ajoute une remarque avec la décision',
+  updateDoc(doc(asUser('prof1'), 'homeworkSubmissions/d1a_e3'), review({ teacherComment: 'Exercice 2 incomplet', teacherTags: ['cahier_incomplet', 'a_refaire'] })))
+// d1a est échu (dateLimite 2026-07-18) : le suivi reste possible après la date limite.
+await allow('prof propriétaire marque non fait avec remarque dès la création (après la date limite)',
+  setDoc(doc(asUser('prof1'), 'homeworkSubmissions/d1a_e4'), {
+    homeworkId: 'd1a', eleveId: 'e4', classeId: '1A', parentUid: 'parent1', teacherId: 'prof1', status: 'not_done',
+    attachments: [], parentComment: '', reviewedAt: serverTimestamp(), reviewedByUid: 'prof1',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    teacherComment: 'Cahier oublié', teacherTags: ['cahier_oublie'],
+  }))
+await deny('remarque rapide inconnue refusée',
+  updateDoc(doc(asUser('prof1'), 'homeworkSubmissions/d1a_e3'), review({ teacherTags: ['nul'] })))
+await deny('remarque trop longue refusée',
+  updateDoc(doc(asUser('prof1'), 'homeworkSubmissions/d1a_e3'), review({ teacherComment: 'x'.repeat(501) })))
+await deny('remarque de type non texte refusée',
+  updateDoc(doc(asUser('prof1'), 'homeworkSubmissions/d1a_e3'), review({ teacherComment: 42 })))
+await deny('prof non propriétaire écrit une remarque',
+  updateDoc(doc(asUser('profSameClass'), 'homeworkSubmissions/d1a_e3'), review({ reviewedByUid: 'profSameClass', teacherComment: 'Intrus' })))
+await deny('le parent ne réécrit pas la remarque du professeur',
+  updateDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e3'), { teacherComment: 'Très bien', teacherTags: ['bon_travail'] }))
+await deny('le parent ne crée pas de remarque avec sa preuve',
+  setDoc(doc(asUser('parent1'), 'homeworkSubmissions/d1a_e1x'), { ...homeworkProof(), teacherComment: 'Bravo' }))
+
 await allow('admin conserve la lecture globale pour les statistiques',
   getDocs(collection(asUser('admin1'), 'homeworkSubmissions')))
 

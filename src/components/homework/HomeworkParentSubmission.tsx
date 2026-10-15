@@ -25,6 +25,8 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTheme } from '../../contexts/ThemeContext'
+import HomeworkRemarkView from './HomeworkRemarkView'
+import { safeRemark } from '../../utils/homeworkRemarks'
 import {
   isHomeworkAwaitingReview,
   submitHomeworkProof,
@@ -238,6 +240,8 @@ export default function HomeworkParentSubmission({ homework }: Props) {
           </Text>
         </View>
       </View>
+
+      <HomeworkRemarkView remark={safeRemark(submission?.teacherComment, submission?.teacherTags)} showTitle />
 
       {error ? <Text style={{ color: theme.danger, fontSize: 12, marginTop: 10 }}>{t('homeworkTracking.loadError')}</Text> : null}
 

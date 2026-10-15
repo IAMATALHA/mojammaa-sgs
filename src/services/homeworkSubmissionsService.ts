@@ -15,6 +15,7 @@ import { toDoc, toDocs } from './firestore'
 import { commitInChunks } from '../utils/firestoreBatch'
 import type { EleveDoc } from './elevesService'
 import { safeAttachments } from '../utils/attachments'
+import { safeRemark, type HomeworkRemark, type HomeworkRemarkTag } from '../utils/homeworkRemarks'
 
 export type HomeworkSubmissionStatus =
   | 'pending'
@@ -39,6 +40,9 @@ export interface HomeworkSubmission {
   submittedByUid?: string
   reviewedAt?: unknown
   reviewedByUid?: string
+  /** Remarque du professeur (utils/homeworkRemarks), lue par la famille. */
+  teacherComment?: string
+  teacherTags?: HomeworkRemarkTag[]
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -60,6 +64,10 @@ function normalizeSubmission(data: HomeworkSubmission): HomeworkSubmission {
     ...data,
     attachments: safeAttachments(data.attachments),
     status: data.status || 'pending',
+    ...(() => {
+      const remark = safeRemark(data.teacherComment, data.teacherTags)
+      return { teacherComment: remark.comment, teacherTags: remark.tags }
+    })(),
   }
 }
 
@@ -144,12 +152,18 @@ export async function submitHomeworkProof(
   )
 }
 
+/**
+ * Décision du professeur. `remark` (facultatif) remplace la remarque
+ * enregistrée ; sans lui, elle est conservée (écriture fusionnée).
+ */
 export async function reviewHomeworkSubmission(
   identity: HomeworkIdentity,
   status: Exclude<HomeworkSubmissionStatus, 'submitted' | 'submitted_late'>,
   existsAlready: boolean,
+  remark?: HomeworkRemark,
 ): Promise<void> {
   const now = serverTimestamp()
+  const clean = remark ? safeRemark(remark.comment, remark.tags) : null
   await setDoc(
     doc(db, 'homeworkSubmissions', homeworkSubmissionId(identity.homeworkId, identity.eleveId)),
     {
@@ -158,6 +172,7 @@ export async function reviewHomeworkSubmission(
       reviewedAt: now,
       reviewedByUid: identity.teacherId,
       updatedAt: now,
+      ...(clean ? { teacherComment: clean.comment, teacherTags: clean.tags } : {}),
       ...(!existsAlready ? { attachments: [], parentComment: '', createdAt: now } : {}),
     },
     { merge: true },

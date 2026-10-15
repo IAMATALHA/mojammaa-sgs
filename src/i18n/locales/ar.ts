@@ -732,6 +732,26 @@ const ar = {
       not_done: 'غير منجز',
       excused: 'معذور',
     },
+    remark: {
+      add: 'ملاحظة',
+      edit: 'تعديل الملاحظة',
+      title: 'ملاحظة الأستاذ',
+      quick: 'ملاحظات سريعة',
+      placeholder: 'ملاحظة للأسرة (اختيارية)…',
+      save: 'حفظ',
+      cancel: 'إلغاء',
+      chooseStatusFirst: 'اختر الحالة أولاً (سلّم، غير مُسلّم، غير منجز أو معذور).',
+      saveFailed: 'تعذّر حفظ الملاحظة.',
+      tags: {
+        bon_travail: 'عمل جيد',
+        cahier_soigne: 'دفتر منظم',
+        exercices_partiels: 'التمارين منجزة جزئياً',
+        cahier_incomplet: 'الدفتر ناقص',
+        corrections_manquantes: 'التصحيح غير منقول',
+        cahier_oublie: 'نسي الدفتر',
+        a_refaire: 'يجب إعادته',
+      },
+    },
   },
 
   admin: {

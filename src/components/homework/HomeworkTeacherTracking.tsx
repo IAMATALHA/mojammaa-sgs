@@ -7,6 +7,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native'
 import {
@@ -15,6 +16,7 @@ import {
   CircleAlert,
   ExternalLink,
   FileText,
+  MessageSquare,
   Users,
   X,
 } from 'lucide-react-native'
@@ -29,6 +31,11 @@ import {
   type HomeworkSubmission,
   type HomeworkSubmissionStatus,
 } from '../../services/homeworkSubmissionsService'
+import HomeworkRemarkView from './HomeworkRemarkView'
+import { dirStyle } from '../../utils/arabicText'
+import {
+  HOMEWORK_REMARK_LIMITS, HOMEWORK_REMARK_TAGS, POSITIVE_REMARK_TAGS, safeRemark, type HomeworkRemarkTag,
+} from '../../utils/homeworkRemarks'
 
 interface Props {
   homework: {
@@ -40,6 +47,9 @@ interface Props {
 }
 
 type ReviewStatus = 'graded' | 'not_submitted' | 'not_done' | 'excused'
+
+const REVIEW_STATUSES: readonly string[] = ['graded', 'not_submitted', 'not_done', 'excused']
+const isReviewStatus = (status?: string): status is ReviewStatus => !!status && REVIEW_STATUSES.includes(status)
 
 const ACTIONS: { status: ReviewStatus; icon: typeof Check }[] = [
   { status: 'graded', icon: Check },
@@ -73,6 +83,10 @@ export default function HomeworkTeacherTracking({ homework, readOnly = false }: 
   const [error, setError] = useState('')
   const [savingId, setSavingId] = useState('')
   const [bulkSaving, setBulkSaving] = useState(false)
+  // Remarque en cours d'écriture (une seule ligne ouverte à la fois).
+  const [remarkFor, setRemarkFor] = useState('')
+  const [draftTags, setDraftTags] = useState<HomeworkRemarkTag[]>([])
+  const [draftComment, setDraftComment] = useState('')
 
   useEffect(() => {
     if (!homework.classeId || !homework.id) {
@@ -144,6 +158,40 @@ export default function HomeworkTeacherTracking({ homework, readOnly = false }: 
       )
     } catch (err: any) {
       Alert.alert(t('common.error'), err?.message || t('homeworkTracking.reviewFailed'))
+    } finally {
+      setSavingId('')
+    }
+  }
+
+  const openRemark = (eleveId: string, row?: HomeworkSubmission) => {
+    const remark = safeRemark(row?.teacherComment, row?.teacherTags)
+    setRemarkFor(eleveId); setDraftTags(remark.tags); setDraftComment(remark.comment)
+  }
+  const toggleTag = (tag: HomeworkRemarkTag) =>
+    setDraftTags(current => current.includes(tag) ? current.filter(x => x !== tag) : [...current, tag])
+
+  // La remarque s'enregistre avec la décision déjà prise (règles : une
+  // écriture du professeur porte toujours un statut final).
+  const saveRemark = async (eleve: EleveDoc, status: ReviewStatus) => {
+    if (!profile?.uid || !homework.classeId || !homework.teacherId) return
+    const eleveId = studentId(eleve)
+    setSavingId(eleveId)
+    try {
+      await reviewHomeworkSubmission(
+        {
+          homeworkId: homework.id,
+          eleveId,
+          classeId: homework.classeId,
+          parentUid: eleve.parentUid || '',
+          teacherId: homework.teacherId,
+        },
+        status,
+        byStudent.has(eleveId),
+        { comment: draftComment, tags: draftTags },
+      )
+      setRemarkFor('')
+    } catch (err: any) {
+      Alert.alert(t('common.error'), err?.message || t('homeworkTracking.remark.saveFailed'))
     } finally {
       setSavingId('')
     }
@@ -246,6 +294,10 @@ export default function HomeworkTeacherTracking({ homework, readOnly = false }: 
                   </Text>
                 ) : null}
 
+                {remarkFor !== eleveId ? (
+                  <HomeworkRemarkView remark={safeRemark(row?.teacherComment, row?.teacherTags)} />
+                ) : null}
+
                 {row?.attachments?.length ? (
                   <View style={styles.proofs}>
                     {row.attachments.map((attachment, attachmentIndex) => (
@@ -288,6 +340,60 @@ export default function HomeworkTeacherTracking({ homework, readOnly = false }: 
                         </Pressable>
                       )
                     })}
+                    <Pressable
+                      disabled={isSaving}
+                      onPress={() => remarkFor === eleveId ? setRemarkFor('') : openRemark(eleveId, row)}
+                      accessibilityRole="button"
+                      style={[styles.action, { borderColor: remarkFor === eleveId ? theme.primary : theme.border, backgroundColor: theme.surfaceAlt }]}
+                    >
+                      <MessageSquare size={13} color={remarkFor === eleveId ? theme.primary : theme.textSoft} />
+                      <Text numberOfLines={1} style={{ color: remarkFor === eleveId ? theme.primary : theme.textSoft, fontSize: 10.5, fontWeight: '700' }}>
+                        {t(row?.teacherComment || row?.teacherTags?.length ? 'homeworkTracking.remark.edit' : 'homeworkTracking.remark.add')}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                {!readOnly && remarkFor === eleveId ? (
+                  <View style={[styles.remarkEditor, { borderColor: theme.border, backgroundColor: theme.surfaceAlt }]}>
+                    <Text style={{ color: theme.textSoft, fontSize: 11, fontWeight: '700' }}>{t('homeworkTracking.remark.quick')}</Text>
+                    <View style={styles.remarkTags}>
+                      {HOMEWORK_REMARK_TAGS.map(tag => {
+                        const on = draftTags.includes(tag)
+                        const color = POSITIVE_REMARK_TAGS.includes(tag) ? theme.success : theme.warning
+                        return (
+                          <Pressable key={tag} onPress={() => toggleTag(tag)}
+                            accessibilityRole="checkbox" accessibilityState={{ checked: on }}
+                            style={[styles.remarkTag, { borderColor: on ? color : theme.border, backgroundColor: on ? color + '18' : theme.surface }]}>
+                            <Text style={{ color: on ? color : theme.textSoft, fontSize: 11.5, fontWeight: on ? '800' : '600' }}>
+                              {t(`homeworkTracking.remark.tags.${tag}`)}
+                            </Text>
+                          </Pressable>
+                        )
+                      })}
+                    </View>
+                    <TextInput
+                      value={draftComment} onChangeText={setDraftComment}
+                      multiline maxLength={HOMEWORK_REMARK_LIMITS.comment}
+                      placeholder={t('homeworkTracking.remark.placeholder')} placeholderTextColor={theme.textMuted}
+                      accessibilityLabel={t('homeworkTracking.remark.placeholder')}
+                      style={[styles.remarkInput, { borderColor: theme.border, backgroundColor: theme.surface, color: theme.text }, dirStyle(draftComment)]}
+                    />
+                    {!isReviewStatus(status) ? (
+                      <Text style={{ color: theme.warning, fontSize: 11.5 }}>{t('homeworkTracking.remark.chooseStatusFirst')}</Text>
+                    ) : null}
+                    <View style={styles.remarkButtons}>
+                      <Pressable onPress={() => setRemarkFor('')} style={[styles.action, { borderColor: theme.border }]}>
+                        <Text style={{ color: theme.textSoft, fontSize: 11.5, fontWeight: '700' }}>{t('homeworkTracking.remark.cancel')}</Text>
+                      </Pressable>
+                      <Pressable
+                        disabled={isSaving || !isReviewStatus(status)}
+                        onPress={() => { if (isReviewStatus(status)) void saveRemark(eleve, status) }}
+                        style={[styles.action, { borderColor: theme.primary, backgroundColor: theme.primary, opacity: isSaving || !isReviewStatus(status) ? 0.5 : 1 }]}
+                      >
+                        <Text style={{ color: '#fff', fontSize: 11.5, fontWeight: '800' }}>{t('homeworkTracking.remark.save')}</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 ) : null}
               </View>
@@ -330,4 +436,9 @@ const styles = StyleSheet.create({
   proofImage: { width: 28, height: 28, borderRadius: 5 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9 },
   action: { minHeight: 34, borderWidth: 1, borderRadius: 9, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  remarkEditor: { borderWidth: 1, borderRadius: 12, padding: 10, marginTop: 9, gap: 8 },
+  remarkTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  remarkTag: { minHeight: 32, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, justifyContent: 'center' },
+  remarkInput: { minHeight: 64, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, textAlignVertical: 'top' },
+  remarkButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
 })

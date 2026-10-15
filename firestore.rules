@@ -107,6 +107,18 @@ service cloud.firestore {
         && (list.size() <= 9 || (list[9].url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/mojammaa-sgs[.]firebasestorage[.]app/o/devoirs%2F[^/\\\\#?]*([?][^#]*)?')
             && list[9].name is string && list[9].mime is string));
     }
+    // Remarque du professeur sur un rendu (15/10/2026) : liste fermée de
+    // remarques rapides (src/utils/homeworkRemarks.ts) + texte libre borné.
+    function validTeacherRemark(data) {
+      return data.get('teacherComment', '') is string
+        && data.get('teacherComment', '').size() <= 500
+        && data.get('teacherTags', []) is list
+        && data.get('teacherTags', []).size() <= 7
+        && data.get('teacherTags', []).hasOnly([
+          'bon_travail', 'cahier_soigne', 'exercices_partiels', 'cahier_incomplet',
+          'corrections_manquantes', 'cahier_oublie', 'a_refaire'
+        ]);
+    }
     function validHomeworkSubmissionStatus(status) {
       return status in [
         'pending', 'submitted', 'submitted_late', 'graded',
@@ -801,8 +813,10 @@ service cloud.firestore {
             && request.resource.data.keys().hasOnly([
               'homeworkId', 'eleveId', 'classeId', 'parentUid', 'teacherId',
               'status', 'attachments', 'parentComment', 'reviewedAt',
-              'reviewedByUid', 'createdAt', 'updatedAt'
-            ]));
+              'reviewedByUid', 'createdAt', 'updatedAt',
+              'teacherComment', 'teacherTags'
+            ])
+            && validTeacherRemark(request.resource.data));
 
       allow update: if isAdmin()
         // Le parent peut corriger son envoi. Après « non rendu/non fait », sa
@@ -836,14 +850,16 @@ service cloud.firestore {
               'submittedByUid', 'createdAt'
             ])
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'status', 'reviewedAt', 'reviewedByUid', 'updatedAt'
+              'status', 'reviewedAt', 'reviewedByUid', 'updatedAt',
+              'teacherComment', 'teacherTags'
             ])
             && request.resource.data.status in [
               'graded', 'not_submitted', 'not_done', 'excused'
             ]
             && request.resource.data.reviewedAt == request.time
             && request.resource.data.reviewedByUid == myUid()
-            && request.resource.data.updatedAt == request.time);
+            && request.resource.data.updatedAt == request.time
+            && validTeacherRemark(request.resource.data));
 
       allow delete: if isAdmin();
     }
