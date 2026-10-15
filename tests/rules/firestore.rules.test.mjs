@@ -2356,6 +2356,15 @@ await deny('A06 parent extérieur marque une ressource comme vue',
   updateDoc(doc(asUser('outsider'), 'ressources/res2b'), { viewedBy: arrayUnion('outsider') }))
 await deny('A06 parent d’une autre classe marque une ressource comme vue',
   updateDoc(doc(asUser('parent1'), 'ressources/res2b'), { viewedBy: arrayUnion('parent1') }))
+// R03 (seconde revue) — un ancien prof devenu parent ne modifie plus sa ressource.
+await testEnv.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'ressources/r03_former'),
+  { classeId: '2B', teacherId: 'parent2', titre: 'Ancienne ressource', viewedBy: [] }))
+await deny('R03 ancien prof (rôle parent) modifie son ancienne ressource',
+  updateDoc(doc(asUser('parent2'), 'ressources/r03_former'), { titre: 'Modifiée après retrait' }))
+await deny('R03 ancien prof (rôle parent) supprime son ancienne ressource',
+  deleteDoc(doc(asUser('parent2'), 'ressources/r03_former')))
+await allow('R03 prof actif propriétaire modifie toujours sa ressource',
+  updateDoc(doc(asUser('prof2'), 'ressources/res2b'), { titre: 'Ressource 2B v3' }))
 // C05 — journal de suivi borné aux classes du professeur.
 await allow('C05 prof écrit un suivi pour SON élève',
   setDoc(doc(asUser('prof1'), 'suivis/c05_ok'), { createdBy: 'prof1', classe: '1A', eleveId: 'e1', note: 'N' }))

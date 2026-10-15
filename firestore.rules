@@ -886,10 +886,14 @@ service cloud.firestore {
       // Audit 2026-10-15 (A06) : s'ajouter à viewedBy suppose de faire partie
       // du public de la ressource (mêmes cas que la lecture) — un compte
       // extérieur gonflait le compteur d'une classe étrangère.
+      // Seconde revue 2026-10-15 (R03) : l'édition du propriétaire exige le
+      // rôle professeur, comme sa lecture et sa suppression — un ancien prof
+      // devenu parent ne modifie plus son ancien contenu. Un prof retiré d'une
+      // classe garde lecture, édition et suppression de SES ressources.
       allow update: if isSignedIn()
         && (
           isAdmin()
-          || (resource.data.teacherId == myUid() && untouched(['teacherId', 'classeId']))
+          || (isTeacher() && resource.data.teacherId == myUid() && untouched(['teacherId', 'classeId']))
           || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy'])
               && ((isTeacher() && teacherTeaches(resource.data.classeId))
                   || guardianHasClass(resource.data.classeId)))
