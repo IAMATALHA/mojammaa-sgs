@@ -9,7 +9,7 @@
  * write the message; in-app delivery still happens via the Firestore listener.
  */
 
-const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/firestore')
+const { onDocumentCreated, onDocumentDeleted, onDocumentWritten } = require('firebase-functions/v2/firestore')
 const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const { setGlobalOptions } = require('firebase-functions/v2')
@@ -17,6 +17,7 @@ const { defineSecret } = require('firebase-functions/params')
 const { initializeApp } = require('firebase-admin/app')
 const { getFirestore, FieldPath, FieldValue } = require('firebase-admin/firestore')
 const { getAuth } = require('firebase-admin/auth')
+const { getStorage } = require('firebase-admin/storage')
 const logger = require('firebase-functions/logger')
 const { createHash } = require('node:crypto')
 const { reconcileSchoolAlert } = require('./schoolAlerts')
@@ -45,6 +46,7 @@ const { updateStudentLatinNames } = require('./studentLatinNames')
 const { requireStudentFileAccess, restrictStudentFileGrades } = require('./studentFileAccess')
 const { staffUidsWithRight } = require('./staffRights')
 const { buildSlotDocs } = require('./emploiDuTempsSync')
+const { deleteOrphanedAttachments } = require('./attachmentCleanup')
 const {
   TransportTransitionError,
   reportTransportTripDelay,
@@ -921,9 +923,18 @@ exports.flushClassStatsDirty = onSchedule(
 // Déclaration d'absence refusée ou retirée : la justification automatique
 // qu'elle avait donnée à l'absence disparaît (audit 2026-09-28, F11). Sans
 // effet sur les alertes, qui ne réagissent qu'au statut de présence.
+// Déclaration approuvée APRÈS l'appel : l'absence déjà saisie devient
+// justifiée (contre-audit 2026-10-15, C02).
 exports.onAbsenceRequestWritten = onDocumentWritten('absenceRequests/{requestId}', async (event) => {
   const before = event.data?.before?.exists ? event.data.before.data() : null
   const after = event.data?.after?.exists ? event.data.after.data() : null
+  if (after?.status === 'approved' && before?.status !== 'approved') {
+    const justified = await attendanceSubmission.applyApprovedJustification(db, {
+      requestId: event.params.requestId, eleveId: after.eleveId, date: after.date,
+    })
+    if (justified) logger.info('Approved declaration justified absences', { records: justified })
+    return
+  }
   if (!before || before.status === 'declined' || (after && after.status !== 'declined')) return
   const cleared = await attendanceSubmission.clearStaleJustification(db, { eleveId: before.eleveId, date: before.date })
   if (cleared) logger.info('Stale absence justification cleared', { records: cleared })
@@ -940,6 +951,20 @@ exports.onDevoirCreated = onDocumentCreated('devoirs/{devoirId}', async (event) 
   const data = event.data.data() || {}
   await stampPeriodFields(event.data, data.dateLimite || data.createdAt)
 })
+
+// Fichiers d'un devoir ou d'une ressource supprimé(e) : effacés de Storage
+// s'ils ne servent plus à aucun autre document de l'auteur (contre-audit
+// 2026-10-15, C08). Un devoir annulé (cancelledAt) garde les siens.
+for (const [name, collection] of [['onRessourceDeleted', 'ressources'], ['onDevoirDeleted', 'devoirs']]) {
+  exports[name] = onDocumentDeleted(`${collection}/{docId}`, async (event) => {
+    const data = event.data?.data()
+    if (!data) return
+    const removed = await deleteOrphanedAttachments(db, getStorage(), {
+      collection, folder: collection, data, docId: event.params.docId,
+    })
+    if (removed) logger.info('Orphaned attachments deleted', { collection, files: removed })
+  })
+}
 
 exports.onRessourceCreated = onDocumentCreated('ressources/{ressourceId}', async (event) => {
   if (!event.data) return
@@ -1934,8 +1959,12 @@ exports.getStatsStudentFile = onCall(async (request) => {
   const behaviorDocs = access.sees.behavior
     ? (await db.collection('comportements').where('eleveId', '==', eleveId).get()).docs
     : []
+  // Entrée annulée (cancelComportement) : hors du dossier, comme dans les
+  // compteurs parent et behavior-overview — le site la comptait encore comme
+  // un avertissement actif (contre-audit 2026-10-15, C04).
   const behavior = behaviorDocs
     .map((d) => d.data())
+    .filter((row) => !row.cancelledAt)
     .filter((row) => {
       const date = statsFilterText(row.date)
       return date >= scope.range.from && date <= scope.range.to

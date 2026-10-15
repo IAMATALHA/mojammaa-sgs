@@ -144,4 +144,31 @@ async function clearStaleJustification(db, { eleveId, date }, now = new Date()) 
   })
 }
 
-module.exports = { loadAttendance, submitAttendance, validateLesson, clearStaleJustification }
+/**
+ * Déclaration APPROUVÉE après l'appel (contre-audit 2026-10-15, C02) : le
+ * parent déclare le lendemain, ou le personnel approuve depuis l'écran
+ * Déclarations. submitAttendance ne justifie qu'au moment de l'appel ; sans ce
+ * passage, l'absence déjà saisie restait « non justifiée ». Les absences déjà
+ * justifiées ne sont pas réécrites (leur version d'appel reste valable).
+ */
+async function applyApprovedJustification(db, { requestId, eleveId, date }, now = new Date()) {
+  if (typeof requestId !== 'string' || !requestId || requestId.includes('/')
+    || typeof eleveId !== 'string' || !eleveId || eleveId.includes('/')
+    || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return 0
+  return db.runTransaction(async tx => {
+    const requestRef = db.collection('absenceRequests').doc(requestId)
+    const [request, records] = await Promise.all([
+      tx.get(requestRef),
+      tx.get(db.collection('absences').where('eleveId', '==', eleveId).where('date', '==', date)),
+    ])
+    // Relu dans la transaction : une déclaration refusée entre-temps ne justifie rien.
+    if (!request.exists || request.get('status') !== 'approved') return 0
+    const pending = records.docs.filter(d => d.get('statut') === 'absent' && d.get('justified') !== true)
+    pending.forEach(d => tx.update(d.ref, {
+      justified: true, raison: request.get('reason') || '', justificationRequestId: requestId, updatedAt: now,
+    }))
+    return pending.length
+  })
+}
+
+module.exports = { loadAttendance, submitAttendance, validateLesson, clearStaleJustification, applyApprovedJustification }

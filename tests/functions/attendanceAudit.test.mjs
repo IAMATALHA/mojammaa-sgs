@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const admin = require('../../functions/node_modules/firebase-admin')
-const { loadAttendance, submitAttendance, clearStaleJustification } = require('../../functions/attendanceSubmission')
+const { loadAttendance, submitAttendance, clearStaleJustification, applyApprovedJustification } = require('../../functions/attendanceSubmission')
 const { attendanceVersion, lessonKey } = require('../../functions/lib/attendanceProtocol')
 if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('Emulator required; never run against production')
 const app = admin.initializeApp({ projectId: 'demo-mojammaa-attendance-fix' }, 'attendance-fix')
@@ -99,6 +99,21 @@ await test('F11 resubmission with a declined declaration keeps no old justificat
   assert.equal(result.versions['fix-child'], attendanceVersion(stored), 'returned version matches the stored record')
   await submit(date, 'present', now)
   assert.equal((await record(date).get()).get('justified'), undefined, 'present correction keeps consistent metadata')
+})
+
+await test('C02 a declaration approved AFTER the roll call justifies the absence', async () => {
+  const { date, now } = monday('2026-08-24')
+  await submit(date, 'absent', now)
+  assert.equal((await record(date).get()).get('justified'), undefined, 'no declaration yet')
+  await db.doc('absenceRequests/fix-late').set({ classe: 'FIX', date, eleveId: 'fix-child', status: 'pending', reason: 'Late excuse' })
+  assert.equal(await applyApprovedJustification(db, { requestId: 'fix-late', eleveId: 'fix-child', date }), 0, 'pending justifies nothing')
+  await db.doc('absenceRequests/fix-late').update({ status: 'approved' })
+  assert.equal(await applyApprovedJustification(db, { requestId: 'fix-late', eleveId: 'fix-child', date }), 1)
+  const stored = (await record(date).get()).data()
+  assert.equal(stored.justified, true); assert.equal(stored.raison, 'Late excuse')
+  assert.equal(stored.justificationRequestId, 'fix-late')
+  assert.equal(await applyApprovedJustification(db, { requestId: 'fix-late', eleveId: 'fix-child', date }), 0, 'idempotent')
+  await db.doc('absenceRequests/fix-late').delete()
 })
 
 await test('F11 another active declaration still justifies the absence', async () => {
