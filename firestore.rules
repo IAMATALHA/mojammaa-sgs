@@ -271,6 +271,24 @@ service cloud.firestore {
     function eleveIsInClasse(eleveId, classe) {
       return get(/databases/$(database)/documents/eleves/$(eleveId)).data.classe == classe;
     }
+    // Date métier 'AAAA-MM-JJ' (absences, déclarations).
+    function isIsoDate(value) {
+      return value is string && value.matches('[0-9]{4}-[0-1][0-9]-[0-3][0-9]');
+    }
+    function isoDateTs(value) {
+      return timestamp.date(int(value[0:4]), int(value[5:7]), int(value[8:10]));
+    }
+    // Écriture directe d'un appel par un professeur (site) : mêmes bornes que
+    // submitAttendance pour ce qui est prouvable sans requête (A07).
+    function teacherAttendanceFields(data) {
+      return data.statut in ['present', 'absent', 'retard']
+        && data.get('professorId', '') == myUid()
+        && isIsoDate(data.date)
+        && isoDateTs(data.date) <= request.time + duration.value(1, 'h')
+        && isoDateTs(data.date) >= request.time - duration.value(8, 'd')
+        && !(exists(/databases/$(database)/documents/joursScolaires/$(data.date))
+             && get(/databases/$(database)/documents/joursScolaires/$(data.date)).data.get('annuleCours', false) == true);
+    }
     // Pièces jointes d'un message (audit 2026-09-28, F5) : seule l'affiche
     // d'annonce de l'administration en porte (1 aujourd'hui, 3 = marge), et
     // uniquement depuis le dossier annonces/ de son auteur. Un parent pouvait
@@ -509,9 +527,13 @@ service cloud.firestore {
                   || teacherTeaches(resource.data.classe);
       // Personnel (`eleves.modifier`) : comme un professeur, jamais le lien
       // parent — il ne se pose que par invitation, côté serveur.
+      // Contre-audit 2026-10-15 (C01) : le professeur non plus ne pose pas de
+      // lien parent à la création — il créait un élève fictif rattaché à son
+      // propre compte ou à un complice, qui recevait aussitôt un guardianAccess
+      // (diffusions « parents » de tout l'établissement, devoirs, ressources).
       allow create: if isAdmin()
-        || (can('eleves.modifier') && request.resource.data.get('parentUid', '') == '')
-        || teacherTeaches(request.resource.data.classe);
+        || ((can('eleves.modifier') || teacherTeaches(request.resource.data.classe))
+            && request.resource.data.get('parentUid', '') == '');
       // Durci 2026-07-11 : l'ancienne règle ne validait que la NOUVELLE classe —
       // un prof pouvait cibler N'IMPORTE QUEL élève par ID (écriture aveugle,
       // pas besoin du droit de lecture) et le "capturer" en posant sa classe.
@@ -588,13 +610,26 @@ service cloud.firestore {
       // create, classe existante validée + eleveId/classe immuables à l'update.
       // (L'écran d'appel réécrit le doc à l'identique via set+merge, docId
       // déterministe → update autorisé, champs gelés inchangés.)
+      //
+      // Audit 2026-10-15 (A07) : l'app passe par submitAttendance (serveur) ;
+      // seul le site écrit encore directement pour un professeur. Cette voie
+      // reprend donc les invariants du serveur que les règles savent prouver :
+      // statut connu, auteur = soi, date réelle entre J-7 et aujourd'hui (heure
+      // marocaine, marge d'1 h), journée non annulée, et JAMAIS de
+      // justification — elle ne vient que des déclarations des familles,
+      // posée par le serveur. À l'update, date/séance/auteur sont gelés aussi.
+      // Reste non prouvable ici : la séance vs l'emploi du temps (à migrer
+      // vers submitAttendance côté site).
       allow create: if can('absences.saisir') || (
         teacherTeaches(request.resource.data.classe)
         && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe)
+        && teacherAttendanceFields(request.resource.data)
+        && !request.resource.data.keys().hasAny(['justified', 'raison', 'justificationRequestId'])
       );
       allow update: if can('absences.saisir') || (
         teacherTeaches(resource.data.classe)
-        && untouched(['eleveId', 'classe'])
+        && untouched(['eleveId', 'classe', 'date', 'seance', 'justified', 'raison', 'justificationRequestId'])
+        && teacherAttendanceFields(request.resource.data)
       );
       allow delete: if isSuperAdmin();
     }
@@ -649,11 +684,29 @@ service cloud.firestore {
     match /absenceRequests/{reqId} {
       // Responsable légal : déclare pour SON enfant, en SON nom, statut
       // 'pending' imposé. Son rôle principal peut être parent/prof/chauffeur.
+      // Contre-audit 2026-10-15 (C03) : la classe doit être celle de l'élève
+      // (submitAttendance cherche les déclarations PAR CLASSE ; une classe
+      // fausse rendait la déclaration invisible au bon professeur et lisible
+      // par un autre), date au format métier, motif borné, champs fermés.
       allow create: if ownsGuardianRecord(
           request.resource.data.parentUid,
           request.resource.data.eleveId
         )
-        && request.resource.data.status == 'pending';
+        && request.resource.data.status == 'pending'
+        && request.resource.data.keys().hasOnly([
+          'eleveId', 'eleveNom', 'elevePrenom', 'classe', 'parentUid',
+          'parentNom', 'date', 'reason', 'status', 'createdAt'
+        ])
+        && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe)
+        && isIsoDate(request.resource.data.date)
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 500
+        && request.resource.data.get('eleveNom', '') is string
+        && request.resource.data.get('eleveNom', '').size() <= 120
+        && request.resource.data.get('elevePrenom', '') is string
+        && request.resource.data.get('elevePrenom', '').size() <= 120
+        && request.resource.data.get('parentNom', '') is string
+        && request.resource.data.get('parentNom', '').size() <= 200;
       allow read: if can('absences.voir')
         || ownsGuardianRecord(resource.data.parentUid, resource.data.eleveId)
         || teacherTeaches(resource.data.classe);
@@ -814,11 +867,16 @@ service cloud.firestore {
       // Le prof propriétaire ne change ni l'auteur ni la classe : sinon il
       // publiait hors de ses classes (la règle create l'interdit) et attribuait
       // son contenu à un collègue (audit 2026-09-28, F6).
+      // Audit 2026-10-15 (A06) : s'ajouter à viewedBy suppose de faire partie
+      // du public de la ressource (mêmes cas que la lecture) — un compte
+      // extérieur gonflait le compteur d'une classe étrangère.
       allow update: if isSignedIn()
         && (
           isAdmin()
           || (resource.data.teacherId == myUid() && untouched(['teacherId', 'classeId']))
-          || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy'])
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy'])
+              && ((isTeacher() && teacherTeaches(resource.data.classeId))
+                  || guardianHasClass(resource.data.classeId)))
         )
         && selfAppendOnly('viewedBy');
       allow delete: if isAdmin() || (isTeacher() && resource.data.teacherId == myUid());
@@ -1009,13 +1067,19 @@ service cloud.firestore {
       allow read:   if can('suivis');
       allow read:   if isTeacher() && resource.data.createdBy == myUid();
       allow read:   if isTeacher() && teacherTeaches(resource.data.classe);
-      allow create: if (can('suivis') || isTeacher())
-        && request.resource.data.createdBy == myUid();
+      // Contre-audit 2026-10-15 (C05) : un professeur n'écrit que pour un
+      // élève d'une classe qu'il enseigne, et ne déplace pas son entrée.
+      allow create: if request.resource.data.createdBy == myUid()
+        && (can('suivis')
+          || (teacherTeaches(request.resource.data.classe)
+              && eleveIsInClasse(request.resource.data.eleveId, request.resource.data.classe)));
       // Personnel (`suivis`) : le journal est tenu à plusieurs — chacun peut
       // compléter ou clore une action, sans en changer l'auteur ni la supprimer.
       allow update: if isAdmin()
         || (isStaff() && can('suivis') && untouched(['createdBy']))
-        || (isTeacher() && resource.data.createdBy == myUid());
+        || (isTeacher() && resource.data.createdBy == myUid()
+            && teacherTeaches(resource.data.classe)
+            && untouched(['createdBy', 'classe', 'eleveId']));
       allow delete: if isAdmin();
     }
 
@@ -1084,6 +1148,9 @@ service cloud.firestore {
     // par la CF onUserWritten (Admin SDK).
     match /directory/{docId} {
       allow read:  if isAdmin() || isTeacher() || hasGuardianAccess();
+      // Audit 2026-10-15 (A05) : le personnel chargé des rendez-vous choisit
+      // un professeur dans cet annuaire (AdminAppointmentsScreen).
+      allow read:  if docId == 'staff' && can('rendezvous');
       allow write: if false;
     }
 

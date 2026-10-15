@@ -11,9 +11,19 @@ service firebase.storage {
     // Limites communes (durci 23/06/2026) : pièces jointes pédagogiques =
     // documents ou images uniquement, ≤ 25 Mo. Empêche l'upload de fichiers
     // arbitraires/volumineux servis ensuite à tous les utilisateurs.
+    // Texte : brut ou CSV seulement (contre-audit 2026-10-15, C09) — un
+    // `text/html` déposé (p. ex. comme preuve de devoir) s'ouvrait comme une
+    // page web sur firebasestorage.googleapis.com : hameçonnage sous un
+    // domaine Google.
     function isAllowedDoc() {
       return request.resource.size < 25 * 1024 * 1024
-        && request.resource.contentType.matches('application/pdf|image/.*|text/.*|application/vnd.*|application/msword');
+        && request.resource.contentType.matches('application/pdf|image/.*|text/plain|text/csv|application/vnd.*|application/msword');
+    }
+    // Affiche d'annonce : image ou PDF, ≤ 10 Mo (C07). Lisible par tout
+    // compte connecté, donc bornée comme les supports pédagogiques.
+    function isAllowedPoster() {
+      return request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf|image/.*');
     }
 
     function currentRole() {
@@ -43,8 +53,12 @@ service firebase.storage {
     // Lecture SDK : voir readsOwnFolderOrAdmin (les familles passent par l'URL).
     match /devoirs/{teacherUid}/{filename} {
       allow read:  if readsOwnFolderOrAdmin(teacherUid);
-      allow write: if request.auth != null && request.auth.uid == teacherUid
+      allow create, update: if request.auth != null && request.auth.uid == teacherUid
         && isAllowedDoc() && isStaffUploader();
+      // Suppression séparée (C08) : `isAllowedDoc` lit request.resource, nul
+      // lors d'une suppression — le propriétaire ne pouvait pas effacer ses
+      // fichiers, qui restaient servis par leur URL à jeton.
+      allow delete: if readsOwnFolderOrAdmin(teacherUid);
     }
 
     // Preuves de devoir envoyées par les parents. L'écriture est limitée au
@@ -81,9 +95,12 @@ service firebase.storage {
     }
 
     // Imports de notes (Excel/CSV) : strictement privé au prof qui upload.
+    // Dépôt réservé aux enseignants et à l'administration (C06) : un parent
+    // pouvait y entasser des fichiers de 25 Mo.
     match /notes-imports/{teacherUid}/{filename} {
-      allow read:  if request.auth != null && request.auth.uid == teacherUid;
-      allow write: if request.auth != null && request.auth.uid == teacherUid && isAllowedDoc();
+      allow read, delete: if request.auth != null && request.auth.uid == teacherUid;
+      allow create, update: if request.auth != null && request.auth.uid == teacherUid
+        && isAllowedDoc() && isStaffUploader();
     }
 
     // Ressources pédagogiques : même modèle que les devoirs — le prof
@@ -91,8 +108,9 @@ service firebase.storage {
     // devoirs, le public autorisé passe par l'URL de la ressource.
     match /ressources/{teacherUid}/{filename} {
       allow read:  if readsOwnFolderOrAdmin(teacherUid);
-      allow write: if request.auth != null && request.auth.uid == teacherUid
+      allow create, update: if request.auth != null && request.auth.uid == teacherUid
         && isAllowedDoc() && isStaffUploader();
+      allow delete: if readsOwnFolderOrAdmin(teacherUid);
     }
 
     // Affiches d'annonces (admin uniquement). Le rôle est vérifié via
@@ -100,7 +118,11 @@ service firebase.storage {
     // sous-dossier ne suffit pas, il faut role == 'admin'.
     match /annonces/{adminUid}/{filename} {
       allow read:  if request.auth != null;
-      allow write: if request.auth != null
+      allow create, update: if request.auth != null
+        && request.auth.uid == adminUid
+        && isAllowedPoster()
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow delete: if request.auth != null
         && request.auth.uid == adminUid
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }

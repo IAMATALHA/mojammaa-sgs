@@ -7,7 +7,7 @@ import {
   assertSucceeds,
 } from '@firebase/rules-unit-testing'
 import { doc, setDoc } from 'firebase/firestore'
-import { getBytes, listAll, ref, uploadBytes } from 'firebase/storage'
+import { deleteObject, getBytes, listAll, ref, uploadBytes } from 'firebase/storage'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const testEnv = await initializeTestEnvironment({
@@ -88,6 +88,25 @@ await assertFails(getBytes(ref(storageAs('parent1'), proofPath)))
 await assertSucceeds(getBytes(ref(storageAs('prof1'), proofPath)))
 await assertSucceeds(getBytes(ref(storageAs('admin1'), proofPath)))
 await assertFails(getBytes(ref(storageAs('parent2'), proofPath)))   // le nouveau parent non plus
+
+// ── Contre-audit 2026-10-15 : C06 à C09 ──
+// C09 : pas de page HTML déposée comme pièce jointe ou preuve.
+await assertFails(uploadBytes(ref(storageAs('parent1'), 'homework-submissions/parent1/page.html'), bytes,
+  { ...metadata, contentType: 'text/html' }))
+await assertFails(uploadBytes(ref(storageAs('prof1'), 'ressources/prof1/page.html'), bytes, { contentType: 'text/html' }))
+await assertSucceeds(uploadBytes(ref(storageAs('prof1'), 'ressources/prof1/notes.csv'), bytes, { contentType: 'text/csv' }))
+// C06 : imports de notes réservés aux enseignants et à l'administration.
+const xlsx = { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+await assertFails(uploadBytes(ref(storageAs('parent1'), 'notes-imports/parent1/x.xlsx'), bytes, xlsx))
+await assertSucceeds(uploadBytes(ref(storageAs('prof1'), 'notes-imports/prof1/x.xlsx'), bytes, xlsx))
+// C07 : affiche d'annonce = image ou PDF borné(e).
+await assertSucceeds(uploadBytes(ref(storageAs('admin1'), 'annonces/admin1/a.jpg'), bytes, { contentType: 'image/jpeg' }))
+await assertFails(uploadBytes(ref(storageAs('admin1'), 'annonces/admin1/a.zip'), bytes, { contentType: 'application/zip' }))
+await assertFails(uploadBytes(ref(storageAs('admin1'), 'annonces/admin1/big.jpg'), new Uint8Array(10 * 1024 * 1024 + 1), { contentType: 'image/jpeg' }))
+// C08 : le propriétaire (ou l'administration) peut effacer ses fichiers ; personne d'autre.
+await assertFails(deleteObject(ref(storageAs('prof2'), resourceFile)))
+await assertSucceeds(deleteObject(ref(storageAs('prof1'), resourceFile)))
+await assertSucceeds(deleteObject(ref(storageAs('admin1'), homeworkFile)))
 
 console.log('storage homework proofs + audit 2026-09-28 (F3, F8): accès autorisés/refusés validés')
 await testEnv.cleanup()

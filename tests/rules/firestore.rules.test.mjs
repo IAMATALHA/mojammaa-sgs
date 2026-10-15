@@ -30,6 +30,12 @@ import {
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
+// Appel saisi directement (site) : borné à J-7…aujourd'hui (A07). Date UTC :
+// toujours ≤ la date marocaine, donc dans la fenêtre.
+const TODAY = new Date().toISOString().slice(0, 10)
+const FUTURE = new Date(Date.now() + 3 * 86400_000).toISOString().slice(0, 10)
+const OLD = new Date(Date.now() - 20 * 86400_000).toISOString().slice(0, 10)
+
 const testEnv = await initializeTestEnvironment({
   projectId: 'demo-mojammaa-rules',
   firestore: { rules: readFileSync(resolve(root, 'firestore.rules'), 'utf8') },
@@ -112,6 +118,9 @@ await testEnv.withSecurityRulesDisabled(async (ctx) => {
     seed('notes/n7', { eleveId: 'e7', classe: '3C', matiere: 'Français', note: 17 }),
     seed('notes/n8', { eleveId: 'e8', classe: '4D', matiere: 'Anglais', note: 16 }),
     seed('absences/a1', { eleveId: 'e1', classe: '1A', date: '2026-07-10', seance: 'S1', statut: 'present' }),
+    seed('absences/a1r', { eleveId: 'e1', classe: '1A', date: TODAY, seance: 'S1', statut: 'present', professorId: 'prof1' }),
+    seed('absences/a1j', { eleveId: 'e1', classe: '1A', date: TODAY, seance: 'S3', statut: 'absent', professorId: 'prof1', justified: true, raison: 'maladie', justificationRequestId: 'r1' }),
+    seed('joursScolaires/2026-10-01', { annuleCours: true }),
     seed('absences/a2', { eleveId: 'e2', classe: '2B', date: '2026-07-10', seance: 'S1', statut: 'absent' }),
     seed('absences/a7', { eleveId: 'e7', classe: '3C', date: '2026-07-10', seance: 'S1', statut: 'absent' }),
     seed('absences/a8', { eleveId: 'e8', classe: '4D', date: '2026-07-10', seance: 'S1', statut: 'retard' }),
@@ -552,15 +561,31 @@ for (const [field, value] of [
 console.log('\n── 5. Absences : mêmes garanties ──')
 await allow('prof enregistre l\'appel pour SON élève',
   setDoc(doc(asUser('prof1'), 'absences/new_a1'), {
-    eleveId: 'e1', classe: '1A', date: '2026-07-11', seance: 'S2', statut: 'absent',
+    eleveId: 'e1', classe: '1A', date: TODAY, seance: 'S2', statut: 'absent', professorId: 'prof1',
   }))
+// A07 — l'écriture directe reprend les invariants de submitAttendance.
+const directAbsence = (extra) => ({ eleveId: 'e1', classe: '1A', date: TODAY, seance: 'S2', statut: 'absent', professorId: 'prof1', ...extra })
+await deny('prof date un appel dans le futur', setDoc(doc(asUser('prof1'), 'absences/a07_future'), directAbsence({ date: FUTURE })))
+await deny('prof saisit un appel de plus de 7 jours', setDoc(doc(asUser('prof1'), 'absences/a07_old'), directAbsence({ date: OLD })))
+await deny('prof saisit une date invalide', setDoc(doc(asUser('prof1'), 'absences/a07_bad'), directAbsence({ date: '15/10/2026' })))
+await deny('prof signe l\'appel au nom d\'un autre', setDoc(doc(asUser('prof1'), 'absences/a07_actor'), directAbsence({ professorId: 'someone-else' })))
+await deny('prof justifie lui-même une absence', setDoc(doc(asUser('prof1'), 'absences/a07_just'), directAbsence({ justified: true })))
+await deny('prof invente un statut', setDoc(doc(asUser('prof1'), 'absences/a07_statut'), directAbsence({ statut: 'excuse' })))
+await testEnv.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), `joursScolaires/${TODAY}`), { annuleCours: true }))
+await deny('prof saisit un appel un jour « cours annulés »', setDoc(doc(asUser('prof1'), 'absences/a07_cancelled'), directAbsence({})))
+await testEnv.withSecurityRulesDisabled(ctx => deleteDoc(doc(ctx.firestore(), `joursScolaires/${TODAY}`)))
+await deny('prof retire la justification posée par le serveur',
+  updateDoc(doc(asUser('prof1'), 'absences/a1j'), { justified: deleteField(), statut: 'absent' }))
+await deny('prof déplace un appel à une autre date', updateDoc(doc(asUser('prof1'), 'absences/a1r'), { date: OLD }))
+await allow('prof re-sauve un appel justifié sans toucher la justification',
+  setDoc(doc(asUser('prof1'), 'absences/a1j'), directAbsence({ seance: 'S3', statut: 'absent' }), { merge: true }))
 await deny('prof forge une absence pour un élève d\'une autre classe',
   setDoc(doc(asUser('prof1'), 'absences/forged_a'), {
     eleveId: 'e2', classe: '1A', date: '2026-07-11', seance: 'S2', statut: 'absent',
   }))
 await allow('prof re-sauve l\'appel (statut modifié, set+merge idempotent)',
-  setDoc(doc(asUser('prof1'), 'absences/a1'), {
-    eleveId: 'e1', classe: '1A', date: '2026-07-10', seance: 'S1', statut: 'retard',
+  setDoc(doc(asUser('prof1'), 'absences/a1r'), {
+    eleveId: 'e1', classe: '1A', date: TODAY, seance: 'S1', statut: 'retard', professorId: 'prof1',
   }, { merge: true }))
 await deny('prof détourne l\'absence d\'une autre classe',
   updateDoc(doc(asUser('prof1'), 'absences/a2'), { classe: '1A' }))
@@ -2276,6 +2301,49 @@ await allow('personnel de la boîte commune lit ses derniers messages', latest(b
 await deny('parent ne lit pas les messages directs d’un autre compte', latest(asUser('parent1'), where('toIds', 'array-contains', 'parent2')))
 await deny('parent ne lit pas la boîte commune', latest(asUser('parent1'), where('toType', 'in', ['all', 'administration'])))
 await deny('professeur ne lit pas les envois d’un collègue', latest(asUser('prof1'), where('fromId', '==', 'prof2')))
+
+// ── Audit du 15/10/2026 (Codex A05/A06, contre-audit C01/C03/C05) ────────
+console.log('\n── 21. Audit 2026-10-15 : correctifs des règles ──')
+await testEnv.withSecurityRulesDisabled(async ctx => {
+  const db = ctx.firestore()
+  await setDoc(doc(db, 'users/staffRdv'), { uid: 'staffRdv', role: 'staff', droits: ['rendezvous'] })
+  await setDoc(doc(db, 'users/outsider'), { uid: 'outsider', role: 'parent' })
+})
+// C01 — aucun lien parent posé à la création par un professeur.
+await deny('C01 prof crée un élève rattaché à un complice',
+  setDoc(doc(asUser('prof1'), 'eleves/c01_fake'), { classe: '1A', nom: 'X', prenom: 'Y', parentUid: 'parent2' }))
+await deny('C01 prof crée un élève rattaché à lui-même',
+  setDoc(doc(asUser('prof1'), 'eleves/c01_self'), { classe: '1A', nom: 'X', prenom: 'Y', parentUid: 'prof1' }))
+await allow('C01 prof crée toujours un élève sans lien parent',
+  setDoc(doc(asUser('prof1'), 'eleves/c01_ok'), { classe: '1A', nom: 'X', prenom: 'Y' }))
+await allow('C01 admin rattache toujours à la création',
+  setDoc(doc(asUser('admin1'), 'eleves/c01_admin'), { classe: '1A', nom: 'X', prenom: 'Y', parentUid: 'parent1' }))
+// C03 — déclaration d'absence cohérente avec l'élève.
+const declaration = extra => ({ eleveId: 'e1', eleveNom: 'A', elevePrenom: 'A', classe: '1A', parentUid: 'parent1',
+  parentNom: 'Pa Rent', date: TODAY, reason: 'maladie', status: 'pending', createdAt: serverTimestamp(), ...extra })
+await allow('C03 parent déclare une absence (charge utile de l’app)', setDoc(doc(asUser('parent1'), 'absenceRequests/c03_ok'), declaration({})))
+await deny('C03 parent déclare avec la classe d’un autre', setDoc(doc(asUser('parent1'), 'absenceRequests/c03_class'), declaration({ classe: '2B' })))
+await deny('C03 parent déclare une date invalide', setDoc(doc(asUser('parent1'), 'absenceRequests/c03_date'), declaration({ date: 'demain' })))
+await deny('C03 parent envoie un motif géant', setDoc(doc(asUser('parent1'), 'absenceRequests/c03_size'), declaration({ reason: 'x'.repeat(501) })))
+await deny('C03 parent pré-signe la décision', setDoc(doc(asUser('parent1'), 'absenceRequests/c03_extra'), declaration({ decidedBy: 'admin1' })))
+// A06 — viewedBy réservé au public de la ressource.
+await deny('A06 parent extérieur marque une ressource comme vue',
+  updateDoc(doc(asUser('outsider'), 'ressources/res2b'), { viewedBy: arrayUnion('outsider') }))
+await deny('A06 parent d’une autre classe marque une ressource comme vue',
+  updateDoc(doc(asUser('parent1'), 'ressources/res2b'), { viewedBy: arrayUnion('parent1') }))
+// C05 — journal de suivi borné aux classes du professeur.
+await allow('C05 prof écrit un suivi pour SON élève',
+  setDoc(doc(asUser('prof1'), 'suivis/c05_ok'), { createdBy: 'prof1', classe: '1A', eleveId: 'e1', note: 'N' }))
+await deny('C05 prof écrit un suivi dans une classe qu’il n’enseigne pas',
+  setDoc(doc(asUser('prof1'), 'suivis/c05_other'), { createdBy: 'prof1', classe: '2B', eleveId: 'e2', note: 'N' }))
+await deny('C05 prof attribue à sa classe un élève d’ailleurs',
+  setDoc(doc(asUser('prof1'), 'suivis/c05_forged'), { createdBy: 'prof1', classe: '1A', eleveId: 'e2', note: 'N' }))
+await deny('C05 prof déplace son suivi vers une autre classe',
+  updateDoc(doc(asUser('prof1'), 'suivis/c05_ok'), { classe: '2B' }))
+await allow('C05 prof complète son suivi', updateDoc(doc(asUser('prof1'), 'suivis/c05_ok'), { note: 'N2' }))
+// A05 — l'annuaire du personnel pour qui gère les rendez-vous.
+await allow('A05 personnel « rendez-vous » lit l’annuaire du personnel', getDoc(doc(asUser('staffRdv'), 'directory/staff')))
+await deny('A05 personnel sans droit ne lit pas l’annuaire', getDoc(doc(asUser('staff0'), 'directory/staff')))
 
 // ── Bilan ─────────────────────────────────────────────────────────────────
 console.log(`\n${passed} tests OK, ${failed.length} échec(s)`)
