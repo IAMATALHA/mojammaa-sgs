@@ -467,11 +467,6 @@ function AdminComposeModal({ theme, t, lang, profile, onClose }: {
 
   const pickPoster = async () => {
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (!perm.granted) {
-        Alert.alert(t('teacher.permissionDenied'), t('teacher.cameraAccessDenied'))
-        return
-      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.85,

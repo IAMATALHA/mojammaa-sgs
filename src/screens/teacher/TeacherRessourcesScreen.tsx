@@ -177,11 +177,6 @@ function CreateRessourceSheet({ visible, onClose, classe, profile }: {
   const pickImage = async () => {
     if (!profile) return
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (perm.status !== 'granted') {
-        Alert.alert(t('teacher.permissionDenied'), t('teacher.cameraAccessDenied'))
-        return
-      }
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 })
       if (result.canceled || !result.assets?.[0]) return
       const a = result.assets[0]

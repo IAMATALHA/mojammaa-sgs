@@ -129,12 +129,12 @@ export default function HomeworkParentSubmission({ homework }: Props) {
 
   const pickPhoto = async (camera: boolean) => {
     try {
-      const permission = camera
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (permission.status !== 'granted') {
-        Alert.alert(t('teacher.permissionDenied'), t('teacher.cameraAccessDenied'))
-        return
+      if (camera) {
+        const permission = await ImagePicker.requestCameraPermissionsAsync()
+        if (permission.status !== 'granted') {
+          Alert.alert(t('teacher.permissionDenied'), t('teacher.cameraAccessDenied'))
+          return
+        }
       }
       const result = camera
         ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.82 })

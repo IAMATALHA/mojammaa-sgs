@@ -259,12 +259,12 @@ function CreateDevoirModal({
   const pickPhoto = async (fromCamera: boolean) => {
     if (!profile) return
     try {
-      const perm = fromCamera
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (perm.status !== 'granted') {
-        Alert.alert(t('teacher.permissionDenied'), t('teacher.cameraAccessDenied'))
-        return
+      if (fromCamera) {
+        const permission = await ImagePicker.requestCameraPermissionsAsync()
+        if (permission.status !== 'granted') {
+          Alert.alert(t('teacher.permissionDenied'), t('teacher.cameraAccessDenied'))
+          return
+        }
       }
       const result = fromCamera
         ? await ImagePicker.launchCameraAsync({  mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 })
